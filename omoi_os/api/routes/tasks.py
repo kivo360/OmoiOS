@@ -4,9 +4,10 @@ from typing import List
 
 from fastapi import APIRouter, HTTPException, Depends
 
-from omoi_os.api.dependencies import get_db_service
+from omoi_os.api.dependencies import get_db_service, get_task_queue
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
+from omoi_os.services.task_queue import TaskQueueService
 
 router = APIRouter()
 
@@ -43,6 +44,7 @@ async def get_task(
             "conversation_id": task.conversation_id,
             "result": task.result,
             "error_message": task.error_message,
+            "dependencies": task.dependencies,
             "created_at": task.created_at.isoformat(),
             "started_at": task.started_at.isoformat() if task.started_at else None,
             "completed_at": task.completed_at.isoformat() if task.completed_at else None,
@@ -88,3 +90,74 @@ async def list_tasks(
             }
             for task in tasks
         ]
+
+
+@router.get("/{task_id}/dependencies", response_model=dict)
+async def get_task_dependencies(
+    task_id: str,
+    db: DatabaseService = Depends(get_db_service),
+    queue: TaskQueueService = Depends(get_task_queue),
+):
+    """
+    Get task dependencies information.
+
+    Args:
+        task_id: Task UUID
+        db: Database service
+        queue: Task queue service
+
+    Returns:
+        Dependencies information including depends_on and blocked tasks
+    """
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        depends_on = []
+        if task.dependencies:
+            depends_on = task.dependencies.get("depends_on", [])
+        
+        # Get blocked tasks (tasks that depend on this one)
+        blocked_tasks = queue.get_blocked_tasks(task_id)
+        
+        # Check if dependencies are complete
+        dependencies_complete = queue.check_dependencies_complete(task_id)
+        
+        return {
+            "task_id": task_id,
+            "depends_on": depends_on,
+            "dependencies_complete": dependencies_complete,
+            "blocked_tasks": [{"id": t.id, "description": t.description, "status": t.status} for t in blocked_tasks],
+        }
+
+
+@router.post("/{task_id}/check-circular", response_model=dict)
+async def check_circular_dependencies(
+    task_id: str,
+    depends_on: list[str],
+    queue: TaskQueueService = Depends(get_task_queue),
+):
+    """
+    Check for circular dependencies.
+
+    Args:
+        task_id: Task UUID
+        depends_on: List of task IDs this task depends on
+        queue: Task queue service
+
+    Returns:
+        Information about circular dependencies if found
+    """
+    cycle = queue.detect_circular_dependencies(task_id, depends_on)
+    
+    if cycle:
+        return {
+            "has_circular_dependency": True,
+            "cycle": cycle,
+        }
+    
+    return {
+        "has_circular_dependency": False,
+        "cycle": None,
+    }

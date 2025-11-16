@@ -25,6 +25,7 @@ class TaskQueueService:
         task_type: str,
         description: str,
         priority: str,
+        dependencies: dict | None = None,
     ) -> Task:
         """
         Add a task to the queue.
@@ -35,6 +36,7 @@ class TaskQueueService:
             task_type: Type of task (e.g., "implement_feature")
             description: Task description
             priority: Task priority (CRITICAL, HIGH, MEDIUM, LOW)
+            dependencies: Optional dependencies dict: {"depends_on": ["task_id_1", "task_id_2"]}
 
         Returns:
             Created Task object
@@ -47,6 +49,7 @@ class TaskQueueService:
                 description=description,
                 priority=priority,
                 status="pending",
+                dependencies=dependencies,
             )
             session.add(task)
             session.flush()
@@ -57,13 +60,13 @@ class TaskQueueService:
 
     def get_next_task(self, phase_id: str) -> Task | None:
         """
-        Get highest priority pending task for a phase.
+        Get highest priority pending task for a phase that has all dependencies completed.
 
         Args:
             phase_id: Phase identifier to filter by
 
         Returns:
-            Task object or None if no pending tasks
+            Task object or None if no pending tasks with completed dependencies
         """
         with self.db.get_session() as session:
             # Priority order: CRITICAL > HIGH > MEDIUM > LOW
@@ -75,8 +78,18 @@ class TaskQueueService:
             )
             if not tasks:
                 return None
+            
+            # Filter out tasks with incomplete dependencies
+            available_tasks = []
+            for task in tasks:
+                if self._check_dependencies_complete(session, task):
+                    available_tasks.append(task)
+            
+            if not available_tasks:
+                return None
+            
             # Sort by priority descending
-            task = max(tasks, key=lambda t: priority_order.get(t.priority, 0))
+            task = max(available_tasks, key=lambda t: priority_order.get(t.priority, 0))
             # Expunge so it can be used outside the session
             session.expunge(task)
             return task
@@ -150,3 +163,110 @@ class TaskQueueService:
             for task in tasks:
                 session.expunge(task)
             return tasks
+
+    def _check_dependencies_complete(self, session, task: Task) -> bool:
+        """
+        Check if all dependencies for a task are completed.
+
+        Args:
+            session: Database session
+            task: Task to check dependencies for
+
+        Returns:
+            True if all dependencies are completed, False otherwise
+        """
+        if not task.dependencies:
+            return True
+        
+        depends_on = task.dependencies.get("depends_on", [])
+        if not depends_on:
+            return True
+        
+        # Check if all dependency tasks are completed
+        dependency_tasks = (
+            session.query(Task)
+            .filter(Task.id.in_(depends_on))
+            .all()
+        )
+        
+        # If we can't find all dependencies, consider them incomplete
+        if len(dependency_tasks) != len(depends_on):
+            return False
+        
+        # All dependencies must be completed
+        return all(dep_task.status == "completed" for dep_task in dependency_tasks)
+
+    def check_dependencies_complete(self, task_id: str) -> bool:
+        """
+        Check if all dependencies for a task are completed.
+
+        Args:
+            task_id: UUID of the task
+
+        Returns:
+            True if all dependencies are completed, False otherwise
+        """
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+            return self._check_dependencies_complete(session, task)
+
+    def get_blocked_tasks(self, task_id: str) -> list[Task]:
+        """
+        Get all tasks that are blocked by this task (i.e., tasks that depend on this task).
+
+        Args:
+            task_id: UUID of the task
+
+        Returns:
+            List of Task objects that depend on this task
+        """
+        with self.db.get_session() as session:
+            # Find all tasks that have this task_id in their dependencies
+            all_tasks = session.query(Task).all()
+            blocked_tasks = []
+            
+            for task in all_tasks:
+                if task.dependencies:
+                    depends_on = task.dependencies.get("depends_on", [])
+                    if task_id in depends_on:
+                        blocked_tasks.append(task)
+            
+            # Expunge tasks so they can be used outside the session
+            for task in blocked_tasks:
+                session.expunge(task)
+            return blocked_tasks
+
+    def detect_circular_dependencies(self, task_id: str, depends_on: list[str], visited: list[str] | None = None) -> list[str] | None:
+        """
+        Detect circular dependencies using DFS.
+
+        Args:
+            task_id: UUID of the task being checked
+            depends_on: List of task IDs this task depends on
+            visited: List of visited task IDs in order (for recursion)
+
+        Returns:
+            List of task IDs forming a cycle, or None if no cycle
+        """
+        if visited is None:
+            visited = []
+        
+        if task_id in visited:
+            # Found a cycle - return the cycle starting from where we first saw this task
+            cycle_start = visited.index(task_id)
+            return visited[cycle_start:] + [task_id]
+        
+        visited.append(task_id)
+        
+        with self.db.get_session() as session:
+            for dep_id in depends_on:
+                dep_task = session.query(Task).filter(Task.id == dep_id).first()
+                if dep_task and dep_task.dependencies:
+                    dep_depends_on = dep_task.dependencies.get("depends_on", [])
+                    cycle = self.detect_circular_dependencies(dep_id, dep_depends_on, visited.copy())
+                    if cycle:
+                        return cycle
+        
+        return None

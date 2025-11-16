@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__openmemory__add-memory",
+      "Skill(backend-dev-guidelines)",
+      "mcp__openmemory__search-memories"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
