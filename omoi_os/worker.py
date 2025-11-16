@@ -5,14 +5,18 @@ import os
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import UUID
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.services.agent_executor import AgentExecutor
 from omoi_os.services.agent_health import AgentHealthService
+from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.resource_lock import LockAcquisitionError, ResourceLockService
+from omoi_os.services.scheduler import SchedulerService
 from omoi_os.services.task_queue import TaskQueueService
 
 
@@ -199,16 +203,20 @@ class TimeoutManager:
 
 
 def main():
-    """Main worker loop."""
+    """Main worker loop with concurrent task execution."""
     # Initialize services
     database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
     workspace_dir = os.getenv("WORKSPACE_DIR", "/tmp/omoi_os_workspaces")
+    max_concurrent_tasks = int(os.getenv("MAX_CONCURRENT_TASKS", "3"))
 
     db = DatabaseService(database_url)
     event_bus = EventBusService(redis_url)
     task_queue = TaskQueueService(db)
     health_service = AgentHealthService(db)
+    registry = AgentRegistryService(db, event_bus)
+    lock_service = ResourceLockService(db)
+    scheduler = SchedulerService(db, task_queue, registry, lock_service, event_bus)
 
     # Register agent
     agent_id = register_agent(db, agent_type="worker", phase_id="PHASE_IMPLEMENTATION")
@@ -221,27 +229,109 @@ def main():
     timeout_manager = TimeoutManager(task_queue, event_bus, interval_seconds=10)
     timeout_manager.start()
 
-    print(f"Worker started with agent_id: {agent_id}")
+    print(f"Worker started with agent_id: {agent_id}, max_concurrent_tasks: {max_concurrent_tasks}")
+
+    # Thread pool for concurrent task execution
+    executor = ThreadPoolExecutor(max_workers=max_concurrent_tasks)
+    running_tasks = {}  # task_id -> future
 
     try:
         # Main worker loop
         while True:
             # Get assigned tasks for this agent
-            tasks = task_queue.get_assigned_tasks(agent_id)
+            tasks = task_queue.get_assigned_tasks(str(agent_id))
 
-            if tasks:
-                for task in tasks:
-                    execute_task_with_retry(task, agent_id, db, task_queue, event_bus, workspace_dir, timeout_manager)
-            else:
-                # No tasks, sleep briefly
+            # Also check scheduler for ready tasks that could be assigned to us
+            # This allows workers to pull work proactively
+            ready_assignments = scheduler.schedule_and_assign(
+                phase_id=None,  # Could filter by agent's phase_id
+                limit=max_concurrent_tasks - len(running_tasks),
+            )
+
+            # Assign ready tasks to this agent if we have capacity
+            for assignment in ready_assignments:
+                if assignment["assigned"] and assignment["agent_id"] == str(agent_id):
+                    if assignment["task_id"] not in running_tasks:
+                        # Actually assign the task
+                        task_queue.assign_task(assignment["task_id"], str(agent_id))
+                        task = assignment["task"]
+                        tasks.append(task)
+                elif not assignment["assigned"]:
+                    # Task is ready but not assigned - try to assign to this agent
+                    # Check if we have capacity
+                    if len(running_tasks) < max_concurrent_tasks:
+                        # Assign to this agent
+                        task_queue.assign_task(assignment["task_id"], str(agent_id))
+                        task = assignment["task"]
+                        tasks.append(task)
+
+            # Start new tasks if we have capacity
+            for task in tasks:
+                if len(running_tasks) >= max_concurrent_tasks:
+                    break
+
+                if task.id in running_tasks:
+                    continue  # Already running
+
+                # Submit task for concurrent execution
+                future = executor.submit(
+                    execute_task_with_retry_and_locks,
+                    task,
+                    str(agent_id),
+                    db,
+                    task_queue,
+                    event_bus,
+                    workspace_dir,
+                    timeout_manager,
+                    lock_service,
+                )
+                running_tasks[task.id] = future
+
+            # Check for completed tasks
+            completed_tasks = []
+            for task_id, future in list(running_tasks.items()):
+                if future.done():
+                    try:
+                        future.result()  # Raise any exceptions
+                    except Exception as e:
+                        print(f"Task {task_id} execution error: {e}")
+                    completed_tasks.append(task_id)
+
+            # Remove completed tasks
+            for task_id in completed_tasks:
+                del running_tasks[task_id]
+
+            # Sleep if no work
+            if not tasks and not running_tasks:
                 time.sleep(2)
+            else:
+                time.sleep(0.5)  # Shorter sleep when there's work
 
     except KeyboardInterrupt:
         print("Worker shutting down...")
     finally:
+        # Wait for running tasks to complete (with timeout)
+        print(f"Waiting for {len(running_tasks)} running tasks to complete...")
+        for task_id, future in running_tasks.items():
+            try:
+                future.result(timeout=30)
+            except Exception as e:
+                print(f"Task {task_id} did not complete gracefully: {e}")
+
+        executor.shutdown(wait=True)
+
         # Stop managers
         heartbeat_manager.stop()
         timeout_manager.stop()
+
+        # Release all locks held by this agent
+        with db.get_session() as session:
+            from omoi_os.models.resource_lock import ResourceLock
+            locks = session.query(ResourceLock).filter(ResourceLock.agent_id == str(agent_id)).all()
+            for lock in locks:
+                session.delete(lock)
+            session.commit()
+
         # Deregister agent
         deregister_agent(db, agent_id)
         event_bus.close()
@@ -308,6 +398,78 @@ def calculate_backoff_delay(retry_count: int, base_delay: float = 1.0, max_delay
 
     # Cap at maximum delay
     return min(delay_with_jitter, max_delay)
+
+
+def execute_task_with_retry_and_locks(
+    task: Task,
+    agent_id: str,
+    db: DatabaseService,
+    task_queue: TaskQueueService,
+    event_bus: EventBusService,
+    workspace_dir: str,
+    timeout_manager: TimeoutManager | None = None,
+    lock_service: ResourceLockService | None = None,
+) -> None:
+    """
+    Execute a task with retry logic, resource locking, and exponential backoff.
+
+    Args:
+        task: Task to execute
+        agent_id: Agent ID executing the task
+        db: Database service
+        task_queue: Task queue service
+        event_bus: Event bus service
+        workspace_dir: Base directory for workspaces
+        timeout_manager: Optional TimeoutManager for cancellation checks
+        lock_service: Optional ResourceLockService for resource locking
+    """
+    import os
+
+    # Acquire resource locks if lock service is available
+    acquired_locks = []
+    if lock_service:
+        # Extract resource keys from task metadata if available
+        # For now, use task workspace as resource key
+        resource_key = f"workspace:{task.id}"
+        try:
+            lock = lock_service.acquire_lock(
+                resource_key=resource_key,
+                task_id=task.id,
+                agent_id=agent_id,
+                lock_type="exclusive",
+            )
+            acquired_locks.append(lock)
+        except LockAcquisitionError as e:
+            print(f"Failed to acquire lock for task {task.id}: {e}")
+            task_queue.update_task_status(task.id, "failed", error_message=str(e))
+            event_bus.publish(
+                SystemEvent(
+                    event_type="TASK_FAILED",
+                    entity_type="task",
+                    entity_id=str(task.id),
+                    payload={"error": str(e), "reason": "lock_acquisition_failed"},
+                )
+            )
+            return
+
+    try:
+        execute_task_with_retry(
+            task,
+            UUID(agent_id),
+            db,
+            task_queue,
+            event_bus,
+            workspace_dir,
+            timeout_manager,
+        )
+    finally:
+        # Release all acquired locks
+        if lock_service:
+            for lock in acquired_locks:
+                try:
+                    lock_service.release_lock(lock.id, agent_id)
+                except Exception as e:
+                    print(f"Error releasing lock {lock.id}: {e}")
 
 
 def execute_task_with_retry(

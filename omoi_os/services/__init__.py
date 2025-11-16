@@ -6,6 +6,8 @@ from omoi_os.services.context_service import ContextService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.phase_gate import PhaseGateService
+from omoi_os.services.resource_lock import ResourceLockService
+from omoi_os.services.scheduler import SchedulerService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.validation_agent import ValidationAgent
 
@@ -19,4 +21,6 @@ __all__ = [
     "ValidationAgent",
     "ContextService",
     "AgentRegistryService",
+    "ResourceLockService",
+    "SchedulerService",
 ]

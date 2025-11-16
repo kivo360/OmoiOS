@@ -47,6 +47,47 @@
 - **Results**: Completed core Role 1 scope — schema/migration, registry service, API endpoints, orchestration client, and updated health telemetry/tests. Pending: full test suite run once Postgres test DB is available.
 
 ---
+
+## 2025-11-16 (Phase 3 - Agent Role 3: Parallel Execution Squad)
+
+- **Task Objective**: Implement Phase 3 Role 3 (Parallel Execution Squad) – DAG-based task scheduling, resource locking, concurrent worker execution, and scheduling APIs.
+- **Step-by-Step Plan**:
+  1. Create ResourceLock model and migration (004_resource_locks) for preventing conflicting task execution.
+  2. Implement ResourceLockService with optimistic retry/backoff logic and telemetry (lock.wait_time events).
+  3. Create SchedulerService with DAG resolver for batching ready tasks based on dependency evaluation.
+  4. Update worker.py to support concurrent task execution with ThreadPoolExecutor, bounded by MAX_CONCURRENT_TASKS.
+  5. Integrate AgentRegistryService for best-fit agent selection when assigning tasks.
+  6. Add telemetry events: scheduler.ready_tasks and lock.wait_time for Phase 4 Monitor.
+  7. Create scheduling API endpoints (/api/v1/scheduler/ready-tasks, /assign, /dag-status).
+  8. Write comprehensive tests: test_parallel_execution.py (DAG scheduling, lock acquisition/failure, fairness) and test_worker_concurrency.py (worker respects lock + capacity constraints).
+- **Results**: 
+  ✅ **Completed**:
+  - Created ResourceLock model (`omoi_os/models/resource_lock.py`) with resource_key, task_id, agent_id, lock_type, expires_at, version fields
+  - Created migration `004_resource_locks_and_scheduler.py` for resource_locks table
+  - Implemented ResourceLockService with acquire_lock, release_lock, is_locked, cleanup_expired_locks, extend_lock methods
+  - Added optimistic retry/backoff with configurable max_retries and base_backoff
+  - Implemented telemetry events for lock.wait_time (successful and failed acquisitions)
+  - Created SchedulerService with get_ready_tasks() using DAG evaluation (topological sort with dependency checking)
+  - Implemented assign_tasks_to_agents() using AgentRegistryService for best-fit selection
+  - Created schedule_and_assign() convenience method combining ready task discovery and assignment
+  - Updated worker.py main() loop to use ThreadPoolExecutor for concurrent execution
+  - Added execute_task_with_retry_and_locks() wrapper that acquires/releases resource locks
+  - Integrated scheduler into worker loop for proactive work pulling
+  - Created scheduler API routes: GET /ready-tasks, POST /assign, GET /dag-status
+  - Added comprehensive tests: 10 tests in test_parallel_execution.py covering lock acquisition, conflicts, expiration, DAG scheduling (simple chains, parallel branches), priority ordering, fairness
+  - Added worker concurrency tests: 4 tests in test_worker_concurrency.py covering capacity limits, concurrent execution with locks, lock cleanup on shutdown, capability-based assignment
+  - Updated services __init__.py and models __init__.py to export new services
+  - All code passes linting checks
+
+  **Key Features Delivered**:
+  - Dependency-graph resolver batches ready tasks using DAG evaluation
+  - Resource-locking subsystem prevents conflicting tasks with optimistic retry/backoff
+  - Worker supports multiple concurrent runners bounded by configuration and lock ownership
+  - Registry integration selects best-fit agent when multiple are available
+  - Telemetry hooks emit scheduler.ready_tasks and lock.wait_time for Phase 4 Monitor
+  - Scheduling API (Python + HTTP) exposed for Coordination Patterns Squad
+
+---
   1. Inspect existing ticket/task models, fixtures, and utilities to identify context-related fields to extend.
   2. Write failing tests in `tests/test_context_passing.py` covering aggregation, summarization, retrieval, and ticket updates.
   3. Implement `ContextSummarizer` and `ContextService`, update models/migrations, and wire endpoints to satisfy tests.

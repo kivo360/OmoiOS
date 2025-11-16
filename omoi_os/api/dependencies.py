@@ -10,6 +10,11 @@ if TYPE_CHECKING:
     from omoi_os.services.task_queue import TaskQueueService
 
 
+def get_db() -> "DatabaseService":
+    """Get database service instance (alias for get_db_service)."""
+    return get_db_service()
+
+
 def get_db_service() -> "DatabaseService":
     """Get database service instance."""
     # Lazy import to avoid circular dependency
