@@ -37,7 +37,7 @@ class TestAgentHealthService:
             agent_type="worker",
             phase_id="PHASE_IMPLEMENTATION",
             status="idle",
-            capabilities={"tools": ["bash"]},
+            capabilities=["bash"],
             last_heartbeat=None,
             created_at=utc_now()
         )
@@ -48,6 +48,7 @@ class TestAgentHealthService:
 
         assert result is True
         assert sample_agent.last_heartbeat is not None
+        assert sample_agent.health_status == "healthy"
         mock_session.commit.assert_called_once()
 
     def test_emit_heartbeat_agent_not_found(self):
@@ -78,7 +79,7 @@ class TestAgentHealthService:
             agent_type="worker",
             phase_id="PHASE_IMPLEMENTATION",
             status="idle",
-            capabilities={"tools": ["bash"]},
+            capabilities=["bash"],
             last_heartbeat=utc_now() - timedelta(seconds=30),
             created_at=utc_now()
         )
@@ -92,6 +93,7 @@ class TestAgentHealthService:
         assert result["status"] == "idle"
         assert result["agent_type"] == "worker"
         assert result["phase_id"] == "PHASE_IMPLEMENTATION"
+        assert result["health_status"] == "healthy"
 
     def test_check_agent_health_stale(self):
         """Test checking health of a stale agent."""
@@ -106,7 +108,7 @@ class TestAgentHealthService:
             agent_type="worker",
             phase_id="PHASE_IMPLEMENTATION",
             status="idle",
-            capabilities={"tools": ["bash"]},
+            capabilities=["bash"],
             last_heartbeat=utc_now() - timedelta(minutes=5),
             created_at=utc_now()
         )
@@ -119,6 +121,8 @@ class TestAgentHealthService:
         assert result["healthy"] is False
         assert result["time_since_last_heartbeat"] > 90
         assert stale_agent.status == "stale"
+        assert stale_agent.health_status == "stale"
+        assert result["health_status"] == "stale"
         mock_session.commit.assert_called_once()
 
     def test_get_agent_statistics(self):
@@ -132,9 +136,9 @@ class TestAgentHealthService:
         now = utc_now()
         agents = [
             Agent(id="worker-1", agent_type="worker", phase_id="PHASE_1", status="idle",
-                  capabilities={}, last_heartbeat=now - timedelta(seconds=30), created_at=now),
+                  capabilities=[], last_heartbeat=now - timedelta(seconds=30), created_at=now),
             Agent(id="worker-2", agent_type="worker", phase_id="PHASE_1", status="running",
-                  capabilities={}, last_heartbeat=now - timedelta(minutes=2), created_at=now),
+                  capabilities=[], last_heartbeat=now - timedelta(minutes=2), created_at=now),
         ]
 
         mock_session.query.return_value.all.return_value = agents
@@ -146,6 +150,8 @@ class TestAgentHealthService:
         assert result["by_status"]["running"] == 1
         assert result["by_type"]["worker"] == 2
         assert result["by_phase"]["PHASE_1"] == 2
+        assert result["health_summary"]["healthy"] == 1
+        assert result["health_summary"]["unhealthy"] == 1
 
     def test_detect_stale_agents(self):
         """Test detection of stale agents."""
@@ -159,7 +165,7 @@ class TestAgentHealthService:
             id="stale-agent",
             agent_type="worker",
             status="idle",
-            capabilities={},
+            capabilities=[],
             last_heartbeat=utc_now() - timedelta(minutes=5),
             created_at=utc_now()
         )
@@ -170,6 +176,7 @@ class TestAgentHealthService:
 
         assert len(result) == 1
         assert stale_agent.status == "stale"
+        assert stale_agent.health_status == "stale"
         mock_session.commit.assert_called_once()
 
     def test_cleanup_stale_agents(self):
@@ -184,7 +191,7 @@ class TestAgentHealthService:
             id="stale-agent",
             agent_type="worker",
             status="stale",
-            capabilities={},
+            capabilities=[],
             last_heartbeat=utc_now() - timedelta(minutes=5),
             created_at=utc_now()
         )
@@ -195,6 +202,7 @@ class TestAgentHealthService:
 
         assert result == 1
         assert stale_agent.status == "timeout"
+        assert stale_agent.health_status == "timeout"
         mock_session.commit.assert_called_once()
 
     def test_get_all_agents_health(self):
@@ -210,7 +218,7 @@ class TestAgentHealthService:
             agent_type="worker",
             phase_id="PHASE_IMPLEMENTATION",
             status="idle",
-            capabilities={"tools": ["bash"]},
+            capabilities=["bash"],
             last_heartbeat=utc_now() - timedelta(seconds=30),
             created_at=utc_now()
         )
@@ -220,7 +228,7 @@ class TestAgentHealthService:
             agent_type="monitor",
             phase_id=None,
             status="idle",
-            capabilities={"monitoring": True},
+            capabilities=["monitoring"],
             last_heartbeat=utc_now() - timedelta(minutes=5),
             created_at=utc_now()
         )
@@ -234,10 +242,12 @@ class TestAgentHealthService:
         healthy_result = next(r for r in result if r["agent_id"] == "healthy-agent")
         assert healthy_result["healthy"] is True
         assert healthy_result["status"] == "idle"
+        assert healthy_result["health_status"] == "healthy"
 
         stale_result = next(r for r in result if r["agent_id"] == "stale-agent")
         assert stale_result["healthy"] is False
         assert stale_result["status"] == "stale"
+        assert stale_result["health_status"] == "stale"
 
         mock_session.commit.assert_called_once()
 
