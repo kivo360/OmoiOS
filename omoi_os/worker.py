@@ -215,7 +215,7 @@ def main():
     task_queue = TaskQueueService(db)
     health_service = AgentHealthService(db)
     registry = AgentRegistryService(db, event_bus)
-    lock_service = ResourceLockService(db)
+    lock_service = ResourceLockService(db, event_bus=event_bus)
     scheduler = SchedulerService(db, task_queue, registry, lock_service, event_bus)
 
     # Register agent
