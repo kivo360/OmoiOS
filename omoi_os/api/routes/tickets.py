@@ -9,6 +9,7 @@ from omoi_os.api.dependencies import get_db_service, get_task_queue
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
+from omoi_os.services.task_generator import TaskGeneratorService
 
 
 router = APIRouter()
@@ -32,6 +33,19 @@ class TicketResponse(BaseModel):
     phase_id: str
     status: str
     priority: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskResponse(BaseModel):
+    """Response model for task."""
+
+    id: UUID
+    task_type: str
+    description: str | None
+    priority: str
+    phase_id: str
+    status: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -98,3 +112,38 @@ async def get_ticket(
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         return TicketResponse.model_validate(ticket)
+
+
+@router.post("/{ticket_id}/generate-tasks", response_model=list[TaskResponse])
+async def generate_tasks_for_ticket(
+    ticket_id: UUID,
+    phase_id: str | None = None,
+    db: DatabaseService = Depends(get_db_service),
+    queue: TaskQueueService = Depends(get_task_queue),
+):
+    """
+    Generate tasks for a ticket's phase.
+
+    Args:
+        ticket_id: Ticket ID
+        phase_id: Optional phase ID (defaults to ticket's current phase)
+        db: Database service
+        queue: Task queue service
+
+    Returns:
+        List of generated tasks
+    """
+    generator = TaskGeneratorService(db, queue)
+
+    with db.get_session() as session:
+        ticket = session.get(Ticket, str(ticket_id))
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        target_phase = phase_id or ticket.phase_id
+
+    try:
+        tasks = generator.generate_phase_tasks(str(ticket_id), target_phase)
+        return [TaskResponse.model_validate(task) for task in tasks]
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
