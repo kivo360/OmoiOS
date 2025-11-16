@@ -23,3 +23,18 @@
   5. Add API endpoints (`GET /tickets/{id}/context`, `POST /tickets/{id}/update-context`) and ensure routers/services integrate cleanly.
   6. Run test + lint suite, address failures, then validate migrations.
 - **Results**: In progress — initialization, planning, and spec review complete.
+
+---
+
+## 2025-11-16 23:16 UTC
+
+- **Task Objective**: Kick off Phase 3 Role 1 (Registry Squad) – capability-aware agent registry with search APIs, migration, service, and events.
+- **Step-by-Step Plan**:
+  1. Analyze current `Agent` model, health service, and API routes to capture deltas plus dependency touchpoints.
+  2. Design & write failing tests (`tests/test_agent_registry.py`, updates to `test_agent_health.py`) covering model validation, CRUD, capability search/ranking, heartbeat metadata, and API contracts.
+  3. Extend schema + Alembic migration (new capabilities array, capacity, health_status, tags, indexes) and ensure fixtures align.
+  4. Implement `AgentRegistryService` + FastAPI endpoints for register/update/search/toggle plus event publishing + registry client skeleton.
+  5. Update docs + orchestration surfaces as needed, then run lint + targeted pytest suite.
+- **Results**: Not started — requirements review complete.
+
+---
