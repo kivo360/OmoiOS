@@ -1,15 +1,15 @@
 services:
   postgres:
-    image: pgvector/pgvector:pg17
+    image: tensorchord/vchord-suite:pg18-latest
     container_name: senior_sandbox_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: app_db
     ports:
-      - "5432:5432"
+      - "15432:5432"  # Non-standard port to avoid conflicts (PostgreSQL default is 5432)
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - pg_data:/var/lib/postgresql  # PostgreSQL 18+ requires mount at /var/lib/postgresql (not /data)
       - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
@@ -18,7 +18,23 @@ services:
       retries: 10
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: senior_sandbox_redis
+    ports:
+      - "16379:6379"  # Non-standard port to avoid conflicts (Redis default is 6379)
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   pg_data:
+  redis_data:
 
 
