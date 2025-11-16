@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from omoi_os.api.routes import agents, phases, tasks, tickets
+from omoi_os.api.routes import agents, phases, scheduler, tasks, tickets
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.database import DatabaseService
@@ -121,6 +121,7 @@ app.include_router(tickets.router, prefix="/api/v1", tags=["tickets"])
 app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
 app.include_router(phases.router, prefix="/api/v1", tags=["phases"])
 app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
+app.include_router(scheduler.router, prefix="/api/v1", tags=["scheduler"])
 
 
 @app.get("/health")
