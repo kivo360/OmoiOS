@@ -41,6 +41,7 @@ class AgentHealthService:
             agent.last_heartbeat = utc_now()
             if agent.status == "stale":
                 agent.status = "idle"
+            agent.health_status = "healthy"
 
             session.commit()
             return True
@@ -68,6 +69,7 @@ class AgentHealthService:
                     "healthy": False,
                     "last_heartbeat": None,
                     "time_since_last_heartbeat": None,
+                    "health_status": "unknown",
                 }
 
             now = utc_now()
@@ -82,6 +84,7 @@ class AgentHealthService:
                     "last_heartbeat": None,
                     "time_since_last_heartbeat": None,
                     "message": "No heartbeat recorded",
+                    "health_status": agent.health_status,
                 }
 
             time_since_last_heartbeat = now - last_heartbeat
@@ -90,6 +93,7 @@ class AgentHealthService:
             # Update agent status if it's stale but not marked as such
             if is_stale and agent.status != "stale":
                 agent.status = "stale"
+                agent.health_status = "stale"
                 session.commit()
 
             return {
@@ -101,6 +105,7 @@ class AgentHealthService:
                 "timeout_seconds": timeout_seconds,
                 "agent_type": agent.agent_type,
                 "phase_id": agent.phase_id,
+                "health_status": agent.health_status,
             }
 
     def detect_stale_agents(self, timeout_seconds: Optional[int] = None) -> List[Agent]:
@@ -131,6 +136,7 @@ class AgentHealthService:
             for agent in stale_agents:
                 if agent.status != "stale":
                     agent.status = "stale"
+                agent.health_status = "stale"
 
             session.commit()
             return stale_agents
@@ -169,8 +175,10 @@ class AgentHealthService:
                 current_status = agent.status
                 if is_stale and current_status != "stale":
                     agent.status = "stale"
+                    agent.health_status = "stale"
                 elif not is_stale and current_status == "stale":
                     agent.status = "idle"
+                    agent.health_status = "healthy"
 
                 health_results.append({
                     "agent_id": agent.id,
@@ -183,6 +191,7 @@ class AgentHealthService:
                     "timeout_seconds": timeout_seconds,
                     "capabilities": agent.capabilities,
                     "created_at": agent.created_at.isoformat() if agent.created_at else None,
+                    "health_status": agent.health_status,
                 })
 
             session.commit()
@@ -222,6 +231,7 @@ class AgentHealthService:
             for agent in stale_agents:
                 if agent.status not in ["terminated", mark_as]:
                     agent.status = mark_as
+                    agent.health_status = mark_as
                     count += 1
 
             session.commit()
@@ -274,16 +284,15 @@ class AgentHealthService:
 
                 # Health summary
                 last_heartbeat = agent.last_heartbeat
-                if not last_heartbeat:
-                    stats["health_summary"]["unknown"] += 1
+                if agent.health_status == "healthy":
+                    stats["health_summary"]["healthy"] += 1
+                elif agent.health_status in ["stale", "timeout", "unresponsive"]:
+                    stats["health_summary"]["unhealthy"] += 1
                 else:
-                    time_diff = now - last_heartbeat
-                    if time_diff <= timedelta(seconds=90):  # Default timeout
-                        stats["health_summary"]["healthy"] += 1
-                    else:
-                        stats["health_summary"]["unhealthy"] += 1
+                    stats["health_summary"]["unknown"] += 1
 
-                    # Recent heartbeat statistics
+                # Recent heartbeat statistics
+                if last_heartbeat:
                     if last_heartbeat >= time_5min_ago:
                         stats["recent_heartbeats"]["last_5_minutes"] += 1
                     if last_heartbeat >= time_1hour_ago:

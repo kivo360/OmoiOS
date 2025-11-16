@@ -264,7 +264,7 @@ def register_agent(db: DatabaseService, agent_type: str, phase_id: str | None = 
             agent_type=agent_type,
             phase_id=phase_id,
             status="idle",
-            capabilities={"tools": ["bash", "file_editor"]},
+            capabilities=["bash", "file_editor"],
         )
         session.add(agent)
         session.commit()

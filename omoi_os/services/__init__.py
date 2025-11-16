@@ -1,6 +1,7 @@
 """Core services for OmoiOS."""
 
 from omoi_os.services.agent_executor import AgentExecutor
+from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.context_service import ContextService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
@@ -17,4 +18,5 @@ __all__ = [
     "PhaseGateService",
     "ValidationAgent",
     "ContextService",
+    "AgentRegistryService",
 ]

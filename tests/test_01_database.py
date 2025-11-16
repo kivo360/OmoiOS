@@ -126,7 +126,7 @@ def test_agent_crud(db_service: DatabaseService):
             agent_type="worker",
             phase_id="PHASE_REQUIREMENTS",
             status="idle",
-            capabilities={"tools": ["bash"]},
+            capabilities=["bash"],
         )
         session.add(agent)
         session.commit()

@@ -44,7 +44,7 @@
   3. Extend schema + Alembic migration (new capabilities array, capacity, health_status, tags, indexes) and ensure fixtures align.
   4. Implement `AgentRegistryService` + FastAPI endpoints for register/update/search/toggle plus event publishing + registry client skeleton.
   5. Update docs + orchestration surfaces as needed, then run lint + targeted pytest suite.
-- **Results**: Not started — requirements review complete.
+- **Results**: Completed core Role 1 scope — schema/migration, registry service, API endpoints, orchestration client, and updated health telemetry/tests. Pending: full test suite run once Postgres test DB is available.
 
 ---
   1. Inspect existing ticket/task models, fixtures, and utilities to identify context-related fields to extend.
