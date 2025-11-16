@@ -3,10 +3,22 @@
 from omoi_os.models.agent import Agent
 from omoi_os.models.base import Base
 from omoi_os.models.event import Event
+from omoi_os.models.phase_context import PhaseContext
+from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
+from omoi_os.models.phase_gate_result import PhaseGateResult
 from omoi_os.models.phase_history import PhaseHistory
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
-from omoi_os.models import phases
 
-__all__ = ["Base", "Ticket", "Task", "Agent", "Event", "PhaseHistory", "phases"]
+__all__ = [
+    "Base",
+    "Ticket",
+    "Task",
+    "Agent",
+    "Event",
+    "PhaseGateArtifact",
+    "PhaseGateResult",
+    "PhaseContext",
+    "PhaseHistory",
+]
 
