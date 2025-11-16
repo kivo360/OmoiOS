@@ -17,6 +17,7 @@ dependencies = [
     "alembic>=1.13.0,<2",
     "redis>=5.0.0,<6",
     "whenever>=0.9.3",
+    "pyyaml>=6.0.0,<7",
 ]
 
 [build-system]

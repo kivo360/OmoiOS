@@ -1,0 +1,49 @@
+# Parallel Implementation Pattern
+# Splits a large task into multiple parallel implementation tasks that can
+# execute independently and then joins them for integration.
+
+name: parallel_implementation
+description: |
+  Splits a large implementation task into multiple parallel subtasks,
+  executes them concurrently, and joins results for integration.
+
+pattern:
+  type: split
+  id: parallel_impl_split
+  source_task_id: "${source_task_id}"
+  target_tasks:
+    - phase_id: PHASE_IMPLEMENTATION
+      task_type: implement_module
+      description: "Implement module 1"
+      priority: MEDIUM
+    - phase_id: PHASE_IMPLEMENTATION
+      task_type: implement_module
+      description: "Implement module 2"
+      priority: MEDIUM
+    - phase_id: PHASE_IMPLEMENTATION
+      task_type: implement_module
+      description: "Implement module 3"
+      priority: MEDIUM
+
+sync_points:
+  - id: implementation_complete
+    waiting_task_ids:
+      - "${split_task_1_id}"
+      - "${split_task_2_id}"
+      - "${split_task_3_id}"
+    required_count: null  # Wait for all
+    timeout_seconds: 7200
+
+join:
+  id: integration_join
+  source_task_ids:
+    - "${split_task_1_id}"
+    - "${split_task_2_id}"
+    - "${split_task_3_id}"
+  continuation_task:
+    phase_id: PHASE_INTEGRATION
+    task_type: integrate_modules
+    description: "Integrate all modules together"
+    priority: HIGH
+  merge_strategy: combine
+

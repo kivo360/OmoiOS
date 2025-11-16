@@ -1,0 +1,50 @@
+# Review-Feedback Loop Pattern
+# This pattern implements a common workflow where work is split into parallel tasks,
+# reviewed, and then merged with feedback before continuing.
+
+name: review_feedback_loop
+description: |
+  A coordination pattern that splits work into parallel implementation tasks,
+  waits for review tasks to complete, merges feedback, and continues with
+  refinement tasks.
+
+pattern:
+  type: split
+  id: review_feedback_split
+  source_task_id: "${source_task_id}"
+  target_tasks:
+    - phase_id: PHASE_IMPLEMENTATION
+      task_type: implement_feature_a
+      description: "Implement feature component A"
+      priority: HIGH
+    - phase_id: PHASE_IMPLEMENTATION
+      task_type: implement_feature_b
+      description: "Implement feature component B"
+      priority: HIGH
+    - phase_id: PHASE_IMPLEMENTATION
+      task_type: implement_feature_c
+      description: "Implement feature component C"
+      priority: HIGH
+
+sync_points:
+  - id: implementation_sync
+    waiting_task_ids: 
+      - "${split_task_1_id}"
+      - "${split_task_2_id}"
+      - "${split_task_3_id}"
+    required_count: 3
+    timeout_seconds: 3600
+
+join:
+  id: review_join
+  source_task_ids:
+    - "${split_task_1_id}"
+    - "${split_task_2_id}"
+    - "${split_task_3_id}"
+  continuation_task:
+    phase_id: PHASE_INTEGRATION
+    task_type: review_and_merge
+    description: "Review implementations and merge feedback"
+    priority: HIGH
+  merge_strategy: combine
+

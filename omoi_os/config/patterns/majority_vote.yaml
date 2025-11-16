@@ -1,0 +1,57 @@
+# Majority Vote Pattern
+# Creates multiple parallel tasks that vote on a decision, then merges
+# results using majority vote strategy.
+
+name: majority_vote
+description: |
+  Splits a decision task into multiple parallel evaluation tasks,
+  collects votes/results, and merges using majority strategy.
+
+pattern:
+  type: split
+  id: vote_split
+  source_task_id: "${source_task_id}"
+  target_tasks:
+    - phase_id: PHASE_INITIAL
+      task_type: evaluate_option_a
+      description: "Evaluate option A"
+      priority: MEDIUM
+    - phase_id: PHASE_INITIAL
+      task_type: evaluate_option_b
+      description: "Evaluate option B"
+      priority: MEDIUM
+    - phase_id: PHASE_INITIAL
+      task_type: evaluate_option_c
+      description: "Evaluate option C"
+      priority: MEDIUM
+
+sync_points:
+  - id: evaluation_complete
+    waiting_task_ids:
+      - "${split_task_1_id}"
+      - "${split_task_2_id}"
+      - "${split_task_3_id}"
+    required_count: 2  # Majority of 3
+    timeout_seconds: 1800
+
+merge:
+  id: vote_merge
+  source_task_ids:
+    - "${split_task_1_id}"
+    - "${split_task_2_id}"
+    - "${split_task_3_id}"
+  merge_strategy: majority
+
+join:
+  id: decision_join
+  source_task_ids:
+    - "${split_task_1_id}"
+    - "${split_task_2_id}"
+    - "${split_task_3_id}"
+  continuation_task:
+    phase_id: PHASE_INITIAL
+    task_type: implement_decision
+    description: "Implement the majority decision"
+    priority: HIGH
+  merge_strategy: majority
+
