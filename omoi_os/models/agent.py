@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import DateTime, Integer, String
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from omoi_os.models.base import Base
@@ -29,9 +29,16 @@ class Agent(Base):
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
     )  # idle, running, degraded, failed
-    capabilities: Mapped[Optional[dict]] = mapped_column(
-        JSONB, nullable=True
+    capabilities: Mapped[list[str]] = mapped_column(
+        PG_ARRAY(String(100)), nullable=False, default=list
     )  # Tools, skills available to agent
+    capacity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    health_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="unknown", index=True
+    )
+    tags: Mapped[Optional[list[str]]] = mapped_column(
+        PG_ARRAY(String(50)), nullable=True
+    )
     last_heartbeat: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

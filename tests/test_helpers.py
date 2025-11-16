@@ -59,11 +59,14 @@ def create_test_agent(
     agent_type: str = "worker",
     phase_id: str | None = "PHASE_REQUIREMENTS",
     status: str = "idle",
-    capabilities: dict | None = None,
+    capabilities: list[str] | None = None,
+    capacity: int = 1,
+    health_status: str = "healthy",
+    tags: list[str] | None = None,
 ) -> Agent:
     """Create a test agent."""
     if capabilities is None:
-        capabilities = {"tools": ["bash", "file_editor"]}
+        capabilities = ["bash", "file_editor"]
 
     with db.get_session() as session:
         agent = Agent(
@@ -71,6 +74,9 @@ def create_test_agent(
             phase_id=phase_id,
             status=status,
             capabilities=capabilities,
+            capacity=capacity,
+            health_status=health_status,
+            tags=tags,
         )
         session.add(agent)
         session.commit()
