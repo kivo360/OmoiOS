@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
-from senior_sandbox.ticketing.db import get_engine
-from senior_sandbox.ticketing.models import Base
+from omoi_os.ticketing.db import get_engine
+from omoi_os.ticketing.models import Base
 
 
 def main() -> None:

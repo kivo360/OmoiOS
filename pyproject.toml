@@ -1,19 +1,31 @@
 [project]
-name = "senior-sandbox"
+name = "omoi-os"
 version = "0.1.0"
-description = "Add your description here"
+description = "OmoiOS - Multi-Agent Orchestration System"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "openhands-sdk>=1.1.0",
     "openhands-tools>=1.1.0",
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
     "pydantic>=2.7.0,<3",
     "pydantic-settings>=2.3.0,<3",
     "sqlalchemy>=2.0.0,<3",
     "psycopg[binary,pool]>=3.2.0,<4",
     "pgvector>=0.3.3,<1",
     "alembic>=1.13.0,<2",
+    "redis>=5.0.0,<6",
 ]
+
+[build-system]
+requires = ["uv_build>=0.9.2,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# Configure module discovery: omoi_os package is in the project root
+module-name = "omoi_os"
+module-root = ""
 
 [dependency-groups]
 dev = [

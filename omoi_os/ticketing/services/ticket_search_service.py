@@ -5,7 +5,7 @@ from typing import Any, Optional
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from senior_sandbox.ticketing.models import Ticket, TicketComment
+from omoi_os.ticketing.models import Ticket, TicketComment
 
 
 class TicketSearchService:

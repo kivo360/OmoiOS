@@ -1,7 +1,7 @@
 services:
   postgres:
     image: tensorchord/vchord-suite:pg18-latest
-    container_name: senior_sandbox_postgres
+    container_name: omoi_os_postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -20,7 +20,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: senior_sandbox_redis
+    container_name: omoi_os_redis
     ports:
       - "16379:6379"  # Non-standard port to avoid conflicts (Redis default is 6379)
     volumes:
@@ -31,6 +31,83 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: omoi_os_api
+    ports:
+      - "18000:8000"  # Non-standard port to avoid conflicts
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app_db
+      - REDIS_URL=redis://redis:6379
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    develop:
+      watch:
+        # Restart on Python source code changes
+        - action: restart
+          path: ./omoi_os/api
+          target: /app/omoi_os/api
+        - action: restart
+          path: ./omoi_os/services
+          target: /app/omoi_os/services
+        - action: restart
+          path: ./omoi_os/models
+          target: /app/omoi_os/models
+        - action: restart
+          path: ./config.py
+          target: /app/config.py
+        # Rebuild on dependency changes
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: omoi_os_worker
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app_db
+      - REDIS_URL=redis://redis:6379
+      - PYTHONUNBUFFERED=1
+      - WORKSPACE_DIR=/tmp/omoi_workspace
+      - PHASE_ID=PHASE_IMPLEMENTATION
+      - AGENT_ID=${AGENT_ID:-00000000-0000-0000-0000-000000000001}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    develop:
+      watch:
+        # Restart on Python source code changes
+        - action: restart
+          path: ./omoi_os/worker.py
+          target: /app/omoi_os/worker.py
+        - action: restart
+          path: ./omoi_os/services
+          target: /app/omoi_os/services
+        - action: restart
+          path: ./omoi_os/models
+          target: /app/omoi_os/models
+        - action: restart
+          path: ./config.py
+          target: /app/config.py
+        # Rebuild on dependency changes
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
     restart: unless-stopped
 
 volumes:

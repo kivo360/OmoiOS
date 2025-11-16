@@ -1,0 +1,114 @@
+"""Initial foundation models
+
+Revision ID: 001_initial
+Revises: 
+Create Date: 2025-11-16
+
+"""
+from typing import Sequence, Union
+
+from alembic import op
+import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
+
+# revision identifiers, used by Alembic.
+revision: str = '001_initial'
+down_revision: Union[str, None] = None
+branch_labels: Union[str, Sequence[str], None] = None
+depends_on: Union[str, Sequence[str], None] = None
+
+
+def upgrade() -> None:
+    # Create tickets table
+    op.create_table(
+        'tickets',
+        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('title', sa.String(length=500), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('phase_id', sa.String(length=50), nullable=False),
+        sa.Column('status', sa.String(length=50), nullable=False),
+        sa.Column('priority', sa.String(length=20), nullable=False),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_tickets_phase_id'), 'tickets', ['phase_id'], unique=False)
+    op.create_index(op.f('ix_tickets_priority'), 'tickets', ['priority'], unique=False)
+    op.create_index(op.f('ix_tickets_status'), 'tickets', ['status'], unique=False)
+
+    # Create tasks table
+    op.create_table(
+        'tasks',
+        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('ticket_id', sa.String(), nullable=False),
+        sa.Column('phase_id', sa.String(length=50), nullable=False),
+        sa.Column('task_type', sa.String(length=100), nullable=False),
+        sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('priority', sa.String(length=20), nullable=False),
+        sa.Column('status', sa.String(length=50), nullable=False),
+        sa.Column('assigned_agent_id', sa.String(), nullable=True),
+        sa.Column('conversation_id', sa.String(length=255), nullable=True),
+        sa.Column('result', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('error_message', sa.Text(), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.Column('started_at', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(['ticket_id'], ['tickets.id'], ondelete='CASCADE'),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_tasks_assigned_agent_id'), 'tasks', ['assigned_agent_id'], unique=False)
+    op.create_index(op.f('ix_tasks_phase_id'), 'tasks', ['phase_id'], unique=False)
+    op.create_index(op.f('ix_tasks_priority'), 'tasks', ['priority'], unique=False)
+    op.create_index(op.f('ix_tasks_status'), 'tasks', ['status'], unique=False)
+    op.create_index(op.f('ix_tasks_ticket_id'), 'tasks', ['ticket_id'], unique=False)
+
+    # Create agents table
+    op.create_table(
+        'agents',
+        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('agent_type', sa.String(length=50), nullable=False),
+        sa.Column('phase_id', sa.String(length=50), nullable=True),
+        sa.Column('status', sa.String(length=50), nullable=False),
+        sa.Column('capabilities', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('last_heartbeat', sa.DateTime(timezone=True), nullable=True),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_agents_agent_type'), 'agents', ['agent_type'], unique=False)
+    op.create_index(op.f('ix_agents_phase_id'), 'agents', ['phase_id'], unique=False)
+    op.create_index(op.f('ix_agents_status'), 'agents', ['status'], unique=False)
+
+    # Create events table
+    op.create_table(
+        'events',
+        sa.Column('id', sa.String(), nullable=False),
+        sa.Column('event_type', sa.String(length=100), nullable=False),
+        sa.Column('entity_type', sa.String(length=50), nullable=True),
+        sa.Column('entity_id', sa.String(), nullable=True),
+        sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column('timestamp', sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_events_event_type'), 'events', ['event_type'], unique=False)
+    op.create_index(op.f('ix_events_timestamp'), 'events', ['timestamp'], unique=False)
+
+
+def downgrade() -> None:
+    op.drop_index(op.f('ix_events_timestamp'), table_name='events')
+    op.drop_index(op.f('ix_events_event_type'), table_name='events')
+    op.drop_table('events')
+    op.drop_index(op.f('ix_agents_status'), table_name='agents')
+    op.drop_index(op.f('ix_agents_phase_id'), table_name='agents')
+    op.drop_index(op.f('ix_agents_agent_type'), table_name='agents')
+    op.drop_table('agents')
+    op.drop_index(op.f('ix_tasks_ticket_id'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_status'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_priority'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_phase_id'), table_name='tasks')
+    op.drop_index(op.f('ix_tasks_assigned_agent_id'), table_name='tasks')
+    op.drop_table('tasks')
+    op.drop_index(op.f('ix_tickets_status'), table_name='tickets')
+    op.drop_index(op.f('ix_tickets_priority'), table_name='tickets')
+    op.drop_index(op.f('ix_tickets_phase_id'), table_name='tickets')
+    op.drop_table('tickets')
+

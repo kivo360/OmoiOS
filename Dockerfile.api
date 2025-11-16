@@ -1,0 +1,38 @@
+FROM python:3.12-slim AS builder
+
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copy dependency files
+COPY pyproject.toml uv.lock ./
+
+# Install dependencies into .venv (without installing project itself)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable
+
+# Copy project source code
+COPY . /app
+
+# Install project in non-editable mode
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable
+
+# Stage 2: Runtime image
+FROM python:3.12-slim
+
+# Copy virtual environment from builder
+COPY --from=builder --chown=app:app /app/.venv /app/.venv
+
+# Set Python path so Python can find omoi_os package
+ENV PATH="/app/.venv/bin:$PATH"
+ENV PYTHONPATH=/app
+
+WORKDIR /app
+
+# Copy application code
+COPY --from=builder /app /app
+
+# Run API server using Python from venv
+CMD ["python", "-m", "omoi_os.api.main"]

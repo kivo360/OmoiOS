@@ -1,5 +1,6 @@
-from typing import Optional
+"""Configuration settings for OmoiOS"""
 
+from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -17,7 +18,7 @@ class LLMSettings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    model: str = "anthropic/claude-sonnet-4-5-20250929"
+    model: str = "openhands/claude-sonnet-4-5-20250929"
     api_key: str
     base_url: Optional[str] = None
 
@@ -56,5 +57,3 @@ def load_database_settings() -> DatabaseSettings:
 
 def load_redis_settings() -> RedisSettings:
     return RedisSettings()
-
-

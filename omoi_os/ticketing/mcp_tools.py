@@ -8,9 +8,9 @@ from pydantic import Field
 from openhands.sdk import Action, Observation, TextContent, ToolDefinition
 from openhands.sdk.tool import register_tool
 
-from senior_sandbox.ticketing.db import get_session
-from senior_sandbox.ticketing.services.ticket_search_service import TicketSearchService
-from senior_sandbox.ticketing.services.ticket_service import TicketService
+from omoi_os.ticketing.db import get_session
+from omoi_os.ticketing.services.ticket_search_service import TicketSearchService
+from omoi_os.ticketing.services.ticket_service import TicketService
 
 
 # ---------- Actions ----------

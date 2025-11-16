@@ -7,7 +7,7 @@ from uuid import uuid4
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from senior_sandbox.ticketing.models import BoardConfig, Ticket, TicketComment, TicketCommit, TicketHistory
+from omoi_os.ticketing.models import BoardConfig, Ticket, TicketComment, TicketCommit, TicketHistory
 
 
 def _ticket_id() -> str:

@@ -6,7 +6,7 @@ from typing import Any, Optional
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from senior_sandbox.ticketing.models import TicketHistory
+from omoi_os.ticketing.models import TicketHistory
 
 
 class TicketHistoryService:

@@ -10,11 +10,16 @@ from sqlalchemy.orm import Session, sessionmaker
 
 
 class DBSettings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=(".env",), env_file_encoding="utf-8", env_prefix="DB_")
+    model_config = SettingsConfigDict(
+        env_file=(".env",),
+        env_file_encoding="utf-8",
+        env_prefix="DB_",
+        extra="ignore",  # Ignore extra environment variables
+    )
 
     host: str = "localhost"
-    port: int = 5432
-    name: str = "hephaestus"
+    port: int = 15432  # Updated to match our non-standard port
+    name: str = "app_db"  # Updated to match docker-compose
     user: str = "postgres"
     password: str = "postgres"
     sslmode: Optional[str] = None  # e.g., "require"
