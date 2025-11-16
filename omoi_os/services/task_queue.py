@@ -268,5 +268,346 @@ class TaskQueueService:
                     cycle = self.detect_circular_dependencies(dep_id, dep_depends_on, visited.copy())
                     if cycle:
                         return cycle
-        
+
         return None
+
+    def should_retry(self, task_id: str) -> bool:
+        """
+        Check if a failed task should be retried.
+
+        Args:
+            task_id: UUID of the task to check
+
+        Returns:
+            True if task should be retried, False otherwise
+        """
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+
+            # Only retry failed tasks
+            if task.status != "failed":
+                return False
+
+            # Check if we haven't exceeded max retries
+            return task.retry_count < task.max_retries
+
+    def increment_retry(self, task_id: str) -> bool:
+        """
+        Increment retry count and reset status to pending.
+
+        Args:
+            task_id: UUID of the task to retry
+
+        Returns:
+            True if retry was scheduled, False if max retries exceeded
+        """
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+
+            # Check if we can retry
+            if task.retry_count >= task.max_retries:
+                return False
+
+            # Increment retry count and reset status
+            task.retry_count += 1
+            task.status = "pending"
+            task.error_message = None  # Clear previous error message
+            task.assigned_agent_id = None  # Clear assignment so it can be picked up again
+
+            session.commit()
+            return True
+
+    def get_retryable_tasks(self, phase_id: str | None = None) -> list[Task]:
+        """
+        Get all tasks that can be retried (failed tasks that haven't exceeded max retries).
+
+        Args:
+            phase_id: Optional phase ID to filter by
+
+        Returns:
+            List of retryable Task objects
+        """
+        with self.db.get_session() as session:
+            query = session.query(Task).filter(Task.status == "failed")
+
+            if phase_id:
+                query = query.filter(Task.phase_id == phase_id)
+
+            tasks = query.all()
+
+            # Filter by retry count vs max retries
+            retryable_tasks = [task for task in tasks if task.retry_count < task.max_retries]
+
+            # Expunge tasks so they can be used outside the session
+            for task in retryable_tasks:
+                session.expunge(task)
+
+            return retryable_tasks
+
+    def is_retryable_error(self, error_message: str | None) -> bool:
+        """
+        Check if an error message indicates a retryable error.
+
+        Args:
+            error_message: Error message to analyze
+
+        Returns:
+            True if error is retryable, False if it's a permanent failure
+        """
+        if not error_message:
+            return True  # No error message, assume retryable
+
+        error_lower = error_message.lower()
+
+        # Permanent errors that should not be retried
+        permanent_error_patterns = [
+            "permission denied",
+            "access denied",
+            "authentication failed",
+            "authorization failed",
+            "syntax error",
+            "invalid argument",
+            "not found",
+            "does not exist",
+            "already exists",
+            "duplicate key",
+            "constraint violation",
+            "immutable",
+            "read-only",
+            "quota exceeded",
+            "rate limit exceeded",
+        ]
+
+        for pattern in permanent_error_patterns:
+            if pattern in error_lower:
+                return False
+
+        # Network-related and temporary errors are retryable
+        retryable_patterns = [
+            "connection",
+            "timeout",
+            "network",
+            "temporary",
+            "unavailable",
+            "retryable",
+            "transient",
+            "intermittent",
+        ]
+
+        for pattern in retryable_patterns:
+            if pattern in error_lower:
+                return True
+
+        # Default to retryable for unknown errors
+        return True
+
+    # Task Timeout & Cancellation Methods (Agent D)
+
+    def check_task_timeout(self, task_id: str) -> bool:
+        """
+        Check if a task has exceeded its timeout.
+
+        Args:
+            task_id: UUID of the task to check
+
+        Returns:
+            True if task has timed out, False otherwise
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+
+            # Only check running tasks with timeout set
+            if task.status != "running" or not task.timeout_seconds:
+                return False
+
+            # Check if started_at is set
+            if not task.started_at:
+                return False
+
+            # Calculate elapsed time
+            elapsed_seconds = (utc_now() - task.started_at).total_seconds()
+            return elapsed_seconds > task.timeout_seconds
+
+    def cancel_task(self, task_id: str, reason: str = "cancelled_by_request") -> bool:
+        """
+        Cancel a running task.
+
+        Args:
+            task_id: UUID of the task to cancel
+            reason: Reason for cancellation
+
+        Returns:
+            True if task was cancelled, False if task not found or not cancellable
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+
+            # Only cancel running tasks
+            if task.status not in ["assigned", "running"]:
+                return False
+
+            # Update task status
+            task.status = "failed"
+            task.error_message = f"Task cancelled: {reason}"
+            task.completed_at = utc_now()
+
+            session.commit()
+            return True
+
+    def get_timed_out_tasks(self) -> list[Task]:
+        """
+        Get all tasks that have exceeded their timeout.
+
+        Returns:
+            List of timed-out Task objects
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        with self.db.get_session() as session:
+            # Get all running tasks with timeout set
+            tasks = (
+                session.query(Task)
+                .filter(Task.status == "running", Task.timeout_seconds.isnot(None))
+                .all()
+            )
+
+            timed_out_tasks = []
+            for task in tasks:
+                if task.started_at:
+                    elapsed_seconds = (utc_now() - task.started_at).total_seconds()
+                    if elapsed_seconds > task.timeout_seconds:
+                        timed_out_tasks.append(task)
+
+            # Expunge tasks so they can be used outside the session
+            for task in timed_out_tasks:
+                session.expunge(task)
+
+            return timed_out_tasks
+
+    def mark_task_timeout(self, task_id: str, reason: str = "timeout_exceeded") -> bool:
+        """
+        Mark a task as failed due to timeout.
+
+        Args:
+            task_id: UUID of the task to mark as timed out
+            reason: Timeout reason
+
+        Returns:
+            True if task was marked as timed out, False if task not found
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return False
+
+            # Only mark running tasks as timed out
+            if task.status != "running":
+                return False
+
+            # Calculate elapsed time for debugging
+            elapsed_seconds = 0
+            if task.started_at:
+                elapsed_seconds = (utc_now() - task.started_at).total_seconds()
+
+            # Update task status
+            task.status = "failed"
+            task.error_message = f"Task timed out after {elapsed_seconds:.1f}s: {reason}"
+            task.completed_at = utc_now()
+
+            session.commit()
+            return True
+
+    def get_cancellable_tasks(self, agent_id: str | None = None) -> list[Task]:
+        """
+        Get all tasks that can be cancelled.
+
+        Args:
+            agent_id: Optional agent ID to filter by
+
+        Returns:
+            List of cancellable Task objects
+        """
+        with self.db.get_session() as session:
+            query = session.query(Task).filter(Task.status.in_(["assigned", "running"]))
+
+            if agent_id:
+                query = query.filter(Task.assigned_agent_id == agent_id)
+
+            tasks = query.all()
+
+            # Expunge tasks so they can be used outside the session
+            for task in tasks:
+                session.expunge(task)
+
+            return tasks
+
+    def get_task_elapsed_time(self, task_id: str) -> float | None:
+        """
+        Get the elapsed time for a running task.
+
+        Args:
+            task_id: UUID of the task
+
+        Returns:
+            Elapsed time in seconds, or None if task not found or not running
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task or task.status != "running" or not task.started_at:
+                return None
+
+            return (utc_now() - task.started_at).total_seconds()
+
+    def get_task_timeout_status(self, task_id: str) -> dict:
+        """
+        Get comprehensive timeout status for a task.
+
+        Args:
+            task_id: UUID of the task
+
+        Returns:
+            Dictionary with timeout status information
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return {"exists": False}
+
+            elapsed_seconds = 0
+            is_timed_out = False
+            time_remaining = None
+
+            if task.started_at:
+                elapsed_seconds = (utc_now() - task.started_at).total_seconds()
+
+                if task.timeout_seconds:
+                    time_remaining = max(0, task.timeout_seconds - elapsed_seconds)
+                    is_timed_out = elapsed_seconds > task.timeout_seconds
+
+            return {
+                "exists": True,
+                "status": task.status,
+                "timeout_seconds": task.timeout_seconds,
+                "elapsed_seconds": elapsed_seconds,
+                "time_remaining": time_remaining,
+                "is_timed_out": is_timed_out,
+                "can_cancel": task.status in ["assigned", "running"],
+            }

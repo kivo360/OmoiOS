@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -34,6 +34,13 @@ class Task(Base):
     result: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Task result/output
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     dependencies: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Task dependencies: {"depends_on": ["task_id_1", "task_id_2"]}
+
+    # Retry fields for error handling
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Current retry attempt count
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)  # Maximum allowed retries
+
+    # Timeout field for cancellation
+    timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Timeout in seconds
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
