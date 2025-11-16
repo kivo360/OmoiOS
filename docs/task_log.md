@@ -10,11 +10,20 @@
   6. Create Alembic migration to add `phase_history` table and new ticket columns, then run full test + lint suite.
 - **Results**: In progress — planning and requirement review complete.
 
----
+## 2025-11-16 22:53 UTC
 
-## 2025-11-16 23:30 UTC
+- **Task Objective**: Implement Stream G Phase Gates & Validation (artifacts, validation service, API routes, migrations) via TDD.
+- **Step-by-Step Plan**:
+  1. Review existing ticket/task models, services, and fixtures to understand integration points for gate validation.
+  2. Draft failing tests in `tests/test_phase_gates.py` covering requirement checks, artifact collection, validation outcomes, and transition gating.
+  3. Implement models (`PhaseGateArtifact`, `PhaseGateResult`), services (`PhaseGateService`, optional `ValidationAgent`), and routes per spec to satisfy tests.
+  4. Update migrations and related modules to persist new tables and wiring.
+  5. Run targeted and full test suites plus linting to ensure compliance.
+- **Results**: In progress — analysis and planning started.
 
-- **Task Objective**: Execute Stream H – Cross-Phase Context Passing (context fields on tickets, aggregation/summarization services, API endpoints, migrations) per prompt.
+## 2025-11-16 23:05 UTC
+
+- **Task Objective**: Implement Stream H Cross-Phase Context Passing (context aggregation, summarization, ticket updates, API endpoints) with TDD.
 - **Step-by-Step Plan**:
   1. Study existing ticket/task/migration structure plus prior streams to understand data flow and DB conventions.
   2. Write failing tests in `tests/test_context_passing.py` covering context aggregation, summarization, retrieval, and update workflows.
@@ -38,3 +47,9 @@
 - **Results**: Not started — requirements review complete.
 
 ---
+  1. Inspect existing ticket/task models, fixtures, and utilities to identify context-related fields to extend.
+  2. Write failing tests in `tests/test_context_passing.py` covering aggregation, summarization, retrieval, and ticket updates.
+  3. Implement `ContextSummarizer` and `ContextService`, update models/migrations, and wire endpoints to satisfy tests.
+  4. Run targeted and full suites (pytest, lint) ensuring no regressions and document outcomes.
+- **Results**: Not started — beginning analysis and test planning.
+

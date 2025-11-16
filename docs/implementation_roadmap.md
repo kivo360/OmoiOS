@@ -168,6 +168,23 @@
 ### Phase 3: Multi-Agent Coordination (Weeks 5-6)
 **Goal**: Enable multiple agents working on related tasks
 
+#### Phase 3 Planning & Parallelization Overview
+- **Readiness Checks**: confirm Phase 2 state machine, context passing, and validation services are merged; ensure heartbeat + retry telemetry from Phase 1 is flowing so coordination metrics have source data.
+- **Agent Workstreams**:
+  - *Registry Squad* (SchemaAgent + APIAgent) owns Milestone 3.1 by extending the Agent model, migrations, and `/agents/search` API.
+  - *Collaboration Squad* (EventBusAgent + ConversationAgent) tackles Milestone 3.2 by defining event schemas and messaging patterns; starts once registry read models are seeded but iterates in parallel with 3.1 after day 1.
+  - *Parallel Execution Squad* (SchedulerAgent + LockManagerAgent) delivers Milestone 3.3 by shipping the DAG resolver, lock manager, and worker concurrency envelope.
+  - *Coordination Patterns Squad* (TemplateAgent + PlaybookAgent) focuses on Milestone 3.4, templating sync/join primitives that plug into the new scheduler.
+- **Parallel Execution Timeline**:
+  - *Week 5 / Days 1-2*: Registry Squad leads; Collaboration Squad develops event schemas simultaneously using stub capability data shared via Redis streams.
+  - *Week 5 / Days 3-5*: Collaboration Squad finalizes messaging + handoff flows while Parallel Execution Squad prototypes DAG evaluation using fixture tickets.
+  - *Week 6 / Days 1-2*: Parallel Execution Squad productionizes locks and conflict detection; Coordination Patterns Squad begins codifying templates leveraging the new DAG API.
+  - *Week 6 / Days 3-5*: Coordination Patterns Squad and Collaboration Squad run joint simulations to prove multi-agent splits/joins while Registry Squad hardens search indexes.
+- **Dependencies & Integration Hooks**:
+  - Registry service publishes capability deltas to EventBus so Collaboration Squad consumes real data.
+  - Scheduler exposes gRPC/REST surface for Coordination Patterns Squad, enabling agents to configure sync points without direct DB writes.
+  - Shared `agent_orchestration` library captures DTOs so each squad iterates independently yet stays type-safe.
+
 #### Milestone 3.1: Agent Registry & Discovery (Week 5)
 **Deliverables**:
 - Enhance agent registry with capabilities
@@ -228,6 +245,23 @@
 
 ### Phase 4: Monitoring & Observability (Weeks 7-8)
 **Goal**: Add comprehensive monitoring and health management
+
+#### Phase 4 Planning & Parallelization Overview
+- **Readiness Checks**: verify Phase 3 emits capability metrics, DAG events, and lock telemetry; ensure OpenTelemetry collectors are provisioned via infrastructure code.
+- **Agent Workstreams**:
+  - *Monitor Squad* (MetricsAgent + DashboardAgent) handles Milestone 4.1, building the monitor service and baseline anomaly detection.
+  - *Alerting Squad* (SignalAgent + RouterAgent) addresses Milestone 4.2 by layering alert logic on top of monitor metrics and wiring outbound channels.
+  - *Watchdog Squad* (GuardianPrepAgent + AutoRecoveryAgent) executes Milestone 4.3, consuming heartbeats plus alert streams to trigger remediation.
+  - *Observability Squad* (TracingAgent + LoggingAgent) owns Milestone 4.4, instrumenting services and integrating distributed tracing/log aggregation.
+- **Parallel Execution Timeline**:
+  - *Week 7 / Days 1-2*: Monitor Squad deploys collector + dashboard scaffolding while Observability Squad adds tracing hooks to shared libraries.
+  - *Week 7 / Days 3-5*: Alerting Squad consumes Monitor metrics to implement rules; Watchdog Squad begins building restart policies using simulated alerts.
+  - *Week 8 / Days 1-2*: Watchdog Squad integrates with Alerting + Monitor outputs; Observability Squad finishes log aggregation pipeline and profiling harness.
+  - *Week 8 / Days 3-5*: All squads run joint game-day to validate anomaly detection → alerting → watchdog remediation, with Observability Squad capturing traces for regression baselines.
+- **Dependencies & Integration Hooks**:
+  - Monitor Squad publishes metrics schemas early so Alerting Squad can stub data; Observability Squad reuses the same schema to avoid duplicate instrumentation.
+  - Watchdog actions piggyback on agent registry APIs from Phase 3; define contract tests to lock interfaces.
+  - Shared `telemetry-config` package centralizes exporter setup to keep squads unblocked while working in parallel.
 
 #### Milestone 4.1: Monitor Agent Implementation (Week 7)
 **Deliverables**:
