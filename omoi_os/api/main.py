@@ -18,27 +18,6 @@ queue: TaskQueueService | None = None
 event_bus: EventBusService | None = None
 
 
-def get_db_service() -> DatabaseService:
-    """Get database service instance."""
-    if db is None:
-        raise RuntimeError("Database service not initialized")
-    return db
-
-
-def get_event_bus() -> EventBusService:
-    """Get event bus service instance."""
-    if event_bus is None:
-        raise RuntimeError("Event bus not initialized")
-    return event_bus
-
-
-def get_task_queue() -> TaskQueueService:
-    """Get task queue service instance."""
-    if queue is None:
-        raise RuntimeError("Task queue not initialized")
-    return queue
-
-
 async def orchestrator_loop():
     """Background task that polls queue and assigns tasks to workers."""
     global db, queue, event_bus

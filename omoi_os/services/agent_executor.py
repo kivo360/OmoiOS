@@ -1,7 +1,14 @@
 """Agent executor service wrapping OpenHands SDK for task execution."""
 
+import asyncio
 import os
 from typing import Dict, Any
+
+# Ensure an event loop exists for libraries that expect one at import time
+try:
+    asyncio.get_running_loop()
+except RuntimeError:
+    asyncio.set_event_loop(asyncio.new_event_loop())
 
 from openhands.sdk import Conversation, LLM
 from openhands.tools.preset.default import get_default_agent

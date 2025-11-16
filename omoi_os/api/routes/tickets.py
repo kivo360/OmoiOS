@@ -3,9 +3,9 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
-from omoi_os.api.main import get_db_service, get_task_queue
+from omoi_os.api.dependencies import get_db_service, get_task_queue
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
@@ -33,8 +33,7 @@ class TicketResponse(BaseModel):
     status: str
     priority: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 @router.post("", response_model=TicketResponse)

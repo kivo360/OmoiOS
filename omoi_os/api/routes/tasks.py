@@ -2,28 +2,30 @@
 
 from typing import List
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
-from omoi_os.api.main import db
+from omoi_os.api.dependencies import get_db_service
 from omoi_os.models.task import Task
+from omoi_os.services.database import DatabaseService
 
 router = APIRouter()
 
 
-@router.get("/tasks/{task_id}", response_model=dict)
-async def get_task(task_id: str):
+@router.get("/{task_id}", response_model=dict)
+async def get_task(
+    task_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
     """
     Get task by ID.
 
     Args:
         task_id: Task UUID
+        db: Database service
 
     Returns:
         Task information
     """
-    if not db:
-        raise HTTPException(status_code=500, detail="Services not initialized")
-
     with db.get_session() as session:
         task = session.query(Task).filter(Task.id == task_id).first()
         if not task:
@@ -47,21 +49,23 @@ async def get_task(task_id: str):
         }
 
 
-@router.get("/tasks", response_model=List[dict])
-async def list_tasks(status: str | None = None, phase_id: str | None = None):
+@router.get("", response_model=List[dict])
+async def list_tasks(
+    status: str | None = None,
+    phase_id: str | None = None,
+    db: DatabaseService = Depends(get_db_service),
+):
     """
     List tasks with optional filtering.
 
     Args:
         status: Filter by status (pending, assigned, running, completed, failed)
         phase_id: Filter by phase ID
+        db: Database service
 
     Returns:
         List of tasks
     """
-    if not db:
-        raise HTTPException(status_code=500, detail="Services not initialized")
-
     with db.get_session() as session:
         query = session.query(Task)
         if status:
