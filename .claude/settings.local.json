@@ -3,7 +3,9 @@
     "allow": [
       "mcp__openmemory__add-memory",
       "Skill(backend-dev-guidelines)",
-      "mcp__openmemory__search-memories"
+      "mcp__openmemory__search-memories",
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__list_directory"
     ],
     "deny": [],
     "ask": []

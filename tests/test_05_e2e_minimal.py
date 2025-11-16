@@ -66,7 +66,7 @@ def test_e2e_minimal_flow(
             agent_type="worker",
             phase_id="PHASE_REQUIREMENTS",
             status="idle",
-            capabilities={"tools": ["bash", "file_editor"]},
+            capabilities=["bash", "file_editor"],
         )
         session.add(agent)
         session.commit()

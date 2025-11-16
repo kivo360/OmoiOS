@@ -133,7 +133,10 @@ def sample_agent(db_service: DatabaseService) -> Agent:
             agent_type="worker",
             phase_id="PHASE_REQUIREMENTS",
             status="idle",
-            capabilities={"tools": ["bash", "file_editor"]},
+            capabilities=["bash", "file_editor"],
+            capacity=2,
+            health_status="healthy",
+            tags=["python"],
         )
         session.add(agent)
         session.commit()
