@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from omoi_os.models.phase_history import PhaseHistory
 
 from sqlalchemy import DateTime, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
@@ -45,6 +46,8 @@ class Ticket(Base):
         default=utc_now,
         onupdate=utc_now,
     )
+    context: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationship
     tasks: Mapped[list["Task"]] = relationship(
