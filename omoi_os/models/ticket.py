@@ -6,6 +6,7 @@ from uuid import uuid4
 
 if TYPE_CHECKING:
     from omoi_os.models.task import Task
+    from omoi_os.models.phase_history import PhaseHistory
 
 from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,6 +32,9 @@ class Ticket(Base):
     priority: Mapped[str] = mapped_column(
         String(20), nullable=False, index=True
     )  # CRITICAL, HIGH, MEDIUM, LOW
+    previous_phase_id: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True, index=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -45,4 +49,10 @@ class Ticket(Base):
     # Relationship
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="ticket", cascade="all, delete-orphan"
+    )
+    phase_history: Mapped[list["PhaseHistory"]] = relationship(
+        "PhaseHistory",
+        back_populates="ticket",
+        cascade="all, delete-orphan",
+        order_by="PhaseHistory.created_at",
     )

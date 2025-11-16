@@ -10,6 +10,7 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.worker import TimeoutManager
+from omoi_os.utils.datetime import utc_now
 
 
 @pytest.fixture
@@ -49,8 +50,8 @@ def sample_task():
     task.status = "running"
     task.assigned_agent_id = "agent-789"
     task.timeout_seconds = 30
-    task.started_at = datetime.utcnow() - timedelta(seconds=35)  # 35 seconds ago
-    task.created_at = datetime.utcnow() - timedelta(minutes=5)
+    task.started_at = utc_now() - timedelta(seconds=35)  # 35 seconds ago
+    task.created_at = utc_now() - timedelta(minutes=5)
     return task
 
 
@@ -73,7 +74,7 @@ class TestTaskTimeoutMethods:
         recent_task = Mock(spec=Task)
         recent_task.status = "running"
         recent_task.timeout_seconds = 30
-        recent_task.started_at = datetime.utcnow() - timedelta(seconds=10)  # 10 seconds ago
+        recent_task.started_at = utc_now() - timedelta(seconds=10)  # 10 seconds ago
 
         with patch.object(task_queue, 'db') as mock_db:
             mock_session = Mock()
@@ -139,12 +140,12 @@ class TestTaskTimeoutMethods:
         """Test getting all timed-out tasks."""
         timed_out_task = Mock(spec=Task)
         timed_out_task.id = "timed-out-task"
-        timed_out_task.started_at = datetime.utcnow() - timedelta(seconds=60)
+        timed_out_task.started_at = utc_now() - timedelta(seconds=60)
         timed_out_task.timeout_seconds = 30
 
         running_task = Mock(spec=Task)
         running_task.id = "running-task"
-        running_task.started_at = datetime.utcnow() - timedelta(seconds=10)
+        running_task.started_at = utc_now() - timedelta(seconds=10)
         running_task.timeout_seconds = 30
 
         with patch.object(task_queue, 'db') as mock_db:
@@ -370,7 +371,7 @@ class TestTimeoutIntegration:
         timed_out_task.id = "timeout-test-task"
         timed_out_task.status = "running"
         timed_out_task.timeout_seconds = 1
-        timed_out_task.started_at = datetime.utcnow() - timedelta(seconds=2)
+        timed_out_task.started_at = utc_now() - timedelta(seconds=2)
         timed_out_task.phase_id = "PHASE_IMPLEMENTATION"
         timed_out_task.task_type = "implement_feature"
 
