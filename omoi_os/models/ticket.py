@@ -11,6 +11,7 @@ from sqlalchemy import DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
+from omoi_os.utils.datetime import utc_now
 
 
 class Ticket(Base):
@@ -32,13 +33,13 @@ class Ticket(Base):
     )  # CRITICAL, HIGH, MEDIUM, LOW
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=utc_now,
+        onupdate=utc_now,
     )
 
     # Relationship

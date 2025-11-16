@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+
+from omoi_os.utils.datetime import utc_now
 from typing import Any, Optional
 
 from sqlalchemy import select
@@ -35,7 +37,7 @@ class TicketHistoryService:
                 new_value=new_value,
                 change_description=change_description,
                 metadata=metadata,
-                changed_at=datetime.utcnow(),
+                changed_at=utc_now(),
             )
         )
 

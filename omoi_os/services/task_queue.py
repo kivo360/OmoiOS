@@ -50,6 +50,9 @@ class TaskQueueService:
             )
             session.add(task)
             session.flush()
+            session.refresh(task)
+            # Expunge the task so it can be used outside the session
+            session.expunge(task)
             return task
 
     def get_next_task(self, phase_id: str) -> Task | None:
@@ -74,6 +77,8 @@ class TaskQueueService:
                 return None
             # Sort by priority descending
             task = max(tasks, key=lambda t: priority_order.get(t.priority, 0))
+            # Expunge so it can be used outside the session
+            session.expunge(task)
             return task
 
     def assign_task(self, task_id: str, agent_id: str) -> None:
@@ -96,6 +101,7 @@ class TaskQueueService:
         status: str,
         result: dict | None = None,
         error_message: str | None = None,
+        conversation_id: str | None = None,
     ) -> None:
         """
         Update task status and result.
@@ -105,8 +111,9 @@ class TaskQueueService:
             status: New status (running, completed, failed)
             result: Optional task result dictionary
             error_message: Optional error message if failed
+            conversation_id: Optional OpenHands conversation ID
         """
-        from datetime import datetime
+        from omoi_os.utils.datetime import utc_now
 
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
@@ -116,7 +123,30 @@ class TaskQueueService:
                     task.result = result
                 if error_message:
                     task.error_message = error_message
+                if conversation_id:
+                    task.conversation_id = conversation_id
                 if status == "running" and not task.started_at:
-                    task.started_at = datetime.utcnow()
+                    task.started_at = utc_now()
                 elif status in ("completed", "failed") and not task.completed_at:
-                    task.completed_at = datetime.utcnow()
+                    task.completed_at = utc_now()
+
+    def get_assigned_tasks(self, agent_id: str) -> list[Task]:
+        """
+        Get all tasks assigned to a specific agent.
+
+        Args:
+            agent_id: UUID of the agent
+
+        Returns:
+            List of Task objects assigned to the agent
+        """
+        with self.db.get_session() as session:
+            tasks = (
+                session.query(Task)
+                .filter(Task.assigned_agent_id == agent_id, Task.status.in_(["assigned", "running"]))
+                .all()
+            )
+            # Expunge all tasks so they can be used outside the session
+            for task in tasks:
+                session.expunge(task)
+            return tasks

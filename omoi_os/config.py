@@ -32,7 +32,7 @@ class DatabaseSettings(BaseSettings):
         env_file_encoding="utf-8",
     )
 
-    url: str = "postgresql://postgres:postgres@localhost:15432/app_db"
+    url: str = "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
 
 
 class RedisSettings(BaseSettings):

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
+
+from omoi_os.utils.datetime import utc_now
 from typing import Optional
 
 from sqlalchemy import (
@@ -39,10 +41,10 @@ class Ticket(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -106,7 +108,7 @@ class TicketComment(Base):
     attachments: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
     updated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -135,7 +137,7 @@ class TicketHistory(Base):
     change_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     changed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True
+        DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
 
     ticket: Mapped["Ticket"] = relationship(back_populates="history")
@@ -162,7 +164,7 @@ class TicketCommit(Base):
     files_list: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     linked_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
     link_method: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
@@ -187,8 +189,8 @@ class BoardConfig(Base):
     initial_status: Mapped[str] = mapped_column(String(50), nullable=False)
     settings: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )

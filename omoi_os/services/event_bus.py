@@ -81,3 +81,8 @@ class EventBusService:
         for message in self.pubsub.listen():
             # Callbacks are invoked automatically via subscribe()
             pass
+
+    def close(self) -> None:
+        """Close Redis connections."""
+        self.pubsub.close()
+        self.redis_client.close()

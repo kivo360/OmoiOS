@@ -15,7 +15,7 @@ from omoi_os.services.task_queue import TaskQueueService
 def main():
     """Main worker loop."""
     # Initialize services
-    database_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:15432/app_db")
+    database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
     workspace_dir = os.getenv("WORKSPACE_DIR", "/tmp/omoi_os_workspaces")
 
@@ -166,13 +166,13 @@ def execute_task(
 
     finally:
         # Update agent status back to idle
-        from datetime import datetime, timezone
+        from omoi_os.utils.datetime import utc_now
 
         with db.get_session() as session:
             agent = session.get(Agent, agent_id)
             if agent:
                 agent.status = "idle"
-                agent.last_heartbeat = datetime.now(timezone.utc)
+                agent.last_heartbeat = utc_now()
 
 
 if __name__ == "__main__":

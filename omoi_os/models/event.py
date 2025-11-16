@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from omoi_os.models.base import Base
+from omoi_os.utils.datetime import utc_now
 
 
 class Event(Base):
@@ -29,5 +30,5 @@ class Event(Base):
     payload: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, default=datetime.utcnow, index=True
+        DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )

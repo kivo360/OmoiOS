@@ -79,7 +79,7 @@ async def lifespan(app: FastAPI):
     # Initialize services
     db = DatabaseService(
         connection_string=os.getenv(
-            "DATABASE_URL", "postgresql://postgres:postgres@localhost:15432/app_db"
+            "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
         )
     )
     queue = TaskQueueService(db)

@@ -41,7 +41,7 @@ services:
     ports:
       - "18000:8000"  # Non-standard port to avoid conflicts
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app_db
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
       - REDIS_URL=redis://redis:6379
       - PYTHONUNBUFFERED=1
     depends_on:
@@ -77,7 +77,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: omoi_os_worker
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/app_db
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
       - REDIS_URL=redis://redis:6379
       - PYTHONUNBUFFERED=1
       - WORKSPACE_DIR=/tmp/omoi_workspace

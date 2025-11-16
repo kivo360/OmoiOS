@@ -16,6 +16,7 @@ dependencies = [
     "pgvector>=0.3.3,<1",
     "alembic>=1.13.0,<2",
     "redis>=5.0.0,<6",
+    "whenever>=0.9.3",
 ]
 
 [build-system]
@@ -31,4 +32,10 @@ module-root = ""
 dev = [
     "openhands-agent-server>=1.1.0",
     "openhands-workspace>=1.1.0",
+]
+test = [
+    "pytest>=8.0.0,<9",
+    "pytest-asyncio>=0.23.0,<1",
+    "fakeredis>=2.20.0,<3",
+    "pytest-cov>=4.1.0,<5",
 ]

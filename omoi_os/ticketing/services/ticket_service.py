@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
+from omoi_os.utils.datetime import utc_now
+
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -66,8 +68,8 @@ class TicketService:
             related_ticket_ids=None,
             tags={"values": tags or []},
             blocked_by_ticket_ids={"ids": blocked_by_ticket_ids or []} if blocked_by_ticket_ids else None,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=utc_now(),
+            updated_at=utc_now(),
             is_resolved=False,
         )
         self.session.add(ticket)
@@ -81,7 +83,7 @@ class TicketService:
                 new_value=None,
                 change_description="Ticket created",
                 metadata=None,
-                changed_at=datetime.utcnow(),
+                changed_at=utc_now(),
             )
         )
         return {"success": True, "ticket_id": ticket.id, "status": ticket.status}
@@ -114,10 +116,10 @@ class TicketService:
                         new_value=str(v) if v is not None else None,
                         change_description=f"Updated {k}",
                         metadata=None,
-                        changed_at=datetime.utcnow(),
+                        changed_at=utc_now(),
                     )
                 )
-        ticket.updated_at = datetime.utcnow()
+        ticket.updated_at = utc_now()
         if update_comment:
             self.add_comment(ticket_id=ticket.id, agent_id=agent_id, comment_text=update_comment, comment_type="general", mentions=[], attachments=[])
         return {"success": True, "ticket_id": ticket.id, "fields_updated": fields_updated}
@@ -141,7 +143,7 @@ class TicketService:
 
         old_status = ticket.status
         ticket.status = new_status
-        now = datetime.utcnow()
+        now = utc_now()
         ticket.updated_at = now
         if old_status != new_status and ticket.started_at is None:
             ticket.started_at = now
@@ -187,7 +189,7 @@ class TicketService:
             comment_type=comment_type or "general",
             mentions={"ids": mentions} if mentions else None,
             attachments={"paths": attachments} if attachments else None,
-            created_at=datetime.utcnow(),
+            created_at=utc_now(),
             is_edited=False,
         )
         self.session.add(comment)
@@ -201,7 +203,7 @@ class TicketService:
                 new_value=None,
                 change_description="Comment added",
                 metadata=None,
-                changed_at=datetime.utcnow(),
+                changed_at=utc_now(),
             )
         )
         return {"success": True, "comment_id": comment.id, "ticket_id": ticket.id}
@@ -278,7 +280,7 @@ class TicketService:
             agent_id=agent_id,
             commit_sha=commit_sha,
             commit_message=commit_message or "",
-            commit_timestamp=datetime.utcnow(),
+            commit_timestamp=utc_now(),
         )
         self.session.add(commit)
         self.session.add(
@@ -291,7 +293,7 @@ class TicketService:
                 new_value=commit_sha,
                 change_description="Commit linked",
                 metadata=None,
-                changed_at=datetime.utcnow(),
+                changed_at=utc_now(),
             )
         )
         return {"success": True, "ticket_id": ticket.id, "commit_sha": commit_sha}
@@ -300,7 +302,7 @@ class TicketService:
         ticket = self.session.get(Ticket, ticket_id)
         if not ticket:
             raise ValueError("Ticket not found")
-        now = datetime.utcnow()
+        now = utc_now()
         ticket.is_resolved = True
         ticket.resolved_at = now
         if commit_sha:

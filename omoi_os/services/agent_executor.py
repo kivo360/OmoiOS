@@ -54,18 +54,21 @@ class AgentExecutor:
             workspace=self.workspace_dir,
         )
 
-        # Send task message
-        conversation.send_message(task_description)
+        try:
+            # Send task message
+            conversation.send_message(task_description)
 
-        # Run agent
-        conversation.run()
+            # Run agent
+            conversation.run()
 
-        # Extract result
-        result = {
-            "status": conversation.state.execution_status,
-            "event_count": len(conversation.state.events),
-            "cost": conversation.conversation_stats.get_combined_metrics().accumulated_cost,
-        }
+            # Extract result
+            result = {
+                "status": conversation.state.execution_status,
+                "event_count": len(conversation.state.events),
+                "cost": conversation.conversation_stats.get_combined_metrics().accumulated_cost,
+            }
 
-        conversation.close()
-        return result
+            return result
+        finally:
+            # Always close conversation, even on error
+            conversation.close()
