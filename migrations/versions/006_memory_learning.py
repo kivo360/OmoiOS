@@ -21,6 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create phases table (foundational - should have been in earlier migration)
+    # Enhanced with Hephaestus-inspired done definitions, outputs, and prompts
     op.create_table(
         "phases",
         sa.Column("id", sa.String(50), nullable=False),
@@ -39,6 +40,31 @@ def upgrade() -> None:
             nullable=False,
             server_default=sa.text("false"),
             comment="Whether this is a terminal phase",
+        ),
+        # Hephaestus-inspired enhancements
+        sa.Column(
+            "done_definitions",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="Concrete, verifiable completion criteria (array of strings)",
+        ),
+        sa.Column(
+            "expected_outputs",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="Expected artifacts: [{type: 'file', pattern: 'src/*.py', required: true}]",
+        ),
+        sa.Column(
+            "phase_prompt",
+            sa.Text(),
+            nullable=True,
+            comment="Phase-level system prompt/instructions for agents",
+        ),
+        sa.Column(
+            "next_steps_guide",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="Guidance on what happens after phase completion (array of strings)",
         ),
         sa.Column(
             "configuration",
@@ -75,6 +101,164 @@ def upgrade() -> None:
          '["PHASE_BACKLOG", "PHASE_REQUIREMENTS", "PHASE_DESIGN", "PHASE_IMPLEMENTATION", "PHASE_TESTING"]'::jsonb, 
          true, '{}'::jsonb)
         """
+    )
+
+    # Create board_columns table (Kanban visualization)
+    op.create_table(
+        "board_columns",
+        sa.Column("id", sa.String(50), nullable=False),
+        sa.Column("name", sa.String(100), nullable=False),
+        sa.Column("description", sa.String(500), nullable=True),
+        sa.Column("sequence_order", sa.Integer(), nullable=False),
+        sa.Column(
+            "phase_mapping",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+            comment="Which phase IDs map to this column",
+        ),
+        sa.Column(
+            "wip_limit",
+            sa.Integer(),
+            nullable=True,
+            comment="Work-in-progress limit (null = unlimited)",
+        ),
+        sa.Column(
+            "is_terminal",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+            comment="Whether this is an end column",
+        ),
+        sa.Column(
+            "auto_transition_to",
+            sa.String(50),
+            nullable=True,
+            comment="Column to auto-transition to on completion",
+        ),
+        sa.Column(
+            "color_theme",
+            sa.String(50),
+            nullable=True,
+            comment="Visual theme color",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_index(
+        "ix_board_columns_sequence_order", "board_columns", ["sequence_order"], unique=False
+    )
+
+    # Populate board_columns with default Kanban layout
+    op.execute(
+        """
+        INSERT INTO board_columns (id, name, description, sequence_order, phase_mapping, wip_limit, is_terminal, auto_transition_to, color_theme) VALUES
+        ('backlog', '📋 Backlog', 'Tickets awaiting analysis', 0,
+         '["PHASE_BACKLOG"]'::jsonb, null, false, null, 'gray'),
+        ('analyzing', '🔍 Analyzing', 'Requirements analysis and design', 1,
+         '["PHASE_REQUIREMENTS", "PHASE_DESIGN"]'::jsonb, 5, false, null, 'blue'),
+        ('building', '🔨 Building', 'Active implementation work', 2,
+         '["PHASE_IMPLEMENTATION"]'::jsonb, 10, false, 'testing', 'yellow'),
+        ('testing', '🧪 Testing', 'Validation and quality assurance', 3,
+         '["PHASE_TESTING"]'::jsonb, 8, false, null, 'blue'),
+        ('deploying', '🚀 Deploying', 'Ready for deployment', 4,
+         '["PHASE_DEPLOYMENT"]'::jsonb, 3, false, 'done', 'green'),
+        ('done', '✅ Done', 'Completed tickets', 5,
+         '["PHASE_DONE"]'::jsonb, null, true, null, 'green'),
+        ('blocked', '🚫 Blocked', 'Blocked by dependencies', 6,
+         '["PHASE_BLOCKED"]'::jsonb, null, true, null, 'red')
+        """
+    )
+
+    # Create task_discoveries table (Hephaestus-inspired discovery tracking)
+    op.create_table(
+        "task_discoveries",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column(
+            "source_task_id",
+            sa.String(),
+            nullable=False,
+            comment="Task that made the discovery",
+        ),
+        sa.Column(
+            "discovery_type",
+            sa.String(50),
+            nullable=False,
+            comment="Type: bug, optimization, clarification_needed, new_component, etc.",
+        ),
+        sa.Column(
+            "description",
+            sa.Text(),
+            nullable=False,
+            comment="What was discovered",
+        ),
+        sa.Column(
+            "spawned_task_ids",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            server_default=sa.text("'[]'::jsonb"),
+            comment="Array of task IDs spawned from this discovery",
+        ),
+        sa.Column(
+            "discovered_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="When the discovery was made",
+        ),
+        sa.Column(
+            "priority_boost",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+            comment="Whether discovery warranted priority escalation",
+        ),
+        sa.Column(
+            "resolution_status",
+            sa.String(50),
+            nullable=False,
+            server_default=sa.text("'open'"),
+            comment="Status: open, in_progress, resolved, invalid",
+        ),
+        sa.Column(
+            "discovery_metadata",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="Additional discovery metadata (evidence, context, etc.)",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["source_task_id"],
+            ["tasks.id"],
+            name="fk_task_discoveries_source_task_id",
+            ondelete="CASCADE",
+        ),
+    )
+
+    # Create indexes for task_discoveries
+    op.create_index(
+        "ix_task_discoveries_source_task_id",
+        "task_discoveries",
+        ["source_task_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_task_discoveries_discovery_type",
+        "task_discoveries",
+        ["discovery_type"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_task_discoveries_discovered_at",
+        "task_discoveries",
+        ["discovered_at"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_task_discoveries_resolution_status",
+        "task_discoveries",
+        ["resolution_status"],
+        unique=False,
     )
 
     # Create task_memories table
@@ -253,4 +437,6 @@ def downgrade() -> None:
     # Drop tables in reverse order
     op.drop_table("learned_patterns")
     op.drop_table("task_memories")
+    op.drop_table("task_discoveries")
+    op.drop_table("board_columns")
     op.drop_table("phases")

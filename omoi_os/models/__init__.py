@@ -3,6 +3,7 @@
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.base import Base
+from omoi_os.models.board_column import BoardColumn
 from omoi_os.models.budget import Budget, BudgetScope
 from omoi_os.models.cost_record import CostRecord
 from omoi_os.models.event import Event
@@ -16,6 +17,7 @@ from omoi_os.models.phase_gate_result import PhaseGateResult
 from omoi_os.models.phase_history import PhaseHistory
 from omoi_os.models.resource_lock import ResourceLock
 from omoi_os.models.task import Task
+from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task_memory import TaskMemory
 from omoi_os.models.ticket import Ticket
 
@@ -25,10 +27,12 @@ __all__ = [
     "Alert",
     "AuthorityLevel",
     "Base",
+    "BoardColumn",
     "Budget",
     "BudgetScope",
     "CollaborationThread",
     "CostRecord",
+    "DiscoveryType",
     "Event",
     "GuardianAction",
     "LearnedPattern",
@@ -40,6 +44,7 @@ __all__ = [
     "PhaseModel",
     "ResourceLock",
     "Task",
+    "TaskDiscovery",
     "TaskMemory",
     "TaskPattern",
     "Ticket",

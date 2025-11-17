@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from omoi_os.models.cost_record import CostRecord
     from omoi_os.models.ticket import Ticket
     from omoi_os.models.task_memory import TaskMemory
+    from omoi_os.models.task_discovery import TaskDiscovery
 
 
 class Task(Base):
@@ -57,4 +58,10 @@ class Task(Base):
     )
     cost_records: Mapped[list["CostRecord"]] = relationship(
         "CostRecord", back_populates="task", cascade="all, delete-orphan"
+    )
+    discoveries: Mapped[list["TaskDiscovery"]] = relationship(
+        "TaskDiscovery",
+        foreign_keys="[TaskDiscovery.source_task_id]",
+        back_populates="source_task",
+        cascade="all, delete-orphan",
     )

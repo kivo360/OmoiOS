@@ -1,0 +1,304 @@
+# Software Development Workflow Configuration
+# Hephaestus-inspired adaptive workflow with done definitions and discovery tracking
+
+name: "Software Development"
+has_result: true
+result_criteria: "All components implemented, tested, and deployed"
+on_result_found: "stop_all"
+
+phases:
+  - id: "PHASE_REQUIREMENTS"
+    name: "Requirements Analysis"
+    description: "Extract requirements from PRD and identify components"
+    sequence_order: 1
+    allowed_transitions:
+      - "PHASE_DESIGN"
+      - "PHASE_BLOCKED"
+    is_terminal: false
+    
+    done_definitions:
+      - "Requirements extracted and documented"
+      - "Components identified and listed"
+      - "Phase 2 implementation tasks created"
+      - "Ticket moved to 'analyzing' status"
+    
+    expected_outputs:
+      - type: "documentation"
+        pattern: "requirements/*.md"
+        required: true
+      - type: "task"
+        pattern: "Phase 2 tasks created"
+        required: true
+    
+    phase_prompt: |
+      YOU ARE IN THE REQUIREMENTS ANALYSIS PHASE
+      
+      STEP 1: Read the PRD.md carefully
+      STEP 2: Extract functional and non-functional requirements
+      STEP 3: Identify system components (auth, API, frontend, database, etc.)
+      STEP 4: For each component, create a Phase 2 implementation task
+      STEP 5: Document requirements in requirements/ directory
+      STEP 6: Mark task as done
+      
+      IMPORTANT: Do not proceed until all done_definitions are met.
+      Create one implementation task per component discovered.
+    
+    next_steps_guide:
+      - "Phase 2 agents will implement each component in parallel"
+      - "Each implementation spawns its own Phase 3 validation task"
+      - "If requirements are unclear, spawn clarification tasks"
+  
+  - id: "PHASE_IMPLEMENTATION"
+    name: "Implementation"
+    description: "Build one component with comprehensive tests"
+    sequence_order: 3
+    allowed_transitions:
+      - "PHASE_TESTING"
+      - "PHASE_REQUIREMENTS"  # Jump back if clarification needed
+      - "PHASE_BLOCKED"
+    is_terminal: false
+    
+    done_definitions:
+      - "Component code files created in src/"
+      - "Minimum 3 test cases written"
+      - "Tests passing locally"
+      - "Phase 3 validation task created"
+      - "update_task_status called with status='done'"
+    
+    expected_outputs:
+      - type: "file"
+        pattern: "src/**/*.py"
+        required: true
+      - type: "test"
+        pattern: "tests/test_*.py"
+        required: true
+        validation_rule: "min_passing: 3"
+    
+    phase_prompt: |
+      YOU ARE A SOFTWARE ENGINEER IN THE IMPLEMENTATION PHASE
+      
+      STEP 1: Understand the component requirements from the ticket
+      STEP 2: Design the interface and data structures
+      STEP 3: Implement the core logic
+      STEP 4: Write comprehensive tests (minimum 3 test cases)
+      STEP 5: Run tests and ensure they pass
+      STEP 6: If you discover bugs → record_discovery(type='bug', spawn_fix=true)
+      STEP 7: If you discover optimizations → record_discovery(type='optimization')
+      STEP 8: Create Phase 3 validation task
+      STEP 9: Mark task as done
+      
+      DISCOVERY TRIGGERS:
+      - Found bug → spawn immediate fix task
+      - Found optimization opportunity → spawn investigation task
+      - Requirements unclear → spawn clarification task (Phase 1)
+      
+      IMPORTANT: All done_definitions must be met before marking complete.
+    
+    next_steps_guide:
+      - "Phase 3 agent runs integration tests on your component"
+      - "If tests pass → component validated → marked complete"
+      - "If tests fail → bugs spawned back to Phase 2"
+      - "Discoveries during testing may spawn parallel investigations"
+  
+  - id: "PHASE_TESTING"
+    name: "Validation & Testing"
+    description: "Run integration tests and validate requirements"
+    sequence_order: 4
+    allowed_transitions:
+      - "PHASE_DEPLOYMENT"
+      - "PHASE_IMPLEMENTATION"  # Loop back if bugs found
+      - "PHASE_BLOCKED"
+    is_terminal: false
+    
+    done_definitions:
+      - "Integration tests executed"
+      - "All tests passing"
+      - "Requirements validated"
+      - "If bugs found → fix tasks created"
+      - "If no bugs → deployment task created"
+    
+    expected_outputs:
+      - type: "test"
+        pattern: "tests/integration/*.py passing"
+        required: true
+      - type: "task"
+        pattern: "Phase 4 deployment task OR Phase 2 fix tasks created"
+        required: true
+    
+    phase_prompt: |
+      YOU ARE A QA ENGINEER IN THE VALIDATION PHASE
+      
+      STEP 1: Review the component implementation
+      STEP 2: Run integration tests
+      STEP 3: Validate against requirements
+      STEP 4: If tests PASS:
+          - Create Phase 4 deployment task
+          - Mark component validated
+      STEP 5: If tests FAIL:
+          - record_discovery(type='bug', description='...')
+          - Spawn Phase 2 fix tasks
+          - DO NOT mark as done
+      STEP 6: If you discover optimization opportunities:
+          - record_discovery(type='optimization', description='...')
+          - Optionally spawn investigation tasks
+      
+      DISCOVERY PATTERNS:
+      - Bug discovered → spawn fix task (Phase 2, priority boost)
+      - Performance issue → spawn optimization investigation
+      - Security issue → spawn security fix (critical priority)
+      - Integration issue → spawn integration fix task
+      
+      IMPORTANT: Do not approve buggy components. Spawn fixes instead.
+    
+    next_steps_guide:
+      - "If all tests pass → Phase 4 deploys the component"
+      - "If bugs found → Phase 2 fixes them → re-test loop"
+      - "Workflow branches naturally based on test results"
+
+  - id: "PHASE_DEPLOYMENT"
+    name: "Deployment"
+    description: "Deploy validated component to production"
+    sequence_order: 5
+    allowed_transitions:
+      - "PHASE_DONE"
+      - "PHASE_BLOCKED"
+    is_terminal: false
+    
+    done_definitions:
+      - "Component deployed successfully"
+      - "Deployment verified"
+      - "Monitoring enabled"
+      - "Ticket marked as 'done'"
+    
+    expected_outputs:
+      - type: "deployment"
+        pattern: "deployment successful"
+        required: true
+    
+    phase_prompt: |
+      YOU ARE A DEVOPS ENGINEER IN THE DEPLOYMENT PHASE
+      
+      STEP 1: Verify component is validated (all tests passing)
+      STEP 2: Deploy to production
+      STEP 3: Verify deployment health
+      STEP 4: Enable monitoring
+      STEP 5: Mark ticket as done
+    
+    next_steps_guide:
+      - "Component is now in production"
+      - "Ticket moves to DONE status"
+      - "Workflow complete for this component"
+
+  - id: "PHASE_DONE"
+    name: "Done"
+    description: "Component complete and deployed"
+    sequence_order: 6
+    allowed_transitions: []
+    is_terminal: true
+    
+    done_definitions:
+      - "Component in production"
+      - "All validation passed"
+    
+    expected_outputs: []
+    phase_prompt: "Component successfully completed."
+    next_steps_guide: []
+
+  - id: "PHASE_BLOCKED"
+    name: "Blocked"
+    description: "Blocked by external dependencies"
+    sequence_order: 7
+    allowed_transitions:
+      - "PHASE_REQUIREMENTS"
+      - "PHASE_IMPLEMENTATION"
+      - "PHASE_TESTING"
+    is_terminal: true
+    
+    done_definitions:
+      - "Blocker identified and documented"
+      - "Blocker resolution plan created"
+    
+    expected_outputs: []
+    phase_prompt: "Identify blocker and create resolution plan."
+    next_steps_guide:
+      - "Once blocker resolved, move back to appropriate phase"
+
+board_columns:
+  - id: "backlog"
+    name: "📋 Backlog"
+    description: "Tickets awaiting analysis"
+    sequence_order: 0
+    phase_mapping:
+      - "PHASE_BACKLOG"
+    wip_limit: null
+    is_terminal: false
+    auto_transition_to: null
+    color_theme: "gray"
+  
+  - id: "analyzing"
+    name: "🔍 Analyzing"
+    description: "Requirements analysis and design"
+    sequence_order: 1
+    phase_mapping:
+      - "PHASE_REQUIREMENTS"
+      - "PHASE_DESIGN"
+    wip_limit: 5
+    is_terminal: false
+    auto_transition_to: null
+    color_theme: "blue"
+  
+  - id: "building"
+    name: "🔨 Building"
+    description: "Active implementation work"
+    sequence_order: 2
+    phase_mapping:
+      - "PHASE_IMPLEMENTATION"
+    wip_limit: 10
+    is_terminal: false
+    auto_transition_to: "testing"
+    color_theme: "yellow"
+  
+  - id: "testing"
+    name: "🧪 Testing"
+    description: "Validation and quality assurance"
+    sequence_order: 3
+    phase_mapping:
+      - "PHASE_TESTING"
+    wip_limit: 8
+    is_terminal: false
+    auto_transition_to: null
+    color_theme: "blue"
+  
+  - id: "deploying"
+    name: "🚀 Deploying"
+    description: "Ready for deployment"
+    sequence_order: 4
+    phase_mapping:
+      - "PHASE_DEPLOYMENT"
+    wip_limit: 3
+    is_terminal: false
+    auto_transition_to: "done"
+    color_theme: "green"
+  
+  - id: "done"
+    name: "✅ Done"
+    description: "Completed tickets"
+    sequence_order: 5
+    phase_mapping:
+      - "PHASE_DONE"
+    wip_limit: null
+    is_terminal: true
+    auto_transition_to: null
+    color_theme: "green"
+  
+  - id: "blocked"
+    name: "🚫 Blocked"
+    description: "Blocked by dependencies"
+    sequence_order: 6
+    phase_mapping:
+      - "PHASE_BLOCKED"
+    wip_limit: null
+    is_terminal: true
+    auto_transition_to: null
+    color_theme: "red"
+

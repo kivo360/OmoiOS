@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from omoi_os.api.routes import (
     agents,
+    board,
     collaboration,
     costs,
     guardian,
@@ -171,6 +172,7 @@ app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"
 app.include_router(costs.router, prefix="/api/v1/costs", tags=["costs"])
 app.include_router(guardian.router, prefix="/api/v1/guardian", tags=["guardian"])
 app.include_router(memory.router, prefix="/api/v1", tags=["memory"])
+app.include_router(board.router, prefix="/api/v1", tags=["board"])
 
 # Conditionally include monitor router if Phase 4 is available
 try:
