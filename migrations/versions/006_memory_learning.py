@@ -435,9 +435,140 @@ def upgrade() -> None:
     # CREATE INDEX ON task_memories USING ivfflat (context_embedding vector_cosine_ops)
     # WITH (lists = 100);
 
+    # Create quality_metrics table (Phase 5 Quality Squad)
+    op.create_table(
+        "quality_metrics",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column(
+            "task_id",
+            sa.String(),
+            nullable=False,
+            comment="Task being measured",
+        ),
+        sa.Column(
+            "metric_type",
+            sa.String(50),
+            nullable=False,
+            comment="Type: coverage, lint, complexity, security, performance",
+        ),
+        sa.Column(
+            "metric_name",
+            sa.String(100),
+            nullable=False,
+            comment="Specific metric name",
+        ),
+        sa.Column("value", sa.Float(), nullable=False, comment="Measured value"),
+        sa.Column("threshold", sa.Float(), nullable=True, comment="Required threshold"),
+        sa.Column(
+            "passed",
+            sa.Boolean(),
+            nullable=False,
+            comment="Whether threshold was met",
+        ),
+        sa.Column(
+            "measured_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+            comment="When measurement was taken",
+        ),
+        sa.Column(
+            "measurement_metadata",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="Additional measurement context",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+        sa.ForeignKeyConstraint(
+            ["task_id"],
+            ["tasks.id"],
+            name="fk_quality_metrics_task_id",
+            ondelete="CASCADE",
+        ),
+    )
+
+    # Create indexes for quality_metrics
+    op.create_index(
+        "ix_quality_metrics_task_id", "quality_metrics", ["task_id"], unique=False
+    )
+    op.create_index(
+        "ix_quality_metrics_metric_type",
+        "quality_metrics",
+        ["metric_type"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_quality_metrics_passed", "quality_metrics", ["passed"], unique=False
+    )
+    op.create_index(
+        "ix_quality_metrics_measured_at",
+        "quality_metrics",
+        ["measured_at"],
+        unique=False,
+    )
+
+    # Create quality_gates table
+    op.create_table(
+        "quality_gates",
+        sa.Column("id", sa.String(), nullable=False),
+        sa.Column(
+            "phase_id",
+            sa.String(50),
+            nullable=False,
+            comment="Phase this gate applies to",
+        ),
+        sa.Column(
+            "gate_type",
+            sa.String(50),
+            nullable=False,
+            comment="Type: quality, ml_prediction, custom",
+        ),
+        sa.Column("name", sa.String(200), nullable=False, comment="Gate name"),
+        sa.Column(
+            "requirements",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=False,
+            comment="Requirements: {min_test_coverage: 80, max_lint_errors: 0}",
+        ),
+        sa.Column(
+            "predictor_model",
+            sa.String(100),
+            nullable=True,
+            comment="ML predictor model name",
+        ),
+        sa.Column(
+            "enabled",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("true"),
+            comment="Whether gate is active",
+        ),
+        sa.Column(
+            "failure_action",
+            sa.String(50),
+            nullable=True,
+            server_default=sa.text("'block'"),
+            comment="Action on failure: block, warn, log",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    # Create indexes for quality_gates
+    op.create_index(
+        "ix_quality_gates_phase_id", "quality_gates", ["phase_id"], unique=False
+    )
+    op.create_index(
+        "ix_quality_gates_gate_type", "quality_gates", ["gate_type"], unique=False
+    )
+    op.create_index(
+        "ix_quality_gates_enabled", "quality_gates", ["enabled"], unique=False
+    )
+
 
 def downgrade() -> None:
     # Drop tables in reverse order
+    op.drop_table("quality_gates")
+    op.drop_table("quality_metrics")
     op.drop_table("learned_patterns")
     op.drop_table("task_memories")
     op.drop_table("task_discoveries")

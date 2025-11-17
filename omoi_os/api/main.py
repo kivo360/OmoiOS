@@ -11,9 +11,12 @@ from omoi_os.api.routes import (
     board,
     collaboration,
     costs,
+    diagnostic,
     guardian,
     memory,
     phases,
+    quality,
+    results,
     tasks,
     tickets,
 )
@@ -39,6 +42,8 @@ lock_service: ResourceLockService | None = None
 monitor_service = None  # Defined below in lifespan
 cost_tracking_service: CostTrackingService | None = None
 budget_enforcer_service: BudgetEnforcerService | None = None
+result_submission_service = None  # Defined below in lifespan
+diagnostic_service = None  # Defined below in lifespan
 
 
 async def orchestrator_loop():
@@ -95,6 +100,59 @@ async def orchestrator_loop():
             await asyncio.sleep(10)
 
 
+async def diagnostic_monitoring_loop():
+    """Check for stuck workflows every 60 seconds and spawn diagnostic agents."""
+    global db, diagnostic_service, event_bus
+
+    if not db or not diagnostic_service or not event_bus:
+        return
+
+    print("Diagnostic monitoring loop started")
+
+    while True:
+        try:
+            # Find stuck workflows
+            stuck_workflows = diagnostic_service.find_stuck_workflows(
+                cooldown_seconds=60,
+                stuck_threshold_seconds=60,
+            )
+
+            for workflow_info in stuck_workflows:
+                workflow_id = workflow_info["workflow_id"]
+                time_stuck = workflow_info["time_stuck_seconds"]
+
+                print(f"🚨 WORKFLOW STUCK DETECTED - {time_stuck}s no progress")
+                print(f"🔍 Creating diagnostic agent for workflow {workflow_id}")
+
+                # Build diagnostic context
+                with db.get_session() as session:
+                    context = diagnostic_service.build_diagnostic_context(
+                        workflow_id=workflow_id,
+                        max_agents=15,
+                        max_analyses=5,
+                    )
+
+                # Update context with trigger info
+                context.update(workflow_info)
+
+                # Spawn diagnostic agent
+                diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
+                    workflow_id=workflow_id,
+                    context=context,
+                )
+
+                print(
+                    f"✅ Diagnostic run {diagnostic_run.id} created for workflow {workflow_id}"
+                )
+
+            # Check every 60 seconds
+            await asyncio.sleep(60)
+
+        except Exception as e:
+            print(f"Error in diagnostic monitoring loop: {e}")
+            await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app."""
@@ -108,7 +166,9 @@ async def lifespan(app: FastAPI):
         lock_service, \
         monitor_service, \
         cost_tracking_service, \
-        budget_enforcer_service
+        budget_enforcer_service, \
+        result_submission_service, \
+        diagnostic_service
 
     # Initialize services
     db = DatabaseService(
@@ -138,18 +198,47 @@ async def lifespan(app: FastAPI):
     cost_tracking_service = CostTrackingService(db, event_bus)
     budget_enforcer_service = BudgetEnforcerService(db, event_bus)
 
+    # Diagnostic system services
+    from omoi_os.services.phase_loader import PhaseLoader
+    from omoi_os.services.result_submission import ResultSubmissionService
+    from omoi_os.services.diagnostic import DiagnosticService
+    from omoi_os.services.discovery import DiscoveryService
+    from omoi_os.services.memory import MemoryService
+    from omoi_os.services.embedding import EmbeddingService
+
+    phase_loader = PhaseLoader()
+    result_submission_service = ResultSubmissionService(db, event_bus, phase_loader)
+
+    # Initialize diagnostic service with dependencies
+    embedding_service = EmbeddingService()
+    memory_service = MemoryService(db, embedding_service, event_bus)
+    discovery_service = DiscoveryService(event_bus)
+    diagnostic_service = DiagnosticService(
+        db=db,
+        discovery=discovery_service,
+        memory=memory_service,
+        monitor=monitor_service,
+        event_bus=event_bus,
+    )
+
     # Create database tables if they don't exist
     db.create_tables()
 
-    # Start orchestrator loop
+    # Start background loops
     orchestrator_task = asyncio.create_task(orchestrator_loop())
+    diagnostic_task = asyncio.create_task(diagnostic_monitoring_loop())
 
     yield
 
     # Cleanup
     orchestrator_task.cancel()
+    diagnostic_task.cancel()
     try:
         await orchestrator_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await diagnostic_task
     except asyncio.CancelledError:
         pass
     event_bus.close()
@@ -173,6 +262,9 @@ app.include_router(costs.router, prefix="/api/v1/costs", tags=["costs"])
 app.include_router(guardian.router, prefix="/api/v1/guardian", tags=["guardian"])
 app.include_router(memory.router, prefix="/api/v1", tags=["memory"])
 app.include_router(board.router, prefix="/api/v1", tags=["board"])
+app.include_router(quality.router, prefix="/api/v1", tags=["quality"])
+app.include_router(results.router, prefix="/api/v1", tags=["results"])
+app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagnostic"])
 
 # Conditionally include monitor router if Phase 4 is available
 try:

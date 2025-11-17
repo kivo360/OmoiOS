@@ -95,8 +95,10 @@ class TaskDiscovery(Base):
 
     def add_spawned_task(self, task_id: str) -> None:
         """Add a task ID to the spawned tasks list."""
+        if not self.spawned_task_ids:
+            self.spawned_task_ids = []
         if task_id not in self.spawned_task_ids:
-            self.spawned_task_ids.append(task_id)
+            self.spawned_task_ids = self.spawned_task_ids + [task_id]  # Create new list for JSONB mutation tracking
 
     def mark_resolved(self) -> None:
         """Mark discovery as resolved."""
@@ -137,3 +139,8 @@ class DiscoveryType:
     MISSING_REQUIREMENT = "missing_requirement"
     INTEGRATION_ISSUE = "integration_issue"
     TECHNICAL_DEBT = "technical_debt"
+    
+    # Diagnostic types
+    DIAGNOSTIC_STUCK = "diagnostic_stuck"
+    DIAGNOSTIC_NO_RESULT = "diagnostic_no_result"
+    DIAGNOSTIC_VALIDATION_LOOP = "diagnostic_validation_loop"

@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from omoi_os.models.ticket import Ticket
     from omoi_os.models.task_memory import TaskMemory
     from omoi_os.models.task_discovery import TaskDiscovery
+    from omoi_os.models.quality_metric import QualityMetric
 
 
 class Task(Base):
@@ -64,4 +65,7 @@ class Task(Base):
         foreign_keys="[TaskDiscovery.source_task_id]",
         back_populates="source_task",
         cascade="all, delete-orphan",
+    )
+    quality_metrics: Mapped[list["QualityMetric"]] = relationship(
+        "QualityMetric", back_populates="task", cascade="all, delete-orphan"
     )

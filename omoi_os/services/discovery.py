@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from omoi_os.models.task import Task
-from omoi_os.models.task_discovery import TaskDiscovery
+from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
@@ -310,3 +310,54 @@ class DiscoveryService:
             )
 
         return discovery
+
+    def spawn_diagnostic_recovery(
+        self,
+        session: Session,
+        ticket_id: str,
+        diagnostic_run_id: str,
+        reason: str,
+        suggested_phase: str = "PHASE_FINAL",
+        suggested_priority: str = "HIGH",
+    ) -> Task:
+        """Spawn diagnostic recovery task using Discovery pattern.
+        
+        Creates a diagnostic discovery and spawns a recovery task to help
+        stuck workflows progress toward their goal.
+        
+        Args:
+            session: Database session.
+            ticket_id: Workflow (ticket) that is stuck.
+            diagnostic_run_id: ID of the diagnostic run triggering this.
+            reason: Why the diagnostic was triggered.
+            suggested_phase: Phase for recovery task.
+            suggested_priority: Priority for recovery task.
+            
+        Returns:
+            Spawned recovery Task.
+        """
+        # Find last completed task to use as source
+        last_task = (
+            session.query(Task)
+            .filter(Task.ticket_id == ticket_id)
+            .order_by(Task.completed_at.desc().nullsfirst())
+            .first()
+        )
+
+        if not last_task:
+            raise ValueError(f"No tasks found for ticket {ticket_id}")
+
+        # Use existing branching mechanism
+        discovery, spawned_task = self.record_discovery_and_branch(
+            session=session,
+            source_task_id=last_task.id,
+            discovery_type=DiscoveryType.DIAGNOSTIC_NO_RESULT,
+            description=f"Diagnostic: {reason}",
+            spawn_phase_id=suggested_phase,
+            spawn_description=f"Diagnostic recovery: {reason}",
+            spawn_priority=suggested_priority,
+            priority_boost=True,
+            spawn_metadata={"diagnostic_run_id": diagnostic_run_id},
+        )
+
+        return spawned_task
