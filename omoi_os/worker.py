@@ -232,14 +232,14 @@ def main():
     try:
         # Main worker loop with thread pool
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            while True:
-                # Get assigned tasks for this agent
-                tasks = task_queue.get_assigned_tasks(agent_id)
+        while True:
+            # Get assigned tasks for this agent
+            tasks = task_queue.get_assigned_tasks(agent_id)
 
-                if tasks:
+            if tasks:
                     # Submit tasks to thread pool for concurrent execution
                     futures = {}
-                    for task in tasks:
+                for task in tasks:
                         future = executor.submit(
                             execute_task_with_retry,
                             task, agent_id, db, task_queue, event_bus, workspace_dir, timeout_manager
@@ -253,9 +253,9 @@ def main():
                             future.result()  # Get result to propagate exceptions
                         except Exception as e:
                             print(f"Error in concurrent task execution for {task.id}: {e}")
-                else:
-                    # No tasks, sleep briefly
-                    time.sleep(2)
+            else:
+                # No tasks, sleep briefly
+                time.sleep(2)
 
     except KeyboardInterrupt:
         print("Worker shutting down...")

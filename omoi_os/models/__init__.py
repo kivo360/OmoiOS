@@ -4,6 +4,7 @@ from omoi_os.models.agent import Agent
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.base import Base
 from omoi_os.models.event import Event
+from omoi_os.models.monitor_anomaly import Alert, MonitorAnomaly
 from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.phase_gate_result import PhaseGateResult
@@ -15,9 +16,11 @@ from omoi_os.models.ticket import Ticket
 __all__ = [
     "Agent",
     "AgentMessage",
+    "Alert",
     "Base",
     "CollaborationThread",
     "Event",
+    "MonitorAnomaly",
     "PhaseContext",
     "PhaseGateArtifact",
     "PhaseGateResult",

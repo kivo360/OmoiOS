@@ -18,6 +18,9 @@ dependencies = [
     "redis>=5.0.0,<6",
     "whenever>=0.9.3",
     "pyyaml>=6.0.0,<7",
+    "logfire>=2.0.0,<3",
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
 ]
 
 [build-system]
