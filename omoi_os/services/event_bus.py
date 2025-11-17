@@ -1,10 +1,17 @@
 """Event bus service for system-wide event publishing and subscription."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any, Callable, Dict
 
 import redis
+
+from omoi_os.models.event import (
+    AgentCollaborationTopics,
+    AgentHandoffRequestedEvent,
+    AgentMessageEvent,
+    CollaborationThreadStartedEvent,
+)
 
 
 @dataclass
@@ -71,6 +78,71 @@ class EventBusService:
                 callback(event)
 
         self.pubsub.subscribe(**{channel: message_handler})
+
+    # ------------------------------------------------------------------
+    # Typed collaboration helpers
+    # ------------------------------------------------------------------
+
+    def publish_agent_message_sent(self, event: AgentMessageEvent) -> None:
+        """Publish agent.message.sent."""
+        self.publish(
+            SystemEvent(
+                event_type=AgentCollaborationTopics.MESSAGE_SENT,
+                entity_type="agent_message",
+                entity_id=event.message_id,
+                payload=asdict(event),
+            )
+        )
+
+    def publish_agent_handoff_requested(self, event: AgentHandoffRequestedEvent) -> None:
+        """Publish agent.handoff.requested."""
+        self.publish(
+            SystemEvent(
+                event_type=AgentCollaborationTopics.HANDOFF_REQUESTED,
+                entity_type="agent_handoff",
+                entity_id=event.handoff_id,
+                payload=asdict(event),
+            )
+        )
+
+    def publish_agent_collaboration_started(self, event: CollaborationThreadStartedEvent) -> None:
+        """Publish agent.collab.started."""
+        self.publish(
+            SystemEvent(
+                event_type=AgentCollaborationTopics.COLLABORATION_STARTED,
+                entity_type="agent_thread",
+                entity_id=event.thread_id,
+                payload=asdict(event),
+            )
+        )
+
+    def subscribe_agent_messages(self, callback: Callable[[AgentMessageEvent], None]) -> None:
+        """Subscribe to agent.message.sent events with typed payloads."""
+
+        def handler(event: SystemEvent) -> None:
+            callback(AgentMessageEvent(**event.payload))
+
+        self.subscribe(AgentCollaborationTopics.MESSAGE_SENT, handler)
+
+    def subscribe_agent_handoffs(
+        self, callback: Callable[[AgentHandoffRequestedEvent], None]
+    ) -> None:
+        """Subscribe to handoff requested events."""
+
+        def handler(event: SystemEvent) -> None:
+            callback(AgentHandoffRequestedEvent(**event.payload))
+
+        self.subscribe(AgentCollaborationTopics.HANDOFF_REQUESTED, handler)
+
+    def subscribe_agent_collaboration_started(
+        self, callback: Callable[[CollaborationThreadStartedEvent], None]
+    ) -> None:
+        """Subscribe to new collaboration thread events."""
+
+        def handler(event: SystemEvent) -> None:
+            callback(CollaborationThreadStartedEvent(**event.payload))
+
+        self.subscribe(AgentCollaborationTopics.COLLABORATION_STARTED, handler)
 
     def listen(self) -> None:
         """

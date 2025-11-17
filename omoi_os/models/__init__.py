@@ -3,6 +3,11 @@
 from omoi_os.models.agent import Agent
 from omoi_os.models.base import Base
 from omoi_os.models.event import Event
+from omoi_os.models.collaboration import (
+    CollaborationThread,
+    CollaborationMessage,
+    AgentHandoffRequest,
+)
 from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.phase_gate_result import PhaseGateResult
@@ -16,6 +21,9 @@ __all__ = [
     "Task",
     "Agent",
     "Event",
+    "CollaborationThread",
+    "CollaborationMessage",
+    "AgentHandoffRequest",
     "PhaseGateArtifact",
     "PhaseGateResult",
     "PhaseContext",
