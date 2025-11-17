@@ -146,7 +146,10 @@ def upgrade() -> None:
     )
 
     op.create_index(
-        "ix_board_columns_sequence_order", "board_columns", ["sequence_order"], unique=False
+        "ix_board_columns_sequence_order",
+        "board_columns",
+        ["sequence_order"],
+        unique=False,
     )
 
     # Populate board_columns with default Kanban layout
