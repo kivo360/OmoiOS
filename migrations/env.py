@@ -16,7 +16,15 @@ from omoi_os.models.base import Base
 from omoi_os.ticketing.db import DBSettings
 
 # Import all models to register them with Base.metadata
-from omoi_os.models import Agent, Event, Task, Ticket  # noqa: F401
+from omoi_os.models import (  # noqa: F401
+    Agent,
+    AgentHandoffRequest,
+    CollaborationMessage,
+    CollaborationThread,
+    Event,
+    Task,
+    Ticket,
+)
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
