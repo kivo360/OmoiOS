@@ -1,6 +1,5 @@
 """Test task queue service: enqueue, get_next_task, assign, update status."""
 
-import pytest
 
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
@@ -35,7 +34,7 @@ def test_get_next_task_empty(task_queue_service: TaskQueueService):
 def test_get_next_task_priority_order(task_queue_service: TaskQueueService, sample_ticket: Ticket):
     """Test get_next_task returns highest priority task first."""
     # Create tasks with different priorities
-    task_low = task_queue_service.enqueue_task(
+    task_queue_service.enqueue_task(
         ticket_id=sample_ticket.id,
         phase_id="PHASE_REQUIREMENTS",
         task_type="task1",

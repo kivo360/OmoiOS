@@ -13,6 +13,7 @@ def create_test_ticket(
     phase_id: str = "PHASE_REQUIREMENTS",
     status: str = "pending",
     priority: str = "MEDIUM",
+    ticket_id: str | None = None,
 ) -> Ticket:
     """Create a test ticket."""
     with db.get_session() as session:
@@ -23,9 +24,12 @@ def create_test_ticket(
             status=status,
             priority=priority,
         )
+        if ticket_id:
+            ticket.id = ticket_id
         session.add(ticket)
         session.commit()
         session.refresh(ticket)
+        session.expunge(ticket)
         return ticket
 
 
@@ -51,6 +55,7 @@ def create_test_task(
         session.add(task)
         session.commit()
         session.refresh(task)
+        session.expunge(task)
         return task
 
 
@@ -81,5 +86,6 @@ def create_test_agent(
         session.add(agent)
         session.commit()
         session.refresh(agent)
+        session.expunge(agent)
         return agent
 

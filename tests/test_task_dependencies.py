@@ -1,6 +1,5 @@
 """Tests for task dependencies and blocking functionality."""
 
-import pytest
 
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket

@@ -81,6 +81,20 @@ def event_bus_service(redis_url: str) -> EventBusService:
 
 
 @pytest.fixture
+def collaboration_service(db_service: DatabaseService, event_bus_service: EventBusService):
+    """Create a collaboration service."""
+    from omoi_os.services.collaboration import CollaborationService
+    return CollaborationService(db_service, event_bus_service)
+
+
+@pytest.fixture
+def lock_service(db_service: DatabaseService):
+    """Create a resource lock service."""
+    from omoi_os.services.resource_lock import ResourceLockService
+    return ResourceLockService(db_service)
+
+
+@pytest.fixture
 def test_workspace_dir() -> str:
     """Create a temporary workspace directory for tests."""
     return tempfile.mkdtemp(prefix="omoi_test_workspace_")

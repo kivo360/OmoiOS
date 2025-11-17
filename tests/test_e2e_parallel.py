@@ -2,27 +2,27 @@
 
 import pytest
 
-from omoi_os.models.task import Task
 from omoi_os.services.coordination import CoordinationService
-from omoi_os.services.database import DatabaseService
-from omoi_os.services.event_bus import EventBusService
-from omoi_os.services.task_queue import TaskQueueService
+from tests.test_helpers import create_test_ticket
 
 
 @pytest.fixture
-def coordination_service(db_service, task_queue, event_bus):
+def coordination_service(db_service, task_queue_service, event_bus_service):
     """Create coordination service instance."""
-    return CoordinationService(db_service, task_queue, event_bus)
+    return CoordinationService(db_service, task_queue_service, event_bus_service)
 
 
 class TestE2EParallelWorkflow:
     """End-to-end tests for parallel workflow scenarios."""
 
-    def test_parallel_implementation_workflow(self, coordination_service):
+    def test_parallel_implementation_workflow(self, coordination_service, db_service):
         """Test complete parallel implementation workflow."""
+        # Create test ticket
+        ticket = create_test_ticket(db_service, ticket_id="test_ticket_parallel")
+        
         # Create initial ticket task
         source_task = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket_parallel",
+            ticket_id=ticket.id,
             phase_id="PHASE_INITIAL",
             task_type="design_feature",
             description="Design feature architecture",
@@ -70,9 +70,9 @@ class TestE2EParallelWorkflow:
         )
 
         # Complete all parallel tasks
-        for task in parallel_tasks:
+        for i, task in enumerate(parallel_tasks):
             coordination_service.queue.update_task_status(
-                task.id, "completed", result={"module": task.task_type}
+                task.id, "completed", result={f"module_{i}": task.task_type}
             )
 
         # Sync point should be ready
@@ -104,13 +104,16 @@ class TestE2EParallelWorkflow:
         )
 
         assert len(merged) == 3
-        assert all("module" in merged.values() for merged in [merged])
+        assert all(k.startswith("module_") for k in merged.keys())
 
-    def test_review_feedback_loop_workflow(self, coordination_service):
+    def test_review_feedback_loop_workflow(self, coordination_service, db_service):
         """Test review-feedback loop workflow."""
+        # Create test ticket
+        ticket = create_test_ticket(db_service, ticket_id="test_ticket_review")
+        
         # Create initial implementation task
         impl_task = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket_review",
+            ticket_id=ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_feature",
             description="Implement feature",
@@ -176,11 +179,14 @@ class TestE2EParallelWorkflow:
 
         assert "review_status" in str(feedback)
 
-    def test_majority_vote_workflow(self, coordination_service):
+    def test_majority_vote_workflow(self, coordination_service, db_service):
         """Test majority vote decision workflow."""
+        # Create test ticket
+        ticket = create_test_ticket(db_service, ticket_id="test_ticket_vote")
+        
         # Create decision task
         decision_task = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket_vote",
+            ticket_id=ticket.id,
             phase_id="PHASE_INITIAL",
             task_type="make_decision",
             description="Make architectural decision",
@@ -255,18 +261,21 @@ class TestE2EParallelWorkflow:
 
         assert continuation.task_type == "implement_decision"
 
-    def test_deadlock_avoidance(self, coordination_service):
+    def test_deadlock_avoidance(self, coordination_service, db_service):
         """Test that coordination patterns avoid deadlocks."""
+        # Create test ticket
+        ticket = create_test_ticket(db_service, ticket_id="test_ticket_deadlock")
+        
         # Create tasks that would form a cycle without proper dependency management
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket_deadlock",
+            ticket_id=ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="task_1",
             description="Task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket_deadlock",
+            ticket_id=ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="task_2",
             description="Task 2",

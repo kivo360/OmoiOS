@@ -25,6 +25,7 @@ def _create_ticket(session, title: str = "Gate Test Ticket") -> Ticket:
     session.add(ticket)
     session.flush()
     session.refresh(ticket)
+    session.expunge(ticket)
     return ticket
 
 
@@ -41,6 +42,7 @@ def _add_completed_task(session, ticket_id: str, result: dict[str, Any] | None =
     session.add(task)
     session.flush()
     session.refresh(task)
+    session.expunge(task)
     return task
 
 
@@ -63,6 +65,7 @@ def _create_artifact(
     session.add(artifact)
     session.flush()
     session.refresh(artifact)
+    session.expunge(artifact)
     return artifact
 
 

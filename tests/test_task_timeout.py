@@ -1,8 +1,7 @@
 """Tests for task timeout and cancellation functionality (Agent D)."""
 
 import pytest
-import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from omoi_os.models.task import Task
@@ -66,7 +65,7 @@ class TestTaskTimeoutMethods:
             mock_session.query.return_value.filter.return_value.first.return_value = sample_task
 
             # Should return True since task started 35s ago with 30s timeout
-            assert task_queue.check_task_timeout("test-task-123") == True
+            assert task_queue.check_task_timeout("test-task-123") is True
 
     def test_check_task_timeout_false(self, task_queue):
         """Test timeout detection for non-timed-out task."""
@@ -82,7 +81,7 @@ class TestTaskTimeoutMethods:
             mock_session.query.return_value.filter.return_value.first.return_value = recent_task
 
             # Should return False since only 10s elapsed with 30s timeout
-            assert task_queue.check_task_timeout("test-task-123") == False
+            assert task_queue.check_task_timeout("test-task-123") is False
 
     def test_check_task_timeout_not_running(self, task_queue, sample_task):
         """Test timeout detection for non-running task."""
@@ -94,7 +93,7 @@ class TestTaskTimeoutMethods:
             mock_session.query.return_value.filter.return_value.first.return_value = sample_task
 
             # Should return False since task is not running
-            assert task_queue.check_task_timeout("test-task-123") == False
+            assert task_queue.check_task_timeout("test-task-123") is False
 
     def test_cancel_task_success(self, task_queue, sample_task):
         """Test successful task cancellation."""
@@ -107,7 +106,7 @@ class TestTaskTimeoutMethods:
 
             result = task_queue.cancel_task("test-task-123", "user_requested")
 
-            assert result == True
+            assert result is True
             assert sample_task.status == "failed"
             assert "Task cancelled: user_requested" in sample_task.error_message
             mock_session.commit.assert_called_once()
@@ -121,7 +120,7 @@ class TestTaskTimeoutMethods:
 
             result = task_queue.cancel_task("non-existent")
 
-            assert result == False
+            assert result is False
 
     def test_cancel_task_not_cancellable(self, task_queue, sample_task):
         """Test cancellation of completed task."""
@@ -134,7 +133,7 @@ class TestTaskTimeoutMethods:
 
             result = task_queue.cancel_task("test-task-123")
 
-            assert result == False
+            assert result is False
 
     def test_get_timed_out_tasks(self, task_queue):
         """Test getting all timed-out tasks."""
@@ -173,7 +172,7 @@ class TestTaskTimeoutMethods:
 
             result = task_queue.mark_task_timeout("test-task-123", "timeout_exceeded")
 
-            assert result == True
+            assert result is True
             assert sample_task.status == "failed"
             assert "Task timed out" in sample_task.error_message
             assert "timeout_exceeded" in sample_task.error_message
@@ -197,7 +196,7 @@ class TestTaskTimeoutMethods:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_session.query.return_value.filter.return_value.all.return_value = [
-                running_task, assigned_task, completed_task
+                running_task, assigned_task  # Only return cancellable tasks (filter applied)
             ]
 
             # Mock expunge
@@ -235,12 +234,12 @@ class TestTaskTimeoutMethods:
 
             status = task_queue.get_task_timeout_status("test-task-123")
 
-            assert status["exists"] == True
+            assert status["exists"] is True
             assert status["status"] == "running"
             assert status["timeout_seconds"] == 60
             assert status["elapsed_seconds"] > 30
-            assert status["is_timed_out"] == True  # Since sample task started 35s ago with 60s timeout
-            assert status["can_cancel"] == True
+            assert status["is_timed_out"] is False  # 35s < 60s, not timed out
+            assert status["can_cancel"] is True
 
     def test_get_task_timeout_status_not_found(self, task_queue):
         """Test timeout status for non-existent task."""
@@ -251,7 +250,7 @@ class TestTaskTimeoutMethods:
 
             status = task_queue.get_task_timeout_status("non-existent")
 
-            assert status["exists"] == False
+            assert status["exists"] is False
 
 
 class TestTimeoutManager:
@@ -262,19 +261,19 @@ class TestTimeoutManager:
         assert timeout_manager.task_queue is not None
         assert timeout_manager.event_bus is not None
         assert timeout_manager.interval_seconds == 1
-        assert timeout_manager._running == False
+        assert timeout_manager._running is False
         assert timeout_manager._thread is None
 
     def test_timeout_manager_start_stop(self, timeout_manager):
         """Test starting and stopping TimeoutManager."""
         # Start the manager
         timeout_manager.start()
-        assert timeout_manager._running == True
+        assert timeout_manager._running is True
         assert timeout_manager._thread is not None
 
         # Stop the manager
         timeout_manager.stop()
-        assert timeout_manager._running == False
+        assert timeout_manager._running is False
 
     @patch('time.sleep')
     def test_timeout_monitoring_loop(self, mock_sleep, timeout_manager, sample_task):
@@ -286,7 +285,7 @@ class TestTimeoutManager:
              patch.object(timeout_manager.event_bus, 'publish') as mock_publish:
 
             # Setup mocks
-            mock_get_timed_out.return_value = [sample_task]
+            mock_get_timed_out.side_effect = [[sample_task], []]  # First call returns task, second is empty
             mock_mark_timeout.return_value = True
             mock_get_elapsed.return_value = 35.0
             mock_sleep.side_effect = [None, KeyboardInterrupt]  # Sleep once then interrupt
@@ -320,7 +319,7 @@ class TestTimeoutManager:
 
             result = timeout_manager.check_task_cancellation_before_execution(sample_task)
 
-            assert result == True
+            assert result is True
 
     def test_check_task_cancellation_before_execution_cancelled(self, timeout_manager, sample_task):
         """Test cancellation check before execution - task was cancelled."""
@@ -334,7 +333,7 @@ class TestTimeoutManager:
             with patch('builtins.print') as mock_print:
                 result = timeout_manager.check_task_cancellation_before_execution(sample_task)
 
-                assert result == False
+                assert result is False
                 mock_print.assert_called_with(f"Task {sample_task.id} status changed to {sample_task.status}, cancelling execution")
 
     def test_handle_task_timeout_during_execution_with_termination(self, timeout_manager, sample_task):
@@ -351,7 +350,7 @@ class TestTimeoutManager:
 
     def test_handle_task_timeout_during_execution_without_termination(self, timeout_manager, sample_task):
         """Test handling timeout during execution without termination support."""
-        mock_executor = Mock()
+        mock_executor = Mock(spec=[])  # Empty spec means no attributes
         # Don't add terminate_conversation method
 
         with patch('builtins.print') as mock_print:
@@ -381,12 +380,12 @@ class TestTimeoutIntegration:
 
             # Test timeout detection
             mock_session.query.return_value.filter.return_value.first.return_value = timed_out_task
-            assert task_queue.check_task_timeout("timeout-test-task") == True
+            assert task_queue.check_task_timeout("timeout-test-task") is True
 
             # Test marking as timed out
             mock_session.query.return_value.filter.return_value.first.return_value = timed_out_task
             result = task_queue.mark_task_timeout("timeout-test-task")
-            assert result == True
+            assert result is True
 
             # Verify task state
             assert timed_out_task.status == "failed"
@@ -406,7 +405,7 @@ class TestTimeoutIntegration:
 
             # Cancel the task
             result = task_queue.cancel_task("cancel-test-task", "user_request")
-            assert result == True
+            assert result is True
 
             # Verify task state
             assert running_task.status == "failed"

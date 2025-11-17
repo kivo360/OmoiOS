@@ -1,9 +1,7 @@
 """Tests for retry logic in task queue and worker."""
 
-import math
-import time
 import uuid
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 

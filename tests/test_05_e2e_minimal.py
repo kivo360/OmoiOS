@@ -1,7 +1,6 @@
 """Minimal end-to-end flow test: create ticket → enqueue task → assign → execute."""
 
-import os
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -228,7 +227,7 @@ def test_e2e_multiple_tasks_per_ticket(
         priority="HIGH",
     )
 
-    task2 = task_queue_service.enqueue_task(
+    task_queue_service.enqueue_task(
         ticket_id=ticket_id,
         phase_id="PHASE_REQUIREMENTS",
         task_type="task2",
@@ -236,7 +235,7 @@ def test_e2e_multiple_tasks_per_ticket(
         priority="MEDIUM",
     )
 
-    task3 = task_queue_service.enqueue_task(
+    task_queue_service.enqueue_task(
         ticket_id=ticket_id,
         phase_id="PHASE_REQUIREMENTS",
         task_type="task3",

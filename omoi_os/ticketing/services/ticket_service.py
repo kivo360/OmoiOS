@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Optional
 from uuid import uuid4
 
 from omoi_os.utils.datetime import utc_now
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from omoi_os.ticketing.models import BoardConfig, Ticket, TicketComment, TicketCommit, TicketHistory

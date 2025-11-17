@@ -2,24 +2,23 @@
 
 import pytest
 
-from omoi_os.models.task import Task
 from omoi_os.services.coordination import (
     CoordinationPattern,
     CoordinationService,
-    JoinConfig,
-    MergeConfig,
-    SplitConfig,
-    SyncPoint,
 )
-from omoi_os.services.database import DatabaseService
-from omoi_os.services.event_bus import EventBusService
-from omoi_os.services.task_queue import TaskQueueService
+from tests.test_helpers import create_test_ticket
 
 
 @pytest.fixture
-def coordination_service(db_service, task_queue, event_bus):
+def coordination_service(db_service, task_queue_service, event_bus_service):
     """Create coordination service instance."""
-    return CoordinationService(db_service, task_queue, event_bus)
+    return CoordinationService(db_service, task_queue_service, event_bus_service)
+
+
+@pytest.fixture
+def test_ticket(db_service):
+    """Create a test ticket for coordination tests."""
+    return create_test_ticket(db_service, ticket_id="test_ticket")
 
 
 class TestSyncPoint:
@@ -49,18 +48,18 @@ class TestSyncPoint:
         assert sync_point.required_count == 2  # Should default to len(waiting_task_ids)
         assert sync_point.timeout_seconds is None
 
-    def test_check_sync_point_ready(self, coordination_service, db_service):
+    def test_check_sync_point_ready(self, coordination_service, db_service, test_ticket):
         """Test checking if sync point is ready."""
         # Create tasks
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 2",
@@ -89,24 +88,24 @@ class TestSyncPoint:
         # Now ready
         assert coordination_service.check_sync_point_ready("test_sync", sync_point)
 
-    def test_check_sync_point_partial(self, coordination_service):
+    def test_check_sync_point_partial(self, coordination_service, test_ticket):
         """Test sync point with partial completion requirement."""
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 2",
             priority="HIGH",
         )
         task3 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 3",
@@ -132,10 +131,10 @@ class TestSyncPoint:
 class TestSplitOperations:
     """Tests for split operations."""
 
-    def test_split_task(self, coordination_service):
+    def test_split_task(self, coordination_service, test_ticket):
         """Test splitting a task into multiple parallel tasks."""
         source_task = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_feature",
             description="Implement feature",
@@ -184,18 +183,18 @@ class TestSplitOperations:
 class TestJoinOperations:
     """Tests for join operations."""
 
-    def test_join_tasks(self, coordination_service):
+    def test_join_tasks(self, coordination_service, test_ticket):
         """Test joining multiple tasks."""
         # Create source tasks
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_module_a",
             description="Implement module A",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_module_b",
             description="Implement module B",
@@ -232,18 +231,18 @@ class TestJoinOperations:
 class TestMergeOperations:
     """Tests for merge operations."""
 
-    def test_merge_task_results_combine(self, coordination_service):
+    def test_merge_task_results_combine(self, coordination_service, test_ticket):
         """Test merging task results with combine strategy."""
         # Create and complete tasks with results
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 2",
@@ -270,17 +269,17 @@ class TestMergeOperations:
             "key4": "value4",
         }
 
-    def test_merge_task_results_intersection(self, coordination_service):
+    def test_merge_task_results_intersection(self, coordination_service, test_ticket):
         """Test merging with intersection strategy."""
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 2",
@@ -305,17 +304,17 @@ class TestMergeOperations:
         assert "unique1" not in merged
         assert "unique2" not in merged
 
-    def test_merge_task_results_incomplete(self, coordination_service):
+    def test_merge_task_results_incomplete(self, coordination_service, test_ticket):
         """Test merging with incomplete tasks."""
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 2",
@@ -351,10 +350,10 @@ class TestPatternExecution:
         assert "sync_point" in result
         assert result["sync_id"] == "test_sync_pattern"
 
-    def test_execute_split_pattern(self, coordination_service):
+    def test_execute_split_pattern(self, coordination_service, test_ticket):
         """Test executing a split pattern."""
         source_task = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_feature",
             description="Implement feature",
@@ -380,17 +379,17 @@ class TestPatternExecution:
         assert "tasks" in result
         assert len(result["tasks"]) == 1
 
-    def test_execute_join_pattern(self, coordination_service):
+    def test_execute_join_pattern(self, coordination_service, test_ticket):
         """Test executing a join pattern."""
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_module_a",
             description="Implement module A",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_module_b",
             description="Implement module B",
@@ -414,17 +413,17 @@ class TestPatternExecution:
         assert "continuation_task" in result
         assert result["task_id"] is not None
 
-    def test_execute_merge_pattern(self, coordination_service):
+    def test_execute_merge_pattern(self, coordination_service, test_ticket):
         """Test executing a merge pattern."""
         task1 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 1",
             priority="HIGH",
         )
         task2 = coordination_service.queue.enqueue_task(
-            ticket_id="test_ticket",
+            ticket_id=test_ticket.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="test_task",
             description="Test task 2",

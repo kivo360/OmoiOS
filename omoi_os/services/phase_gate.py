@@ -245,6 +245,9 @@ class PhaseGateService:
                 )
                 .all()
             )
+            # Expunge artifacts so they can be used outside the session
+            for artifact in artifacts:
+                session.expunge(artifact)
             artifact_map = {artifact.artifact_type: artifact for artifact in artifacts}
 
         blocking_reasons: list[str] = []

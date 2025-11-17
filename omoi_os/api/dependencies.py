@@ -5,8 +5,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from omoi_os.services.agent_health import AgentHealthService
     from omoi_os.services.agent_registry import AgentRegistryService
+    from omoi_os.services.collaboration import CollaborationService
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.event_bus import EventBusService
+    from omoi_os.services.resource_lock import ResourceLockService
     from omoi_os.services.task_queue import TaskQueueService
 
 
@@ -57,4 +59,22 @@ def get_agent_registry_service() -> "AgentRegistryService":
     if registry_service is None:
         raise RuntimeError("Agent registry service not initialized")
     return registry_service
+
+
+def get_collaboration_service() -> "CollaborationService":
+    """Get collaboration service instance."""
+    from omoi_os.api.main import collaboration_service
+
+    if collaboration_service is None:
+        raise RuntimeError("Collaboration service not initialized")
+    return collaboration_service
+
+
+def get_resource_lock_service() -> "ResourceLockService":
+    """Get resource lock service instance."""
+    from omoi_os.api.main import lock_service
+
+    if lock_service is None:
+        raise RuntimeError("Resource lock service not initialized")
+    return lock_service
 

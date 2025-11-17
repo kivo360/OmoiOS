@@ -1,6 +1,6 @@
 """Datetime utilities using whenever library for timezone-aware datetime handling."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 from whenever import Instant
 

@@ -6,11 +6,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from omoi_os.api.routes import agents, phases, tasks, tickets
+from omoi_os.api.routes import agents, collaboration, phases, tasks, tickets
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
+from omoi_os.services.collaboration import CollaborationService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
+from omoi_os.services.resource_lock import ResourceLockService
 from omoi_os.services.task_queue import TaskQueueService
 
 
@@ -20,6 +22,8 @@ queue: TaskQueueService | None = None
 event_bus: EventBusService | None = None
 health_service: AgentHealthService | None = None
 registry_service: AgentRegistryService | None = None
+collaboration_service: CollaborationService | None = None
+lock_service: ResourceLockService | None = None
 
 
 async def orchestrator_loop():
@@ -42,7 +46,6 @@ async def orchestrator_loop():
                 # For MVP, assign to first available agent
                 # TODO: Implement proper agent selection logic
                 from omoi_os.models.agent import Agent
-                from uuid import UUID
 
                 with db.get_session() as session:
                     available_agent = session.query(Agent).filter(Agent.status == "idle").first()
@@ -78,7 +81,7 @@ async def orchestrator_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app."""
-    global db, queue, event_bus, health_service, registry_service
+    global db, queue, event_bus, health_service, registry_service, collaboration_service, lock_service
 
     # Initialize services
     db = DatabaseService(
@@ -90,6 +93,8 @@ async def lifespan(app: FastAPI):
     event_bus = EventBusService(redis_url=os.getenv("REDIS_URL", "redis://localhost:16379"))
     health_service = AgentHealthService(db)
     registry_service = AgentRegistryService(db, event_bus)
+    collaboration_service = CollaborationService(db, event_bus)
+    lock_service = ResourceLockService(db)
 
     # Create database tables if they don't exist
     db.create_tables()
@@ -121,6 +126,7 @@ app.include_router(tickets.router, prefix="/api/v1", tags=["tickets"])
 app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
 app.include_router(phases.router, prefix="/api/v1", tags=["phases"])
 app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
+app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"])
 
 
 @app.get("/health")

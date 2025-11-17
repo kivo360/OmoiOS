@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 
 from omoi_os.services.coordination import CoordinationService
 from omoi_os.services.pattern_loader import PatternLoader
-from omoi_os.services.task_queue import TaskQueueService
 
 
 class OrchestratorCoordination:

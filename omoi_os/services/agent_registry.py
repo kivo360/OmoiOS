@@ -58,10 +58,12 @@ class AgentRegistryService:
                 capabilities=normalized_caps,
                 capacity=max(1, capacity),
                 tags=normalized_tags or None,
+                health_status="healthy",
             )
             session.add(agent)
             session.commit()
             session.refresh(agent)
+            session.expunge(agent)
 
             self._publish_capability_event(agent.id, agent.capabilities)
             return agent
@@ -105,6 +107,7 @@ class AgentRegistryService:
 
             session.commit()
             session.refresh(agent)
+            session.expunge(agent)
 
             if capabilities_changed:
                 self._publish_capability_event(agent.id, agent.capabilities)
@@ -146,6 +149,10 @@ class AgentRegistryService:
                 query = query.filter(and_(*filters))
 
             agents = query.all()
+
+            # Expunge agents so they can be used outside the session
+            for agent in agents:
+                session.expunge(agent)
 
         matches: List[dict] = []
         for agent in agents:

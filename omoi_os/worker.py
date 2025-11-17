@@ -1,10 +1,10 @@
 """Worker service for executing tasks."""
 
-import math
 import os
 import random
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from uuid import UUID
 
 from omoi_os.models.agent import Agent
@@ -199,19 +199,25 @@ class TimeoutManager:
 
 
 def main():
-    """Main worker loop."""
+    """Main worker loop with concurrent task execution."""
     # Initialize services
     database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db")
     redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
     workspace_dir = os.getenv("WORKSPACE_DIR", "/tmp/omoi_os_workspaces")
+    max_workers = int(os.getenv("WORKER_CONCURRENCY", "2"))  # Default 2 concurrent tasks
 
     db = DatabaseService(database_url)
     event_bus = EventBusService(redis_url)
     task_queue = TaskQueueService(db)
     health_service = AgentHealthService(db)
 
-    # Register agent
-    agent_id = register_agent(db, agent_type="worker", phase_id="PHASE_IMPLEMENTATION")
+    # Register agent with capacity
+    agent_id = register_agent(
+        db,
+        agent_type="worker",
+        phase_id="PHASE_IMPLEMENTATION",
+        capacity=max_workers
+    )
 
     # Initialize heartbeat manager
     heartbeat_manager = HeartbeatManager(str(agent_id), health_service, interval_seconds=30)
@@ -221,20 +227,35 @@ def main():
     timeout_manager = TimeoutManager(task_queue, event_bus, interval_seconds=10)
     timeout_manager.start()
 
-    print(f"Worker started with agent_id: {agent_id}")
+    print(f"Worker started with agent_id: {agent_id}, concurrency: {max_workers}")
 
     try:
-        # Main worker loop
-        while True:
-            # Get assigned tasks for this agent
-            tasks = task_queue.get_assigned_tasks(agent_id)
+        # Main worker loop with thread pool
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            while True:
+                # Get assigned tasks for this agent
+                tasks = task_queue.get_assigned_tasks(agent_id)
 
-            if tasks:
-                for task in tasks:
-                    execute_task_with_retry(task, agent_id, db, task_queue, event_bus, workspace_dir, timeout_manager)
-            else:
-                # No tasks, sleep briefly
-                time.sleep(2)
+                if tasks:
+                    # Submit tasks to thread pool for concurrent execution
+                    futures = {}
+                    for task in tasks:
+                        future = executor.submit(
+                            execute_task_with_retry,
+                            task, agent_id, db, task_queue, event_bus, workspace_dir, timeout_manager
+                        )
+                        futures[future] = task
+
+                    # Wait for completion (non-blocking with timeout)
+                    for future in as_completed(futures, timeout=2):
+                        task = futures[future]
+                        try:
+                            future.result()  # Get result to propagate exceptions
+                        except Exception as e:
+                            print(f"Error in concurrent task execution for {task.id}: {e}")
+                else:
+                    # No tasks, sleep briefly
+                    time.sleep(2)
 
     except KeyboardInterrupt:
         print("Worker shutting down...")
@@ -247,7 +268,12 @@ def main():
         event_bus.close()
 
 
-def register_agent(db: DatabaseService, agent_type: str, phase_id: str | None = None) -> UUID:
+def register_agent(
+    db: DatabaseService,
+    agent_type: str,
+    phase_id: str | None = None,
+    capacity: int = 1,
+) -> UUID:
     """
     Register this agent in the database.
 
@@ -255,6 +281,7 @@ def register_agent(db: DatabaseService, agent_type: str, phase_id: str | None = 
         db: Database service
         agent_type: Type of agent (worker, monitor, etc.)
         phase_id: Phase ID for worker agents
+        capacity: Number of concurrent tasks this agent can handle
 
     Returns:
         Agent ID
@@ -265,6 +292,8 @@ def register_agent(db: DatabaseService, agent_type: str, phase_id: str | None = 
             phase_id=phase_id,
             status="idle",
             capabilities=["bash", "file_editor"],
+            capacity=capacity,
+            health_status="healthy",
         )
         session.add(agent)
         session.commit()

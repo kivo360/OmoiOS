@@ -24,7 +24,7 @@ def test_register_agent_persists_fields(db_service: DatabaseService):
     assert agent.capacity == 3
     assert agent.capabilities == ["analysis", "python"]
     assert agent.tags == ["python", "fastapi"]
-    assert agent.health_status == "unknown"
+    assert agent.health_status == "healthy"
 
 
 def test_search_agents_ranks_best_match(db_service: DatabaseService):

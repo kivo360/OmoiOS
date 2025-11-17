@@ -1,6 +1,6 @@
 """Tests for PhaseHistory model and relationships."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from omoi_os.models.phase_history import PhaseHistory
 from omoi_os.models.phases import Phase
@@ -63,9 +63,10 @@ def test_phase_history_timestamps(db_service: DatabaseService, sample_ticket: Ti
         session.commit()
         session.refresh(history)
 
-        now = datetime.utcnow() + timedelta(seconds=5)
+        from omoi_os.utils.datetime import utc_now
+        now = utc_now() + timedelta(seconds=5)
         assert history.created_at <= now
-        assert history.created_at >= datetime.utcnow() - timedelta(minutes=5)
+        assert history.created_at >= utc_now() - timedelta(minutes=5)
 
 
 

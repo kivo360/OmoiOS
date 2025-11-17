@@ -1,7 +1,7 @@
 """Phase workflow extensions for Stream G.
 
 Revision ID: 003_phase_workflow
-Revises: 002_phase1
+Revises: 003_agent_registry
 Create Date: 2025-11-16
 
 """
@@ -14,7 +14,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "003_phase_workflow"
-down_revision: Union[str, None] = "002_phase1"
+down_revision: Union[str, None] = "003_agent_registry"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

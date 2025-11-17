@@ -1,9 +1,8 @@
 """Test event bus service: publish/subscribe, callback invocation, error handling."""
 
-import json
 import threading
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 

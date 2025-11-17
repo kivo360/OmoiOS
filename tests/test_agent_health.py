@@ -1,8 +1,6 @@
 """Simplified tests for Agent Health Service functionality."""
 
-import pytest
-import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from omoi_os.models.agent import Agent
@@ -136,9 +134,9 @@ class TestAgentHealthService:
         now = utc_now()
         agents = [
             Agent(id="worker-1", agent_type="worker", phase_id="PHASE_1", status="idle",
-                  capabilities=[], last_heartbeat=now - timedelta(seconds=30), created_at=now),
+                  capabilities=[], last_heartbeat=now - timedelta(seconds=30), created_at=now, health_status="healthy"),
             Agent(id="worker-2", agent_type="worker", phase_id="PHASE_1", status="running",
-                  capabilities=[], last_heartbeat=now - timedelta(minutes=2), created_at=now),
+                  capabilities=[], last_heartbeat=now - timedelta(minutes=2), created_at=now, health_status="stale"),
         ]
 
         mock_session.query.return_value.all.return_value = agents

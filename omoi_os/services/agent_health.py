@@ -1,9 +1,9 @@
 """Agent Health Service for monitoring agent heartbeats and status."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Dict, List, Optional
 
-from sqlalchemy import and_, or_
+from sqlalchemy import or_
 
 from omoi_os.models.agent import Agent
 from omoi_os.services.database import DatabaseService
@@ -46,7 +46,9 @@ class AgentHealthService:
             session.commit()
             return True
 
-    def check_agent_health(self, agent_id: str, timeout_seconds: Optional[int] = None) -> Dict[str, any]:
+    def check_agent_health(
+        self, agent_id: str, timeout_seconds: Optional[int] = None
+    ) -> Dict[str, any]:
         """
         Check the health status of a specific agent.
 
@@ -84,7 +86,7 @@ class AgentHealthService:
                     "last_heartbeat": None,
                     "time_since_last_heartbeat": None,
                     "message": "No heartbeat recorded",
-                    "health_status": agent.health_status,
+                    "health_status": agent.health_status or "unknown",
                 }
 
             time_since_last_heartbeat = now - last_heartbeat
@@ -95,12 +97,17 @@ class AgentHealthService:
                 agent.status = "stale"
                 agent.health_status = "stale"
                 session.commit()
+            elif not is_stale and agent.health_status != "healthy":
+                agent.health_status = "healthy"
+                session.commit()
 
             return {
                 "agent_id": agent_id,
                 "status": agent.status,
                 "healthy": not is_stale,
-                "last_heartbeat": last_heartbeat.isoformat() if last_heartbeat else None,
+                "last_heartbeat": last_heartbeat.isoformat()
+                if last_heartbeat
+                else None,
                 "time_since_last_heartbeat": time_since_last_heartbeat.total_seconds(),
                 "timeout_seconds": timeout_seconds,
                 "agent_type": agent.agent_type,
@@ -125,12 +132,16 @@ class AgentHealthService:
 
         with self.db.get_session() as session:
             # Find agents with no heartbeat or last heartbeat before cutoff
-            stale_agents = session.query(Agent).filter(
-                or_(
-                    Agent.last_heartbeat.is_(None),
-                    Agent.last_heartbeat < cutoff_time
+            stale_agents = (
+                session.query(Agent)
+                .filter(
+                    or_(
+                        Agent.last_heartbeat.is_(None),
+                        Agent.last_heartbeat < cutoff_time,
+                    )
                 )
-            ).all()
+                .all()
+            )
 
             # Update their status to stale if not already
             for agent in stale_agents:
@@ -141,7 +152,9 @@ class AgentHealthService:
             session.commit()
             return stale_agents
 
-    def get_all_agents_health(self, timeout_seconds: Optional[int] = None) -> List[Dict[str, any]]:
+    def get_all_agents_health(
+        self, timeout_seconds: Optional[int] = None
+    ) -> List[Dict[str, any]]:
         """
         Get health status for all agents.
 
@@ -179,28 +192,36 @@ class AgentHealthService:
                 elif not is_stale and current_status == "stale":
                     agent.status = "idle"
                     agent.health_status = "healthy"
+                elif not is_stale and not agent.health_status:
+                    agent.health_status = "healthy"
 
-                health_results.append({
-                    "agent_id": agent.id,
-                    "agent_type": agent.agent_type,
-                    "phase_id": agent.phase_id,
-                    "status": agent.status,
-                    "healthy": not is_stale,
-                    "last_heartbeat": last_heartbeat.isoformat() if last_heartbeat else None,
-                    "time_since_last_heartbeat": time_since_last_heartbeat,
-                    "timeout_seconds": timeout_seconds,
-                    "capabilities": agent.capabilities,
-                    "created_at": agent.created_at.isoformat() if agent.created_at else None,
-                    "health_status": agent.health_status,
-                })
+                health_results.append(
+                    {
+                        "agent_id": agent.id,
+                        "agent_type": agent.agent_type,
+                        "phase_id": agent.phase_id,
+                        "status": agent.status,
+                        "healthy": not is_stale,
+                        "last_heartbeat": last_heartbeat.isoformat()
+                        if last_heartbeat
+                        else None,
+                        "time_since_last_heartbeat": time_since_last_heartbeat,
+                        "timeout_seconds": timeout_seconds,
+                        "capabilities": agent.capabilities,
+                        "created_at": agent.created_at.isoformat()
+                        if agent.created_at
+                        else None,
+                        "health_status": agent.health_status or "healthy"
+                        if not is_stale
+                        else "stale",
+                    }
+                )
 
             session.commit()
             return health_results
 
     def cleanup_stale_agents(
-        self,
-        timeout_seconds: Optional[int] = None,
-        mark_as: str = "timeout"
+        self, timeout_seconds: Optional[int] = None, mark_as: str = "timeout"
     ) -> int:
         """
         Mark stale agents with a specific status for cleanup tracking.
@@ -219,12 +240,16 @@ class AgentHealthService:
 
         with self.db.get_session() as session:
             # Find agents that are stale
-            stale_agents = session.query(Agent).filter(
-                or_(
-                    Agent.last_heartbeat.is_(None),
-                    Agent.last_heartbeat < cutoff_time
+            stale_agents = (
+                session.query(Agent)
+                .filter(
+                    or_(
+                        Agent.last_heartbeat.is_(None),
+                        Agent.last_heartbeat < cutoff_time,
+                    )
                 )
-            ).all()
+                .all()
+            )
 
             # Mark them with specified status
             count = 0
@@ -268,6 +293,7 @@ class AgentHealthService:
             time_5min_ago = now - timedelta(minutes=5)
             time_1hour_ago = now - timedelta(hours=1)
             time_24hours_ago = now - timedelta(hours=24)
+            cutoff_time = now - timedelta(seconds=90)
 
             for agent in agents:
                 # Status statistics
@@ -284,7 +310,10 @@ class AgentHealthService:
 
                 # Health summary
                 last_heartbeat = agent.last_heartbeat
-                if agent.health_status == "healthy":
+                # Determine health based on heartbeat recency
+                is_healthy = last_heartbeat and last_heartbeat >= cutoff_time
+
+                if is_healthy:
                     stats["health_summary"]["healthy"] += 1
                 elif agent.health_status in ["stale", "timeout", "unresponsive"]:
                     stats["health_summary"]["unhealthy"] += 1

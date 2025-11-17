@@ -1,6 +1,5 @@
 """Task queue service for managing task assignment and retrieval."""
 
-from uuid import UUID
 
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
@@ -93,6 +92,55 @@ class TaskQueueService:
             # Expunge so it can be used outside the session
             session.expunge(task)
             return task
+
+    def get_ready_tasks(
+        self,
+        phase_id: str,
+        limit: int = 10,
+    ) -> list[Task]:
+        """
+        Get multiple ready tasks for parallel execution (DAG batching).
+
+        Args:
+            phase_id: Phase identifier to filter by
+            limit: Maximum number of tasks to return
+
+        Returns:
+            List of Task objects ready for execution
+        """
+        with self.db.get_session() as session:
+            # Priority order: CRITICAL > HIGH > MEDIUM > LOW
+            priority_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+            
+            tasks = (
+                session.query(Task)
+                .filter(Task.status == "pending", Task.phase_id == phase_id)
+                .all()
+            )
+            
+            if not tasks:
+                return []
+            
+            # Filter out tasks with incomplete dependencies
+            available_tasks = []
+            for task in tasks:
+                if self._check_dependencies_complete(session, task):
+                    available_tasks.append(task)
+            
+            # Sort by priority descending
+            available_tasks.sort(
+                key=lambda t: priority_order.get(t.priority, 0),
+                reverse=True
+            )
+            
+            # Take top N tasks
+            batch = available_tasks[:limit]
+            
+            # Expunge all tasks for use outside session
+            for task in batch:
+                session.expunge(task)
+            
+            return batch
 
     def assign_task(self, task_id: str, agent_id: str) -> None:
         """

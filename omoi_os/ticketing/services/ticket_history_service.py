@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import datetime
 
 from omoi_os.utils.datetime import utc_now
 from typing import Any, Optional

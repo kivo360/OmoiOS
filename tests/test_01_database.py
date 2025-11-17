@@ -248,7 +248,7 @@ def test_alembic_migration_check(db_service: DatabaseService):
             # Get current database revision
             with db_service.engine.connect() as conn:
                 context = MigrationContext.configure(conn)
-                current_rev = context.get_current_revision()
+                context.get_current_revision()
 
             # Verify we have migrations available
             revisions = list(script.walk_revisions())
