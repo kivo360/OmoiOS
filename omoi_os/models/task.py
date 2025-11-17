@@ -12,7 +12,9 @@ from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
 
 if TYPE_CHECKING:
+    from omoi_os.models.cost_record import CostRecord
     from omoi_os.models.ticket import Ticket
+    from omoi_os.models.task_memory import TaskMemory
 
 
 class Task(Base):
@@ -48,5 +50,11 @@ class Task(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    # Relationship
+    # Relationships
     ticket: Mapped["Ticket"] = relationship("Ticket", back_populates="tasks")
+    memories: Mapped[list["TaskMemory"]] = relationship(
+        "TaskMemory", back_populates="task", cascade="all, delete-orphan"
+    )
+    cost_records: Mapped[list["CostRecord"]] = relationship(
+        "CostRecord", back_populates="task", cascade="all, delete-orphan"
+    )

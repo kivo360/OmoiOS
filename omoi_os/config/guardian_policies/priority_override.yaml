@@ -1,0 +1,77 @@
+# Priority Override Policy
+# Defines rules for boosting task priority in the queue
+
+policy:
+  name: "priority_override"
+  version: "1.0"
+  description: "Policy for emergency priority escalation of critical tasks"
+  
+  # Minimum authority level required
+  min_authority: 4  # GUARDIAN level
+  
+  # Conditions that trigger priority override
+  triggers:
+    - type: "production_incident"
+      condition: "incident.severity == 'P0' OR incident.severity == 'P1'"
+      description: "Production incident requires immediate attention"
+      auto_escalate: true
+      
+    - type: "deadline_approaching"
+      condition: "task.deadline - current_time < 1_hour AND task.priority != 'CRITICAL'"
+      description: "Task deadline imminent but not marked critical"
+      
+    - type: "customer_escalation"
+      condition: "ticket.customer_tier == 'enterprise' AND ticket.sla_breach_risk > 0.8"
+      description: "Enterprise customer at risk of SLA breach"
+      
+    - type: "dependency_chain"
+      condition: "task.blocks_critical_tasks AND task.priority < 'HIGH'"
+      description: "Task blocks critical work but has lower priority"
+  
+  # Priority escalation rules
+  rules:
+    - name: "escalate_to_critical"
+      when:
+        - "incident.severity == 'P0'"
+        - "OR task.sla_breach_imminent == true"
+      new_priority: "CRITICAL"
+      notify_team: true
+      
+    - name: "escalate_to_high"
+      when:
+        - "incident.severity == 'P1'"
+        - "OR task.deadline_within_hours < 2"
+      new_priority: "HIGH"
+      notify_team: false
+  
+  # Actions to take when triggered
+  actions:
+    - type: "override_priority"
+      priority: 1
+      
+    - type: "notify"
+      priority: 2
+      channels: ["slack", "email"]
+      message: "Task {task_id} priority escalated to {new_priority}: {reason}"
+      
+    - type: "reassign_if_needed"
+      priority: 3
+      when: "new_priority == 'CRITICAL' AND current_agent_overloaded"
+      
+    - type: "audit_log"
+      priority: 4
+      include_full_context: true
+  
+  # Rollback policy
+  rollback:
+    enabled: true
+    auto_rollback_after_minutes: 120  # Revert after 2 hours if not completed
+    revert_to_original_priority: true
+    requires_manual_confirmation: false
+  
+  # Approval workflow (optional)
+  approval:
+    required: false  # Emergency overrides don't need approval
+    approvers: ["guardian_agents", "system_admins"]
+    timeout_minutes: 5  # Auto-approve if no response within 5 min
+

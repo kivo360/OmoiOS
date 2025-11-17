@@ -1,0 +1,50 @@
+# Emergency Intervention Policy
+# Defines rules for emergency task cancellation
+
+policy:
+  name: "emergency_cancellation"
+  version: "1.0"
+  description: "Policy for emergency task cancellation during critical failures"
+  
+  # Minimum authority level required
+  min_authority: 4  # GUARDIAN level
+  
+  # Conditions that trigger emergency intervention
+  triggers:
+    - type: "task_timeout"
+      condition: "task.running_duration > task.timeout_seconds * 2"
+      description: "Task has run more than 2x its timeout duration"
+      
+    - type: "agent_failure"
+      condition: "agent.health_status == 'failed' AND task.status == 'running'"
+      description: "Agent has failed while task is running"
+      
+    - type: "critical_error"
+      condition: "task.retry_count >= task.max_retries AND task.priority == 'CRITICAL'"
+      description: "Critical task has exhausted all retries"
+      
+    - type: "resource_exhaustion"
+      condition: "system.memory_usage > 0.95 OR system.cpu_usage > 0.95"
+      description: "System resources critically low"
+  
+  # Actions to take when triggered
+  actions:
+    - type: "cancel_task"
+      priority: 1
+      auto_approve: true  # Emergency actions are auto-approved
+      
+    - type: "notify"
+      priority: 2
+      channels: ["slack", "pagerduty"]
+      message: "Emergency task cancellation triggered: {reason}"
+      
+    - type: "audit_log"
+      priority: 3
+      include_full_state: true
+  
+  # Rollback policy
+  rollback:
+    enabled: true
+    auto_rollback_after_minutes: 60  # Auto-revert after 1 hour if crisis resolved
+    requires_manual_confirmation: false
+

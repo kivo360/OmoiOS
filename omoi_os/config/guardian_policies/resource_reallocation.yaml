@@ -1,0 +1,66 @@
+# Resource Reallocation Policy
+# Defines rules for stealing capacity from low-priority work
+
+policy:
+  name: "resource_reallocation"
+  version: "1.0"
+  description: "Policy for reallocating agent capacity during resource constraints"
+  
+  # Minimum authority level required
+  min_authority: 4  # GUARDIAN level
+  
+  # Conditions that trigger reallocation
+  triggers:
+    - type: "critical_task_blocked"
+      condition: "task.priority == 'CRITICAL' AND task.status == 'pending' AND no_available_capacity"
+      description: "Critical task waiting but no agents available"
+      max_wait_minutes: 5
+      
+    - type: "high_priority_backlog"
+      condition: "queue.high_priority_count > 10 AND all_agents_busy_with_low_priority"
+      description: "Many high-priority tasks blocked by low-priority work"
+      
+    - type: "deadline_risk"
+      condition: "task.deadline - current_time < 30_minutes AND task.status == 'pending'"
+      description: "Task approaching deadline without agent assignment"
+  
+  # Reallocation rules
+  rules:
+    - name: "steal_from_low_priority"
+      source_criteria:
+        - "agent.current_task.priority IN ['LOW', 'MEDIUM']"
+        - "agent.current_task.can_be_paused == true"
+        - "agent.capacity > 1"  # Don't steal if agent only has 1 capacity
+      
+      target_criteria:
+        - "task.priority IN ['CRITICAL', 'HIGH']"
+        - "task.status == 'pending'"
+      
+      capacity_to_steal:
+        min: 1
+        max: 3
+        prefer: 2  # Prefer stealing 2 units
+  
+  # Actions to take when triggered
+  actions:
+    - type: "pause_low_priority_task"
+      priority: 1
+      
+    - type: "reallocate_capacity"
+      priority: 2
+      
+    - type: "resume_paused_task"
+      priority: 3
+      when: "crisis_resolved"
+      
+    - type: "notify"
+      priority: 4
+      channels: ["slack"]
+      message: "Capacity reallocated from {from_agent} to {to_agent}: {reason}"
+  
+  # Rollback policy
+  rollback:
+    enabled: true
+    auto_rollback_when: "critical_tasks_completed"
+    restore_original_capacity: true
+

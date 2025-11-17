@@ -19,7 +19,12 @@ from omoi_os.services.task_queue import TaskQueueService
 class HeartbeatManager:
     """Manages background heartbeat emission for a worker agent."""
 
-    def __init__(self, agent_id: str, health_service: AgentHealthService, interval_seconds: int = 30):
+    def __init__(
+        self,
+        agent_id: str,
+        health_service: AgentHealthService,
+        interval_seconds: int = 30,
+    ):
         """
         Initialize HeartbeatManager.
 
@@ -61,7 +66,9 @@ class HeartbeatManager:
                 # Emit heartbeat
                 success = self.health_service.emit_heartbeat(self.agent_id)
                 if not success:
-                    print(f"Warning: Failed to emit heartbeat for agent {self.agent_id} (agent not found)")
+                    print(
+                        f"Warning: Failed to emit heartbeat for agent {self.agent_id} (agent not found)"
+                    )
 
                 # Sleep for the interval
                 time.sleep(self.interval_seconds)
@@ -75,7 +82,12 @@ class HeartbeatManager:
 class TimeoutManager:
     """Manages background timeout monitoring for tasks."""
 
-    def __init__(self, task_queue: TaskQueueService, event_bus: EventBusService, interval_seconds: int = 10):
+    def __init__(
+        self,
+        task_queue: TaskQueueService,
+        event_bus: EventBusService,
+        interval_seconds: int = 10,
+    ):
         """
         Initialize TimeoutManager.
 
@@ -96,7 +108,9 @@ class TimeoutManager:
             return
 
         self._running = True
-        self._thread = threading.Thread(target=self._timeout_monitoring_loop, daemon=True)
+        self._thread = threading.Thread(
+            target=self._timeout_monitoring_loop, daemon=True
+        )
         self._thread.start()
         print("Timeout manager started")
 
@@ -123,7 +137,9 @@ class TimeoutManager:
                         success = self.task_queue.mark_task_timeout(task.id)
 
                         if success:
-                            print(f"Task {task.id} timed out after {task.timeout_seconds}s")
+                            print(
+                                f"Task {task.id} timed out after {task.timeout_seconds}s"
+                            )
 
                             # Publish timeout event
                             self.event_bus.publish(
@@ -133,7 +149,9 @@ class TimeoutManager:
                                     entity_id=str(task.id),
                                     payload={
                                         "timeout_seconds": task.timeout_seconds,
-                                        "elapsed_time": self.task_queue.get_task_elapsed_time(task.id),
+                                        "elapsed_time": self.task_queue.get_task_elapsed_time(
+                                            task.id
+                                        ),
                                         "phase_id": task.phase_id,
                                         "task_type": task.task_type,
                                     },
@@ -171,12 +189,16 @@ class TimeoutManager:
 
             # Check if task status is no longer executable
             if current_task.status not in ["assigned", "running"]:
-                print(f"Task {task.id} status changed to {current_task.status}, cancelling execution")
+                print(
+                    f"Task {task.id} status changed to {current_task.status}, cancelling execution"
+                )
                 return False
 
         return True
 
-    def handle_task_timeout_during_execution(self, task: Task, executor: AgentExecutor) -> None:
+    def handle_task_timeout_during_execution(
+        self, task: Task, executor: AgentExecutor
+    ) -> None:
         """
         Handle timeout during task execution by terminating the conversation.
 
@@ -188,11 +210,13 @@ class TimeoutManager:
             print(f"Handling timeout for task {task.id}")
 
             # Attempt to terminate the OpenHands conversation
-            if hasattr(executor, 'terminate_conversation'):
+            if hasattr(executor, "terminate_conversation"):
                 executor.terminate_conversation()
                 print(f"Terminated conversation for timed-out task {task.id}")
             else:
-                print(f"Executor for task {task.id} does not support conversation termination")
+                print(
+                    f"Executor for task {task.id} does not support conversation termination"
+                )
 
         except Exception as e:
             print(f"Error handling timeout for task {task.id}: {e}")
@@ -201,10 +225,14 @@ class TimeoutManager:
 def main():
     """Main worker loop with concurrent task execution."""
     # Initialize services
-    database_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db")
+    database_url = os.getenv(
+        "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
+    )
     redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
     workspace_dir = os.getenv("WORKSPACE_DIR", "/tmp/omoi_os_workspaces")
-    max_workers = int(os.getenv("WORKER_CONCURRENCY", "2"))  # Default 2 concurrent tasks
+    max_workers = int(
+        os.getenv("WORKER_CONCURRENCY", "2")
+    )  # Default 2 concurrent tasks
 
     db = DatabaseService(database_url)
     event_bus = EventBusService(redis_url)
@@ -213,14 +241,13 @@ def main():
 
     # Register agent with capacity
     agent_id = register_agent(
-        db,
-        agent_type="worker",
-        phase_id="PHASE_IMPLEMENTATION",
-        capacity=max_workers
+        db, agent_type="worker", phase_id="PHASE_IMPLEMENTATION", capacity=max_workers
     )
 
     # Initialize heartbeat manager
-    heartbeat_manager = HeartbeatManager(str(agent_id), health_service, interval_seconds=30)
+    heartbeat_manager = HeartbeatManager(
+        str(agent_id), health_service, interval_seconds=30
+    )
     heartbeat_manager.start()
 
     # Initialize timeout manager
@@ -232,17 +259,23 @@ def main():
     try:
         # Main worker loop with thread pool
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        while True:
-            # Get assigned tasks for this agent
-            tasks = task_queue.get_assigned_tasks(agent_id)
+            while True:
+                # Get assigned tasks for this agent
+                tasks = task_queue.get_assigned_tasks(agent_id)
 
-            if tasks:
+                if tasks:
                     # Submit tasks to thread pool for concurrent execution
                     futures = {}
-                for task in tasks:
+                    for task in tasks:
                         future = executor.submit(
                             execute_task_with_retry,
-                            task, agent_id, db, task_queue, event_bus, workspace_dir, timeout_manager
+                            task,
+                            agent_id,
+                            db,
+                            task_queue,
+                            event_bus,
+                            workspace_dir,
+                            timeout_manager,
                         )
                         futures[future] = task
 
@@ -252,10 +285,12 @@ def main():
                         try:
                             future.result()  # Get result to propagate exceptions
                         except Exception as e:
-                            print(f"Error in concurrent task execution for {task.id}: {e}")
-            else:
-                # No tasks, sleep briefly
-                time.sleep(2)
+                            print(
+                                f"Error in concurrent task execution for {task.id}: {e}"
+                            )
+                else:
+                    # No tasks, sleep briefly
+                    time.sleep(2)
 
     except KeyboardInterrupt:
         print("Worker shutting down...")
@@ -316,7 +351,9 @@ def deregister_agent(db: DatabaseService, agent_id: UUID) -> None:
             session.commit()
 
 
-def calculate_backoff_delay(retry_count: int, base_delay: float = 1.0, max_delay: float = 60.0) -> float:
+def calculate_backoff_delay(
+    retry_count: int, base_delay: float = 1.0, max_delay: float = 60.0
+) -> float:
     """
     Calculate exponential backoff delay with jitter.
 
@@ -329,7 +366,7 @@ def calculate_backoff_delay(retry_count: int, base_delay: float = 1.0, max_delay
         Delay in seconds with exponential backoff and jitter
     """
     # Calculate exponential backoff: base_delay * (2^retry_count)
-    exponential_delay = base_delay * (2 ** retry_count)
+    exponential_delay = base_delay * (2**retry_count)
 
     # Apply jitter: ±25% random variation
     jitter_factor = 0.75 + (random.random() * 0.5)  # Random between 0.75 and 1.25
@@ -366,7 +403,9 @@ def execute_task_with_retry(
     is_retry = task.retry_count > 0
     attempt_count = task.retry_count + 1  # Current attempt (1-based)
 
-    print(f"Executing task {task.id} (attempt {attempt_count}/{task.max_retries + 1}): {task.description}")
+    print(
+        f"Executing task {task.id} (attempt {attempt_count}/{task.max_retries + 1}): {task.description}"
+    )
 
     # Update agent status
     with db.get_session() as session:
@@ -412,7 +451,9 @@ def execute_task_with_retry(
         )
 
         if is_retry:
-            print(f"Task {task.id} completed successfully after {task.retry_count} retries")
+            print(
+                f"Task {task.id} completed successfully after {task.retry_count} retries"
+            )
         else:
             print(f"Task {task.id} completed successfully")
 
@@ -449,7 +490,9 @@ def execute_task_with_retry(
                 # Increment retry count and schedule retry
                 if task_queue.increment_retry(task.id):
                     # Calculate backoff delay
-                    delay = calculate_backoff_delay(task.retry_count - 1)  # Use incremented retry_count
+                    delay = calculate_backoff_delay(
+                        task.retry_count - 1
+                    )  # Use incremented retry_count
 
                     print(f"Scheduling retry for task {task.id} in {delay:.2f} seconds")
 
@@ -472,15 +515,21 @@ def execute_task_with_retry(
                     def schedule_retry():
                         time.sleep(delay)
                         # The task will be picked up by get_next_task() since it's now "pending"
-                        print(f"Retry delay completed for task {task.id}, task is now pending")
+                        print(
+                            f"Retry delay completed for task {task.id}, task is now pending"
+                        )
 
                     # Start retry timer in background thread
                     retry_thread = threading.Thread(target=schedule_retry, daemon=True)
                     retry_thread.start()
                 else:
-                    print(f"Failed to schedule retry for task {task.id} (max retries exceeded)")
+                    print(
+                        f"Failed to schedule retry for task {task.id} (max retries exceeded)"
+                    )
             else:
-                print(f"Task {task.id} failed with permanent error, not retrying: {error_message}")
+                print(
+                    f"Task {task.id} failed with permanent error, not retrying: {error_message}"
+                )
                 # Publish permanent failure event
                 event_bus.publish(
                     SystemEvent(
@@ -494,7 +543,9 @@ def execute_task_with_retry(
                     )
                 )
         else:
-            print(f"Task {task.id} will not be retried (max retries: {task.max_retries}, current: {task.retry_count})")
+            print(
+                f"Task {task.id} will not be retried (max retries: {task.max_retries}, current: {task.retry_count})"
+            )
             # Publish max retries exceeded event
             event_bus.publish(
                 SystemEvent(

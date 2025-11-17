@@ -5,9 +5,12 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from omoi_os.services.agent_health import AgentHealthService
     from omoi_os.services.agent_registry import AgentRegistryService
+    from omoi_os.services.budget_enforcer import BudgetEnforcerService
     from omoi_os.services.collaboration import CollaborationService
+    from omoi_os.services.cost_tracking import CostTrackingService
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.event_bus import EventBusService
+    from omoi_os.services.monitor import MonitorService
     from omoi_os.services.resource_lock import ResourceLockService
     from omoi_os.services.task_queue import TaskQueueService
 
@@ -77,4 +80,31 @@ def get_resource_lock_service() -> "ResourceLockService":
     if lock_service is None:
         raise RuntimeError("Resource lock service not initialized")
     return lock_service
+
+
+def get_monitor_service() -> "MonitorService":
+    """Get monitor service instance."""
+    from omoi_os.api.main import monitor_service
+
+    if monitor_service is None:
+        raise RuntimeError("Monitor service not initialized")
+    return monitor_service
+
+
+def get_cost_tracking_service() -> "CostTrackingService":
+    """Get cost tracking service instance."""
+    from omoi_os.api.main import cost_tracking_service
+
+    if cost_tracking_service is None:
+        raise RuntimeError("Cost tracking service not initialized")
+    return cost_tracking_service
+
+
+def get_budget_enforcer_service() -> "BudgetEnforcerService":
+    """Get budget enforcer service instance."""
+    from omoi_os.api.main import budget_enforcer_service
+
+    if budget_enforcer_service is None:
+        raise RuntimeError("Budget enforcer service not initialized")
+    return budget_enforcer_service
 

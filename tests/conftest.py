@@ -95,6 +95,13 @@ def lock_service(db_service: DatabaseService):
 
 
 @pytest.fixture
+def monitor_service(db_service: DatabaseService, event_bus_service: EventBusService):
+    """Create a monitor service."""
+    from omoi_os.services.monitor import MonitorService
+    return MonitorService(db_service, event_bus_service)
+
+
+@pytest.fixture
 def test_workspace_dir() -> str:
     """Create a temporary workspace directory for tests."""
     return tempfile.mkdtemp(prefix="omoi_test_workspace_")

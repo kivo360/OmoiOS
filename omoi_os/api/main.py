@@ -6,10 +6,21 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from omoi_os.api.routes import agents, collaboration, phases, tasks, tickets
+from omoi_os.api.routes import (
+    agents,
+    collaboration,
+    costs,
+    guardian,
+    memory,
+    phases,
+    tasks,
+    tickets,
+)
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
+from omoi_os.services.budget_enforcer import BudgetEnforcerService
 from omoi_os.services.collaboration import CollaborationService
+from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.resource_lock import ResourceLockService
@@ -24,6 +35,9 @@ health_service: AgentHealthService | None = None
 registry_service: AgentRegistryService | None = None
 collaboration_service: CollaborationService | None = None
 lock_service: ResourceLockService | None = None
+monitor_service = None  # Defined below in lifespan
+cost_tracking_service: CostTrackingService | None = None
+budget_enforcer_service: BudgetEnforcerService | None = None
 
 
 async def orchestrator_loop():
@@ -48,7 +62,9 @@ async def orchestrator_loop():
                 from omoi_os.models.agent import Agent
 
                 with db.get_session() as session:
-                    available_agent = session.query(Agent).filter(Agent.status == "idle").first()
+                    available_agent = (
+                        session.query(Agent).filter(Agent.status == "idle").first()
+                    )
                     if available_agent:
                         queue.assign_task(task.id, available_agent.id)
                         agent_id = str(available_agent.id)
@@ -81,20 +97,45 @@ async def orchestrator_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app."""
-    global db, queue, event_bus, health_service, registry_service, collaboration_service, lock_service
+    global \
+        db, \
+        queue, \
+        event_bus, \
+        health_service, \
+        registry_service, \
+        collaboration_service, \
+        lock_service, \
+        monitor_service, \
+        cost_tracking_service, \
+        budget_enforcer_service
 
     # Initialize services
     db = DatabaseService(
         connection_string=os.getenv(
-            "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
+            "DATABASE_URL",
+            "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
         )
     )
     queue = TaskQueueService(db)
-    event_bus = EventBusService(redis_url=os.getenv("REDIS_URL", "redis://localhost:16379"))
+    event_bus = EventBusService(
+        redis_url=os.getenv("REDIS_URL", "redis://localhost:16379")
+    )
     health_service = AgentHealthService(db)
     registry_service = AgentRegistryService(db, event_bus)
     collaboration_service = CollaborationService(db, event_bus)
     lock_service = ResourceLockService(db)
+
+    # Import MonitorService here to avoid issues if Phase 4 not complete
+    try:
+        from omoi_os.services.monitor import MonitorService
+
+        monitor_service = MonitorService(db, event_bus)
+    except ImportError:
+        monitor_service = None
+
+    # Phase 5 services
+    cost_tracking_service = CostTrackingService(db, event_bus)
+    budget_enforcer_service = BudgetEnforcerService(db, event_bus)
 
     # Create database tables if they don't exist
     db.create_tables()
@@ -122,11 +163,22 @@ app = FastAPI(
 )
 
 # Include routers
-app.include_router(tickets.router, prefix="/api/v1", tags=["tickets"])
-app.include_router(tasks.router, prefix="/api/v1", tags=["tasks"])
+app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["tickets"])
+app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
 app.include_router(phases.router, prefix="/api/v1", tags=["phases"])
 app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
 app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"])
+app.include_router(costs.router, prefix="/api/v1/costs", tags=["costs"])
+app.include_router(guardian.router, prefix="/api/v1/guardian", tags=["guardian"])
+app.include_router(memory.router, prefix="/api/v1", tags=["memory"])
+
+# Conditionally include monitor router if Phase 4 is available
+try:
+    from omoi_os.api.routes import monitor
+
+    app.include_router(monitor.router, prefix="/api/v1", tags=["monitoring"])
+except ImportError:
+    pass
 
 
 @app.get("/health")

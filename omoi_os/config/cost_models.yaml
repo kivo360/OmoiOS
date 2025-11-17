@@ -1,0 +1,76 @@
+# LLM Provider Cost Models
+# Pricing as of November 2024 (USD per token)
+# Source: Official provider pricing pages
+
+providers:
+  openai:
+    gpt-4-turbo:
+      prompt_token_cost: 0.00001
+      completion_token_cost: 0.00003
+      notes: "GPT-4 Turbo with 128K context"
+    
+    gpt-4:
+      prompt_token_cost: 0.00003
+      completion_token_cost: 0.00006
+      notes: "GPT-4 baseline model"
+    
+    gpt-3.5-turbo:
+      prompt_token_cost: 0.0000005
+      completion_token_cost: 0.0000015
+      notes: "GPT-3.5 Turbo"
+    
+    text-embedding-3-small:
+      prompt_token_cost: 0.00000002
+      completion_token_cost: 0.0
+      notes: "Embeddings model (smaller)"
+    
+    text-embedding-3-large:
+      prompt_token_cost: 0.00000013
+      completion_token_cost: 0.0
+      notes: "Embeddings model (larger)"
+  
+  anthropic:
+    claude-sonnet-4.5:
+      prompt_token_cost: 0.000003
+      completion_token_cost: 0.000015
+      notes: "Claude Sonnet 4.5 (latest)"
+    
+    claude-sonnet-3.5:
+      prompt_token_cost: 0.000003
+      completion_token_cost: 0.000015
+      notes: "Claude Sonnet 3.5"
+    
+    claude-opus:
+      prompt_token_cost: 0.000015
+      completion_token_cost: 0.000075
+      notes: "Claude Opus (most capable)"
+    
+    claude-haiku:
+      prompt_token_cost: 0.00000025
+      completion_token_cost: 0.00000125
+      notes: "Claude Haiku (fastest)"
+  
+  # OpenHands default model
+  openhands:
+    claude-sonnet-4-5-20250929:
+      prompt_token_cost: 0.000003
+      completion_token_cost: 0.000015
+      provider: "anthropic"
+      notes: "OpenHands default model (maps to Anthropic)"
+
+# Default cost assumptions for unknown models
+defaults:
+  prompt_token_cost: 0.000003
+  completion_token_cost: 0.000015
+  notes: "Fallback pricing for unknown models"
+
+# Budget alert thresholds (percentage of limit)
+budget_alerts:
+  warning: 0.8  # Alert at 80% of budget
+  critical: 0.95  # Critical alert at 95%
+  
+# Cost forecasting parameters
+forecasting:
+  avg_tokens_per_task: 5000  # Average tokens per task (estimated)
+  buffer_multiplier: 1.2  # Safety buffer for forecasts (20% overhead)
+

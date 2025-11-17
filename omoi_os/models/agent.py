@@ -1,15 +1,18 @@
 """Agent model for agent registry."""
 
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
 from sqlalchemy import DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
+
+if TYPE_CHECKING:
+    from omoi_os.models.cost_record import CostRecord
 
 
 class Agent(Base):
@@ -45,4 +48,9 @@ class Agent(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    # Relationships
+    cost_records: Mapped[list["CostRecord"]] = relationship(
+        "CostRecord", back_populates="agent", cascade="all, delete-orphan"
     )
