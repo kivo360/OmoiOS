@@ -4,7 +4,7 @@ import re
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from omoi_os.models.task_memory import TaskMemory
@@ -30,7 +30,7 @@ class SimilarTask:
 class MemoryService:
     """
     Service for storing task execution history and learning patterns.
-    
+
     Features:
     - Store task execution summaries with embeddings
     - Search for similar past tasks using vector similarity
@@ -45,7 +45,7 @@ class MemoryService:
     ):
         """
         Initialize memory service.
-        
+
         Args:
             embedding_service: Service for generating text embeddings.
             event_bus: Optional event bus for publishing memory events.
@@ -64,7 +64,7 @@ class MemoryService:
     ) -> TaskMemory:
         """
         Store task execution in memory with embedding.
-        
+
         Args:
             session: Database session.
             task_id: Task ID to remember.
@@ -72,7 +72,7 @@ class MemoryService:
             success: Whether execution was successful.
             error_patterns: Optional error patterns if failed.
             auto_extract_patterns: Whether to automatically extract patterns.
-            
+
         Returns:
             Created TaskMemory record.
         """
@@ -129,14 +129,14 @@ class MemoryService:
     ) -> List[SimilarTask]:
         """
         Search for similar past tasks using embedding similarity.
-        
+
         Args:
             session: Database session.
             task_description: Description of the new task.
             top_k: Number of results to return.
             similarity_threshold: Minimum similarity score (0.0 to 1.0).
             success_only: Only return successful task executions.
-            
+
         Returns:
             List of similar tasks ordered by similarity.
         """
@@ -145,7 +145,7 @@ class MemoryService:
 
         # Query memories with embeddings
         query = select(TaskMemory).where(TaskMemory.context_embedding.isnot(None))
-        
+
         if success_only:
             query = query.where(TaskMemory.success == True)  # noqa: E712
 
@@ -158,7 +158,7 @@ class MemoryService:
                 similarity = self.embedding_service.cosine_similarity(
                     query_embedding, memory.context_embedding
                 )
-                
+
                 if similarity >= similarity_threshold:
                     results.append(
                         SimilarTask(
@@ -193,12 +193,12 @@ class MemoryService:
     ) -> Dict[str, Any]:
         """
         Get suggested context for a new task based on similar past tasks.
-        
+
         Args:
             session: Database session.
             task_description: Description of the new task.
             top_k: Number of similar tasks to consider.
-            
+
         Returns:
             Dictionary with context suggestions and patterns.
         """
@@ -259,12 +259,12 @@ class MemoryService:
     ) -> List[LearnedPattern]:
         """
         Find learned patterns that match a task description.
-        
+
         Args:
             session: Database session.
             task_description: Task description to match.
             min_confidence: Minimum confidence score.
-            
+
         Returns:
             List of matching patterns.
         """
@@ -278,7 +278,9 @@ class MemoryService:
         matching = []
         for pattern in patterns:
             try:
-                if re.search(pattern.task_type_pattern, task_description, re.IGNORECASE):
+                if re.search(
+                    pattern.task_type_pattern, task_description, re.IGNORECASE
+                ):
                     matching.append(pattern)
                     pattern.increment_usage()
             except re.error:
@@ -296,13 +298,13 @@ class MemoryService:
     ) -> List[TaskPattern]:
         """
         Search for learned patterns (contract interface for Quality Squad).
-        
+
         Args:
             session: Database session.
             task_type: Optional task type pattern to filter.
             pattern_type: Optional pattern type (success/failure/optimization).
             limit: Maximum number of patterns to return.
-            
+
         Returns:
             List of TaskPattern data classes.
         """
@@ -340,13 +342,13 @@ class MemoryService:
     ) -> Optional[LearnedPattern]:
         """
         Extract a pattern from similar completed tasks.
-        
+
         Args:
             session: Database session.
             task_type_pattern: Regex pattern for matching tasks.
             pattern_type: Type of pattern (success/failure/optimization).
             min_samples: Minimum number of samples needed to extract pattern.
-            
+
         Returns:
             Extracted pattern or None if insufficient samples.
         """
@@ -374,7 +376,9 @@ class MemoryService:
         )
 
         # Generate pattern embedding (average of task embeddings)
-        embeddings = [m[1].context_embedding for m in matching_memories if m[1].context_embedding]
+        embeddings = [
+            m[1].context_embedding for m in matching_memories if m[1].context_embedding
+        ]
         pattern_embedding = self._average_embeddings(embeddings) if embeddings else None
 
         # Calculate confidence based on sample size and consistency
@@ -386,7 +390,10 @@ class MemoryService:
             task_type_pattern=task_type_pattern,
             success_indicators=success_indicators,
             failure_indicators=[],
-            recommended_context={"source": "extracted", "sample_count": len(matching_memories)},
+            recommended_context={
+                "source": "extracted",
+                "sample_count": len(matching_memories),
+            },
             embedding=pattern_embedding,
             confidence_score=confidence,
             usage_count=0,
@@ -423,7 +430,9 @@ class MemoryService:
             return
 
         # Simple pattern: task_type prefix
-        task_type_prefix = task.task_type.split("_")[0] if "_" in task.task_type else task.task_type
+        task_type_prefix = (
+            task.task_type.split("_")[0] if "_" in task.task_type else task.task_type
+        )
         pattern_regex = f".*{re.escape(task_type_prefix)}.*"
 
         # Check if pattern already exists
@@ -445,19 +454,23 @@ class MemoryService:
         # Simple keyword extraction (can be enhanced with NLP)
         indicators = []
         common_words = ["completed", "successful", "passed", "validated", "deployed"]
-        
+
         for word in common_words:
-            if sum(1 for s in summaries if word.lower() in s.lower()) >= len(summaries) // 2:
+            if (
+                sum(1 for s in summaries if word.lower() in s.lower())
+                >= len(summaries) // 2
+            ):
                 indicators.append(word)
-        
+
         return indicators[:5]  # Top 5
 
     def _average_embeddings(self, embeddings: List[List[float]]) -> List[float]:
         """Calculate average embedding vector."""
         if not embeddings:
             return []
-        
+
         import numpy as np
+
         arr = np.array(embeddings)
         avg = np.mean(arr, axis=0)
         return avg.tolist()
@@ -471,10 +484,12 @@ class MemoryService:
         recommendations = []
 
         if similar_tasks:
-            success_rate = sum(1 for t in similar_tasks if t.success) / len(similar_tasks)
+            success_rate = sum(1 for t in similar_tasks if t.success) / len(
+                similar_tasks
+            )
             if success_rate > 0.8:
                 recommendations.append(
-                    f"Similar tasks have {success_rate*100:.0f}% success rate. "
+                    f"Similar tasks have {success_rate * 100:.0f}% success rate. "
                     "Consider following similar approaches."
                 )
 
@@ -487,4 +502,3 @@ class MemoryService:
                 )
 
         return recommendations
-

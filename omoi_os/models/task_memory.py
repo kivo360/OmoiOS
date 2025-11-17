@@ -1,7 +1,7 @@
 """Task memory model for storing execution history with embeddings."""
 
 import uuid
-from typing import Optional, List, Dict, Any
+from typing import TYPE_CHECKING, Optional, List, Dict, Any
 
 from sqlalchemy import (
     String,
@@ -19,11 +19,14 @@ from whenever import Instant
 from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
 
+if TYPE_CHECKING:
+    from omoi_os.models.task import Task
+
 
 class TaskMemory(Base):
     """
     Stores execution history and learned context from completed tasks.
-    
+
     Used for pattern recognition and context retrieval for similar tasks.
     """
 
@@ -93,4 +96,3 @@ class TaskMemory(Base):
             "learned_at": self.learned_at.isoformat() if self.learned_at else None,
             "reused_count": self.reused_count,
         }
-

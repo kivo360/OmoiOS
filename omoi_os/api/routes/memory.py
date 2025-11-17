@@ -7,10 +7,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from omoi_os.api.dependencies import get_db
-from omoi_os.services.memory import MemoryService, SimilarTask
+from omoi_os.services.memory import MemoryService
 from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
 from omoi_os.services.event_bus import EventBusService
-from omoi_os.models.learned_pattern import TaskPattern
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -46,7 +45,9 @@ class SearchSimilarRequest(BaseModel):
 
     task_description: str = Field(..., description="Description of the task")
     top_k: int = Field(5, ge=1, le=20, description="Number of results")
-    similarity_threshold: float = Field(0.7, ge=0.0, le=1.0, description="Minimum similarity")
+    similarity_threshold: float = Field(
+        0.7, ge=0.0, le=1.0, description="Minimum similarity"
+    )
     success_only: bool = Field(False, description="Only return successful tasks")
 
 
@@ -75,7 +76,9 @@ class ExtractPatternRequest(BaseModel):
     """Request to extract a pattern."""
 
     task_type_pattern: str = Field(..., description="Regex pattern for matching tasks")
-    pattern_type: str = Field("success", description="Type: success, failure, optimization")
+    pattern_type: str = Field(
+        "success", description="Type: success, failure, optimization"
+    )
     min_samples: int = Field(3, ge=2, le=10, description="Minimum sample count")
 
 
@@ -106,7 +109,7 @@ def store_execution(
 ) -> Dict[str, str]:
     """
     Store task execution in memory with embedding.
-    
+
     This endpoint records a task execution for future pattern learning and
     similarity search.
     """
@@ -125,7 +128,9 @@ def store_execution(
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to store execution: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to store execution: {str(e)}"
+        )
 
 
 @router.post("/search", response_model=List[SimilarTaskResponse])
@@ -136,7 +141,7 @@ def search_similar(
 ) -> List[SimilarTaskResponse]:
     """
     Search for similar past tasks using embedding similarity.
-    
+
     Returns tasks ordered by similarity score with the query description.
     """
     try:
@@ -173,7 +178,7 @@ def get_task_context(
 ) -> TaskContextResponse:
     """
     Get suggested context for a task based on similar past tasks.
-    
+
     Useful for providing context to agents before they start working on a task.
     """
     try:
@@ -183,7 +188,8 @@ def get_task_context(
         task = db.get(Task, task_id)
         if not task or not task.description:
             raise HTTPException(
-                status_code=404, detail=f"Task {task_id} not found or has no description"
+                status_code=404,
+                detail=f"Task {task_id} not found or has no description",
             )
 
         context = memory_service.get_task_context(
@@ -208,7 +214,7 @@ def list_patterns(
 ) -> List[PatternResponse]:
     """
     List learned patterns.
-    
+
     Patterns are ordered by confidence score and usage count.
     """
     try:
@@ -229,7 +235,9 @@ def list_patterns(
             for p in patterns
         ]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to list patterns: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list patterns: {str(e)}"
+        )
 
 
 @router.post("/patterns/extract", status_code=201)
@@ -240,7 +248,7 @@ def extract_pattern(
 ) -> Dict[str, Any]:
     """
     Extract a pattern from completed tasks matching a regex.
-    
+
     Requires minimum number of samples to extract a reliable pattern.
     """
     try:
@@ -250,13 +258,13 @@ def extract_pattern(
             pattern_type=request.pattern_type,
             min_samples=request.min_samples,
         )
-        
+
         if not pattern:
             raise HTTPException(
                 status_code=400,
                 detail=f"Insufficient samples (need {request.min_samples}) to extract pattern",
             )
-        
+
         db.commit()
         return {
             "pattern_id": pattern.id,
@@ -267,7 +275,9 @@ def extract_pattern(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to extract pattern: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to extract pattern: {str(e)}"
+        )
 
 
 @router.post("/patterns/{pattern_id}/feedback")
@@ -278,7 +288,7 @@ def provide_pattern_feedback(
 ) -> Dict[str, str]:
     """
     Provide feedback on a pattern's usefulness.
-    
+
     Helps improve pattern confidence scores over time based on real usage.
     """
     try:
@@ -286,7 +296,9 @@ def provide_pattern_feedback(
 
         pattern = db.get(LearnedPattern, pattern_id)
         if not pattern:
-            raise HTTPException(status_code=404, detail=f"Pattern {pattern_id} not found")
+            raise HTTPException(
+                status_code=404, detail=f"Pattern {pattern_id} not found"
+            )
 
         # Adjust confidence if provided
         if feedback.confidence_adjustment is not None:
@@ -295,10 +307,14 @@ def provide_pattern_feedback(
             pattern.update_confidence(new_confidence)
 
         db.commit()
-        return {"status": "feedback_recorded", "new_confidence": pattern.confidence_score}
+        return {
+            "status": "feedback_recorded",
+            "new_confidence": pattern.confidence_score,
+        }
     except HTTPException:
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to record feedback: {str(e)}")
-
+        raise HTTPException(
+            status_code=500, detail=f"Failed to record feedback: {str(e)}"
+        )

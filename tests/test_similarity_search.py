@@ -47,13 +47,16 @@ def test_vector_similarity_ranking(
     with db_service.get_session() as session:
         # Create tasks with varying similarity to a query
         tasks_data = [
-            ("Implement JWT authentication system", "Completed JWT auth with Redis sessions"),
+            (
+                "Implement JWT authentication system",
+                "Completed JWT auth with Redis sessions",
+            ),
             ("Add OAuth2 Google login", "Integrated OAuth2 with Google provider"),
             ("Fix authentication bug", "Fixed token expiration handling"),
             ("Build payment system", "Implemented Stripe payment integration"),
             ("Create user profile page", "Built user profile with avatar upload"),
         ]
-        
+
         for desc, summary in tasks_data:
             task = Task(
                 ticket_id=test_ticket.id,
@@ -65,16 +68,16 @@ def test_vector_similarity_ranking(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
                 execution_summary=summary,
                 success=True,
             )
-        
+
         session.commit()
-        
+
         # Search for authentication-related tasks
         query = "Implement user authentication with JWT tokens"
         results = memory_service.search_similar(
@@ -83,7 +86,7 @@ def test_vector_similarity_ranking(
             top_k=3,
             similarity_threshold=0.1,
         )
-        
+
         # Should return authentication-related tasks first
         assert len(results) > 0
         # Results should be in descending similarity order
@@ -100,13 +103,13 @@ def test_cosine_similarity_calculation(
     vec2 = [1.0, 2.0, 3.0]
     similarity = embedding_service.cosine_similarity(vec1, vec2)
     assert 0.99 < similarity <= 1.0  # Should be ~1.0 for identical vectors
-    
+
     # Test orthogonal vectors
     vec3 = [1.0, 0.0, 0.0]
     vec4 = [0.0, 1.0, 0.0]
     similarity = embedding_service.cosine_similarity(vec3, vec4)
     assert abs(similarity) < 0.01  # Should be ~0.0 for orthogonal
-    
+
     # Test opposite vectors
     vec5 = [1.0, 2.0, 3.0]
     vec6 = [-1.0, -2.0, -3.0]
@@ -123,7 +126,7 @@ def test_euclidean_distance_calculation(
     vec2 = [1.0, 2.0, 3.0]
     distance = embedding_service.euclidean_distance(vec1, vec2)
     assert distance < 0.01  # Should be ~0.0 for identical vectors
-    
+
     # Test different vectors
     vec3 = [0.0, 0.0, 0.0]
     vec4 = [3.0, 4.0, 0.0]
@@ -144,7 +147,7 @@ def test_similarity_threshold_filtering(
             ("Add database indexes", "Created database indexes"),
             ("Write unit tests", "Wrote comprehensive tests"),
         ]
-        
+
         for desc, summary in tasks_data:
             task = Task(
                 ticket_id=test_ticket.id,
@@ -156,16 +159,16 @@ def test_similarity_threshold_filtering(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
                 execution_summary=summary,
                 success=True,
             )
-        
+
         session.commit()
-        
+
         # Search with low threshold (should return more results)
         low_threshold_results = memory_service.search_similar(
             session=session,
@@ -173,7 +176,7 @@ def test_similarity_threshold_filtering(
             top_k=10,
             similarity_threshold=0.1,
         )
-        
+
         # Search with high threshold (should return fewer results)
         high_threshold_results = memory_service.search_similar(
             session=session,
@@ -181,10 +184,10 @@ def test_similarity_threshold_filtering(
             top_k=10,
             similarity_threshold=0.8,
         )
-        
+
         # Low threshold should return more or equal results
         assert len(low_threshold_results) >= len(high_threshold_results)
-        
+
         # All high threshold results should exceed threshold
         for result in high_threshold_results:
             assert result.similarity_score >= 0.8
@@ -209,16 +212,16 @@ def test_top_k_limit(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
                 execution_summary=f"Completed feature {i}",
                 success=True,
             )
-        
+
         session.commit()
-        
+
         # Search with top_k=5
         results = memory_service.search_similar(
             session=session,
@@ -226,7 +229,7 @@ def test_top_k_limit(
             top_k=5,
             similarity_threshold=0.1,
         )
-        
+
         # Should return exactly 5 results (or fewer if not enough matches)
         assert len(results) <= 5
 
@@ -236,10 +239,10 @@ def test_embedding_consistency(
 ):
     """Test that same text produces consistent embeddings."""
     text = "Implement user authentication with JWT tokens"
-    
+
     embedding1 = embedding_service.generate_embedding(text)
     embedding2 = embedding_service.generate_embedding(text)
-    
+
     # Should be identical
     similarity = embedding_service.cosine_similarity(embedding1, embedding2)
     assert similarity > 0.999  # Nearly 1.0 (account for floating point precision)
@@ -254,9 +257,9 @@ def test_embedding_dimensions_consistency(
         "A longer piece of text with more words",
         "This is an even longer text with many more words to see if dimension stays consistent",
     ]
-    
+
     embeddings = embedding_service.batch_generate_embeddings(texts)
-    
+
     # All should have same dimensions
     dimensions = [len(emb) for emb in embeddings]
     assert all(d == 1536 for d in dimensions)
@@ -271,18 +274,20 @@ def test_batch_embedding_generation(
         "Add payment system",
         "Create admin dashboard",
     ]
-    
+
     # Generate individually
     individual_embeddings = [
         embedding_service.generate_embedding(text) for text in texts
     ]
-    
+
     # Generate in batch
     batch_embeddings = embedding_service.batch_generate_embeddings(texts)
-    
+
     assert len(batch_embeddings) == len(individual_embeddings)
-    
+
     # Compare similarities (should be very high, accounting for potential batch processing differences)
     for ind_emb, batch_emb in zip(individual_embeddings, batch_embeddings):
         similarity = embedding_service.cosine_similarity(ind_emb, batch_emb)
-        assert similarity > 0.99  # Very similar (allow for minor differences in batch processing)
+        assert (
+            similarity > 0.99
+        )  # Very similar (allow for minor differences in batch processing)

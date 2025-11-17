@@ -67,7 +67,7 @@ def test_store_execution_success(
 ):
     """Test storing a successful task execution."""
     summary = "Successfully implemented authentication with JWT tokens"
-    
+
     with db_service.get_session() as session:
         memory = memory_service.store_execution(
             session=session,
@@ -76,7 +76,7 @@ def test_store_execution_success(
             success=True,
         )
         session.commit()
-        
+
         assert memory is not None
         assert memory.task_id == test_task.id
         assert memory.execution_summary == summary
@@ -98,7 +98,7 @@ def test_store_execution_failure(
         "message": "Database connection refused",
         "stack_trace": "...",
     }
-    
+
     with db_service.get_session() as session:
         memory = memory_service.store_execution(
             session=session,
@@ -108,7 +108,7 @@ def test_store_execution_failure(
             error_patterns=error_patterns,
         )
         session.commit()
-        
+
         assert memory is not None
         assert memory.success is False
         assert memory.error_patterns == error_patterns
@@ -144,7 +144,7 @@ def test_search_similar_tasks(
             ("Fix login bug", "Fixed password validation issue", True),
             ("Implement file upload", "Added file upload with S3", True),
         ]
-        
+
         for desc, summary, success in tasks_data:
             task = Task(
                 ticket_id=test_ticket.id,
@@ -156,7 +156,7 @@ def test_search_similar_tasks(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
@@ -164,9 +164,9 @@ def test_search_similar_tasks(
                 success=success,
                 auto_extract_patterns=False,  # Disable for this test
             )
-        
+
         session.commit()
-        
+
         # Search for authentication-related tasks
         results = memory_service.search_similar(
             session=session,
@@ -175,7 +175,7 @@ def test_search_similar_tasks(
             similarity_threshold=0.3,  # Lower threshold for local embeddings
             success_only=True,
         )
-        
+
         assert len(results) > 0
         assert all(r.success for r in results)
         assert all(0 <= r.similarity_score <= 1.0 for r in results)
@@ -199,7 +199,7 @@ def test_search_similar_with_threshold(
             success=True,
         )
         session.commit()
-        
+
         # Search with very high threshold (should return nothing)
         results = memory_service.search_similar(
             session=session,
@@ -207,7 +207,7 @@ def test_search_similar_with_threshold(
             top_k=5,
             similarity_threshold=0.99,  # Very high threshold
         )
-        
+
         assert len(results) == 0
 
 
@@ -223,7 +223,7 @@ def test_search_similar_success_only_filter(
             ("Implement feature A", "Successfully completed", True),
             ("Implement feature B", "Failed due to error", False),
         ]
-        
+
         for desc, summary, success in tasks_data:
             task = Task(
                 ticket_id=test_ticket.id,
@@ -235,16 +235,16 @@ def test_search_similar_success_only_filter(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
                 execution_summary=summary,
                 success=success,
             )
-        
+
         session.commit()
-        
+
         # Search with success_only=True
         results = memory_service.search_similar(
             session=session,
@@ -253,7 +253,7 @@ def test_search_similar_success_only_filter(
             similarity_threshold=0.1,
             success_only=True,
         )
-        
+
         assert all(r.success for r in results)
 
 
@@ -276,7 +276,7 @@ def test_memory_reuse_counter_increments(
         memory_id = memory.id
         initial_count = memory.reused_count
         assert initial_count == 0
-    
+
     with db_service.get_session() as session:
         # Search for it (should increment reuse counter)
         results = memory_service.search_similar(
@@ -286,9 +286,9 @@ def test_memory_reuse_counter_increments(
             similarity_threshold=0.1,
         )
         session.commit()
-        
+
         assert len(results) > 0
-    
+
     # Check counter incremented
     with db_service.get_session() as session:
         memory = session.get(TaskMemory, memory_id)
@@ -313,7 +313,7 @@ def test_get_task_context(
         )
         session.add(task)
         session.flush()
-        
+
         memory_service.store_execution(
             session=session,
             task_id=task.id,
@@ -321,7 +321,7 @@ def test_get_task_context(
             success=True,
         )
         session.commit()
-        
+
         # Create new task needing context
         new_task = Task(
             ticket_id=test_ticket.id,
@@ -333,14 +333,14 @@ def test_get_task_context(
         )
         session.add(new_task)
         session.commit()
-        
+
         # Get context
         context = memory_service.get_task_context(
             session=session,
             task_description=new_task.description,
             top_k=3,
         )
-        
+
         assert "similar_tasks" in context
         assert "matching_patterns" in context
         assert "recommendations" in context
@@ -368,7 +368,7 @@ def test_store_execution_auto_extract_patterns(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
@@ -376,9 +376,9 @@ def test_store_execution_auto_extract_patterns(
                 success=True,
                 auto_extract_patterns=True,
             )
-        
+
         session.commit()
-        
+
         # If we got here, auto extraction didn't crash
         assert True
 
@@ -397,7 +397,7 @@ def test_memory_embedding_dimensions(
             success=True,
         )
         session.commit()
-        
+
         assert memory.context_embedding is not None
         assert len(memory.context_embedding) == 1536
         assert all(isinstance(v, float) for v in memory.context_embedding)
@@ -417,9 +417,9 @@ def test_memory_to_dict(
             success=True,
         )
         session.commit()
-        
+
         data = memory.to_dict()
-        
+
         assert "id" in data
         assert "task_id" in data
         assert "execution_summary" in data
@@ -428,6 +428,6 @@ def test_memory_to_dict(
         assert "success" in data
         assert "learned_at" in data
         assert "reused_count" in data
-        
+
         assert data["has_embedding"] is True
         assert data["embedding_dimensions"] == 1536

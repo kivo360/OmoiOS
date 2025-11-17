@@ -9,6 +9,7 @@ from omoi_os.models.event import Event
 from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
 from omoi_os.models.learned_pattern import LearnedPattern, TaskPattern
 from omoi_os.models.monitor_anomaly import Alert, MonitorAnomaly
+from omoi_os.models.phase import PhaseModel
 from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.phase_gate_result import PhaseGateResult
@@ -36,6 +37,7 @@ __all__ = [
     "PhaseGateArtifact",
     "PhaseGateResult",
     "PhaseHistory",
+    "PhaseModel",
     "ResourceLock",
     "Task",
     "TaskMemory",

@@ -58,7 +58,7 @@ def test_extract_pattern_success(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
@@ -66,9 +66,9 @@ def test_extract_pattern_success(
                 success=True,
                 auto_extract_patterns=False,
             )
-        
+
         session.commit()
-        
+
         # Extract pattern
         pattern = memory_service.extract_pattern(
             session=session,
@@ -76,7 +76,7 @@ def test_extract_pattern_success(
             pattern_type="success",
             min_samples=3,
         )
-        
+
         assert pattern is not None
         assert pattern.pattern_type == "success"
         assert pattern.task_type_pattern == ".*API endpoint.*"
@@ -104,16 +104,16 @@ def test_extract_pattern_insufficient_samples(
             )
             session.add(task)
             session.flush()
-            
+
             memory_service.store_execution(
                 session=session,
                 task_id=task.id,
                 execution_summary=f"Completed feature {i}",
                 success=True,
             )
-        
+
         session.commit()
-        
+
         # Try to extract pattern (should return None)
         pattern = memory_service.extract_pattern(
             session=session,
@@ -121,7 +121,7 @@ def test_extract_pattern_insufficient_samples(
             pattern_type="success",
             min_samples=3,
         )
-        
+
         assert pattern is None
 
 
@@ -133,13 +133,13 @@ def test_pattern_confidence_scaling(
     """Test that pattern confidence scales with sample size."""
     sample_counts = [3, 5, 10]
     confidences = []
-    
+
     for count in sample_counts:
         with db_service.get_session() as session:
             # Clear previous data
             session.query(Task).delete()
             session.commit()
-            
+
             # Create tasks
             for i in range(count):
                 task = Task(
@@ -152,16 +152,16 @@ def test_pattern_confidence_scaling(
                 )
                 session.add(task)
                 session.flush()
-                
+
                 memory_service.store_execution(
                     session=session,
                     task_id=task.id,
                     execution_summary=f"Completed task {i}",
                     success=True,
                 )
-            
+
             session.commit()
-            
+
             # Extract pattern
             pattern = memory_service.extract_pattern(
                 session=session,
@@ -169,10 +169,10 @@ def test_pattern_confidence_scaling(
                 pattern_type="success",
                 min_samples=3,
             )
-            
+
             if pattern:
                 confidences.append(pattern.confidence_score)
-    
+
     # Confidence should generally increase with more samples
     assert len(confidences) > 0
 
@@ -194,13 +194,13 @@ def test_pattern_increment_usage(
         session.add(pattern)
         session.commit()
         session.refresh(pattern)
-        
+
         initial_count = pattern.usage_count
         initial_updated = pattern.updated_at
-        
+
         pattern.increment_usage()
         session.commit()
-        
+
         assert pattern.usage_count == initial_count + 1
         assert pattern.updated_at > initial_updated
 
@@ -218,12 +218,12 @@ def test_pattern_update_confidence(
         session.add(pattern)
         session.commit()
         session.refresh(pattern)
-        
+
         initial_updated = pattern.updated_at
-        
+
         pattern.update_confidence(0.8)
         session.commit()
-        
+
         assert pattern.confidence_score == 0.8
         assert pattern.updated_at > initial_updated
 
@@ -240,11 +240,11 @@ def test_pattern_update_confidence_validation(
         )
         session.add(pattern)
         session.commit()
-        
+
         # Test invalid confidence scores
         with pytest.raises(ValueError, match="must be between 0.0 and 1.0"):
             pattern.update_confidence(1.5)
-        
+
         with pytest.raises(ValueError, match="must be between 0.0 and 1.0"):
             pattern.update_confidence(-0.1)
 
@@ -262,7 +262,7 @@ def test_find_matching_patterns(
             (".*database.*", 0.6),
             (".*frontend.*", 0.3),  # Below min_confidence
         ]
-        
+
         for pattern_regex, confidence in patterns_data:
             pattern = LearnedPattern(
                 pattern_type="success",
@@ -270,16 +270,16 @@ def test_find_matching_patterns(
                 confidence_score=confidence,
             )
             session.add(pattern)
-        
+
         session.commit()
-        
+
         # Find matching patterns
         matches = memory_service.find_matching_patterns(
             session=session,
             task_description="Implement API authentication endpoint",
             min_confidence=0.5,
         )
-        
+
         # Should match authentication and API patterns (both >= 0.5 confidence)
         assert len(matches) >= 2
         assert all(m.confidence_score >= 0.5 for m in matches)
@@ -299,16 +299,16 @@ def test_search_patterns_by_type(
                 confidence_score=0.7,
             )
             session.add(pattern)
-        
+
         session.commit()
-        
+
         # Search for success patterns
         success_patterns = memory_service.search_patterns(
             session=session,
             pattern_type="success",
             limit=10,
         )
-        
+
         assert len(success_patterns) > 0
         assert all(isinstance(p, TaskPattern) for p in success_patterns)
         assert all(p.pattern_type == "success" for p in success_patterns)
@@ -324,9 +324,9 @@ def test_search_patterns_ordering(
         patterns_data = [
             (0.9, 10),  # High confidence, high usage
             (0.8, 20),  # Medium-high confidence, very high usage
-            (0.6, 5),   # Medium confidence, low usage
+            (0.6, 5),  # Medium confidence, low usage
         ]
-        
+
         for confidence, usage in patterns_data:
             pattern = LearnedPattern(
                 pattern_type="success",
@@ -335,15 +335,15 @@ def test_search_patterns_ordering(
                 usage_count=usage,
             )
             session.add(pattern)
-        
+
         session.commit()
-        
+
         # Search patterns
         patterns = memory_service.search_patterns(
             session=session,
             limit=10,
         )
-        
+
         # Should be ordered (confidence DESC, usage DESC)
         assert len(patterns) > 0
         # First pattern should have highest confidence
@@ -367,9 +367,9 @@ def test_pattern_to_dict(
         session.add(pattern)
         session.commit()
         session.refresh(pattern)
-        
+
         data = pattern.to_dict()
-        
+
         assert "id" in data
         assert "pattern_type" in data
         assert "task_type_pattern" in data
@@ -380,7 +380,7 @@ def test_pattern_to_dict(
         assert "usage_count" in data
         assert "created_at" in data
         assert "updated_at" in data
-        
+
         assert data["pattern_type"] == "success"
         assert data["confidence_score"] == 0.8
         assert data["usage_count"] == 5

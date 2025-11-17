@@ -20,6 +20,63 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    # Create phases table (foundational - should have been in earlier migration)
+    op.create_table(
+        "phases",
+        sa.Column("id", sa.String(50), nullable=False),
+        sa.Column("name", sa.String(100), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("sequence_order", sa.Integer(), nullable=False),
+        sa.Column(
+            "allowed_transitions",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="List of phase IDs that can be transitioned to",
+        ),
+        sa.Column(
+            "is_terminal",
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.text("false"),
+            comment="Whether this is a terminal phase",
+        ),
+        sa.Column(
+            "configuration",
+            postgresql.JSONB(astext_type=sa.Text()),
+            nullable=True,
+            comment="Phase-specific configuration",
+        ),
+        sa.PrimaryKeyConstraint("id"),
+    )
+
+    op.create_index(
+        "ix_phases_sequence_order", "phases", ["sequence_order"], unique=False
+    )
+
+    # Populate phases table with default workflow phases
+    op.execute(
+        """
+        INSERT INTO phases (id, name, description, sequence_order, allowed_transitions, is_terminal, configuration) VALUES
+        ('PHASE_BACKLOG', 'Backlog', 'Initial ticket triage and prioritization', 0, 
+         '["PHASE_REQUIREMENTS", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
+        ('PHASE_REQUIREMENTS', 'Requirements Analysis', 'Gather and analyze requirements', 1,
+         '["PHASE_DESIGN", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
+        ('PHASE_DESIGN', 'Design', 'Create technical design and architecture', 2,
+         '["PHASE_IMPLEMENTATION", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
+        ('PHASE_IMPLEMENTATION', 'Implementation', 'Develop and implement features', 3,
+         '["PHASE_TESTING", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
+        ('PHASE_TESTING', 'Testing', 'Test and validate implementation', 4,
+         '["PHASE_DEPLOYMENT", "PHASE_IMPLEMENTATION", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
+        ('PHASE_DEPLOYMENT', 'Deployment', 'Deploy to production', 5,
+         '["PHASE_DONE", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
+        ('PHASE_DONE', 'Done', 'Ticket completed', 6,
+         '[]'::jsonb, true, '{}'::jsonb),
+        ('PHASE_BLOCKED', 'Blocked', 'Ticket blocked by external dependencies', 7,
+         '["PHASE_BACKLOG", "PHASE_REQUIREMENTS", "PHASE_DESIGN", "PHASE_IMPLEMENTATION", "PHASE_TESTING"]'::jsonb, 
+         true, '{}'::jsonb)
+        """
+    )
+
     # Create task_memories table
     op.create_table(
         "task_memories",
@@ -196,3 +253,4 @@ def downgrade() -> None:
     # Drop tables in reverse order
     op.drop_table("learned_patterns")
     op.drop_table("task_memories")
+    op.drop_table("phases")
