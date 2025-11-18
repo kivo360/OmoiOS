@@ -8,8 +8,10 @@ from omoi_os.services.context_service import ContextService
 from omoi_os.services.coordination import CoordinationService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.resource_lock import ResourceLockService
+from omoi_os.services.restart_orchestrator import RestartOrchestrator
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.validation_agent import ValidationAgent
 
@@ -22,8 +24,10 @@ __all__ = [
     "CoordinationService",
     "DatabaseService",
     "EventBusService",
+    "HeartbeatProtocolService",
     "PhaseGateService",
     "ResourceLockService",
+    "RestartOrchestrator",
     "SystemEvent",
     "TaskQueueService",
     "ValidationAgent",

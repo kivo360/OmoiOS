@@ -84,3 +84,4 @@ class QualityGate(Base):
     def get_requirement(self, key: str, default: Any = None) -> Any:
         """Get a specific requirement value."""
         return self.requirements.get(key, default)
+

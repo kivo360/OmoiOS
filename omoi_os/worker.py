@@ -5,6 +5,7 @@ import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from omoi_os.models.agent import Agent
@@ -14,28 +15,53 @@ from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.task_queue import TaskQueueService
+from omoi_os.utils.datetime import utc_now
+
+if TYPE_CHECKING:
+    from omoi_os.models.heartbeat_message import HeartbeatMessage
 
 
 class HeartbeatManager:
-    """Manages background heartbeat emission for a worker agent."""
+    """
+    Enhanced heartbeat manager per REQ-ALM-002.
+    
+    Features:
+    - Adaptive frequency based on agent status (30s IDLE, 15s RUNNING)
+    - Sequence number tracking
+    - Health metrics collection
+    - Checksum validation
+    - Bidirectional acknowledgment handling
+    """
+
+    # Interval thresholds per REQ-FT-HB-002
+    IDLE_INTERVAL = 30  # IDLE agents: 30s
+    RUNNING_INTERVAL = 15  # RUNNING agents: 15s
+    HIGH_LOAD_INTERVAL = 10  # Under high load: 10s
 
     def __init__(
         self,
         agent_id: str,
-        health_service: AgentHealthService,
-        interval_seconds: int = 30,
+        heartbeat_protocol_service,
+        current_task_id: Optional[str] = None,
+        get_agent_status: Optional[callable] = None,
+        collect_health_metrics: Optional[callable] = None,
     ):
         """
         Initialize HeartbeatManager.
 
         Args:
             agent_id: ID of the agent to emit heartbeats for
-            health_service: AgentHealthService instance
-            interval_seconds: Heartbeat interval in seconds (default: 30)
+            heartbeat_protocol_service: HeartbeatProtocolService instance
+            current_task_id: Optional callable to get current task ID
+            get_agent_status: Optional callable to get current agent status
+            collect_health_metrics: Optional callable to collect health metrics
         """
         self.agent_id = agent_id
-        self.health_service = health_service
-        self.interval_seconds = interval_seconds
+        self.heartbeat_protocol_service = heartbeat_protocol_service
+        self.current_task_id = current_task_id
+        self.get_agent_status = get_agent_status or (lambda: "idle")
+        self.collect_health_metrics = collect_health_metrics or (lambda: {})
+        self._sequence_number = 0
         self._running = False
         self._thread = None
 
@@ -56,27 +82,117 @@ class HeartbeatManager:
 
         self._running = False
         if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=self.interval_seconds + 5)
+            self._thread.join(timeout=self.IDLE_INTERVAL + 5)
         print(f"Heartbeat manager stopped for agent {self.agent_id}")
 
+    def _get_interval(self) -> int:
+        """
+        Get adaptive heartbeat interval per REQ-FT-HB-002.
+
+        Returns:
+            Interval in seconds
+        """
+        status = self.get_agent_status()
+        if status == "running":
+            return self.RUNNING_INTERVAL
+        elif status == "idle":
+            return self.IDLE_INTERVAL
+        else:
+            return self.IDLE_INTERVAL
+
+    def _collect_health_metrics(self) -> dict:
+        """
+        Collect health metrics for heartbeat per REQ-ALM-002.
+
+        Returns:
+            Dictionary of health metrics
+        """
+        base_metrics = self.collect_health_metrics()
+        # Add common metrics if not present
+        metrics = {
+            "cpu_usage_percent": base_metrics.get("cpu_usage_percent", 0.0),
+            "memory_usage_mb": base_metrics.get("memory_usage_mb", 0),
+            "active_connections": base_metrics.get("active_connections", 0),
+            "pending_operations": base_metrics.get("pending_operations", 0),
+            "last_error_timestamp": base_metrics.get("last_error_timestamp"),
+            "custom_metrics": base_metrics.get("custom_metrics", {}),
+        }
+        return metrics
+
+    def _create_heartbeat_message(self) -> "HeartbeatMessage":
+        """
+        Create heartbeat message with sequence number and checksum per REQ-ALM-002.
+
+        Returns:
+            HeartbeatMessage with all required fields
+        """
+        from omoi_os.models.heartbeat_message import HeartbeatMessage
+
+        # Increment sequence number
+        self._sequence_number += 1
+
+        # Get current status and task
+        status = self.get_agent_status()
+        task_id = None
+        if callable(self.current_task_id):
+            task_id = self.current_task_id()
+        elif self.current_task_id:
+            task_id = self.current_task_id
+
+        # Collect health metrics
+        health_metrics = self._collect_health_metrics()
+
+        # Create message payload (without checksum)
+        payload = {
+            "agent_id": self.agent_id,
+            "timestamp": utc_now().isoformat(),
+            "sequence_number": self._sequence_number,
+            "status": status,
+            "current_task_id": task_id,
+            "health_metrics": health_metrics,
+        }
+
+        # Calculate checksum
+        checksum = self.heartbeat_protocol_service._calculate_checksum(payload)
+
+        # Create heartbeat message
+        return HeartbeatMessage(
+            agent_id=self.agent_id,
+            timestamp=utc_now(),
+            sequence_number=self._sequence_number,
+            status=status,
+            current_task_id=task_id,
+            health_metrics=health_metrics,
+            checksum=checksum,
+        )
+
     def _heartbeat_loop(self) -> None:
-        """Background loop that emits heartbeats at regular intervals."""
+        """Background loop that emits heartbeats at adaptive intervals per REQ-ALM-002."""
         while self._running:
             try:
-                # Emit heartbeat
-                success = self.health_service.emit_heartbeat(self.agent_id)
-                if not success:
-                    print(
-                        f"Warning: Failed to emit heartbeat for agent {self.agent_id} (agent not found)"
-                    )
+                # Create heartbeat message with sequence number and checksum
+                heartbeat_message = self._create_heartbeat_message()
 
-                # Sleep for the interval
-                time.sleep(self.interval_seconds)
+                # Send heartbeat and get acknowledgment
+                ack = self.heartbeat_protocol_service.receive_heartbeat(heartbeat_message)
+
+                if not ack.received:
+                    print(
+                        f"Warning: Heartbeat not acknowledged for agent {self.agent_id}: {ack.message}"
+                    )
+                elif ack.message:
+                    # Log warnings from acknowledgment (e.g., sequence gaps)
+                    print(f"Heartbeat ack for agent {self.agent_id}: {ack.message}")
+
+                # Get adaptive interval based on status
+                interval = self._get_interval()
+                time.sleep(interval)
 
             except Exception as e:
                 print(f"Error in heartbeat loop for agent {self.agent_id}: {e}")
                 # Continue running even if there's an error
-                time.sleep(self.interval_seconds)
+                interval = self._get_interval()
+                time.sleep(interval)
 
 
 class TimeoutManager:

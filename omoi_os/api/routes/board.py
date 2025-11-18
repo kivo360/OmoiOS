@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from omoi_os.api.dependencies import get_db
+from omoi_os.api.dependencies import get_db_service
 from omoi_os.services.board import BoardService
 from omoi_os.services.event_bus import EventBusService
 
@@ -58,7 +58,7 @@ def get_board_service() -> BoardService:
 
 @router.get("/view", response_model=BoardViewResponse)
 def get_board_view(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> BoardViewResponse:
     """
@@ -78,7 +78,7 @@ def get_board_view(
 @router.post("/move")
 def move_ticket(
     request: MoveTicketRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> Dict[str, Any]:
     """
@@ -111,7 +111,7 @@ def move_ticket(
 
 @router.get("/stats", response_model=List[ColumnStatsResponse])
 def get_column_stats(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> List[ColumnStatsResponse]:
     """
@@ -130,7 +130,7 @@ def get_column_stats(
 
 @router.get("/wip-violations", response_model=List[WIPViolationResponse])
 def check_wip_violations(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> List[WIPViolationResponse]:
     """
@@ -151,7 +151,7 @@ def check_wip_violations(
 @router.post("/auto-transition/{ticket_id}")
 def auto_transition_ticket(
     ticket_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> Dict[str, Any]:
     """
@@ -186,7 +186,7 @@ def auto_transition_ticket(
 @router.get("/column/{phase_id}")
 def get_column_for_phase(
     phase_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> Dict[str, Any]:
     """

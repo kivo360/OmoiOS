@@ -1,6 +1,7 @@
 """Database models for OmoiOS"""
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.agent_result import AgentResult
 from omoi_os.models.base import Base
@@ -24,7 +25,9 @@ from omoi_os.models.task import Task
 from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task_memory import TaskMemory
 from omoi_os.models.ticket import Ticket
+from omoi_os.models.validation_review import ValidationReview
 from omoi_os.models.workflow_result import WorkflowResult
+from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 
 __all__ = [
     "Agent",
@@ -58,5 +61,8 @@ __all__ = [
     "TaskMemory",
     "TaskPattern",
     "Ticket",
+    "ValidationReview",
     "WorkflowResult",
+    "HeartbeatMessage",
+    "HeartbeatAck",
 ]

@@ -239,3 +239,4 @@ async def forecast_costs(
     )
     return ForecastResponse(**forecast)
 
+

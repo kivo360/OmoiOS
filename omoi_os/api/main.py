@@ -19,6 +19,7 @@ from omoi_os.api.routes import (
     results,
     tasks,
     tickets,
+    validation,
 )
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
@@ -27,6 +28,7 @@ from omoi_os.services.collaboration import CollaborationService
 from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
+from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
 from omoi_os.services.resource_lock import ResourceLockService
 from omoi_os.services.task_queue import TaskQueueService
 
@@ -36,6 +38,7 @@ db: DatabaseService | None = None
 queue: TaskQueueService | None = None
 event_bus: EventBusService | None = None
 health_service: AgentHealthService | None = None
+heartbeat_protocol_service: HeartbeatProtocolService | None = None
 registry_service: AgentRegistryService | None = None
 collaboration_service: CollaborationService | None = None
 lock_service: ResourceLockService | None = None
@@ -44,6 +47,7 @@ cost_tracking_service: CostTrackingService | None = None
 budget_enforcer_service: BudgetEnforcerService | None = None
 result_submission_service = None  # Defined below in lifespan
 diagnostic_service = None  # Defined below in lifespan
+validation_orchestrator = None  # Defined below in lifespan
 
 
 async def orchestrator_loop():
@@ -161,6 +165,7 @@ async def lifespan(app: FastAPI):
         queue, \
         event_bus, \
         health_service, \
+        heartbeat_protocol_service, \
         registry_service, \
         collaboration_service, \
         lock_service, \
@@ -168,7 +173,8 @@ async def lifespan(app: FastAPI):
         cost_tracking_service, \
         budget_enforcer_service, \
         result_submission_service, \
-        diagnostic_service
+        diagnostic_service, \
+        validation_orchestrator
 
     # Initialize services
     db = DatabaseService(
@@ -182,6 +188,7 @@ async def lifespan(app: FastAPI):
         redis_url=os.getenv("REDIS_URL", "redis://localhost:16379")
     )
     health_service = AgentHealthService(db)
+    heartbeat_protocol_service = HeartbeatProtocolService(db, event_bus)
     registry_service = AgentRegistryService(db, event_bus)
     collaboration_service = CollaborationService(db, event_bus)
     lock_service = ResourceLockService(db)
@@ -218,6 +225,17 @@ async def lifespan(app: FastAPI):
         discovery=discovery_service,
         memory=memory_service,
         monitor=monitor_service,
+        event_bus=event_bus,
+    )
+
+    # Validation system services
+    from omoi_os.services.validation_orchestrator import ValidationOrchestrator
+
+    validation_orchestrator = ValidationOrchestrator(
+        db=db,
+        agent_registry=registry_service,
+        memory=memory_service,
+        diagnostic=diagnostic_service,
         event_bus=event_bus,
     )
 
@@ -265,6 +283,7 @@ app.include_router(board.router, prefix="/api/v1", tags=["board"])
 app.include_router(quality.router, prefix="/api/v1", tags=["quality"])
 app.include_router(results.router, prefix="/api/v1", tags=["results"])
 app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagnostic"])
+app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
 
 # Conditionally include monitor router if Phase 4 is available
 try:

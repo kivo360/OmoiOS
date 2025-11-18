@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from omoi_os.api.dependencies import get_db
+from omoi_os.api.dependencies import get_db_service
 from omoi_os.services.memory import MemoryService
 from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
 from omoi_os.services.event_bus import EventBusService
@@ -93,7 +93,7 @@ class PatternFeedbackRequest(BaseModel):
 
 # Dependency: Get MemoryService
 def get_memory_service(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
 ) -> MemoryService:
     """Get memory service with dependencies."""
     embedding_service = EmbeddingService(provider=EmbeddingProvider.LOCAL)
@@ -104,7 +104,7 @@ def get_memory_service(
 @router.post("/store", status_code=201)
 def store_execution(
     request: StoreExecutionRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> Dict[str, str]:
     """
@@ -136,7 +136,7 @@ def store_execution(
 @router.post("/search", response_model=List[SimilarTaskResponse])
 def search_similar(
     request: SearchSimilarRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> List[SimilarTaskResponse]:
     """
@@ -173,7 +173,7 @@ def search_similar(
 def get_task_context(
     task_id: str,
     top_k: int = Query(3, ge=1, le=10, description="Number of similar tasks"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> TaskContextResponse:
     """
@@ -209,7 +209,7 @@ def list_patterns(
     task_type: Optional[str] = Query(None, description="Filter by task type pattern"),
     pattern_type: Optional[str] = Query(None, description="Filter by pattern type"),
     limit: int = Query(10, ge=1, le=50, description="Maximum results"),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> List[PatternResponse]:
     """
@@ -243,7 +243,7 @@ def list_patterns(
 @router.post("/patterns/extract", status_code=201)
 def extract_pattern(
     request: ExtractPatternRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     memory_service: MemoryService = Depends(get_memory_service),
 ) -> Dict[str, Any]:
     """
@@ -284,7 +284,7 @@ def extract_pattern(
 def provide_pattern_feedback(
     pattern_id: str,
     feedback: PatternFeedbackRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
 ) -> Dict[str, str]:
     """
     Provide feedback on a pattern's usefulness.

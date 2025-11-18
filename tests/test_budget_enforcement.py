@@ -246,3 +246,4 @@ def test_is_budget_available_no_budget(budget_service):
     # Should return True (no budget means no limit)
     assert budget_service.is_budget_available("nonexistent", 999999.0) is True
 
+

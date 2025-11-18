@@ -100,3 +100,4 @@ class MetricType:
     SECURITY = "security"
     PERFORMANCE = "performance"
     DOCUMENTATION = "documentation"
+

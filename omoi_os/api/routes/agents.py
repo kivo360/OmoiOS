@@ -9,11 +9,14 @@ from omoi_os.api.dependencies import (
     get_agent_health_service,
     get_agent_registry_service,
     get_db_service,
+    get_heartbeat_protocol_service,
 )
 from omoi_os.models.agent import Agent
+from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.database import DatabaseService
+from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
 
 router = APIRouter()
 
@@ -273,37 +276,52 @@ async def get_agent_health(
         raise HTTPException(status_code=500, detail=f"Failed to get agent health: {str(e)}")
 
 
-@router.post("/agents/{agent_id}/heartbeat", response_model=Dict)
+@router.post("/agents/{agent_id}/heartbeat", response_model=HeartbeatAck)
 async def emit_agent_heartbeat(
+    message: HeartbeatMessage,
     agent_id: str,
-    health_service: AgentHealthService = Depends(get_agent_health_service)
+    heartbeat_protocol: HeartbeatProtocolService = Depends(get_heartbeat_protocol_service),
 ):
     """
-    Emit a heartbeat for a specific agent (manual heartbeat).
+    Receive heartbeat message from agent per REQ-FT-HB-001.
+
+    This endpoint implements the bidirectional heartbeat protocol:
+    - Validates message integrity (checksum)
+    - Checks sequence number for gaps
+    - Updates agent heartbeat state
+    - Applies escalation ladder if needed
+    - Returns acknowledgment
 
     Args:
-        agent_id: ID of the agent to emit heartbeat for
-        health_service: Agent health service dependency
+        message: HeartbeatMessage with sequence number, health metrics, and checksum
+        agent_id: ID of the agent (must match message.agent_id)
+        heartbeat_protocol: Heartbeat protocol service dependency
 
     Returns:
-        Success status
+        HeartbeatAck with acknowledgment details
     """
     try:
-        success = health_service.emit_heartbeat(agent_id)
-        if not success:
-            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+        # Validate agent_id matches message
+        if message.agent_id != agent_id:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Agent ID mismatch: URL {agent_id} != message {message.agent_id}",
+            )
 
-        # Get updated health info
-        health_info = health_service.check_agent_health(agent_id)
-        return {
-            "success": True,
-            "message": f"Heartbeat recorded for agent {agent_id}",
-            "agent_health": health_info
-        }
+        # Process heartbeat and get acknowledgment
+        ack = heartbeat_protocol.receive_heartbeat(message)
+
+        if not ack.received:
+            # Checksum validation failed or agent not found
+            status_code = 404 if "not found" in (ack.message or "").lower() else 400
+            raise HTTPException(status_code=status_code, detail=ack.message or "Heartbeat processing failed")
+
+        return ack
+
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to emit heartbeat: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to process heartbeat: {str(e)}")
 
 
 @router.get("/agents/stale", response_model=List[AgentDTO])

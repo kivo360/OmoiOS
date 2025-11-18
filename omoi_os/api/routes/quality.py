@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from omoi_os.api.dependencies import get_db
+from omoi_os.api.dependencies import get_db_service
 from omoi_os.services.quality_checker import QualityCheckerService
 from omoi_os.services.quality_predictor import QualityPredictorService
 from omoi_os.services.memory import MemoryService
@@ -66,7 +66,7 @@ def get_quality_predictor() -> QualityPredictorService:
 @router.post("/metrics/record", status_code=201)
 def record_quality_metric(
     request: RecordMetricRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     checker: QualityCheckerService = Depends(get_quality_checker),
 ) -> Dict[str, Any]:
     """Record a quality metric for a task."""
@@ -94,7 +94,7 @@ def record_quality_metric(
 @router.get("/metrics/{task_id}")
 def get_task_metrics(
     task_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     checker: QualityCheckerService = Depends(get_quality_checker),
 ) -> Dict[str, Any]:
     """Get all quality metrics for a task."""
@@ -108,7 +108,7 @@ def get_task_metrics(
 @router.post("/predict", response_model=QualityPredictionResponse)
 def predict_quality(
     request: PredictQualityRequest,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     predictor: QualityPredictorService = Depends(get_quality_predictor),
 ) -> QualityPredictionResponse:
     """
@@ -134,7 +134,7 @@ def predict_quality(
 def get_quality_trends(
     phase_id: Optional[str] = None,
     limit: int = 10,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     predictor: QualityPredictorService = Depends(get_quality_predictor),
 ) -> Dict[str, Any]:
     """Get quality trends across tasks."""
@@ -151,7 +151,7 @@ def get_quality_trends(
 def evaluate_quality_gate(
     gate_id: str,
     task_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db_service),
     checker: QualityCheckerService = Depends(get_quality_checker),
 ) -> Dict[str, Any]:
     """Evaluate a quality gate for a task."""
@@ -164,3 +164,4 @@ def evaluate_quality_gate(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Evaluation failed: {str(e)}")
+

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,6 +45,22 @@ class Agent(Base):
     last_heartbeat: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    
+    # Enhanced heartbeat protocol fields (REQ-ALM-002, REQ-FT-HB-003)
+    sequence_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )  # Monotonically increasing sequence number for heartbeat
+    last_expected_sequence: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )  # Last expected sequence number (for gap detection)
+    consecutive_missed_heartbeats: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )  # Count of consecutive missed heartbeats (for escalation ladder)
+    
+    # Validation field (REQ-VAL-DM-002)
+    kept_alive_for_validation: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )  # Whether the agent should be retained across iterations for validation-driven work
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now

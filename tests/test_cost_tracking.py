@@ -288,3 +288,4 @@ def test_forecast_costs_with_defaults(cost_service):
     # Total: 0.1 * 5 * 1.2 = 0.6
     assert forecast["estimated_cost"] == pytest.approx(0.6)
 
+

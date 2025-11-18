@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from omoi_os.services.cost_tracking import CostTrackingService
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.event_bus import EventBusService
+    from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
     from omoi_os.services.monitor import MonitorService
     from omoi_os.services.resource_lock import ResourceLockService
     from omoi_os.services.task_queue import TaskQueueService
@@ -107,4 +108,13 @@ def get_budget_enforcer_service() -> "BudgetEnforcerService":
     if budget_enforcer_service is None:
         raise RuntimeError("Budget enforcer service not initialized")
     return budget_enforcer_service
+
+
+def get_heartbeat_protocol_service() -> "HeartbeatProtocolService":
+    """Get heartbeat protocol service instance."""
+    from omoi_os.api.main import heartbeat_protocol_service
+
+    if heartbeat_protocol_service is None:
+        raise RuntimeError("Heartbeat protocol service not initialized")
+    return heartbeat_protocol_service
 

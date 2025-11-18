@@ -74,3 +74,4 @@ forecasting:
   avg_tokens_per_task: 5000  # Average tokens per task (estimated)
   buffer_multiplier: 1.2  # Safety buffer for forecasts (20% overhead)
 
+

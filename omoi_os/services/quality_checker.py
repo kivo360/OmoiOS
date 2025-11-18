@@ -289,3 +289,4 @@ class QualityCheckerService:
             "overall_passed": overall_passed,
             "metrics": [m.to_dict() for m in metrics],
         }
+

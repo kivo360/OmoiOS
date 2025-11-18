@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from omoi_os.models.task_memory import TaskMemory
     from omoi_os.models.task_discovery import TaskDiscovery
     from omoi_os.models.quality_metric import QualityMetric
+    from omoi_os.models.validation_review import ValidationReview
 
 
 class Task(Base):
@@ -46,6 +47,20 @@ class Task(Base):
     # Timeout field for cancellation
     timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Timeout in seconds
 
+    # Validation fields (REQ-VAL-DM-001)
+    validation_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )  # Enables validation for this task
+    validation_iteration: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )  # Current validation iteration counter
+    last_validation_feedback: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True
+    )  # Last feedback text provided by validator
+    review_done: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )  # Whether the latest validation cycle has completed successfully
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -68,4 +83,7 @@ class Task(Base):
     )
     quality_metrics: Mapped[list["QualityMetric"]] = relationship(
         "QualityMetric", back_populates="task", cascade="all, delete-orphan"
+    )
+    validation_reviews: Mapped[list["ValidationReview"]] = relationship(
+        "ValidationReview", back_populates="task", cascade="all, delete-orphan"
     )

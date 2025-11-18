@@ -102,3 +102,4 @@ def downgrade() -> None:
     op.drop_index("ix_cost_records_task_id", table_name="cost_records")
     op.drop_table("cost_records")
 
+

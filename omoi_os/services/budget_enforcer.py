@@ -299,3 +299,4 @@ class BudgetEnforcerService:
         # Check if adding this cost would exceed budget
         return (budget.spent_amount + estimated_cost) <= budget.limit_amount
 
+
