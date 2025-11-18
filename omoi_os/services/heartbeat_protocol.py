@@ -223,12 +223,12 @@ class HeartbeatProtocolService:
 
         return gaps
 
-    def check_missed_heartbeats(self) -> List[Tuple[Agent, int]]:
+    def check_missed_heartbeats(self) -> List[Tuple[dict, int]]:
         """
         Check for agents with missed heartbeats and apply escalation ladder per REQ-FT-AR-001.
 
         Returns:
-            List of tuples (Agent, missed_count) for agents with missed heartbeats
+            List of tuples (agent_data, missed_count) where agent_data is a dict with agent attributes
         """
         now = utc_now()
         agents_with_missed = []
@@ -259,8 +259,23 @@ class HeartbeatProtocolService:
                     self._apply_escalation(agent, missed_count)
 
             session.commit()
+            
+            # Extract agent IDs and critical attributes before expunging (to avoid detached instance errors)
+            result = []
+            for agent, missed_count in agents_with_missed:
+                # Extract ID and other needed attributes while still attached to session
+                agent_data = {
+                    "id": agent.id,
+                    "agent_type": agent.agent_type,
+                    "status": agent.status,
+                    "phase_id": agent.phase_id,
+                    "capabilities": agent.capabilities,
+                    "capacity": agent.capacity,
+                }
+                session.expunge(agent)
+                result.append((agent_data, missed_count))
 
-        return agents_with_missed
+        return result
 
     def _apply_escalation(self, agent: Agent, missed_count: int) -> None:
         """

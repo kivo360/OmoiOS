@@ -104,6 +104,75 @@ async def orchestrator_loop():
             await asyncio.sleep(10)
 
 
+async def heartbeat_monitoring_loop():
+    """
+    Check for missed heartbeats and trigger restarts per REQ-FT-AR-002.
+
+    Monitors agents for missed heartbeats every 10 seconds and applies escalation ladder.
+    When 3 consecutive heartbeats are missed, triggers restart protocol.
+    """
+    global db, heartbeat_protocol_service, registry_service, queue, event_bus
+
+    if not db or not heartbeat_protocol_service:
+        return
+
+    print("Heartbeat monitoring loop started")
+
+    # Import restart orchestrator
+    from omoi_os.services.restart_orchestrator import RestartOrchestrator
+    from omoi_os.models.guardian_action import AuthorityLevel
+
+    restart_orchestrator = RestartOrchestrator(
+        db=db,
+        agent_registry=registry_service,
+        task_queue=queue,
+        event_bus=event_bus,
+    )
+
+    while True:
+        try:
+            # Check for missed heartbeats (applies escalation ladder)
+            agents_with_missed = heartbeat_protocol_service.check_missed_heartbeats()
+
+            for agent_data, missed_count in agents_with_missed:
+                agent_id = agent_data["id"]
+                if missed_count >= 3:
+                    # 3 consecutive missed → UNRESPONSIVE → restart
+                    print(
+                        f"🚨 Agent {agent_id} UNRESPONSIVE ({missed_count} missed heartbeats)"
+                    )
+                    print(f"🔄 Initiating restart protocol for agent {agent_id}")
+
+                    try:
+                        restart_result = restart_orchestrator.initiate_restart(
+                            agent_id=agent_id,
+                            reason=f"missed_heartbeats ({missed_count} consecutive)",
+                            authority=AuthorityLevel.MONITOR,
+                        )
+
+                        if restart_result:
+                            print(
+                                f"✅ Agent {agent_id} restarted. Replacement: {restart_result['replacement_agent_id']}"
+                            )
+                            print(
+                                f"   Reassigned {len(restart_result['reassigned_tasks'])} tasks"
+                            )
+                        else:
+                            print(
+                                f"⚠️ Restart for agent {agent_id} blocked (cooldown or max attempts)"
+                            )
+
+                    except Exception as e:
+                        print(f"❌ Error initiating restart for agent {agent_id}: {e}")
+
+            # Check every 10 seconds (more frequent than diagnostic loop)
+            await asyncio.sleep(10)
+
+        except Exception as e:
+            print(f"Error in heartbeat monitoring loop: {e}")
+            await asyncio.sleep(10)
+
+
 async def diagnostic_monitoring_loop():
     """Check for stuck workflows every 60 seconds and spawn diagnostic agents."""
     global db, diagnostic_service, event_bus
@@ -129,12 +198,11 @@ async def diagnostic_monitoring_loop():
                 print(f"🔍 Creating diagnostic agent for workflow {workflow_id}")
 
                 # Build diagnostic context
-                with db.get_session() as session:
-                    context = diagnostic_service.build_diagnostic_context(
-                        workflow_id=workflow_id,
-                        max_agents=15,
-                        max_analyses=5,
-                    )
+                context = diagnostic_service.build_diagnostic_context(
+                    workflow_id=workflow_id,
+                    max_agents=15,
+                    max_analyses=5,
+                )
 
                 # Update context with trigger info
                 context.update(workflow_info)
@@ -244,15 +312,21 @@ async def lifespan(app: FastAPI):
 
     # Start background loops
     orchestrator_task = asyncio.create_task(orchestrator_loop())
+    heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
     diagnostic_task = asyncio.create_task(diagnostic_monitoring_loop())
 
     yield
 
     # Cleanup
     orchestrator_task.cancel()
+    heartbeat_task.cancel()
     diagnostic_task.cancel()
     try:
         await orchestrator_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await heartbeat_task
     except asyncio.CancelledError:
         pass
     try:

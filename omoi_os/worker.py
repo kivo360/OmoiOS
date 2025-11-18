@@ -355,14 +355,51 @@ def main():
     task_queue = TaskQueueService(db)
     health_service = AgentHealthService(db)
 
+    # Import heartbeat protocol service for enhanced heartbeat
+    from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
+    
+    heartbeat_protocol_service = HeartbeatProtocolService(db, event_bus)
+
     # Register agent with capacity
     agent_id = register_agent(
         db, agent_type="worker", phase_id="PHASE_IMPLEMENTATION", capacity=max_workers
     )
 
-    # Initialize heartbeat manager
+    # Track current task for heartbeat
+    current_task_ref = {"id": None}
+
+    def get_agent_status():
+        """Get current agent status based on tasks."""
+        with db.get_session() as session:
+            agent = session.query(Agent).filter(Agent.id == agent_id).first()
+            if agent:
+                return agent.status
+            return "idle"
+
+    def get_current_task_id():
+        """Get current task ID."""
+        return current_task_ref["id"]
+
+    def collect_health_metrics():
+        """Collect health metrics for heartbeat."""
+        # In a real implementation, this would collect actual metrics
+        # For now, return basic metrics
+        return {
+            "cpu_usage_percent": 0.0,
+            "memory_usage_mb": 0,
+            "active_connections": 0,
+            "pending_operations": len(task_queue.get_assigned_tasks(agent_id)) if task_queue else 0,
+            "last_error_timestamp": None,
+            "custom_metrics": {},
+        }
+
+    # Initialize enhanced heartbeat manager
     heartbeat_manager = HeartbeatManager(
-        str(agent_id), health_service, interval_seconds=30
+        agent_id=str(agent_id),
+        heartbeat_protocol_service=heartbeat_protocol_service,
+        current_task_id=get_current_task_id,
+        get_agent_status=get_agent_status,
+        collect_health_metrics=collect_health_metrics,
     )
     heartbeat_manager.start()
 
@@ -383,6 +420,9 @@ def main():
                     # Submit tasks to thread pool for concurrent execution
                     futures = {}
                     for task in tasks:
+                        # Update current task for heartbeat
+                        current_task_ref["id"] = str(task.id)
+                        
                         future = executor.submit(
                             execute_task_with_retry,
                             task,
@@ -400,10 +440,16 @@ def main():
                         task = futures[future]
                         try:
                             future.result()  # Get result to propagate exceptions
+                            # Clear current task after completion
+                            if current_task_ref["id"] == str(task.id):
+                                current_task_ref["id"] = None
                         except Exception as e:
                             print(
                                 f"Error in concurrent task execution for {task.id}: {e}"
                             )
+                            # Clear current task on error too
+                            if current_task_ref["id"] == str(task.id):
+                                current_task_ref["id"] = None
                 else:
                     # No tasks, sleep briefly
                     time.sleep(2)
