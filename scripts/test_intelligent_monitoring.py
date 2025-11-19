@@ -50,6 +50,21 @@ class IntelligentMonitoringSmokeTest:
         self.llm_service = LLMService()
         self.test_results = []
 
+        # Ensure database tables exist
+        try:
+            self.db.create_tables()
+            self.log_test_result(
+                "Database Initialization",
+                True,
+                "Database tables created/verified",
+            )
+        except Exception as e:
+            self.log_test_result(
+                "Database Initialization",
+                False,
+                f"Failed to create tables: {str(e)}",
+            )
+
     def log_test_result(self, test_name: str, success: bool, message: str = ""):
         """Log test result."""
         status = "PASS" if success else "FAIL"
@@ -320,10 +335,15 @@ class IntelligentMonitoringSmokeTest:
                         result = await monitoring_loop.trigger_emergency_analysis(
                             [agent.id]
                         )
+                        emergency_count = result.get("emergency_analyses", 0)
+                        if isinstance(emergency_count, int):
+                            count_str = str(emergency_count)
+                        else:
+                            count_str = str(len(emergency_count))
                         self.log_test_result(
                             "MonitoringLoop - Emergency Analysis",
                             True,
-                            f"Emergency analysis completed for {len(result.get('emergency_analyses', 0))} agents",
+                            f"Emergency analysis completed for {count_str} agents",
                         )
             except Exception as e:
                 if "LLM" in str(e) or "invoke" in str(e):
@@ -362,10 +382,8 @@ class IntelligentMonitoringSmokeTest:
                     agent_type="worker",
                     status="working",
                     phase_id="PHASE_IMPLEMENTATION",
-                    current_task_id=uuid.uuid4(),
                     capacity=100,
                     last_heartbeat=datetime.utcnow(),
-                    health_check_failures=0,
                 )
                 session.add(test_agent)
 

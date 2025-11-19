@@ -76,8 +76,7 @@ class TrajectoryContext:
             if cached["timestamp"] > datetime.utcnow() - self.cache_ttl:
                 return cached["context"]
 
-        session = self.db.get_session()
-        try:
+        with self.db.get_session() as session:
             # Get all logs for complete understanding
             logs = session.query(AgentLog).filter_by(
                 agent_id=agent_id
@@ -180,9 +179,6 @@ class TrajectoryContext:
             }
 
             return trajectory_context.model_dump()
-
-        finally:
-            session.close()
 
     def _build_conversation_history(
         self,
