@@ -14,6 +14,7 @@ from omoi_os.api.routes import (
     diagnostic,
     guardian,
     memory,
+    mcp,
     phases,
     quality,
     results,
@@ -590,6 +591,7 @@ app.include_router(quality.router, prefix="/api/v1", tags=["quality"])
 app.include_router(results.router, prefix="/api/v1", tags=["results"])
 app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagnostic"])
 app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
+app.include_router(mcp.router, tags=["MCP"])
 
 # Conditionally include monitor router if Phase 4 is available
 try:
