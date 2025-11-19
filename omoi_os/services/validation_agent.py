@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.validation_analysis import ValidationResult
 
 
@@ -14,17 +14,14 @@ class ValidationAgent:
     def __init__(
         self,
         workspace_dir: str,
-        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize validation agent.
 
         Args:
             workspace_dir: Directory path for workspace operations.
-            ai_service: Optional PydanticAI service for structured validation.
         """
         self.workspace_dir = workspace_dir
-        self.ai_service = ai_service or PydanticAIService()
 
     async def validate_phase_completion(
         self,
@@ -43,17 +40,6 @@ class ValidationAgent:
         Returns:
             ValidationResult with structured validation feedback.
         """
-        # Create agent with structured output
-        agent = self.ai_service.create_agent(
-            output_type=ValidationResult,
-            system_prompt=(
-                "You are a validation expert. Review phase completion artifacts to determine "
-                "if they meet the phase requirements. Check for completeness, correctness, "
-                "and identify any blocking issues. Provide specific feedback and list missing "
-                "artifacts if any."
-            ),
-        )
-
         # Build prompt with artifact information
         prompt_parts = [
             f"Ticket ID: {ticket_id}",
@@ -73,9 +59,18 @@ class ValidationAgent:
         prompt = "\n".join(prompt_parts)
         prompt += "\n\nValidate these artifacts and provide structured feedback."
 
-        # Run validation
-        result = await agent.run(prompt)
-        return result.output
+        # Run validation using LLM service
+        llm = get_llm_service()
+        return await llm.structured_output(
+            prompt,
+            output_type=ValidationResult,
+            system_prompt=(
+                "You are a validation expert. Review phase completion artifacts to determine "
+                "if they meet the phase requirements. Check for completeness, correctness, "
+                "and identify any blocking issues. Provide specific feedback and list missing "
+                "artifacts if any."
+            ),
+        )
 
     def validate_phase_completion_sync(
         self,

@@ -9,7 +9,7 @@ from omoi_os.models.quality_metric import QualityMetric, MetricType
 from omoi_os.models.quality_gate import QualityGate
 from omoi_os.models.task import Task
 from omoi_os.services.event_bus import EventBusService, SystemEvent
-from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.quality_metrics_analysis import QualityMetricsExtraction
 from omoi_os.utils.datetime import utc_now
 
@@ -25,17 +25,14 @@ class QualityCheckerService:
     def __init__(
         self,
         event_bus: Optional[EventBusService] = None,
-        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize quality checker service.
 
         Args:
             event_bus: Optional event bus for publishing quality events.
-            ai_service: Optional PydanticAI service for metric extraction.
         """
         self.event_bus = event_bus
-        self.ai_service = ai_service or PydanticAIService()
 
     def record_metric(
         self,
@@ -129,25 +126,23 @@ class QualityCheckerService:
         """
         import json
 
-        # Create agent with structured output
-        agent = self.ai_service.create_agent(
-            output_type=QualityMetricsExtraction,
-            system_prompt=(
-                "You are a code quality analysis expert. Extract quality metrics from task execution results. "
-                "Identify test coverage percentages, lint errors with file paths and line numbers, "
-                "complexity scores, and provide an overall code quality score (0.0-1.0). "
-                "List specific lint errors with their file paths, line numbers, error types, messages, and severity."
-            ),
-        )
-
         # Convert task result to JSON for analysis
         task_result_str = json.dumps(task_result, indent=2, default=str)
         prompt = f"Extract quality metrics from this task result:\n\n{task_result_str}"
 
         try:
-            # Run extraction
-            result = await agent.run(prompt)
-            extraction = result.output
+            # Run extraction using LLM service
+            llm = get_llm_service()
+            extraction = await llm.structured_output(
+                prompt,
+                output_type=QualityMetricsExtraction,
+                system_prompt=(
+                    "You are a code quality analysis expert. Extract quality metrics from task execution results. "
+                    "Identify test coverage percentages, lint errors with file paths and line numbers, "
+                    "complexity scores, and provide an overall code quality score (0.0-1.0). "
+                    "List specific lint errors with their file paths, line numbers, error types, messages, and severity."
+                ),
+            )
 
             # Record metrics from structured extraction
             metrics = []

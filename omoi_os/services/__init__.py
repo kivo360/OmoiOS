@@ -24,6 +24,7 @@ from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.task_scorer import TaskScorer
 from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
 from omoi_os.services.validation_agent import ValidationAgent
+from omoi_os.services.llm_service import LLMService, get_llm_service
 
 __all__ = [
     "ACEEngine",

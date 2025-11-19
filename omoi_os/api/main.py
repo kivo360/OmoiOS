@@ -53,7 +53,8 @@ phase_gate_service: PhaseGateService | None = None
 cost_tracking_service: CostTrackingService | None = None
 budget_enforcer_service: BudgetEnforcerService | None = None
 result_submission_service = None  # Defined below in lifespan
-diagnostic_service = None  # Defined below in lifespan
+diagnostic_service = None
+llm_service = None  # Unified LLM service  # Defined below in lifespan
 validation_orchestrator = None  # Defined below in lifespan
 ticket_workflow_orchestrator = None  # Defined below in lifespan
 
@@ -439,7 +440,8 @@ async def lifespan(app: FastAPI):
         result_submission_service, \
         diagnostic_service, \
         validation_orchestrator, \
-        ticket_workflow_orchestrator
+        ticket_workflow_orchestrator, \
+        llm_service
 
     # Initialize services
     db = DatabaseService(
@@ -514,6 +516,10 @@ async def lifespan(app: FastAPI):
         phase_gate=phase_gate_service,
         event_bus=event_bus,
     )
+
+    # Unified LLM service
+    from omoi_os.services.llm_service import get_llm_service
+    llm_service = get_llm_service()
 
     # Create database tables if they don't exist
     db.create_tables()

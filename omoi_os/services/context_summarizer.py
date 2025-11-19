@@ -5,21 +5,17 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.context_analysis import ContextSummary
 
 
 class ContextSummarizer:
     """Summarizes structured context dictionaries using PydanticAI."""
 
-    def __init__(self, ai_service: Optional[PydanticAIService] = None):
+    def __init__(self):
         """
         Initialize context summarizer.
-
-        Args:
-            ai_service: Optional PydanticAI service for structured extraction.
         """
-        self.ai_service = ai_service or PydanticAIService()
 
     async def extract_key_points(self, context: dict[str, Any]) -> ContextSummary:
         """
@@ -31,8 +27,14 @@ class ContextSummarizer:
         Returns:
             ContextSummary with structured decisions, risks, and highlights.
         """
-        # Create agent with structured output
-        agent = self.ai_service.create_agent(
+        # Convert context to JSON string for analysis
+        context_str = json.dumps(context, indent=2, default=str)
+        prompt = f"Analyze this workflow context and extract structured insights:\n\n{context_str}"
+
+        # Run extraction using LLM service
+        llm = get_llm_service()
+        return await llm.structured_output(
+            prompt,
             output_type=ContextSummary,
             system_prompt=(
                 "You are a context analysis expert. Extract key decisions, risks, highlights, "
@@ -40,14 +42,6 @@ class ContextSummarizer:
                 "their rationale, risks with severity levels, and key insights."
             ),
         )
-
-        # Convert context to JSON string for analysis
-        context_str = json.dumps(context, indent=2, default=str)
-        prompt = f"Analyze this workflow context and extract structured insights:\n\n{context_str}"
-
-        # Run extraction
-        result = await agent.run(prompt)
-        return result.output
 
     def extract_key_points_sync(self, context: dict[str, Any]) -> list[str]:
         """

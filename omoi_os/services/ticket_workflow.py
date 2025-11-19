@@ -15,7 +15,7 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.task_queue import TaskQueueService
-from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.blocker_analysis import BlockerAnalysis
 from omoi_os.utils.datetime import utc_now
 
@@ -66,7 +66,6 @@ class TicketWorkflowOrchestrator:
         task_queue: TaskQueueService,
         phase_gate: PhaseGateService,
         event_bus: Optional[EventBusService] = None,
-        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize ticket workflow orchestrator.
@@ -76,13 +75,11 @@ class TicketWorkflowOrchestrator:
             task_queue: Task queue service
             phase_gate: Phase gate service
             event_bus: Optional event bus for publishing events
-            ai_service: Optional PydanticAI service for blocker analysis
         """
         self.db = db
         self.task_queue = task_queue
         self.phase_gate = phase_gate
         self.event_bus = event_bus
-        self.ai_service = ai_service or PydanticAIService()
 
     # ---------------------------------------------------------------------
     # State Machine Transitions (REQ-TKT-SM-001, REQ-TKT-SM-002)
@@ -570,17 +567,6 @@ class TicketWorkflowOrchestrator:
             .all()
         )
 
-        # Create agent with structured output
-        agent = self.ai_service.create_agent(
-            output_type=BlockerAnalysis,
-            system_prompt=(
-                "You are a blocker analysis expert. Analyze tickets to identify why they are blocked. "
-                "Classify blocker types (dependency, resource, validation, approval, etc.) and provide "
-                "actionable unblocking steps with priority levels (CRITICAL, HIGH, MEDIUM, LOW) and "
-                "effort estimates (S, M, L)."
-            ),
-        )
-
         # Build prompt with ticket context
         prompt_parts = [
             f"Ticket ID: {ticket.id}",
@@ -605,9 +591,18 @@ class TicketWorkflowOrchestrator:
         prompt = "\n".join(prompt_parts)
         prompt += "\n\nAnalyze why this ticket is blocked and provide unblocking steps."
 
-        # Run analysis
-        result = await agent.run(prompt)
-        return result.output
+        # Run analysis using LLM service
+        llm = get_llm_service()
+        return await llm.structured_output(
+            prompt,
+            output_type=BlockerAnalysis,
+            system_prompt=(
+                "You are a workflow analysis expert. Analyze ticket context to identify why "
+                "a ticket is blocked. Classify the blocker type, explain the reason, and provide "
+                "actionable unblocking steps with priority levels (CRITICAL, HIGH, MEDIUM, LOW) and "
+                "effort estimates (S, M, L)."
+            ),
+        )
 
     def _classify_blocker_sync(self, session, ticket: Ticket) -> str:
         """

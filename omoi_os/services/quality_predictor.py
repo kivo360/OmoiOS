@@ -10,7 +10,7 @@ from omoi_os.models.quality_metric import QualityMetric
 from omoi_os.models.task import Task
 from omoi_os.services.memory import MemoryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
-from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.quality_analysis import QualityPrediction
 
 
@@ -26,7 +26,6 @@ class QualityPredictorService:
         self,
         memory_service: MemoryService,
         event_bus: Optional[EventBusService] = None,
-        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize quality predictor.
@@ -34,11 +33,9 @@ class QualityPredictorService:
         Args:
             memory_service: Memory service for pattern retrieval.
             event_bus: Optional event bus for publishing predictions.
-            ai_service: Optional PydanticAI service for structured predictions.
         """
         self.memory_service = memory_service
         self.event_bus = event_bus
-        self.ai_service = ai_service or PydanticAIService()
 
     async def predict_quality(
         self, session: Session, task_description: str, task_type: Optional[str] = None
@@ -68,16 +65,6 @@ class QualityPredictorService:
             session=session, task_type=task_type, pattern_type="success", limit=5
         )
 
-        # Create agent with structured output
-        agent = self.ai_service.create_agent(
-            output_type=QualityPrediction,
-            system_prompt=(
-                "You are a quality prediction expert. Analyze task descriptions and "
-                "historical patterns to predict quality scores (0.0-1.0), assess risk levels "
-                "(low, medium, high), and provide actionable recommendations with priority levels."
-            ),
-        )
-
         # Build prompt with context
         prompt_parts = [f"Task Description: {task_description}"]
         if task_type:
@@ -99,9 +86,18 @@ class QualityPredictorService:
         prompt = "\n".join(prompt_parts)
         prompt += "\n\nPredict the quality score, risk level, and provide recommendations."
 
-        # Run prediction
-        result = await agent.run(prompt)
-        prediction = result.output
+        # Run prediction using LLM service
+        llm = get_llm_service()
+        prediction = await llm.structured_output(
+            prompt,
+            output_type=QualityPrediction,
+            system_prompt=(
+                "You are a quality prediction expert. Analyze task descriptions and similar "
+                "past tasks to predict quality scores (0.0-1.0), risk levels (LOW, MEDIUM, HIGH, CRITICAL), "
+                "and provide actionable recommendations. Consider patterns from similar tasks and "
+                "their success/failure indicators."
+            ),
+        )
 
         # Ensure counts are set
         prediction.similar_task_count = len(similar_tasks)

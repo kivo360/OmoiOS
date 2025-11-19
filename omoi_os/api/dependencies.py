@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
+    from omoi_os.services.llm_service import LLMService
     from omoi_os.services.monitor import MonitorService
     from omoi_os.services.phase_gate import PhaseGateService
     from omoi_os.services.resource_lock import ResourceLockService
@@ -152,4 +153,11 @@ def get_approval_service() -> "ApprovalService":
     if approval_service is None:
         raise RuntimeError("Approval service not initialized")
     return approval_service
+
+
+def get_llm_service() -> "LLMService":
+    """Get LLM service instance for dependency injection."""
+    from omoi_os.services.llm_service import get_llm_service
+    
+    return get_llm_service()
 

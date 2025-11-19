@@ -13,7 +13,7 @@ from omoi_os.models.memory_type import MemoryType
 from omoi_os.models.task import Task
 from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
-from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.memory_analysis import MemoryClassification, PatternExtraction
 from omoi_os.utils.datetime import utc_now
 
@@ -45,7 +45,6 @@ class MemoryService:
         self,
         embedding_service: EmbeddingService,
         event_bus: Optional[EventBusService] = None,
-        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize memory service.
@@ -53,11 +52,9 @@ class MemoryService:
         Args:
             embedding_service: Service for generating text embeddings.
             event_bus: Optional event bus for publishing memory events.
-            ai_service: Optional PydanticAI service for structured analysis.
         """
         self.embedding_service = embedding_service
         self.event_bus = event_bus
-        self.ai_service = ai_service or PydanticAIService()
 
     async def classify_memory_type(
         self,
@@ -76,31 +73,31 @@ class MemoryService:
         Returns:
             Memory type string (one of MemoryType enum values)
         """
-        # Create agent with structured output
-        agent = self.ai_service.create_agent(
-            output_type=MemoryClassification,
-            system_prompt=(
-                "You are a memory classification expert. Classify task execution summaries "
-                "into one of these memory types:\n"
-                "- error_fix: Contains fixes, errors, bugs, or issues\n"
-                "- decision: Contains choices, decisions, or selections\n"
-                "- learning: Contains discoveries, learnings, or realizations\n"
-                "- warning: Contains warnings, gotchas, or cautions\n"
-                "- codebase_knowledge: Contains architecture, structure, patterns, or design\n"
-                "- discovery: Default category for other insights\n\n"
-                "Provide a confidence score and brief reasoning for your classification."
-            ),
-        )
-
         # Build prompt
         prompt = f"Execution summary: {execution_summary}"
         if task_description:
             prompt += f"\nTask description: {task_description}"
 
-        # Run classification
+        # Run classification using LLM service
         try:
-            result = await agent.run(prompt)
-            classification = result.output
+            from omoi_os.services.llm_service import get_llm_service
+            
+            llm = get_llm_service()
+            classification = await llm.structured_output(
+                prompt,
+                output_type=MemoryClassification,
+                system_prompt=(
+                    "You are a memory classification expert. Classify task execution summaries "
+                    "into one of these memory types:\n"
+                    "- error_fix: Contains fixes, errors, bugs, or issues\n"
+                    "- decision: Contains choices, decisions, or selections\n"
+                    "- learning: Contains discoveries, learnings, or realizations\n"
+                    "- warning: Contains warnings, gotchas, or cautions\n"
+                    "- codebase_knowledge: Contains architecture, structure, patterns, or design\n"
+                    "- discovery: Default category for other insights\n\n"
+                    "Provide a confidence score and brief reasoning for your classification."
+                ),
+            )
         except Exception as e:
             # If structured output fails, fall back to sync method
             import logging
@@ -583,23 +580,23 @@ class MemoryService:
         if not summaries:
             return []
 
-        # Create agent for pattern extraction
-        agent = self.ai_service.create_agent(
-            output_type=PatternExtraction,
-            system_prompt=(
-                "You are a pattern extraction expert. Analyze execution summaries "
-                "to identify common success and failure indicators. Extract patterns "
-                "that appear across multiple summaries."
-            ),
-        )
-
         # Combine summaries for analysis
         combined_text = "\n\n".join([f"Summary {i+1}: {s}" for i, s in enumerate(summaries)])
         prompt = f"Analyze these execution summaries and extract common indicators:\n\n{combined_text}"
 
         try:
-            result = await agent.run(prompt)
-            pattern = result.output
+            from omoi_os.services.llm_service import get_llm_service
+            
+            llm = get_llm_service()
+            pattern = await llm.structured_output(
+                prompt,
+                output_type=PatternExtraction,
+                system_prompt=(
+                    "You are a pattern extraction expert. Analyze execution summaries "
+                    "to identify common success and failure indicators. Extract patterns "
+                    "that appear across multiple summaries."
+                ),
+            )
             # Combine success and failure indicators
             all_indicators = pattern.success_indicators + pattern.failure_indicators
             return all_indicators[:10]  # Top 10
