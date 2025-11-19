@@ -21,6 +21,7 @@ from omoi_os.api.routes import (
     tasks,
     tickets,
     validation,
+    watchdog,
 )
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
@@ -489,7 +490,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize diagnostic service with dependencies
     embedding_service = EmbeddingService()
-    memory_service = MemoryService(db, embedding_service, event_bus)
+    memory_service = MemoryService(embedding_service, event_bus)
     discovery_service = DiscoveryService(event_bus)
     diagnostic_service = DiagnosticService(
         db=db,
@@ -585,6 +586,7 @@ app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
 app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"])
 app.include_router(costs.router, prefix="/api/v1/costs", tags=["costs"])
 app.include_router(guardian.router, prefix="/api/v1/guardian", tags=["guardian"])
+app.include_router(watchdog.router, prefix="/api/v1/watchdog", tags=["watchdog"])
 app.include_router(memory.router, prefix="/api/v1", tags=["memory"])
 app.include_router(board.router, prefix="/api/v1", tags=["board"])
 app.include_router(quality.router, prefix="/api/v1", tags=["quality"])

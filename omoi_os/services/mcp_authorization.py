@@ -3,7 +3,7 @@
 import secrets
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, Optional, Set
+from typing import Dict, List, Optional, Set
 
 from omoi_os.models.mcp_server import MCPPolicy, MCPToken
 from omoi_os.services.database import DatabaseService
@@ -47,7 +47,7 @@ class PolicyGrant:
         agent_id: str,
         server_id: str,
         tool_name: str,
-        actions: list[str],
+        actions: List[str],
         token_ttl: timedelta = timedelta(minutes=15),
         token_id: Optional[str] = None,
     ):
@@ -164,7 +164,7 @@ class MCPAuthorizationService:
         agent_id: str,
         server_id: str,
         tool_name: str,
-        actions: list[str],
+        actions: List[str],
         granted_by: Optional[str] = None,
         token_ttl: timedelta = timedelta(minutes=15),
         expires_at: Optional[datetime] = None,

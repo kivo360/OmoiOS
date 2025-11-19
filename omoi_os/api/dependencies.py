@@ -161,3 +161,36 @@ def get_llm_service() -> "LLMService":
     
     return get_llm_service()
 
+
+def get_restart_orchestrator():
+    """Get RestartOrchestrator instance."""
+    from omoi_os.services.restart_orchestrator import RestartOrchestrator
+    from omoi_os.api.main import db, registry_service, queue, event_bus, agent_status_manager
+    
+    if db is None or registry_service is None or queue is None:
+        raise RuntimeError("Required services not initialized")
+    
+    return RestartOrchestrator(
+        db=db,
+        agent_registry=registry_service,
+        task_queue=queue,
+        event_bus=event_bus,
+        status_manager=agent_status_manager,
+    )
+
+
+def get_guardian_service():
+    """Get GuardianService instance."""
+    from omoi_os.services.guardian import GuardianService
+    from omoi_os.api.main import db, event_bus
+    
+    if db is None:
+        raise RuntimeError("Database service not initialized")
+    
+    return GuardianService(db=db, event_bus=event_bus)
+
+
+def get_database_service() -> "DatabaseService":
+    """Get database service instance (alias for get_db_service)."""
+    return get_db_service()
+

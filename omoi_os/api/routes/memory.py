@@ -114,7 +114,7 @@ class CompleteTaskRequest(BaseModel):
     task_id: str = Field(..., description="Task ID")
     goal: str = Field(..., min_length=10, description="What you were trying to accomplish")
     result: str = Field(..., min_length=10, description="What actually happened")
-    tool_usage: List[ToolUsage] = Field(..., min_items=1, description="Tools used during task")
+    tool_usage: List[ToolUsage] = Field(..., min_length=1, description="Tools used during task")
     feedback: str = Field(..., description="Output from environment (stdout, stderr, test results)")
     agent_id: str = Field(..., description="Agent ID that completed the task")
 

@@ -4,7 +4,7 @@ import hashlib
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from omoi_os.models.mcp_server import MCPInvocation
 from omoi_os.services.database import DatabaseService
@@ -108,7 +108,7 @@ class MCPIntegrationService:
         authorization: MCPAuthorizationService,
         retry_manager: MCPRetryManager,
         event_bus: Optional[EventBusService] = None,
-        fallback_config: Optional[Dict[str, list[str]]] = None,
+        fallback_config: Optional[Dict[str, List[str]]] = None,
     ):
         """
         Initialize MCP integration service.

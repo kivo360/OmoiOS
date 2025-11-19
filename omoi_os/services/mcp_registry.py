@@ -48,7 +48,7 @@ class MCPRegistryService:
         self.db = db
         self.version_matrix: Dict[str, Dict[str, List[str]]] = {}  # server_id -> tool_name -> versions
 
-    async def register_server(
+    def register_server(
         self,
         server_id: str,
         version: str,
@@ -159,6 +159,16 @@ class MCPRegistryService:
                     )
 
             session.commit()
+            
+            # Access all attributes while session is still active, then expunge
+            for tool in registered_tools:
+                # Force load of all attributes
+                _ = tool.id
+                _ = tool.server_id
+                _ = tool.tool_name
+                _ = tool.version
+                _ = tool.enabled
+                session.expunge(tool)
 
             return RegistrationResult(
                 server_id=server_id,
@@ -254,7 +264,18 @@ class MCPRegistryService:
                 query = query.filter(MCPTool.server_id == server_id)
             if enabled_only:
                 query = query.filter(MCPTool.enabled == True)
-            return list(query.all())
+            tools = list(query.all())
+            # Access all attributes while session is active, then expunge
+            for tool in tools:
+                _ = tool.id
+                _ = tool.server_id
+                _ = tool.tool_name
+                _ = tool.schema
+                _ = tool.version
+                _ = tool.enabled
+                _ = tool.registered_at
+                session.expunge(tool)
+            return tools
 
     def get_tool(self, server_id: str, tool_name: str) -> Optional[MCPTool]:
         """
@@ -268,11 +289,22 @@ class MCPRegistryService:
             MCPTool or None if not found
         """
         with self.db.get_session() as session:
-            return (
+            tool = (
                 session.query(MCPTool)
                 .filter_by(server_id=server_id, tool_name=tool_name)
                 .first()
             )
+            if tool:
+                # Access all attributes while session is active
+                _ = tool.id
+                _ = tool.server_id
+                _ = tool.tool_name
+                _ = tool.schema
+                _ = tool.version
+                _ = tool.enabled
+                _ = tool.registered_at
+                session.expunge(tool)
+            return tool
 
     def list_servers(self, status: Optional[str] = None) -> List[MCPServer]:
         """
@@ -288,7 +320,19 @@ class MCPRegistryService:
             query = session.query(MCPServer)
             if status:
                 query = query.filter(MCPServer.status == status)
-            return list(query.all())
+            servers = list(query.all())
+            # Access all attributes while session is active, then expunge
+            for server in servers:
+                _ = server.server_id
+                _ = server.version
+                _ = server.capabilities
+                _ = server.connected_at
+                _ = server.last_heartbeat
+                _ = server.status
+                _ = server.connection_url
+                _ = server.server_metadata
+                session.expunge(server)
+            return servers
 
     def get_server(self, server_id: str) -> Optional[MCPServer]:
         """
@@ -301,7 +345,19 @@ class MCPRegistryService:
             MCPServer or None if not found
         """
         with self.db.get_session() as session:
-            return session.query(MCPServer).filter_by(server_id=server_id).first()
+            server = session.query(MCPServer).filter_by(server_id=server_id).first()
+            if server:
+                # Access all attributes while session is active
+                _ = server.server_id
+                _ = server.version
+                _ = server.capabilities
+                _ = server.connected_at
+                _ = server.last_heartbeat
+                _ = server.status
+                _ = server.connection_url
+                _ = server.server_metadata
+                session.expunge(server)
+            return server
 
     def update_server_heartbeat(self, server_id: str) -> None:
         """

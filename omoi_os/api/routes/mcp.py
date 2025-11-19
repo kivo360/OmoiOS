@@ -144,7 +144,7 @@ async def register_server(
     REQ-MCP-REG-001: Server Discovery
     REQ-MCP-REG-002: Schema Validation
     """
-    result = await registry.register_server(
+    result = registry.register_server(
         server_id=request.server_id,
         version=request.version,
         capabilities=request.capabilities,
