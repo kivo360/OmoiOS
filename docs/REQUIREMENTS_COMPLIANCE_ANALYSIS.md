@@ -1444,7 +1444,7 @@ class WorkflowResult(Base):
 - ✅ MonitorService with metrics collection and anomaly detection
 - ✅ **Logfire observability fully implemented** (distributed tracing, structured logging, profiling)
 - ✅ **Composite anomaly detection fully implemented** (latency_z, error_rate_ema, resource_skew, queue_impact with baseline learning)
-- ❌ Alerting service not implemented
+- ✅ **Alerting service fully implemented** (rule evaluation engine, YAML rules, routing adapters, API routes)
 - ✅ **Watchdog service fully implemented** (remediation policies, API routes, escalation to Guardian)
 
 **Phase 5/6 Additions**:
