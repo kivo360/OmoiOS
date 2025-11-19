@@ -73,10 +73,17 @@ class MemoryService:
         Returns:
             Memory type string (one of MemoryType enum values)
         """
-        # Build prompt
-        prompt = f"Execution summary: {execution_summary}"
-        if task_description:
-            prompt += f"\nTask description: {task_description}"
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
+
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/memory_classification.md.j2",
+            execution_summary=execution_summary,
+            task_description=task_description,
+        )
+
+        system_prompt = template_service.render_system_prompt("system/memory_classification.md.j2")
 
         # Run classification using LLM service
         try:
@@ -86,17 +93,7 @@ class MemoryService:
             classification = await llm.structured_output(
                 prompt,
                 output_type=MemoryClassification,
-                system_prompt=(
-                    "You are a memory classification expert. Classify task execution summaries "
-                    "into one of these memory types:\n"
-                    "- error_fix: Contains fixes, errors, bugs, or issues\n"
-                    "- decision: Contains choices, decisions, or selections\n"
-                    "- learning: Contains discoveries, learnings, or realizations\n"
-                    "- warning: Contains warnings, gotchas, or cautions\n"
-                    "- codebase_knowledge: Contains architecture, structure, patterns, or design\n"
-                    "- discovery: Default category for other insights\n\n"
-                    "Provide a confidence score and brief reasoning for your classification."
-                ),
+                system_prompt=system_prompt,
             )
         except Exception as e:
             # If structured output fails, fall back to sync method
@@ -582,7 +579,17 @@ class MemoryService:
 
         # Combine summaries for analysis
         combined_text = "\n\n".join([f"Summary {i+1}: {s}" for i, s in enumerate(summaries)])
-        prompt = f"Analyze these execution summaries and extract common indicators:\n\n{combined_text}"
+
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
+
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/pattern_extraction.md.j2",
+            combined_summaries=combined_text,
+        )
+
+        system_prompt = template_service.render_system_prompt("system/pattern_extraction.md.j2")
 
         try:
             from omoi_os.services.llm_service import get_llm_service
@@ -591,11 +598,7 @@ class MemoryService:
             pattern = await llm.structured_output(
                 prompt,
                 output_type=PatternExtraction,
-                system_prompt=(
-                    "You are a pattern extraction expert. Analyze execution summaries "
-                    "to identify common success and failure indicators. Extract patterns "
-                    "that appear across multiple summaries."
-                ),
+                system_prompt=system_prompt,
             )
             # Combine success and failure indicators
             all_indicators = pattern.success_indicators + pattern.failure_indicators

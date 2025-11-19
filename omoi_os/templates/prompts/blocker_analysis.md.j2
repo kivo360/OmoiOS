@@ -1,0 +1,22 @@
+Ticket ID: {{ ticket_id }}
+Title: {{ ticket_title }}
+Description: {{ ticket_description or 'No description' }}
+Status: {{ ticket_status }}
+Phase: {{ ticket_phase }}
+
+{% if failing_tasks %}
+Failing Tasks ({{ failing_tasks|length }}):
+{% for task in failing_tasks[:5] %}
+- {{ task.task_type }}: {{ task.error_message or 'No error message' }}
+{% endfor %}
+{% endif %}
+
+{% if pending_tasks %}
+Pending Tasks ({{ pending_tasks|length }}):
+{% for task in pending_tasks[:5] %}
+- {{ task.task_type }}: {{ task.description or 'No description' }}
+{% endfor %}
+{% endif %}
+
+Analyze why this ticket is blocked and provide unblocking steps.
+

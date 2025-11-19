@@ -235,40 +235,29 @@ class DiagnosticService:
         Returns:
             DiagnosticAnalysis with hypotheses and recommendations
         """
-        # Build comprehensive prompt from context
-        prompt_parts = [
-            f"Workflow Goal: {context.get('workflow_goal', 'Unknown')}",
-            f"Current Phase: {context.get('current_phase', 'Unknown')}",
-            f"Total Tasks: {context.get('total_tasks', 0)}",
-            f"Completed Tasks: {context.get('done_tasks', 0)}",
-            f"Failed Tasks: {context.get('failed_tasks', 0)}",
-            f"Time Stuck: {context.get('time_stuck_seconds', 0)} seconds",
-        ]
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
 
-        if context.get("recent_tasks"):
-            prompt_parts.append("\nRecent Tasks:")
-            for task in context["recent_tasks"][:10]:  # Limit to 10 most recent
-                prompt_parts.append(
-                    f"- {task.get('task_type', 'unknown')}: {task.get('status', 'unknown')} - "
-                    f"{task.get('description', '')[:100]}"
-                )
-                if task.get("error_message"):
-                    prompt_parts.append(f"  Error: {task['error_message'][:200]}")
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/diagnostic.md.j2",
+            workflow_goal=context.get("workflow_goal", "Unknown"),
+            current_phase=context.get("current_phase", "Unknown"),
+            total_tasks=context.get("total_tasks", 0),
+            done_tasks=context.get("done_tasks", 0),
+            failed_tasks=context.get("failed_tasks", 0),
+            time_stuck_seconds=context.get("time_stuck_seconds", 0),
+            recent_tasks=context.get("recent_tasks", [])[:10],
+        )
 
-        prompt = "\n".join(prompt_parts)
-        prompt += "\n\nAnalyze why this workflow is stuck and generate hypotheses with recommendations."
+        system_prompt = template_service.render_system_prompt("system/diagnostic.md.j2")
 
         # Run analysis using LLM service
         llm = get_llm_service()
         return await llm.structured_output(
             prompt,
             output_type=DiagnosticAnalysis,
-            system_prompt=(
-                "You are a diagnostic agent analyzing stuck workflows. "
-                "Analyze the provided context to identify root causes and generate "
-                "actionable hypotheses ranked by likelihood. Provide recommendations "
-                "with priority levels (CRITICAL, HIGH, MEDIUM, LOW) and effort estimates (S, M, L)."
-            ),
+            system_prompt=system_prompt,
         )
 
     def build_diagnostic_context(

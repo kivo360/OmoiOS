@@ -1,0 +1,21 @@
+Task Description: {{ task_description }}
+{% if task_type %}
+Task Type: {{ task_type }}
+{% endif %}
+
+{% if similar_tasks %}
+Found {{ similar_tasks|length }} similar successful tasks:
+{% for task in similar_tasks[:3] %}
+{{ loop.index }}. Similarity: {{ "%.2f"|format(task.similarity_score) }} - {{ task.summary[:100] }}
+{% endfor %}
+{% endif %}
+
+{% if patterns %}
+Found {{ patterns|length }} matching patterns:
+{% for pattern in patterns[:3] %}
+{{ loop.index }}. Confidence: {{ "%.2f"|format(pattern.confidence_score) }} - Indicators: {{ pattern.success_indicators[:3]|join(', ') }}
+{% endfor %}
+{% endif %}
+
+Predict the quality score, risk level, and provide recommendations.
+

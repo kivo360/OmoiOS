@@ -1,0 +1,13 @@
+Ticket ID: {{ ticket_id }}
+Phase ID: {{ phase_id }}
+
+Artifacts to validate ({{ artifacts|length }} total):
+
+{% for artifact in artifacts %}
+{{ loop.index }}. Type: {{ artifact.get('type', 'unknown') }}
+   Path: {{ artifact.get('path', 'unknown') }}
+   Content preview: {{ str(artifact.get('content', ''))[:200] }}
+{% endfor %}
+
+Validate these artifacts and provide structured feedback.
+

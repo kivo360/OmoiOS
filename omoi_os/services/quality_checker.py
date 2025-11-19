@@ -128,7 +128,17 @@ class QualityCheckerService:
 
         # Convert task result to JSON for analysis
         task_result_str = json.dumps(task_result, indent=2, default=str)
-        prompt = f"Extract quality metrics from this task result:\n\n{task_result_str}"
+
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
+
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/quality_metrics.md.j2",
+            task_result_json=task_result_str,
+        )
+
+        system_prompt = template_service.render_system_prompt("system/quality_metrics.md.j2")
 
         try:
             # Run extraction using LLM service
@@ -136,12 +146,7 @@ class QualityCheckerService:
             extraction = await llm.structured_output(
                 prompt,
                 output_type=QualityMetricsExtraction,
-                system_prompt=(
-                    "You are a code quality analysis expert. Extract quality metrics from task execution results. "
-                    "Identify test coverage percentages, lint errors with file paths and line numbers, "
-                    "complexity scores, and provide an overall code quality score (0.0-1.0). "
-                    "List specific lint errors with their file paths, line numbers, error types, messages, and severity."
-                ),
+                system_prompt=system_prompt,
             )
 
             # Record metrics from structured extraction

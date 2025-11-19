@@ -1,0 +1,19 @@
+Workflow Goal: {{ workflow_goal }}
+Current Phase: {{ current_phase }}
+Total Tasks: {{ total_tasks }}
+Completed Tasks: {{ done_tasks }}
+Failed Tasks: {{ failed_tasks }}
+Time Stuck: {{ time_stuck_seconds }} seconds
+
+{% if recent_tasks %}
+Recent Tasks:
+{% for task in recent_tasks[:10] %}
+- {{ task.get('task_type', 'unknown') }}: {{ task.get('status', 'unknown') }} - {{ task.get('description', '')[:100] }}
+{% if task.get('error_message') %}
+  Error: {{ task['error_message'][:200] }}
+{% endif %}
+{% endfor %}
+{% endif %}
+
+Analyze why this workflow is stuck and generate hypotheses with recommendations.
+

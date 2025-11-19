@@ -29,18 +29,24 @@ class ContextSummarizer:
         """
         # Convert context to JSON string for analysis
         context_str = json.dumps(context, indent=2, default=str)
-        prompt = f"Analyze this workflow context and extract structured insights:\n\n{context_str}"
+
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
+
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/context_analysis.md.j2",
+            context_json=context_str,
+        )
+
+        system_prompt = template_service.render_system_prompt("system/context_analysis.md.j2")
 
         # Run extraction using LLM service
         llm = get_llm_service()
         return await llm.structured_output(
             prompt,
             output_type=ContextSummary,
-            system_prompt=(
-                "You are a context analysis expert. Extract key decisions, risks, highlights, "
-                "and phase summaries from workflow context. Identify important decisions with "
-                "their rationale, risks with severity levels, and key insights."
-            ),
+            system_prompt=system_prompt,
         )
 
     def extract_key_points_sync(self, context: dict[str, Any]) -> list[str]:

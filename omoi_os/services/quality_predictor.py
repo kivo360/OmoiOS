@@ -65,38 +65,26 @@ class QualityPredictorService:
             session=session, task_type=task_type, pattern_type="success", limit=5
         )
 
-        # Build prompt with context
-        prompt_parts = [f"Task Description: {task_description}"]
-        if task_type:
-            prompt_parts.append(f"Task Type: {task_type}")
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
 
-        if similar_tasks:
-            prompt_parts.append(f"\nFound {len(similar_tasks)} similar successful tasks:")
-            for i, task in enumerate(similar_tasks[:3], 1):
-                prompt_parts.append(f"{i}. Similarity: {task.similarity_score:.2f} - {task.summary[:100]}")
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/quality_predictor.md.j2",
+            task_description=task_description,
+            task_type=task_type,
+            similar_tasks=similar_tasks[:3] if similar_tasks else [],
+            patterns=patterns[:3] if patterns else [],
+        )
 
-        if patterns:
-            prompt_parts.append(f"\nFound {len(patterns)} matching patterns:")
-            for i, pattern in enumerate(patterns[:3], 1):
-                prompt_parts.append(
-                    f"{i}. Confidence: {pattern.confidence_score:.2f} - "
-                    f"Indicators: {', '.join(pattern.success_indicators[:3])}"
-                )
-
-        prompt = "\n".join(prompt_parts)
-        prompt += "\n\nPredict the quality score, risk level, and provide recommendations."
+        system_prompt = template_service.render_system_prompt("system/quality_predictor.md.j2")
 
         # Run prediction using LLM service
         llm = get_llm_service()
         prediction = await llm.structured_output(
             prompt,
             output_type=QualityPrediction,
-            system_prompt=(
-                "You are a quality prediction expert. Analyze task descriptions and similar "
-                "past tasks to predict quality scores (0.0-1.0), risk levels (LOW, MEDIUM, HIGH, CRITICAL), "
-                "and provide actionable recommendations. Consider patterns from similar tasks and "
-                "their success/failure indicators."
-            ),
+            system_prompt=system_prompt,
         )
 
         # Ensure counts are set

@@ -40,36 +40,25 @@ class ValidationAgent:
         Returns:
             ValidationResult with structured validation feedback.
         """
-        # Build prompt with artifact information
-        prompt_parts = [
-            f"Ticket ID: {ticket_id}",
-            f"Phase ID: {phase_id}",
-            f"\nArtifacts to validate ({len(artifacts)} total):",
-        ]
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
 
-        for i, artifact in enumerate(artifacts, 1):
-            artifact_type = artifact.get("type", "unknown")
-            artifact_path = artifact.get("path", "unknown")
-            artifact_content = artifact.get("content", "")
-            prompt_parts.append(
-                f"\n{i}. Type: {artifact_type}\n   Path: {artifact_path}\n   "
-                f"Content preview: {str(artifact_content)[:200]}"
-            )
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/validation.md.j2",
+            ticket_id=ticket_id,
+            phase_id=phase_id,
+            artifacts=artifacts,
+        )
 
-        prompt = "\n".join(prompt_parts)
-        prompt += "\n\nValidate these artifacts and provide structured feedback."
+        system_prompt = template_service.render_system_prompt("system/validation.md.j2")
 
         # Run validation using LLM service
         llm = get_llm_service()
         return await llm.structured_output(
             prompt,
             output_type=ValidationResult,
-            system_prompt=(
-                "You are a validation expert. Review phase completion artifacts to determine "
-                "if they meet the phase requirements. Check for completeness, correctness, "
-                "and identify any blocking issues. Provide specific feedback and list missing "
-                "artifacts if any."
-            ),
+            system_prompt=system_prompt,
         )
 
     def validate_phase_completion_sync(

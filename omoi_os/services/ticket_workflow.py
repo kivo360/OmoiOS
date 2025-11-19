@@ -567,41 +567,29 @@ class TicketWorkflowOrchestrator:
             .all()
         )
 
-        # Build prompt with ticket context
-        prompt_parts = [
-            f"Ticket ID: {ticket.id}",
-            f"Title: {ticket.title}",
-            f"Description: {ticket.description or 'No description'}",
-            f"Status: {ticket.status}",
-            f"Phase: {ticket.phase_id}",
-        ]
+        # Build prompt using template
+        from omoi_os.services.template_service import get_template_service
 
-        if failing_tasks:
-            prompt_parts.append(f"\nFailing Tasks ({len(failing_tasks)}):")
-            for task in failing_tasks[:5]:
-                prompt_parts.append(
-                    f"- {task.task_type}: {task.error_message or 'No error message'}"
-                )
+        template_service = get_template_service()
+        prompt = template_service.render(
+            "prompts/blocker_analysis.md.j2",
+            ticket_id=ticket.id,
+            ticket_title=ticket.title,
+            ticket_description=ticket.description,
+            ticket_status=ticket.status,
+            ticket_phase=ticket.phase_id,
+            failing_tasks=failing_tasks[:5] if failing_tasks else [],
+            pending_tasks=pending_tasks[:5] if pending_tasks else [],
+        )
 
-        if pending_tasks:
-            prompt_parts.append(f"\nPending Tasks ({len(pending_tasks)}):")
-            for task in pending_tasks[:5]:
-                prompt_parts.append(f"- {task.task_type}: {task.description or 'No description'}")
-
-        prompt = "\n".join(prompt_parts)
-        prompt += "\n\nAnalyze why this ticket is blocked and provide unblocking steps."
+        system_prompt = template_service.render_system_prompt("system/blocker_analysis.md.j2")
 
         # Run analysis using LLM service
         llm = get_llm_service()
         return await llm.structured_output(
             prompt,
             output_type=BlockerAnalysis,
-            system_prompt=(
-                "You are a workflow analysis expert. Analyze ticket context to identify why "
-                "a ticket is blocked. Classify the blocker type, explain the reason, and provide "
-                "actionable unblocking steps with priority levels (CRITICAL, HIGH, MEDIUM, LOW) and "
-                "effort estimates (S, M, L)."
-            ),
+            system_prompt=system_prompt,
         )
 
     def _classify_blocker_sync(self, session, ticket: Ticket) -> str:
