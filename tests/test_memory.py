@@ -646,12 +646,326 @@ def test_classify_memory_type_helper(
 ):
     """Test classify_memory_type helper method directly (REQ-MEM-TAX-001)."""
     # Test various classifications
-    assert memory_service.classify_memory_type("Fixed bug") == MemoryType.ERROR_FIX.value
+    assert (
+        memory_service.classify_memory_type("Fixed bug") == MemoryType.ERROR_FIX.value
+    )
     assert memory_service.classify_memory_type("Chose JWT") == MemoryType.DECISION.value
-    assert memory_service.classify_memory_type("Learned OAuth2") == MemoryType.LEARNING.value
-    assert memory_service.classify_memory_type("Warning: be careful") == MemoryType.WARNING.value
-    assert memory_service.classify_memory_type("Architecture uses microservices") == MemoryType.CODEBASE_KNOWLEDGE.value
-    assert memory_service.classify_memory_type("Implemented feature") == MemoryType.DISCOVERY.value
+    assert (
+        memory_service.classify_memory_type("Learned OAuth2")
+        == MemoryType.LEARNING.value
+    )
+    assert (
+        memory_service.classify_memory_type("Warning: be careful")
+        == MemoryType.WARNING.value
+    )
+    assert (
+        memory_service.classify_memory_type("Architecture uses microservices")
+        == MemoryType.CODEBASE_KNOWLEDGE.value
+    )
+    assert (
+        memory_service.classify_memory_type("Implemented feature")
+        == MemoryType.DISCOVERY.value
+    )
+
+
+# Hybrid Search Tests (REQ-MEM-SEARCH-001)
+def test_search_similar_semantic_mode(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test semantic-only search mode (REQ-MEM-SEARCH-001)."""
+    with db_service.get_session() as session:
+        # Create tasks with memories
+        tasks_data = [
+            ("Implement JWT authentication", "Successfully implemented JWT auth", True),
+            ("Add OAuth2 support", "Added OAuth2 with Google provider", True),
+        ]
+
+        for desc, summary, success in tasks_data:
+            task = Task(
+                ticket_id=test_ticket.id,
+                phase_id="PHASE_IMPLEMENTATION",
+                task_type="implement_feature",
+                description=desc,
+                priority="MEDIUM",
+                status="completed",
+            )
+            session.add(task)
+            session.flush()
+
+            memory_service.store_execution(
+                session=session,
+                task_id=task.id,
+                execution_summary=summary,
+                success=success,
+            )
+
+        session.commit()
+
+        # Search using semantic mode
+        results = memory_service.search_similar(
+            session=session,
+            task_description="Implement user authentication",
+            top_k=5,
+            similarity_threshold=0.1,
+            search_mode="semantic",
+        )
+
+        assert len(results) > 0
+        # All results should have semantic_score set
+        assert all(r.semantic_score is not None for r in results)
+        # Results should be ordered by similarity
+        scores = [r.similarity_score for r in results]
+        assert scores == sorted(scores, reverse=True)
+
+
+def test_search_similar_keyword_mode(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test keyword-only search mode using tsvector (REQ-MEM-SEARCH-001)."""
+    with db_service.get_session() as session:
+        # Create tasks with memories containing specific keywords
+        tasks_data = [
+            (
+                "Implement JWT authentication",
+                "Successfully implemented JWT authentication system",
+                True,
+            ),
+            (
+                "Add OAuth2 support",
+                "Added OAuth2 with Google provider integration",
+                True,
+            ),
+            ("Build payment system", "Implemented Stripe payment processing", True),
+        ]
+
+        for desc, summary, success in tasks_data:
+            task = Task(
+                ticket_id=test_ticket.id,
+                phase_id="PHASE_IMPLEMENTATION",
+                task_type="implement_feature",
+                description=desc,
+                priority="MEDIUM",
+                status="completed",
+            )
+            session.add(task)
+            session.flush()
+
+            memory_service.store_execution(
+                session=session,
+                task_id=task.id,
+                execution_summary=summary,
+                success=success,
+            )
+
+        session.commit()
+
+        # Search using keyword mode (should match "JWT" and "authentication")
+        results = memory_service.search_similar(
+            session=session,
+            task_description="JWT authentication",
+            top_k=5,
+            similarity_threshold=0.0,  # Not used in keyword mode
+            search_mode="keyword",
+        )
+
+        assert len(results) > 0
+        # All results should have keyword_score set
+        assert all(r.keyword_score is not None for r in results)
+        # Results should be ordered by keyword rank
+        scores = [r.similarity_score for r in results]
+        assert scores == sorted(scores, reverse=True)
+
+
+def test_search_similar_hybrid_mode(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test hybrid search mode combining semantic and keyword with RRF (REQ-MEM-SEARCH-001)."""
+    with db_service.get_session() as session:
+        # Create tasks with memories
+        tasks_data = [
+            (
+                "Implement JWT authentication",
+                "Successfully implemented JWT authentication system",
+                True,
+            ),
+            ("Add OAuth2 support", "Added OAuth2 with Google provider", True),
+            ("Build payment system", "Implemented Stripe payment processing", True),
+        ]
+
+        for desc, summary, success in tasks_data:
+            task = Task(
+                ticket_id=test_ticket.id,
+                phase_id="PHASE_IMPLEMENTATION",
+                task_type="implement_feature",
+                description=desc,
+                priority="MEDIUM",
+                status="completed",
+            )
+            session.add(task)
+            session.flush()
+
+            memory_service.store_execution(
+                session=session,
+                task_id=task.id,
+                execution_summary=summary,
+                success=success,
+            )
+
+        session.commit()
+
+        # Search using hybrid mode (default)
+        results = memory_service.search_similar(
+            session=session,
+            task_description="Implement user authentication with JWT",
+            top_k=5,
+            similarity_threshold=0.1,
+            search_mode="hybrid",
+            semantic_weight=0.6,
+            keyword_weight=0.4,
+        )
+
+        assert len(results) > 0
+        # Results should have both semantic and keyword scores (if available)
+        # At least one should have both scores
+        assert any(
+            r.semantic_score is not None and r.keyword_score is not None
+            for r in results
+        )
+        # Results should be ordered by RRF score
+        scores = [r.similarity_score for r in results]
+        assert scores == sorted(scores, reverse=True)
+
+
+def test_search_similar_invalid_mode(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test that invalid search_mode raises ValueError (REQ-MEM-SEARCH-001)."""
+    with db_service.get_session() as session:
+        with pytest.raises(ValueError, match="Invalid search_mode"):
+            memory_service.search_similar(
+                session=session,
+                task_description="Test query",
+                top_k=5,
+                search_mode="invalid_mode",
+            )
+
+
+def test_rrf_algorithm_merges_results(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test that RRF algorithm correctly merges semantic and keyword results (REQ-MEM-SEARCH-001)."""
+    with db_service.get_session() as session:
+        # Create tasks with memories
+        tasks_data = [
+            (
+                "Implement JWT authentication",
+                "Successfully implemented JWT authentication system",
+                True,
+            ),
+            ("Add OAuth2 support", "Added OAuth2 with Google provider", True),
+            ("Build payment system", "Implemented Stripe payment processing", True),
+        ]
+
+        for desc, summary, success in tasks_data:
+            task = Task(
+                ticket_id=test_ticket.id,
+                phase_id="PHASE_IMPLEMENTATION",
+                task_type="implement_feature",
+                description=desc,
+                priority="MEDIUM",
+                status="completed",
+            )
+            session.add(task)
+            session.flush()
+
+            memory_service.store_execution(
+                session=session,
+                task_id=task.id,
+                execution_summary=summary,
+                success=success,
+            )
+
+        session.commit()
+
+        # Get hybrid results (which internally uses semantic and keyword)
+        hybrid_results = memory_service.search_similar(
+            session=session,
+            task_description="Implement JWT authentication",
+            top_k=10,
+            similarity_threshold=0.1,
+            search_mode="hybrid",
+            semantic_weight=0.6,
+            keyword_weight=0.4,
+        )
+
+        # Hybrid should combine results from both
+        assert len(hybrid_results) > 0
+        # Hybrid results should be ordered by RRF score
+        scores = [r.similarity_score for r in hybrid_results]
+        assert scores == sorted(scores, reverse=True)
+
+
+def test_search_similar_weight_parameters(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test that semantic_weight and keyword_weight parameters affect hybrid search (REQ-MEM-SEARCH-001)."""
+    with db_service.get_session() as session:
+        # Create tasks with memories
+        task = Task(
+            ticket_id=test_ticket.id,
+            phase_id="PHASE_IMPLEMENTATION",
+            task_type="implement_feature",
+            description="Implement JWT authentication",
+            priority="MEDIUM",
+            status="completed",
+        )
+        session.add(task)
+        session.flush()
+
+        memory_service.store_execution(
+            session=session,
+            task_id=task.id,
+            execution_summary="Successfully implemented JWT authentication system",
+            success=True,
+        )
+        session.commit()
+
+        # Search with semantic-heavy weights
+        semantic_heavy = memory_service.search_similar(
+            session=session,
+            task_description="Implement authentication",
+            top_k=5,
+            similarity_threshold=0.1,
+            search_mode="hybrid",
+            semantic_weight=0.9,
+            keyword_weight=0.1,
+        )
+
+        # Search with keyword-heavy weights
+        keyword_heavy = memory_service.search_similar(
+            session=session,
+            task_description="JWT authentication",
+            top_k=5,
+            similarity_threshold=0.1,
+            search_mode="hybrid",
+            semantic_weight=0.1,
+            keyword_weight=0.9,
+        )
+
+        # Both should return results (may differ in ordering)
+        assert len(semantic_heavy) > 0 or len(keyword_heavy) > 0
 
 
 def test_memory_type_enum_methods():

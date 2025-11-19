@@ -49,22 +49,99 @@ class TicketSearchService:
         limit: int = 10,
         filters: Optional[dict] = None,
         include_comments: bool = True,
+        semantic_weight: float = 0.6,
+        keyword_weight: float = 0.4,
     ) -> dict[str, Any]:
-        sem = self.semantic_search(query_text=query_text, workflow_id=workflow_id, limit=limit, filters=filters)
+        """
+        Hybrid search combining semantic and keyword search using RRF (REQ-MEM-SEARCH-001).
+        
+        Args:
+            query_text: Search query text
+            workflow_id: Workflow ID to filter by
+            limit: Maximum number of results to return
+            filters: Optional filters to apply
+            include_comments: Whether to include comments in search
+            semantic_weight: Weight for semantic search in RRF (default: 0.6)
+            keyword_weight: Weight for keyword search in RRF (default: 0.4)
+        
+        Returns:
+            Dictionary with search results merged using RRF algorithm
+        """
+        # Run both searches with expanded limit for better RRF results
+        sem = self.semantic_search(query_text=query_text, workflow_id=workflow_id, limit=limit * 2, filters=filters)
         kw = self.search_by_keywords(keywords=query_text, workflow_id=workflow_id, filters=filters)
-        # Simple merge (placeholder for RRF)
-        merged: list[dict[str, Any]] = []
-        merged.extend(sem.get("results", []))
-        merged.extend(kw.get("results", []))
-        # Deduplicate by ticket_id
-        seen: set[str] = set()
-        de_duped: list[dict[str, Any]] = []
-        for r in merged:
-            tid = r.get("ticket_id")
-            if tid and tid not in seen:
-                seen.add(tid)
-                de_duped.append(r)
-        return {"success": True, "query": query_text, "results": de_duped[:limit], "total_found": len(de_duped)}
+        
+        # Merge using Reciprocal Rank Fusion
+        merged_results = self._merge_results_rrf(
+            sem.get("results", []),
+            kw.get("results", []),
+            semantic_weight,
+            keyword_weight,
+        )
+        
+        return {
+            "success": True,
+            "query": query_text,
+            "results": merged_results[:limit],
+            "total_found": len(merged_results),
+        }
+    
+    def _merge_results_rrf(
+        self,
+        semantic_results: list[dict[str, Any]],
+        keyword_results: list[dict[str, Any]],
+        semantic_weight: float,
+        keyword_weight: float,
+    ) -> list[dict[str, Any]]:
+        """
+        Merge results using Reciprocal Rank Fusion (RRF) algorithm.
+        
+        Formula:
+        score = semantic_weight * (1 / (k + semantic_rank)) +
+                keyword_weight * (1 / (k + keyword_rank))
+        
+        Where k = 60 (typical RRF constant)
+        """
+        k = 60  # RRF constant
+        
+        # Create rank maps (1-indexed for RRF)
+        semantic_ranks = {r.get("ticket_id"): idx + 1 for idx, r in enumerate(semantic_results) if r.get("ticket_id")}
+        keyword_ranks = {r.get("ticket_id"): idx + 1 for idx, r in enumerate(keyword_results) if r.get("ticket_id")}
+        
+        # Get all unique ticket IDs
+        all_ids = set(semantic_ranks.keys()) | set(keyword_ranks.keys())
+        
+        # Create result maps for quick lookup
+        semantic_map = {r.get("ticket_id"): r for r in semantic_results if r.get("ticket_id")}
+        keyword_map = {r.get("ticket_id"): r for r in keyword_results if r.get("ticket_id")}
+        
+        # Calculate combined scores
+        combined_results = []
+        for ticket_id in all_ids:
+            sem_rank = semantic_ranks.get(ticket_id, len(semantic_results) + 10)
+            kw_rank = keyword_ranks.get(ticket_id, len(keyword_results) + 10)
+            
+            # RRF score calculation
+            rrf_score = (
+                semantic_weight * (1.0 / (k + sem_rank)) + keyword_weight * (1.0 / (k + kw_rank))
+            )
+            
+            # Get the result object (prefer semantic as it has more info)
+            result = semantic_map.get(ticket_id) or keyword_map.get(ticket_id)
+            if not result:
+                continue
+            
+            # Create merged result with RRF score
+            merged_result = result.copy()
+            merged_result["relevance_score"] = rrf_score
+            merged_result["semantic_score"] = result.get("relevance_score") if ticket_id in semantic_map else None
+            merged_result["keyword_score"] = result.get("relevance_score") if ticket_id in keyword_map else None
+            combined_results.append(merged_result)
+        
+        # Sort by combined RRF score descending
+        combined_results.sort(key=lambda x: x.get("relevance_score", 0.0), reverse=True)
+        
+        return combined_results
 
     def index_ticket(self, *, ticket_id: str) -> None:
         # TODO: push embedding to Qdrant

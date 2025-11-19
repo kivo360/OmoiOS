@@ -1,10 +1,10 @@
 """Memory service for task pattern learning and similarity search."""
 
 import re
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from dataclasses import dataclass
 
-from sqlalchemy import select
+from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
 
 from omoi_os.models.task_memory import TaskMemory
@@ -28,6 +28,8 @@ class SimilarTask:
     success: bool
     similarity_score: float
     reused_count: int
+    semantic_score: Optional[float] = None  # For hybrid search
+    keyword_score: Optional[float] = None  # For hybrid search
 
 
 class MemoryService:
@@ -237,9 +239,12 @@ class MemoryService:
         similarity_threshold: float = 0.7,
         success_only: bool = False,
         memory_types: Optional[List[str]] = None,
+        search_mode: str = "hybrid",
+        semantic_weight: float = 0.6,
+        keyword_weight: float = 0.4,
     ) -> List[SimilarTask]:
         """
-        Search for similar past tasks using embedding similarity (REQ-MEM-SEARCH-001).
+        Search for similar past tasks using semantic, keyword, or hybrid search (REQ-MEM-SEARCH-001).
 
         Args:
             session: Database session.
@@ -248,10 +253,45 @@ class MemoryService:
             similarity_threshold: Minimum similarity score (0.0 to 1.0).
             success_only: Only return successful task executions.
             memory_types: Optional list of memory types to filter by (REQ-MEM-SEARCH-005).
+            search_mode: Search mode: "semantic", "keyword", or "hybrid" (default: "hybrid").
+            semantic_weight: Weight for semantic search in hybrid mode (default: 0.6).
+            keyword_weight: Weight for keyword search in hybrid mode (default: 0.4).
 
         Returns:
-            List of similar tasks ordered by similarity.
+            List of similar tasks ordered by relevance score.
         """
+        if search_mode == "semantic":
+            return self._semantic_search(
+                session, task_description, top_k, similarity_threshold, success_only, memory_types
+            )
+        elif search_mode == "keyword":
+            return self._keyword_search(
+                session, task_description, top_k, success_only, memory_types
+            )
+        elif search_mode == "hybrid":
+            return self._hybrid_search(
+                session,
+                task_description,
+                top_k,
+                similarity_threshold,
+                success_only,
+                memory_types,
+                semantic_weight,
+                keyword_weight,
+            )
+        else:
+            raise ValueError(f"Invalid search_mode: {search_mode}. Must be 'semantic', 'keyword', or 'hybrid'")
+
+    def _semantic_search(
+        self,
+        session: Session,
+        task_description: str,
+        top_k: int,
+        similarity_threshold: float,
+        success_only: bool,
+        memory_types: Optional[List[str]],
+    ) -> List[SimilarTask]:
+        """Semantic search using embedding similarity."""
         # Generate embedding for query (use is_query=True for multilingual-e5-large)
         query_embedding = self.embedding_service.generate_embedding(task_description, is_query=True)
 
@@ -291,6 +331,7 @@ class MemoryService:
                             success=memory.success,
                             similarity_score=similarity,
                             reused_count=memory.reused_count,
+                            semantic_score=similarity,
                         )
                     )
 
@@ -307,6 +348,171 @@ class MemoryService:
                 memory.increment_reuse()
 
         return top_results
+
+    def _keyword_search(
+        self,
+        session: Session,
+        task_description: str,
+        top_k: int,
+        success_only: bool,
+        memory_types: Optional[List[str]],
+    ) -> List[SimilarTask]:
+        """Keyword search using PostgreSQL tsvector full-text search."""
+        # Build base query with tsvector search using parameterized query
+        # Use func.plainto_tsquery for safe parameterization
+        tsquery = func.plainto_tsquery("english", task_description)
+        
+        query = session.query(
+            TaskMemory,
+            func.ts_rank(
+                text("content_tsv"),
+                tsquery,
+            ).label("rank"),
+        ).filter(
+            text("content_tsv @@ plainto_tsquery('english', :query)").bindparams(query=task_description)
+        )
+
+        if success_only:
+            query = query.filter(TaskMemory.success == True)  # noqa: E712
+
+        # Filter by memory types if provided
+        if memory_types:
+            for mem_type in memory_types:
+                if not MemoryType.is_valid(mem_type):
+                    raise ValueError(
+                        f"Invalid memory_type in filter: {mem_type}. "
+                        f"Must be one of: {', '.join(MemoryType.all_types())}"
+                    )
+            query = query.filter(TaskMemory.memory_type.in_(memory_types))
+
+        # Order by rank descending and limit
+        results_raw = query.order_by(text("rank DESC")).limit(top_k * 2).all()
+
+        # Convert to SimilarTask objects
+        results = []
+        for memory, rank in results_raw:
+            results.append(
+                SimilarTask(
+                    task_id=memory.task_id,
+                    memory_id=memory.id,
+                    summary=memory.execution_summary,
+                    success=memory.success,
+                    similarity_score=float(rank) if rank else 0.0,
+                    reused_count=memory.reused_count,
+                    keyword_score=float(rank) if rank else 0.0,
+                )
+            )
+
+        # Return top K
+        top_results = results[:top_k]
+
+        # Increment reuse counters
+        for result in top_results:
+            memory = session.get(TaskMemory, result.memory_id)
+            if memory:
+                memory.increment_reuse()
+
+        return top_results
+
+    def _hybrid_search(
+        self,
+        session: Session,
+        task_description: str,
+        top_k: int,
+        similarity_threshold: float,
+        success_only: bool,
+        memory_types: Optional[List[str]],
+        semantic_weight: float,
+        keyword_weight: float,
+    ) -> List[SimilarTask]:
+        """Hybrid search combining semantic and keyword search using RRF (REQ-MEM-SEARCH-001)."""
+        # Run both searches with expanded limit for better RRF results
+        semantic_results = self._semantic_search(
+            session, task_description, top_k * 2, similarity_threshold, success_only, memory_types
+        )
+        keyword_results = self._keyword_search(
+            session, task_description, top_k * 2, success_only, memory_types
+        )
+
+        # Merge using Reciprocal Rank Fusion
+        merged_results = self._merge_results_rrf(
+            semantic_results, keyword_results, semantic_weight, keyword_weight
+        )
+
+        # Return top K
+        top_results = merged_results[:top_k]
+
+        # Increment reuse counters
+        for result in top_results:
+            memory = session.get(TaskMemory, result.memory_id)
+            if memory:
+                memory.increment_reuse()
+
+        return top_results
+
+    def _merge_results_rrf(
+        self,
+        semantic_results: List[SimilarTask],
+        keyword_results: List[SimilarTask],
+        semantic_weight: float,
+        keyword_weight: float,
+    ) -> List[SimilarTask]:
+        """
+        Merge results using Reciprocal Rank Fusion (RRF) algorithm.
+
+        Formula:
+        score = semantic_weight * (1 / (k + semantic_rank)) +
+                keyword_weight * (1 / (k + keyword_rank))
+
+        Where k = 60 (typical RRF constant)
+        """
+        k = 60  # RRF constant
+
+        # Create rank maps (1-indexed for RRF)
+        semantic_ranks = {r.memory_id: idx + 1 for idx, r in enumerate(semantic_results)}
+        keyword_ranks = {r.memory_id: idx + 1 for idx, r in enumerate(keyword_results)}
+
+        # Get all unique memory IDs
+        all_ids = set(semantic_ranks.keys()) | set(keyword_ranks.keys())
+
+        # Create result map for quick lookup
+        semantic_map = {r.memory_id: r for r in semantic_results}
+        keyword_map = {r.memory_id: r for r in keyword_results}
+
+        # Calculate combined scores
+        combined_results = []
+        for memory_id in all_ids:
+            sem_rank = semantic_ranks.get(memory_id, len(semantic_results) + 10)
+            kw_rank = keyword_ranks.get(memory_id, len(keyword_results) + 10)
+
+            # RRF score calculation
+            rrf_score = (
+                semantic_weight * (1.0 / (k + sem_rank)) + keyword_weight * (1.0 / (k + kw_rank))
+            )
+
+            # Get the memory object (prefer semantic as it has more info)
+            memory_result = semantic_map.get(memory_id) or keyword_map.get(memory_id)
+            if not memory_result:
+                continue
+
+            # Create merged result
+            combined_results.append(
+                SimilarTask(
+                    task_id=memory_result.task_id,
+                    memory_id=memory_result.memory_id,
+                    summary=memory_result.summary,
+                    success=memory_result.success,
+                    similarity_score=rrf_score,
+                    reused_count=memory_result.reused_count,
+                    semantic_score=memory_result.semantic_score,
+                    keyword_score=memory_result.keyword_score,
+                )
+            )
+
+        # Sort by combined RRF score descending
+        combined_results.sort(key=lambda x: x.similarity_score, reverse=True)
+
+        return combined_results
 
     def get_task_context(
         self,

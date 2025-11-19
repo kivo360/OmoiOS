@@ -1075,20 +1075,23 @@ class MemoryType(str, Enum):
 
 ---
 
-### REQ-MEM-SEARCH-001: Hybrid Search ⚠️ PARTIAL
+### REQ-MEM-SEARCH-001: Hybrid Search ✅ COMPLIANT
 
 **Requirements**: Support semantic, keyword, and hybrid search modes
 
 **Implementation Status**:
 - ✅ Embedding service exists: `omoi_os/services/embedding.py`
-- ✅ Semantic search implemented: `MemoryService.search_similar()` uses pgvector cosine similarity
-- ✅ TicketSearchService has hybrid search: `omoi_os/ticketing/services/ticket_search_service.py::hybrid_search()`
-- ⚠️ MemoryService only has semantic search, not full hybrid (semantic + keyword + RRF)
-- ⚠️ TicketSearchService hybrid search uses simple merge, not full Reciprocal Rank Fusion (RRF)
-- ⚠️ pgvector integration exists but hybrid RRF algorithm not fully implemented in MemoryService
+- ✅ Semantic search implemented: `MemoryService._semantic_search()` uses pgvector cosine similarity
+- ✅ Keyword search implemented: `MemoryService._keyword_search()` uses PostgreSQL tsvector full-text search
+- ✅ Hybrid search implemented: `MemoryService._hybrid_search()` combines semantic and keyword using RRF
+- ✅ RRF algorithm implemented: `MemoryService._merge_results_rrf()` uses Reciprocal Rank Fusion (k=60)
+- ✅ TicketSearchService hybrid search updated: `omoi_os/ticketing/services/ticket_search_service.py::hybrid_search()` uses proper RRF
+- ✅ tsvector column added: Migration `024_add_tsvector_for_hybrid_search.py` adds `content_tsv` generated column with GIN index
+- ✅ API support: `SearchSimilarRequest` includes `search_mode`, `semantic_weight`, and `keyword_weight` parameters
+- ✅ Search modes: "semantic", "keyword", or "hybrid" (default: "hybrid")
 
 **Code Evidence**:
-```232:299:omoi_os/services/memory.py
+```234:283:omoi_os/services/memory.py
     def search_similar(
         self,
         session: Session,
@@ -1097,12 +1100,29 @@ class MemoryType(str, Enum):
         similarity_threshold: float = 0.7,
         success_only: bool = False,
         memory_types: Optional[List[str]] = None,
+        search_mode: str = "hybrid",
+        semantic_weight: float = 0.6,
+        keyword_weight: float = 0.4,
     ) -> List[SimilarTask]:
-        """Search for similar past tasks using embedding similarity (REQ-MEM-SEARCH-001)."""
-        # Only semantic search, no keyword or hybrid
+        """Search for similar past tasks using semantic, keyword, or hybrid search (REQ-MEM-SEARCH-001)."""
 ```
 
-```44:67:omoi_os/ticketing/services/ticket_search_service.py
+```450:512:omoi_os/services/memory.py
+    def _merge_results_rrf(
+        self,
+        semantic_results: List[SimilarTask],
+        keyword_results: List[SimilarTask],
+        semantic_weight: float,
+        keyword_weight: float,
+    ) -> List[SimilarTask]:
+        """
+        Merge results using Reciprocal Rank Fusion (RRF) algorithm.
+        Formula: score = semantic_weight * (1 / (k + semantic_rank)) + keyword_weight * (1 / (k + keyword_rank))
+        Where k = 60 (typical RRF constant)
+        """
+```
+
+```44:144:omoi_os/ticketing/services/ticket_search_service.py
     def hybrid_search(
         self,
         *,
@@ -1111,18 +1131,13 @@ class MemoryType(str, Enum):
         limit: int = 10,
         filters: Optional[dict] = None,
         include_comments: bool = True,
+        semantic_weight: float = 0.6,
+        keyword_weight: float = 0.4,
     ) -> dict[str, Any]:
-        sem = self.semantic_search(...)
-        kw = self.search_by_keywords(...)
-        # Simple merge (placeholder for RRF)
+        """Hybrid search combining semantic and keyword search using RRF (REQ-MEM-SEARCH-001)."""
 ```
 
-**Gaps**:
-- MemoryService needs full hybrid search with RRF algorithm
-- TicketSearchService needs proper RRF instead of simple merge
-- Keyword search (tsvector) integration needed for MemoryService
-
-**Recommendation**: MEDIUM - Implement full hybrid search with RRF in MemoryService
+**Status**: ✅ FULLY COMPLIANT - Complete hybrid search implementation with semantic search (pgvector), keyword search (tsvector), RRF algorithm, and API support for all three search modes
 
 ---
 
@@ -1424,15 +1439,15 @@ class WorkflowResult(Base):
 | Alerting (Phase 4) | 1 | 0 | 0 | 0 |
 | Watchdog (Phase 4) | 1 | 0 | 0 | 0 |
 | Observability (Phase 4) | 1 | 0 | 0 | 0 |
-| Memory System | 3 | 1 | 0 | 0 |
+| Memory System | 4 | 0 | 0 | 0 |
 | MCP Integration | 1 | 0 | 0 | 0 |
 | Diagnosis | 1 | 0 | 0 | 0 |
 | Guardian | 1 | 1 | 0 | 0 |
 | Result Submission | 1 | 0 | 0 | 0 |
 | Ticket Human Approval | 1 | 0 | 0 | 0 |
-| **Total** | **35** | **3** | **3** | **0** |
+| **Total** | **36** | **2** | **3** | **0** |
 
-**Compliance Rate**: ~85% fully compliant, ~7% partial, ~7% missing (improved from initial 16%)
+**Compliance Rate**: ~88% fully compliant, ~5% partial, ~7% missing (improved from initial 16%)
 
 **Phase 3 Additions (Multi-Agent Coordination)**:
 - ✅ Collaboration service (messaging, handoff protocol)

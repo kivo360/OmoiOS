@@ -50,13 +50,24 @@ class SearchSimilarRequest(BaseModel):
     """Request to search for similar tasks."""
 
     task_description: str = Field(..., description="Description of the task")
-    top_k: int = Field(5, ge=1, le=20, description="Number of results")
+    top_k: int = Field(5, ge=1, le=100, description="Number of results")
     similarity_threshold: float = Field(
         0.7, ge=0.0, le=1.0, description="Minimum similarity"
     )
     success_only: bool = Field(False, description="Only return successful tasks")
     memory_types: Optional[List[str]] = Field(
         None, description="Filter by memory types (REQ-MEM-SEARCH-005)"
+    )
+    search_mode: str = Field(
+        "hybrid",
+        pattern="^(semantic|keyword|hybrid)$",
+        description="Search mode: semantic, keyword, or hybrid (REQ-MEM-SEARCH-001)",
+    )
+    semantic_weight: float = Field(
+        0.6, ge=0.0, le=1.0, description="Weight for semantic search in hybrid mode"
+    )
+    keyword_weight: float = Field(
+        0.4, ge=0.0, le=1.0, description="Weight for keyword search in hybrid mode"
     )
 
 
@@ -208,6 +219,9 @@ def search_similar(
             similarity_threshold=request.similarity_threshold,
             success_only=request.success_only,
             memory_types=request.memory_types,
+            search_mode=request.search_mode,
+            semantic_weight=request.semantic_weight,
+            keyword_weight=request.keyword_weight,
         )
         db.commit()  # Commit reuse counter updates
         return [
