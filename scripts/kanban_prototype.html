@@ -245,6 +245,32 @@
             background: #1976d2;
         }
 
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .filter-input {
+            border: 1px solid #d0d0d0;
+            border-radius: 4px;
+            padding: 6px 10px;
+            font-size: 14px;
+            min-width: 220px;
+        }
+
+        .filter-input:focus {
+            outline: none;
+            border-color: #2196f3;
+            box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.15);
+        }
+
+        .filter-status {
+            font-size: 12px;
+            color: #666;
+        }
+
         .create-ticket-btn {
             background: #4caf50;
             color: white;
@@ -376,6 +402,11 @@
             font-size: 14px;
         }
 
+        .empty-column.filter-placeholder {
+            font-style: italic;
+            color: #607d8b;
+        }
+
         .ticket-detail-modal {
             max-width: 800px;
             max-height: 90vh;
@@ -503,6 +534,16 @@
                 <div class="status-indicator" id="wsStatus"></div>
                 <span id="wsStatusText">Connecting...</span>
             </div>
+            <div class="filter-group">
+                <input
+                    type="search"
+                    id="ticketFilter"
+                    class="filter-input"
+                    placeholder="Filter tickets by title or ID..."
+                    autocomplete="off"
+                >
+                <span id="filterStatus" class="filter-status"></span>
+            </div>
         </div>
         <div>
             <button class="refresh-btn" onclick="loadBoard()">Refresh Board</button>
@@ -586,11 +627,19 @@
         let draggedTicket = null;
         let dragStartPos = null;
         let isDragging = false;
+        let currentFilter = '';
 
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
             connectWebSocket();
             loadBoard();
+            const filterInput = document.getElementById('ticketFilter');
+            if (filterInput) {
+                filterInput.addEventListener('input', (event) => {
+                    currentFilter = event.target.value.toLowerCase().trim();
+                    applyTicketFilter();
+                });
+            }
         });
 
         // WebSocket Connection
@@ -818,6 +867,8 @@
                     </div>
                 </div>
             `).join('');
+
+            applyTicketFilter();
         }
 
         function renderTicket(ticket) {
@@ -1253,6 +1304,58 @@
                 closeTicketDetailModal();
             }
         });
+
+        function applyTicketFilter() {
+            const tickets = document.querySelectorAll('.ticket');
+            const normalized = currentFilter;
+            let visibleCount = 0;
+
+            tickets.forEach(ticket => {
+                if (!normalized) {
+                    ticket.style.display = '';
+                    visibleCount++;
+                    return;
+                }
+
+                const title = (ticket.querySelector('.ticket-title')?.textContent || '').toLowerCase();
+                const ticketId = ticket.dataset.ticketId.toLowerCase();
+                const matches = title.includes(normalized) || ticketId.includes(normalized);
+                ticket.style.display = matches ? '' : 'none';
+                if (matches) visibleCount++;
+            });
+
+            document.querySelectorAll('.tickets-container').forEach(container => {
+                const ticketElements = container.querySelectorAll('.ticket');
+                const hasVisible = [...ticketElements].some(ticket => ticket.style.display !== 'none');
+                let placeholder = container.querySelector('.filter-placeholder');
+
+                if (!placeholder) {
+                    placeholder = document.createElement('div');
+                    placeholder.className = 'empty-column filter-placeholder';
+                    placeholder.textContent = 'No tickets match the current filter';
+                    container.appendChild(placeholder);
+                }
+
+                placeholder.style.display = (!hasVisible && normalized) ? 'block' : 'none';
+                if (!normalized) {
+                    placeholder.style.display = 'none';
+                }
+            });
+
+            const status = document.getElementById('filterStatus');
+            if (!status) return;
+
+            if (!tickets.length) {
+                status.textContent = 'No tickets loaded';
+                return;
+            }
+
+            if (!normalized) {
+                status.textContent = `Showing all tickets (${tickets.length})`;
+            } else {
+                status.textContent = `Filtered: ${visibleCount} of ${tickets.length}`;
+            }
+        }
     </script>
 </body>
 </html>
