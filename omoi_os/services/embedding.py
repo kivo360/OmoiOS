@@ -20,10 +20,15 @@ class EmbeddingService:
 
     Supports:
     - OpenAI text-embedding-3-small (1536 dimensions, production)
-    - FastEmbed local models (e.g., all-MiniLM-L6-v2, 384 dimensions, development)
+    - FastEmbed intfloat/multilingual-e5-large (1024 dimensions, development)
 
     The service automatically pads local embeddings to 1536 dimensions for
     consistency with OpenAI embeddings.
+    
+    Note: multilingual-e5-large requires prefixes for optimal performance:
+    - Use "query: " prefix for queries
+    - Use "passage: " prefix for passages/documents
+    - For symmetric tasks, use "query: " prefix for all inputs
     """
 
     def __init__(
@@ -51,7 +56,7 @@ class EmbeddingService:
             self.dimensions = 1536
             self._init_openai()
         else:
-            self.model_name = model_name or "all-MiniLM-L6-v2"
+            self.model_name = model_name or "intfloat/multilingual-e5-large"
             self.dimensions = 1536  # Padded to match OpenAI
             self._init_local()
 
@@ -74,18 +79,19 @@ class EmbeddingService:
         try:
             from fastembed import TextEmbedding
 
-            # FastEmbed uses different model names, map if needed
-            fastembed_model = self.model_name.replace("sentence-transformers/", "")
-            self.local_model = TextEmbedding(model_name=fastembed_model)
+            # FastEmbed uses model names directly (no sentence-transformers/ prefix needed)
+            self.local_model = TextEmbedding(model_name=self.model_name)
         except ImportError:
             raise ImportError("fastembed not installed. Run: uv add fastembed")
 
-    def generate_embedding(self, text: str) -> List[float]:
+    def generate_embedding(self, text: str, is_query: bool = False) -> List[float]:
         """
         Generate embedding vector for text.
 
         Args:
             text: Input text to embed.
+            is_query: If True, adds "query: " prefix for multilingual-e5-large.
+                     If False, adds "passage: " prefix (default for documents).
 
         Returns:
             1536-dimensional embedding vector.
@@ -96,7 +102,7 @@ class EmbeddingService:
         if self.provider == EmbeddingProvider.OPENAI:
             return self._generate_openai_embedding(text)
         else:
-            return self._generate_local_embedding(text)
+            return self._generate_local_embedding(text, is_query=is_query)
 
     def _generate_openai_embedding(self, text: str) -> List[float]:
         """Generate embedding using OpenAI API."""
@@ -106,10 +112,17 @@ class EmbeddingService:
         )
         return response.data[0].embedding
 
-    def _generate_local_embedding(self, text: str) -> List[float]:
+    def _generate_local_embedding(self, text: str, is_query: bool = False) -> List[float]:
         """Generate embedding using local FastEmbed model."""
+        # multilingual-e5-large requires prefixes for optimal performance
+        if "multilingual-e5" in self.model_name:
+            prefix = "query: " if is_query else "passage: "
+            prefixed_text = f"{prefix}{text}"
+        else:
+            prefixed_text = text
+        
         # FastEmbed returns an iterator, get first (and only) result
-        embedding_iter = self.local_model.embed([text])
+        embedding_iter = self.local_model.embed([prefixed_text])
         base_embedding = next(embedding_iter)
 
         # Pad to 1536 dimensions for consistency with OpenAI
@@ -118,12 +131,14 @@ class EmbeddingService:
 
         return padded.tolist()
 
-    def batch_generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def batch_generate_embeddings(self, texts: List[str], is_query: bool = False) -> List[List[float]]:
         """
         Generate embeddings for multiple texts in batch.
 
         Args:
             texts: List of input texts.
+            is_query: If True, adds "query: " prefix for multilingual-e5-large.
+                     If False, adds "passage: " prefix (default for documents).
 
         Returns:
             List of 1536-dimensional embedding vectors.
@@ -134,7 +149,7 @@ class EmbeddingService:
         if self.provider == EmbeddingProvider.OPENAI:
             return self._batch_generate_openai_embeddings(texts)
         else:
-            return self._batch_generate_local_embeddings(texts)
+            return self._batch_generate_local_embeddings(texts, is_query=is_query)
 
     def _batch_generate_openai_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Batch generate embeddings using OpenAI API."""
@@ -144,10 +159,17 @@ class EmbeddingService:
         )
         return [item.embedding for item in response.data]
 
-    def _batch_generate_local_embeddings(self, texts: List[str]) -> List[List[float]]:
+    def _batch_generate_local_embeddings(self, texts: List[str], is_query: bool = False) -> List[List[float]]:
         """Batch generate embeddings using local FastEmbed model."""
+        # multilingual-e5-large requires prefixes for optimal performance
+        if "multilingual-e5" in self.model_name:
+            prefix = "query: " if is_query else "passage: "
+            prefixed_texts = [f"{prefix}{text}" for text in texts]
+        else:
+            prefixed_texts = texts
+        
         # FastEmbed returns an iterator for batch embeddings
-        embedding_iter = self.local_model.embed(texts)
+        embedding_iter = self.local_model.embed(prefixed_texts)
         base_embeddings = list(embedding_iter)
 
         # Pad all embeddings to 1536 dimensions

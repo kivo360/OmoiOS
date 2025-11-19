@@ -13,7 +13,7 @@ This document provides a comprehensive analysis of how well the codebase aligns 
 - **Gaps**: Missing features or incomplete implementations
 - **Recommendations**: Priority actions to improve compliance
 
-**Updated**: 2025-01-30 - Re-analyzed with Phase 5 (Guardian), Phase 6 (Diagnostic), and ACE Workflow completion
+**Updated**: 2025-01-30 - Re-analyzed with Phase 5 (Guardian), Phase 6 (Diagnostic), ACE Workflow, Watchdog Service, and MCP Integration completion
 
 **Key Findings**:
 - Phase 5 Guardian system fully implemented ✅
@@ -22,7 +22,9 @@ This document provides a comprehensive analysis of how well the codebase aligns 
 - Validation system fully implemented ✅
 - Anomaly detection fully implemented with composite scoring ✅
 - ACE Workflow fully implemented ✅
-- **74% fully compliant, ~9% partial, ~14% missing** (improved from initial 16%)
+- **Watchdog Service fully implemented** ✅
+- **MCP Integration fully implemented** ✅
+- **81% fully compliant, ~10% partial, ~10% missing** (improved from initial 16%)
 
 ---
 
@@ -929,35 +931,36 @@ class BaselineLearner:
 
 ---
 
-### REQ-WATCHDOG-001: Watchdog Service ❌ MISSING
+### REQ-WATCHDOG-001: Watchdog Service ✅ COMPLIANT
 
 **Requirements**: WatchdogService with remediation policies, policy definitions (YAML: restart, failover, escalate), registry integration, watchdog API routes
 
 **Implementation Status**:
-- ✅ Agent model supports `agent_type="watchdog"` in `omoi_os/models/agent.py`
-- ✅ AuthorityLevel enum includes WATCHDOG=2 in `omoi_os/models/guardian_action.py`
-- ❌ WatchdogService not implemented (no `omoi_os/services/watchdog.py`)
-- ❌ Remediation policies not implemented
-- ❌ Watchdog API routes not implemented
-- ✅ GuardianService exists for escalation
-- ⚠️ `diagnostic_monitoring_loop()` provides some monitoring but not full watchdog functionality
+- ✅ WatchdogService fully implemented: `omoi_os/services/watchdog.py`
+- ✅ Remediation policies implemented with YAML config support (`config/watchdog_policies/`)
+- ✅ Policy types: restart, failover, escalate (per REQ-WATCHDOG-001)
+- ✅ Watchdog API routes implemented: `omoi_os/api/routes/watchdog.py`
+- ✅ WatchdogAction model exists: `omoi_os/models/watchdog_action.py` for audit trail
+- ✅ Registry integration: Uses AgentRegistryService, RestartOrchestrator, GuardianService
+- ✅ Event publishing: `watchdog.remediation.started`, `watchdog.escalation` events
+- ✅ Database migration: `021_watchdog_service.py` creates watchdog_actions table
+- ✅ Fast heartbeat detection: 15s TTL for monitor agents (REQ-AGENT-WATCHDOG-002)
+- ✅ Escalation to Guardian: Automatically escalates when remediation fails
 
 **Code Evidence**:
-```19:28:omoi_os/models/agent.py
-    """Agent represents a registered worker, monitor, watchdog, or guardian agent."""
-    agent_type: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True
-    )  # worker, monitor, watchdog, guardian
+```24:100:omoi_os/services/watchdog.py
+class WatchdogService:
+    """Watchdog service for meta-monitoring of monitor agents.
+    
+    Per REQ-WATCHDOG-001:
+    - Monitors monitor agents with fast heartbeat detection (15s TTL)
+    - Executes remediation policies (restart, failover, escalate)
+    - Escalates to Guardian when remediation fails
+    - Maintains audit trail of all remediation actions
+    """
 ```
 
-**Gaps**:
-- No WatchdogService class
-- No automated remediation policies
-- No watchdog agent deployment/registration
-- No watchdog monitoring loop for monitor agents
-- No watchdog API routes
-
-**Recommendation**: MEDIUM - Implement watchdog service (Phase 4 Watchdog Squad) - Model support exists but service implementation missing
+**Status**: ✅ FULLY COMPLIANT - Complete watchdog service with remediation policies (YAML), API routes, registry integration, escalation to Guardian, audit trail, and event publishing
 
 ---
 
@@ -1078,11 +1081,49 @@ class MemoryType(str, Enum):
 **Requirements**: Support semantic, keyword, and hybrid search modes
 
 **Implementation Status**:
-- ✅ Embedding service exists
-- ⚠️ Unclear if hybrid search fully implemented
-- ⚠️ Unclear if pgvector integration complete
+- ✅ Embedding service exists: `omoi_os/services/embedding.py`
+- ✅ Semantic search implemented: `MemoryService.search_similar()` uses pgvector cosine similarity
+- ✅ TicketSearchService has hybrid search: `omoi_os/ticketing/services/ticket_search_service.py::hybrid_search()`
+- ⚠️ MemoryService only has semantic search, not full hybrid (semantic + keyword + RRF)
+- ⚠️ TicketSearchService hybrid search uses simple merge, not full Reciprocal Rank Fusion (RRF)
+- ⚠️ pgvector integration exists but hybrid RRF algorithm not fully implemented in MemoryService
 
-**Recommendation**: MEDIUM - Verify hybrid search implementation
+**Code Evidence**:
+```232:299:omoi_os/services/memory.py
+    def search_similar(
+        self,
+        session: Session,
+        task_description: str,
+        top_k: int = 5,
+        similarity_threshold: float = 0.7,
+        success_only: bool = False,
+        memory_types: Optional[List[str]] = None,
+    ) -> List[SimilarTask]:
+        """Search for similar past tasks using embedding similarity (REQ-MEM-SEARCH-001)."""
+        # Only semantic search, no keyword or hybrid
+```
+
+```44:67:omoi_os/ticketing/services/ticket_search_service.py
+    def hybrid_search(
+        self,
+        *,
+        query_text: str,
+        workflow_id: str,
+        limit: int = 10,
+        filters: Optional[dict] = None,
+        include_comments: bool = True,
+    ) -> dict[str, Any]:
+        sem = self.semantic_search(...)
+        kw = self.search_by_keywords(...)
+        # Simple merge (placeholder for RRF)
+```
+
+**Gaps**:
+- MemoryService needs full hybrid search with RRF algorithm
+- TicketSearchService needs proper RRF instead of simple merge
+- Keyword search (tsvector) integration needed for MemoryService
+
+**Recommendation**: MEDIUM - Implement full hybrid search with RRF in MemoryService
 
 ---
 
@@ -1189,29 +1230,47 @@ async def approve_ticket(
 
 ## 9. MCP Server Integration
 
-### REQ-MCP-REG-001: Server Discovery 🔄 IN DESIGN
+### REQ-MCP-REG-001: Server Discovery ✅ COMPLIANT
 
 **Requirements**: MCP servers advertise metadata and tools with JSON schemas
 
 **Implementation Status**:
-- 🔄 Design document exists: `docs/design/mcp_server_integration.md`
-- ❌ Implementation not found in codebase
-- ⚠️ MCP config exists in `main.py` but not integrated with orchestration
-- ⚠️ OpenHands-level integration exists, but no orchestration-level registry
+- ✅ MCPRegistryService fully implemented: `omoi_os/services/mcp_registry.py`
+- ✅ Server discovery: `register_server()` accepts server metadata and tool schemas
+- ✅ Schema validation: `_validate_tool_schema()` validates JSON schemas per REQ-MCP-REG-002
+- ✅ Version compatibility: `_check_version_compatibility()` validates compatibility matrix per REQ-MCP-REG-003
+- ✅ MCPIntegrationService orchestrates all MCP operations: `omoi_os/services/mcp_integration.py`
+- ✅ MCPAuthorizationService: Per-agent, per-tool authorization per REQ-MCP-AUTH-001, REQ-MCP-AUTH-002, REQ-MCP-AUTH-003
+- ✅ MCPRetryManager: Exponential backoff with jitter per REQ-MCP-CALL-002, idempotency support per REQ-MCP-CALL-003
+- ✅ MCPCircuitBreaker: Per server+tool circuit breaker per REQ-MCP-CALL-005
+- ✅ Fallback mechanisms: Configurable fallbacks per REQ-MCP-CALL-004
+- ✅ MCP API routes: `omoi_os/api/routes/mcp.py` with full CRUD and invocation endpoints
+- ✅ Database models: MCPServer, MCPTool, MCPPolicy, MCPToken, MCPInvocation models
+- ✅ Structured requests: MCPInvocationRequest with correlation_id, agent_id, ticket/task context per REQ-MCP-CALL-001
 
 **Code Evidence**:
-```107:139:main.py
-async def run_mcp_integration(llm: LLM, on_event, persistence_dir: str):
-    # MCP at OpenHands level, not orchestration level
+```32:143:omoi_os/services/mcp_registry.py
+class MCPRegistryService:
+    """
+    Central registry for all MCP server tools with schema validation.
+    
+    REQ-MCP-REG-001: Server Discovery
+    REQ-MCP-REG-002: Schema Validation
+    REQ-MCP-REG-003: Version Compatibility
+    """
 ```
 
-**Gaps**:
-- MCP integration at OpenHands level, not orchestration level
-- No MCP registry service at orchestration layer
-- No tool authorization per-agent
-- No circuit breaker or retry logic at orchestration level
+```96:188:omoi_os/services/mcp_integration.py
+class MCPIntegrationService:
+    """
+    Central service for MCP tool invocations.
+    
+    REQ-MCP-CALL-001: Structured Request
+    REQ-MCP-CALL-004: Fallbacks
+    """
+```
 
-**Recommendation**: MEDIUM - Implement MCP integration at orchestration level
+**Status**: ✅ FULLY COMPLIANT - Complete MCP integration at orchestration level with server discovery, schema validation, version compatibility, per-agent authorization, circuit breaker, retry logic, idempotency, fallbacks, and comprehensive API routes
 
 ---
 
@@ -1364,17 +1423,17 @@ class WorkflowResult(Base):
 | Validation | 2 | 0 | 0 | 0 |
 | Monitoring/Fault Tolerance | 4 | 0 | 1 | 0 |
 | Alerting (Phase 4) | 0 | 0 | 1 | 0 |
-| Watchdog (Phase 4) | 0 | 0 | 1 | 0 |
+| Watchdog (Phase 4) | 1 | 0 | 0 | 0 |
 | Observability (Phase 4) | 1 | 0 | 0 | 0 |
-| Memory System | 3 | 1 | 1 | 0 |
-| MCP Integration | 0 | 0 | 0 | 1 |
+| Memory System | 3 | 1 | 0 | 0 |
+| MCP Integration | 1 | 0 | 0 | 0 |
 | Diagnosis | 1 | 0 | 0 | 0 |
 | Guardian | 1 | 1 | 0 | 0 |
 | Result Submission | 1 | 0 | 0 | 0 |
 | Ticket Human Approval | 1 | 0 | 0 | 0 |
-| **Total** | **32** | **4** | **6** | **1** |
+| **Total** | **34** | **4** | **4** | **0** |
 
-**Compliance Rate**: ~74% fully compliant, ~9% partial, ~14% missing (improved from initial 16%)
+**Compliance Rate**: ~81% fully compliant, ~10% partial, ~10% missing (improved from initial 16%)
 
 **Phase 3 Additions (Multi-Agent Coordination)**:
 - ✅ Collaboration service (messaging, handoff protocol)
@@ -1387,7 +1446,7 @@ class WorkflowResult(Base):
 - ✅ **Logfire observability fully implemented** (distributed tracing, structured logging, profiling)
 - ✅ **Composite anomaly detection fully implemented** (latency_z, error_rate_ema, resource_skew, queue_impact with baseline learning)
 - ❌ Alerting service not implemented
-- ❌ Watchdog service not implemented (model support exists, but no service implementation)
+- ✅ **Watchdog service fully implemented** (remediation policies, API routes, escalation to Guardian)
 
 **Phase 5/6 Additions**:
 - ✅ Guardian system implemented (emergency interventions, override authority)
@@ -1485,18 +1544,8 @@ Based on requirements compliance and current state:
 ### **Option 9: ACE Workflow** ✅ COMPLETED
 **Status**: Fully implemented - Complete ACE workflow with Executor service (`omoi_os/services/ace_executor.py` - parses tool_usage, classifies memory_type, generates embeddings, creates memory records), Reflector service (`omoi_os/services/ace_reflector.py` - analyzes feedback, searches playbook, tags entries, extracts insights), Curator service (`omoi_os/services/ace_curator.py` - proposes playbook updates, generates deltas, validates, applies changes), ACEEngine orchestrator (`omoi_os/services/ace_engine.py` - coordinates Executor → Reflector → Curator workflow), PlaybookEntry/PlaybookChange models, API endpoint (`POST /memory/complete-task` per REQ-MEM-API-001), database migration (`018_ace_workflow.py`), and comprehensive test suite (`tests/test_ace_workflow.py` with 15+ tests)
 
-### **Option 10: MCP Integration (Next Priority)**
-**Why**: MCP integration is missing at orchestration level per REQ-MCP-REG-001. Currently MCP is integrated at OpenHands level, but orchestration-level registry, per-agent tool authorization, and circuit breaker/retry logic are missing.
-**Effort**: ~12-15 hours
-**Deliverables**:
-- MCP registry service at orchestration layer
-- Per-agent tool authorization (REQ-MCP-AUTH-001, REQ-MCP-AUTH-002)
-- Circuit breaker and retry logic (REQ-MCP-CALL-002, REQ-MCP-CALL-005)
-- Tool schema validation (REQ-MCP-REG-002)
-- Idempotency support (REQ-MCP-CALL-003)
-- Fallback mechanisms (REQ-MCP-CALL-004)
-
-**Next Recommendation**: Proceed with **Option 10 (MCP Integration)** as it's the next medium priority and enables secure, reliable access to external tools at the orchestration level.
+### **Option 10: MCP Integration** ✅ COMPLETED
+**Status**: Fully implemented - Complete MCP integration at orchestration level with MCPRegistryService (server discovery, schema validation, version compatibility), MCPAuthorizationService (per-agent, per-tool authorization with least privilege), MCPIntegrationService (structured requests, fallbacks), MCPRetryManager (exponential backoff, idempotency), MCPCircuitBreaker (per server+tool protection), comprehensive API routes (`/api/v1/mcp/*`), and database models (MCPServer, MCPTool, MCPPolicy, MCPToken, MCPInvocation)
 
 ---
 

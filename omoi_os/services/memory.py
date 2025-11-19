@@ -252,8 +252,8 @@ class MemoryService:
         Returns:
             List of similar tasks ordered by similarity.
         """
-        # Generate embedding for query
-        query_embedding = self.embedding_service.generate_embedding(task_description)
+        # Generate embedding for query (use is_query=True for multilingual-e5-large)
+        query_embedding = self.embedding_service.generate_embedding(task_description, is_query=True)
 
         # Query memories with embeddings
         query = select(TaskMemory).where(TaskMemory.context_embedding.isnot(None))
