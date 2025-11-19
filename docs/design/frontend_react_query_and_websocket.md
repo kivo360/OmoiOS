@@ -492,12 +492,161 @@ export function useAgentStats(id: string) {
   })
 }
 
-// Spawn agent
+// Agent Lifecycle Commands
+
+// Register agent
+export function useRegisterAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (request: {
+      agent_type: string
+      phase_id?: string
+      capabilities: string[]
+      capacity?: number
+      status?: string
+      tags?: string[]
+    }) => api.registerAgent(request),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      queryClient.setQueryData(agentKeys.detail(data.agent_id), data)
+    },
+  })
+}
+
+// Update agent
+export function useUpdateAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ 
+      agentId, 
+      updates 
+    }: { 
+      agentId: string
+      updates: {
+        capabilities?: string[]
+        capacity?: number
+        status?: string
+        tags?: string[]
+        health_status?: string
+      }
+    }) => api.updateAgent(agentId, updates),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+    },
+  })
+}
+
+// Toggle agent availability
+export function useToggleAgentAvailability() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ agentId, available }: { agentId: string; available: boolean }) =>
+      api.toggleAgentAvailability(agentId, available),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+    },
+  })
+}
+
+// Emit agent heartbeat (for manual heartbeat sending from frontend)
+export function useAgentHeartbeat() {
+  const queryClient = useQueryClient()
+  const { updateAgentHealth } = useAgentStore()
+  
+  return useMutation({
+    mutationFn: ({ 
+      agentId, 
+      heartbeat 
+    }: { 
+      agentId: string
+      heartbeat: {
+        sequence_number: number
+        health_metrics?: Record<string, any>
+        checksum?: string
+      }
+    }) => api.emitHeartbeat(agentId, heartbeat),
+    onSuccess: (ack, variables) => {
+      // Update health in store
+      updateAgentHealth(variables.agentId, {
+        lastHeartbeat: new Date().toISOString(),
+        isStale: false,
+      })
+      // Invalidate health query
+      queryClient.invalidateQueries({ queryKey: agentKeys.health(variables.agentId) })
+    },
+  })
+}
+
+// Search agents
+export function useSearchAgents() {
+  return useQuery({
+    queryKey: agentKeys.lists(),
+    queryFn: (options?: {
+      capabilities?: string[]
+      phase_id?: string
+      agent_type?: string
+      limit?: number
+    }) => api.searchAgents(options),
+  })
+}
+
+// Get best fit agent
+export function useBestFitAgent() {
+  return useQuery({
+    queryKey: ['agents', 'best-fit'],
+    queryFn: (options?: {
+      capabilities?: string[]
+      phase_id?: string
+      agent_type?: string
+    }) => api.getBestFitAgent(options),
+    enabled: false, // Only fetch when explicitly called
+  })
+}
+
+// Get stale agents
+export function useStaleAgents(timeoutSeconds?: number) {
+  return useQuery({
+    queryKey: ['agents', 'stale', timeoutSeconds],
+    queryFn: () => api.getStaleAgents(timeoutSeconds),
+    refetchInterval: 30000, // Refetch every 30s
+  })
+}
+
+// Cleanup stale agents
+export function useCleanupStaleAgents() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ 
+      timeoutSeconds, 
+      markAs 
+    }: { 
+      timeoutSeconds?: number
+      markAs?: string 
+    }) => api.cleanupStaleAgents(timeoutSeconds, markAs),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ['agents', 'stale'] })
+    },
+  })
+}
+
+// Spawn agent (high-level wrapper that may call register + additional setup)
 export function useSpawnAgent() {
   const queryClient = useQueryClient()
   
   return useMutation({
-    mutationFn: api.spawnAgent,
+    mutationFn: (request: {
+      project_id?: string
+      agent_type: string
+      phase_id?: string
+      allow_discoveries?: boolean
+    }) => api.spawnAgent(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
     },
@@ -514,6 +663,79 @@ export function useCancelAgentTask() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
       queryClient.invalidateQueries({ queryKey: agentKeys.tasks(variables.agentId) })
+    },
+  })
+}
+
+// Pause agent (stops accepting new tasks, preserves state)
+export function usePauseAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ agentId, finishCurrentTask = false }: { agentId: string; finishCurrentTask?: boolean }) => {
+      // Get current agent state
+      const currentAgent = await api.getAgent(agentId)
+      
+      // Set availability to false (agent won't receive new tasks)
+      const availabilityResult = await api.toggleAgentAvailability(agentId, false)
+      
+      // If agent is RUNNING and we want to pause immediately (don't finish current task),
+      // change status to IDLE to stop current work
+      if (!finishCurrentTask && currentAgent.status === 'RUNNING') {
+        await api.updateAgent(agentId, { status: 'IDLE' })
+      }
+      
+      return {
+        ...availabilityResult,
+        paused: true,
+        paused_at: new Date().toISOString(),
+        previous_status: currentAgent.status,
+      }
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      // Update cache with pause state
+      queryClient.setQueryData(agentKeys.detail(variables.agentId), (old: any) => ({
+        ...old,
+        ...data,
+      }))
+    },
+  })
+}
+
+// Resume agent (resumes accepting tasks and work)
+export function useResumeAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ agentId }: { agentId: string }) => {
+      // Get current agent state to restore previous status if needed
+      const currentAgent = await api.getAgent(agentId)
+      
+      // Restore availability
+      const availabilityResult = await api.toggleAgentAvailability(agentId, true)
+      
+      // Restore status: if agent was RUNNING before pause, keep it IDLE (will transition to RUNNING when task assigned)
+      // Otherwise restore to IDLE (ready for tasks)
+      const targetStatus = currentAgent.previous_status === 'RUNNING' ? 'IDLE' : 'IDLE'
+      await api.updateAgent(agentId, { status: targetStatus })
+      
+      return {
+        ...availabilityResult,
+        paused: false,
+        paused_at: null,
+        resumed_at: new Date().toISOString(),
+      }
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      // Clear pause state
+      queryClient.setQueryData(agentKeys.detail(variables.agentId), (old: any) => ({
+        ...old,
+        ...data,
+      }))
     },
   })
 }

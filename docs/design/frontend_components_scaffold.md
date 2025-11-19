@@ -3480,6 +3480,101 @@ export function AgentSpawner({ projectId }: { projectId?: string }) {
 }
 ```
 
+### `src/components/agents/AgentPauseResume.tsx`
+
+Pause/Resume button component for agent lifecycle control.
+
+```tsx
+"use client"
+
+import { Button } from "@/components/ui/button"
+import { Pause, Play, Loader2 } from "lucide-react"
+import { usePauseAgent, useResumeAgent } from "@/hooks/useAgents"
+import { useToast } from "@/hooks/use-toast"
+
+interface AgentPauseResumeProps {
+  agentId: string
+  isPaused?: boolean
+  className?: string
+}
+
+export function AgentPauseResume({ agentId, isPaused = false, className }: AgentPauseResumeProps) {
+  const { toast } = useToast()
+  const pauseAgent = usePauseAgent()
+  const resumeAgent = useResumeAgent()
+
+  const handlePause = async () => {
+    try {
+      await pauseAgent.mutateAsync({ agentId, finishCurrentTask: false })
+      toast({
+        title: "Agent Paused",
+        description: "Agent has been paused and will not accept new tasks.",
+      })
+    } catch (error) {
+      toast({
+        title: "Failed to Pause Agent",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleResume = async () => {
+    try {
+      await resumeAgent.mutateAsync({ agentId })
+      toast({
+        title: "Agent Resumed",
+        description: "Agent has been resumed and is ready to accept tasks.",
+      })
+    } catch (error) {
+      toast({
+        title: "Failed to Resume Agent",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const isLoading = pauseAgent.isPending || resumeAgent.isPending
+
+  if (isPaused) {
+    return (
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleResume}
+        disabled={isLoading}
+        className={className}
+      >
+        {isLoading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Play className="mr-2 h-4 w-4" />
+        )}
+        Resume
+      </Button>
+    )
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={handlePause}
+      disabled={isLoading}
+      className={className}
+    >
+      {isLoading ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <Pause className="mr-2 h-4 w-4" />
+      )}
+      Pause
+    </Button>
+  )
+}
+```
+
 ### `src/components/tasks/TaskCreator.tsx`
 
 Task creation dialog.
