@@ -274,7 +274,7 @@ class DiagnosticService:
 
         # Run analysis
         result = await agent.run(prompt)
-        return result.data
+        return result.output
 
     def build_diagnostic_context(
         self,

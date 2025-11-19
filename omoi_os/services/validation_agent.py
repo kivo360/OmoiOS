@@ -75,7 +75,7 @@ class ValidationAgent:
 
         # Run validation
         result = await agent.run(prompt)
-        return result.data
+        return result.output
 
     def validate_phase_completion_sync(
         self,

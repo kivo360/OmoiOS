@@ -147,7 +147,7 @@ class QualityCheckerService:
         try:
             # Run extraction
             result = await agent.run(prompt)
-            extraction = result.data
+            extraction = result.output
 
             # Record metrics from structured extraction
             metrics = []

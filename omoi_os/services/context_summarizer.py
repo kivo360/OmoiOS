@@ -47,7 +47,7 @@ class ContextSummarizer:
 
         # Run extraction
         result = await agent.run(prompt)
-        return result.data
+        return result.output
 
     def extract_key_points_sync(self, context: dict[str, Any]) -> list[str]:
         """

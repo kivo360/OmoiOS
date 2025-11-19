@@ -607,7 +607,7 @@ class TicketWorkflowOrchestrator:
 
         # Run analysis
         result = await agent.run(prompt)
-        return result.data
+        return result.output
 
     def _classify_blocker_sync(self, session, ticket: Ticket) -> str:
         """

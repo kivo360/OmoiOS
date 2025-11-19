@@ -101,7 +101,7 @@ class QualityPredictorService:
 
         # Run prediction
         result = await agent.run(prompt)
-        prediction = result.data
+        prediction = result.output
 
         # Ensure counts are set
         prediction.similar_task_count = len(similar_tasks)

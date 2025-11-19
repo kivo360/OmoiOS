@@ -16,6 +16,7 @@ class LLMSettings(BaseSettings):
         env_prefix="LLM_",
         env_file=(".env",),
         env_file_encoding="utf-8",
+        extra="ignore",  # Ignore extra fields like FIREWORKS_API_KEY
     )
 
     model: str = "openhands/claude-sonnet-4-5-20250929"

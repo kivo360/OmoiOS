@@ -98,8 +98,15 @@ class MemoryService:
             prompt += f"\nTask description: {task_description}"
 
         # Run classification
-        result = await agent.run(prompt)
-        classification = result.data
+        try:
+            result = await agent.run(prompt)
+            classification = result.output
+        except Exception as e:
+            # If structured output fails, fall back to sync method
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Structured output failed for memory classification: {e}")
+            return self.classify_memory_type_sync(execution_summary, task_description)
 
         # Validate memory type
         memory_type = classification.memory_type
@@ -592,7 +599,7 @@ class MemoryService:
 
         try:
             result = await agent.run(prompt)
-            pattern = result.data
+            pattern = result.output
             # Combine success and failure indicators
             all_indicators = pattern.success_indicators + pattern.failure_indicators
             return all_indicators[:10]  # Top 10
