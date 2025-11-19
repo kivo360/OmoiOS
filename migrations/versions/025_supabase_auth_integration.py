@@ -56,6 +56,7 @@ def upgrade() -> None:
         BEGIN
             INSERT INTO public.users (
                 id, email, email_confirmed_at, phone, phone_confirmed_at,
+                name, avatar_url, role,
                 created_at, updated_at, last_sign_in_at, user_metadata
             )
             VALUES (
@@ -64,6 +65,9 @@ def upgrade() -> None:
                 NEW.email_confirmed_at,
                 NEW.phone,
                 NEW.phone_confirmed_at,
+                COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'full_name'),
+                NEW.raw_user_meta_data->>'avatar_url',
+                COALESCE(NEW.raw_user_meta_data->>'role', 'user'),
                 NEW.created_at,
                 NEW.updated_at,
                 NEW.last_sign_in_at,
@@ -75,6 +79,9 @@ def upgrade() -> None:
                 email_confirmed_at = EXCLUDED.email_confirmed_at,
                 phone = EXCLUDED.phone,
                 phone_confirmed_at = EXCLUDED.phone_confirmed_at,
+                name = EXCLUDED.name,
+                avatar_url = EXCLUDED.avatar_url,
+                role = EXCLUDED.role,
                 updated_at = EXCLUDED.updated_at,
                 last_sign_in_at = EXCLUDED.last_sign_in_at,
                 user_metadata = EXCLUDED.user_metadata;

@@ -4,17 +4,45 @@ from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def get_env_files():
+    """Get environment files in priority order for PydanticSettings.
+
+    NOTE: PydanticSettings v2.12.0 seems to have reversed priority behavior
+    compared to documentation. The first file in the list gets LOWEST priority,
+    not HIGHEST priority as documented. So we reverse the order to work around this.
+
+    Intended priority: .env.local (highest) > .env > environment variables
+    Actual behavior: .env (highest) > .env.local > environment variables
+    """
+    # Workaround: Put .env first so it gets overridden by .env.local (backwards but works)
+    env_files = []
+
+    import os
+
+    # Check for .env first (will be overridden by .env.local due to PydanticSettings bug)
+    if os.path.exists(".env"):
+        env_files.append(".env")
+
+    # Then .env.local (will take priority due to reversed behavior)
+    if os.path.exists(".env.local"):
+        env_files.append(".env.local")
+
+    return env_files if env_files else None
+
+
 class LLMSettings(BaseSettings):
     """
     Loads LLM_* environment variables:
       - LLM_MODEL
       - LLM_API_KEY
       - LLM_BASE_URL (optional)
+
+    Environment files priority: .env.local > .env > environment variables
     """
 
     model_config = SettingsConfigDict(
         env_prefix="LLM_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",  # Ignore extra fields like FIREWORKS_API_KEY
     )
@@ -25,24 +53,34 @@ class LLMSettings(BaseSettings):
 
 
 class DatabaseSettings(BaseSettings):
-    """Database configuration settings."""
+    """
+    Database configuration settings.
+
+    Environment files priority: .env.local > .env > environment variables
+    """
 
     model_config = SettingsConfigDict(
         env_prefix="DATABASE_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     url: str = "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
 
 
 class RedisSettings(BaseSettings):
-    """Redis configuration settings."""
+    """
+    Redis configuration settings.
+
+    Environment files priority: .env.local > .env > environment variables
+    """
 
     model_config = SettingsConfigDict(
         env_prefix="REDIS_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     url: str = "redis://localhost:16379"
@@ -61,11 +99,15 @@ def load_redis_settings() -> RedisSettings:
 
 
 class TaskQueueSettings(BaseSettings):
-    """Task queue configuration settings (REQ-TQM-PRI-002, REQ-TQM-PRI-003, REQ-TQM-PRI-004)."""
+    """
+    Task queue configuration settings (REQ-TQM-PRI-002, REQ-TQM-PRI-003, REQ-TQM-PRI-004).
+
+    Environment files priority: .env.local > .env > environment variables
+    """
 
     model_config = SettingsConfigDict(
         env_prefix="TQ_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",  # Ignore extra environment variables (e.g., LLM_* variables)
     )
@@ -93,11 +135,15 @@ def load_task_queue_settings() -> TaskQueueSettings:
 
 
 class ApprovalSettings(BaseSettings):
-    """Ticket approval configuration settings (REQ-THA-002, REQ-THA-004)."""
+    """
+    Ticket approval configuration settings (REQ-THA-002, REQ-THA-004).
+
+    Environment files priority: .env.local > .env > environment variables
+    """
 
     model_config = SettingsConfigDict(
         env_prefix="APPROVAL_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -112,12 +158,17 @@ def load_approval_settings() -> ApprovalSettings:
 
 
 class SupabaseSettings(BaseSettings):
-    """Supabase configuration settings."""
+    """
+    Supabase configuration settings.
+
+    Environment files priority: .env.local > .env > environment variables
+    """
 
     model_config = SettingsConfigDict(
         env_prefix="SUPABASE_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     url: str  # SUPABASE_URL

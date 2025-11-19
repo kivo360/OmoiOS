@@ -41,17 +41,15 @@ config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
 
-def run_migrations_offline() -> None:
-    url = config.get_main_option("sqlalchemy.url")
-    context.configure(
-        url=url,
-        target_metadata=target_metadata,
-        literal_binds=True,
-        dialect_opts={"paramstyle": "named"},
-    )
-
-    with context.begin_transaction():
-        context.run_migrations()
+# Reflect auth schema tables into metadata so Alembic can see them
+# This allows references to auth.users and auth functions in migrations
+def include_object(object, name, type_, reflected, compare_to):
+    """Include objects from both public and auth schemas."""
+    if type_ == "schema":
+        return name in ("public", "auth")
+    if hasattr(object, "schema"):
+        return object.schema in ("public", "auth")
+    return True
 
 
 def run_migrations_online() -> None:
@@ -62,10 +60,47 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        # Reflect auth schema into metadata
+        from sqlalchemy import inspect, Table
+
+        # Reflect auth.users table so it's visible to Alembic
+        inspector = inspect(connection)
+        if "auth" in inspector.get_schema_names():
+            try:
+                # Reflect auth.users table directly into target_metadata
+                Table(
+                    "users",
+                    target_metadata,
+                    autoload_with=connection,
+                    schema="auth",
+                )
+            except Exception:
+                # If reflection fails, continue without it
+                # This is expected if auth schema is not accessible
+                pass
+
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+        )
 
         with context.begin_transaction():
             context.run_migrations()
+
+
+def run_migrations_offline() -> None:
+    url = config.get_main_option("sqlalchemy.url")
+    context.configure(
+        url=url,
+        target_metadata=target_metadata,
+        literal_binds=True,
+        dialect_opts={"paramstyle": "named"},
+        include_object=include_object,
+    )
+
+    with context.begin_transaction():
+        context.run_migrations()
 
 
 if context.is_offline_mode():

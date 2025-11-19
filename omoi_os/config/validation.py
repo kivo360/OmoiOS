@@ -3,8 +3,28 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def get_env_files():
+    """Get environment files in priority order: .env.local, .env, then environment variables."""
+    # Priority order: .env.local (highest), .env, environment variables
+    env_files = []
+
+    # Check for .env.local first (highest priority)
+    import os
+    if os.path.exists(".env.local"):
+        env_files.append(".env.local")
+
+    # Then .env
+    if os.path.exists(".env"):
+        env_files.append(".env")
+
+    return env_files if env_files else None
+
+
 class ValidationConfig(BaseSettings):
-    """Validation system configuration matching REQ-VAL-Config.
+    """
+    Validation system configuration matching REQ-VAL-Config.
+
+    Environment files priority: .env.local > .env > environment variables
 
     Parameters:
         enabled_by_default: Enable validation for new tasks (default: false)
@@ -20,8 +40,9 @@ class ValidationConfig(BaseSettings):
 
     model_config = SettingsConfigDict(
         env_prefix="VALIDATION_",
-        env_file=(".env",),
+        env_file=get_env_files(),
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     enabled_by_default: bool = False

@@ -7,6 +7,7 @@ from omoi_os.models.agent_status_transition import AgentStatusTransition
 from omoi_os.models.approval_status import ApprovalStatus
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.models.memory_type import MemoryType
+from omoi_os.models.agent_log import AgentLog
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.agent_result import AgentResult
 from omoi_os.models.base import Base
@@ -50,6 +51,7 @@ from omoi_os.models.mcp_server import (
 __all__ = [
     "Agent",
     "AgentBaseline",
+    "AgentLog",
     "AgentStatus",
     "AgentStatusTransition",
     "ApprovalStatus",

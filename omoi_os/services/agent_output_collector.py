@@ -350,7 +350,7 @@ class AgentOutputCollector:
                 recent_logs = (
                     session.query(AgentLog)
                     .filter_by(agent_id=agent_id)
-                    .filter(AgentLog.created_at > utc_now - timedelta(minutes=10))
+                    .filter(AgentLog.created_at > utc_now() - timedelta(minutes=10))
                     .order_by(AgentLog.created_at.desc())
                     .limit(20)
                     .all()
