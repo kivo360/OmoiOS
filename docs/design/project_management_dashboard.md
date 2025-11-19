@@ -24,6 +24,30 @@ This document designs a real-time project management dashboard that integrates:
 - **Statistics Dashboard**: Analytics on tickets, tasks, agents, and code changes
 - **Search & Filtering**: Advanced search across tickets, commits, agents, and code changes
 - **Real-Time Updates**: WebSocket-powered live synchronization across all views
+- **Guardian Intervention System**: Real-time agent steering and trajectory monitoring with live intervention delivery
+
+### Agent-Driven Workflow Architecture
+
+**Core Principle**: Agents are autonomous actors that create, link, and manage their own work items in real-time.
+
+**Agent Capabilities**:
+- **Create Tickets**: Agents use MCP tools (`create_ticket`) to create new tickets during execution when they discover new requirements or work items
+- **Create Tasks**: Agents can spawn new tasks via `DiscoveryService` when they find bugs, optimizations, or missing requirements
+- **Link Work Items**: Agents automatically identify and link related tasks/tickets through dependency detection and discovery tracking
+- **Real-Time State Updates**: All agent actions (ticket creation, task spawning, linking) trigger immediate WebSocket events that update the dashboard in real-time
+
+**Workflow Example**:
+1. Agent working on Task A discovers a bug → Creates TaskDiscovery record → Spawns Task B to fix bug
+2. Agent working on Task B needs clarification → Creates Ticket via MCP tool → Links ticket to Task B
+3. Agent identifies missing dependency → Creates Task C → Links Task C as dependency of Task B
+4. Dashboard receives WebSocket events → Updates Kanban board, dependency graph, and statistics in real-time
+
+**Guardian Intervention Delivery**:
+- **Real-Time Monitoring**: Guardian analyzes agent trajectories every 60 seconds, calculating alignment scores and detecting drift
+- **Live Intervention**: When Guardian detects agents need steering, it sends intervention messages directly to active OpenHands conversations
+- **Non-Blocking Delivery**: Interventions are delivered via `Conversation.send_message()` even while agents are running, allowing real-time course correction
+- **Conversation Persistence**: All conversations are persisted with `conversation_id` and `persistence_dir`, enabling Guardian to resume and intervene in active conversations
+- **Dashboard Integration**: Intervention events are broadcast via WebSocket, allowing dashboard to show real-time Guardian actions and agent responses
 
 ---
 
@@ -92,13 +116,14 @@ This document designs a real-time project management dashboard that integrates:
 - ✅ `WS /api/v1/ws/events` - Real-time event streaming with filters
 
 **Additional APIs**:
-- ✅ **Guardian API** (`omoi_os/api/routes/guardian.py`) - Emergency intervention
+- ✅ **Guardian API** (`omoi_os/api/routes/guardian.py`) - Emergency intervention and real-time steering
 - ✅ **Alerts API** (`omoi_os/api/routes/alerts.py`) - Alert management
 - ✅ **Memory API** (`omoi_os/api/routes/memory.py`) - Pattern storage & search
 - ✅ **Quality API** (`omoi_os/api/routes/quality.py`) - Quality metrics
 - ✅ **Costs API** (`omoi_os/api/routes/costs.py`) - Cost tracking
 - ✅ **Validation API** (`omoi_os/api/routes/validation.py`) - Validation reviews
 - ✅ **Collaboration API** (`omoi_os/api/routes/collaboration.py`) - Agent collaboration threads
+- ✅ **Discovery API** (`omoi_os/services/discovery.py`) - Task discovery and workflow branching
 
 ### ✅ Already Implemented Models
 
@@ -160,6 +185,131 @@ This document designs a real-time project management dashboard that integrates:
 - ❌ CommitDiffService - Commit diff fetching/parsing
 - ❌ StatisticsService - Analytics computation
 - ❌ SearchService - Global search across entities
+
+**Recently Implemented Services**:
+- ✅ **ConversationInterventionService** (`omoi_os/services/conversation_intervention.py`) - Real-time Guardian intervention delivery to active OpenHands conversations
+- ✅ **DiscoveryService** (`omoi_os/services/discovery.py`) - Task discovery tracking and workflow branching
+- ✅ **IntelligentGuardian** (`omoi_os/services/intelligent_guardian.py`) - Enhanced with conversation intervention delivery via `ConversationInterventionService`
+
+---
+
+## Agent-Driven Workflow Architecture
+
+### Core Philosophy
+
+**Agents as Autonomous Actors**: Unlike traditional project management systems where humans create all work items, this system enables agents to autonomously create, link, and manage their own work. The dashboard provides real-time visibility into this dynamic, adaptive workflow.
+
+### Agent Capabilities
+
+**1. Ticket Creation via MCP Tools**:
+- Agents use `create_ticket` MCP tool (`omoi_os/ticketing/mcp_tools.py`) to create tickets during execution
+- Use cases: Clarification needed, new requirement discovered, blocking issue found
+- Real-time update: `TICKET_CREATED` WebSocket event → Dashboard updates Kanban board immediately
+
+**2. Task Spawning via DiscoveryService**:
+- Agents call `DiscoveryService.record_discovery_and_branch()` when they discover:
+  - Bugs that need fixing
+  - Optimization opportunities
+  - Missing requirements
+  - Dependency issues
+  - Security concerns
+- Automatically creates `TaskDiscovery` record and spawns linked tasks
+- Real-time update: `TASK_CREATED` + `DISCOVERY_MADE` WebSocket events → Dashboard updates dependency graph
+
+**3. Task Linking & Dependency Management**:
+- **Automatic Detection**: Agents analyze task descriptions and identify dependencies
+- **Manual Linking**: Agents use MCP tools to explicitly link tasks via `Task.dependencies` JSONB field
+- **Discovery-Based Linking**: When agent spawns task from discovery, automatic parent-child link created via `parent_task_id`
+- **Real-time update**: `TASK_DEPENDENCY_UPDATED` WebSocket event → Dashboard updates graph edges
+
+**4. Real-Time State Synchronization**:
+- All agent actions trigger immediate WebSocket events
+- Dashboard receives events and updates UI in real-time:
+  - Kanban board shows new tickets/tasks immediately
+  - Dependency graph shows new nodes and edges
+  - Statistics update with new counts
+  - Agent detail views show latest discoveries and interventions
+
+**5. Conversation Control & Multi-Agent Workflows**:
+- **Pause/Resume**: Conversations support `conversation.pause()` and `conversation.run()` for controlled execution
+  - Useful for: Manual intervention, dependency waiting, resource management
+  - Example: Pause agent when dependency task completes, then resume with updated context
+- **Message While Running**: Agents can receive new messages via `conversation.send_message()` even while `conversation.run()` is executing (OpenHands event-driven architecture)
+  - Guardian interventions leverage this capability
+  - Messages are queued and processed asynchronously by agent's `step()` method
+  - No interruption to current work - agent processes new messages when ready
+- **Multi-Agent Patterns**: Planning agent + execution agent workflows
+  - Planning agent: Analyzes task, creates detailed implementation plan (read-only tools via `get_planning_agent()`)
+  - Execution agent: Implements plan with full editing capabilities (via `get_default_agent()`)
+  - Pattern: Planning conversation creates plan → Execution conversation implements plan
+- **Remote Conversations**: Support for `RemoteConversation` via `Workspace(host=...)` for client-server architecture
+  - Local agent server: `Workspace(host="http://localhost:8001")` → automatically becomes `RemoteConversation`
+  - Docker/API sandboxed servers: Same pattern, different workspace configuration
+  - Event callbacks work with remote conversations for real-time monitoring
+- **Conversation Persistence**: All conversations can be resumed using `conversation_id` and `persistence_dir`
+  - Enables Guardian to resume and intervene in active conversations
+  - Supports conversation migration between workspace instances
+
+### Workflow Example
+
+```
+Agent Working on Task A (Implement Authentication)
+    │
+    ├─→ Discovers bug: "Database connection timeout"
+    │   ├─→ Calls DiscoveryService.record_discovery_and_branch()
+    │   ├─→ Creates TaskDiscovery record (type: "bug")
+    │   ├─→ Spawns Task B: "Fix database connection timeout"
+    │   ├─→ Links Task B as child of Task A (parent_task_id)
+    │   └─→ WebSocket: TASK_CREATED, DISCOVERY_MADE → Dashboard updates
+    │
+    ├─→ Needs clarification on OAuth scope
+    │   ├─→ Calls create_ticket MCP tool
+    │   ├─→ Creates Ticket: "Clarify OAuth scope requirements"
+    │   ├─→ Links ticket to Task A (related_task_ids)
+    │   └─→ WebSocket: TICKET_CREATED → Dashboard updates Kanban board
+    │
+    ├─→ Identifies missing dependency
+    │   ├─→ Analyzes task descriptions
+    │   ├─→ Detects Task C must complete before Task A
+    │   ├─→ Updates Task.dependencies JSONB field
+    │   └─→ WebSocket: TASK_DEPENDENCY_UPDATED → Dashboard updates graph
+    │
+    └─→ Guardian detects drift (alignment_score drops to 45%)
+        ├─→ Guardian generates SteeringIntervention
+        ├─→ ConversationInterventionService resumes conversation (using conversation_id + persistence_dir)
+        ├─→ Sends message via conversation.send_message() - **works even while agent is running**
+        ├─→ Agent receives intervention: "[GUARDIAN INTERVENTION] Please focus on core authentication flow first"
+        ├─→ Agent processes intervention asynchronously (OpenHands event-driven architecture)
+        ├─→ Agent adjusts course based on intervention without interrupting current work
+        └─→ WebSocket: STEERING_ISSUED → Dashboard shows intervention in agent detail view
+```
+
+### Guardian Intervention Integration
+
+**Real-Time Steering**: Guardian monitors agent trajectories every 60 seconds and can send intervention messages directly to active OpenHands conversations without interrupting agent execution.
+
+**OpenHands Capability**: The ability to send messages to running conversations is a core OpenHands feature. As demonstrated in the [OpenHands examples](https://docs.openhands.dev/sdk/guides/agent-server/local-server), agents can receive and process new messages even while actively working on a previous task. This event-driven architecture enables real-time intervention delivery.
+
+**How Interventions Work**:
+1. Guardian analyzes agent trajectory → detects `needs_steering=true`
+2. Guardian finds agent's running task → retrieves `conversation_id` and `persistence_dir`
+3. `ConversationInterventionService` resumes conversation using `Conversation(conversation_id=..., persistence_dir=...)`
+4. Sends intervention message via `Conversation.send_message()` - **works even if agent is currently running**
+5. Agent processes message asynchronously via event-driven architecture (no interruption)
+6. WebSocket event broadcasts intervention → Dashboard updates in real-time
+
+**Key OpenHands Features Used**:
+- **`Conversation.send_message()` while running**: Messages can be sent to conversations even while `conversation.run()` is executing in a background thread
+- **Event-driven processing**: Agent's `step()` method processes all events including newly added messages
+- **Conversation persistence**: Conversations can be resumed using `conversation_id` and `persistence_dir`
+- **Pause/Resume**: Conversations support `conversation.pause()` and `conversation.run()` for controlled execution
+
+**Benefits**:
+- **Non-Blocking**: Interventions don't pause agent execution - messages are queued and processed asynchronously
+- **Real-Time**: Course correction happens immediately without waiting for agent to finish current task
+- **Persistent**: All conversations persisted with `conversation_id` and `persistence_dir` for resumption
+- **Visible**: Dashboard shows all interventions in agent detail views via WebSocket events
+- **Proven Pattern**: Based on OpenHands's built-in message-while-processing capability
 
 ---
 
@@ -2544,6 +2694,75 @@ See [Implementation Details - Frontend Code Examples](./project_management_dashb
 - **Progress Tracking**: Real-time updates on task progress with Guardian analysis
 - **Discovery Tracking**: Monitor agent discoveries and workflow branching via TaskDiscovery model
 - **Background Worker Integration**: Monitoring loop, Validation orchestrator, Guardian service, Alert system
+- **Real-Time Intervention Delivery**: Guardian sends steering messages directly to active OpenHands conversations via `ConversationInterventionService`
+
+### 11.5.1.1 Guardian Intervention Delivery System
+
+**Implementation Status**: ✅ **COMPLETED**
+
+**Architecture**:
+- **Conversation Persistence**: All agent conversations are persisted with `conversation_id` and `persistence_dir` stored in `Task` model
+- **Early Storage**: Conversation metadata is stored in database BEFORE execution starts, enabling Guardian to access active conversations
+- **Intervention Service**: `ConversationInterventionService` resumes conversations and sends intervention messages via `Conversation.send_message()`
+- **Non-Blocking**: Interventions can be sent while agents are running - OpenHands handles message queuing automatically
+- **Real-Time Updates**: Intervention events are broadcast via WebSocket, updating dashboard immediately
+
+**How It Works**:
+1. **Task Execution Starts**: Worker calls `AgentExecutor.prepare_conversation()` to create conversation with persistence
+2. **Early Storage**: Conversation `conversation_id` and `persistence_dir` stored in `Task` model before `conversation.run()` starts
+3. **Guardian Monitoring**: Guardian analyzes agent trajectory every 60 seconds
+4. **Intervention Detection**: Guardian detects `needs_steering=true` and generates `SteeringIntervention`
+5. **Intervention Delivery**: `IntelligentGuardian._execute_intervention_action()`:
+   - Finds agent's current running task
+   - Retrieves `conversation_id` and `persistence_dir` from task
+   - Resumes conversation using `ConversationInterventionService`:
+     ```python
+     conversation = Conversation(
+         agent=agent,
+         workspace=workspace,
+         conversation_id=task.conversation_id,
+         persistence_dir=task.persistence_dir
+     )
+     ```
+   - Sends intervention message: `"[GUARDIAN INTERVENTION] {message}"` via `conversation.send_message()`
+   - **OpenHands Feature**: Message is queued and processed asynchronously - agent continues current work and processes intervention when ready
+6. **Dashboard Update**: WebSocket event `GUARDIAN_INTERVENTION` broadcasts to all connected clients
+7. **Real-Time UI Update**: Dashboard shows intervention in agent detail view, trajectory analysis, and system overview
+
+**OpenHands Message-While-Processing**: This leverages OpenHands's built-in capability where `Conversation.send_message()` can be called even while `conversation.run()` is executing in a background thread. The agent's event-driven architecture processes all queued messages, including interventions sent mid-execution. See [OpenHands examples](https://docs.openhands.dev/sdk/guides/agent-server/local-server) for demonstration of this pattern.
+
+**Database Schema**:
+- `Task.conversation_id` (String) - OpenHands conversation ID for resumption
+- `Task.persistence_dir` (String) - Conversation persistence directory path
+
+**Key Files**:
+- `omoi_os/services/conversation_intervention.py` - Intervention delivery service
+- `omoi_os/services/intelligent_guardian.py` - Enhanced with intervention delivery
+- `omoi_os/services/agent_executor.py` - Conversation persistence setup
+- `omoi_os/models/task.py` - Added `persistence_dir` field
+- `migrations/versions/028_add_persistence_dir_to_tasks.py` - Database migration
+
+**OpenHands Integration Details**:
+- **Message While Running**: Uses OpenHands's built-in capability where `Conversation.send_message()` works even while `conversation.run()` is executing in a background thread
+  - Demonstrated in OpenHands examples: Messages sent during agent processing are queued and processed asynchronously
+  - Agent's event-driven architecture handles message queuing automatically
+  - Reference: [OpenHands Local Agent Server Guide](https://docs.openhands.dev/sdk/guides/agent-server/local-server)
+- **Event-Driven Processing**: Agent's `step()` method processes all events including newly added messages
+  - Events include: `MessageEvent`, `ActionEvent`, `ObservationEvent`, `ConversationStateUpdateEvent`
+  - Callbacks can be registered to monitor events in real-time
+- **Conversation Resumption**: Uses `Conversation(conversation_id=..., persistence_dir=...)` to resume conversations
+  - Workspace can change between resumptions (local → remote, different directories)
+  - Conversation state persists across workspace instances
+- **Pause/Resume Control**: Conversations support `conversation.pause()` and `conversation.run()` for controlled execution
+  - Useful for dependency management, manual intervention, resource allocation
+- **Remote Conversations**: Supports `RemoteConversation` via `Workspace(host=...)` for remote agent servers
+  - Local server: `python -m openhands.agent_server --port 8001`
+  - Client connects via `Workspace(host="http://localhost:8001")` → automatically becomes `RemoteConversation`
+  - Event callbacks work with remote conversations via WebSocket
+- **Multi-Agent Workflows**: Planning + execution agent patterns
+  - `get_planning_agent()`: Read-only tools, creates implementation plans
+  - `get_default_agent()`: Full editing capabilities, implements plans
+  - Pattern: Planning conversation creates plan → Execution conversation implements plan
 
 ### 11.5.2 System Overview Dashboard
 
@@ -3082,16 +3301,31 @@ VALIDATION_FAILED → {
 // Guardian intervention events
 GUARDIAN_INTERVENTION → {
     action_id: string,
-    action_type: "cancel_task" | "reallocate" | "override_priority",
+    action_type: "cancel_task" | "reallocate" | "override_priority" | "steering_message",
     target_entity: string,
     authority_level: number,  // 4=GUARDIAN, 5=SYSTEM
     reason: string,
     initiated_by: string,
-    timestamp: string
+    timestamp: string,
+    conversation_id?: string,  // OpenHands conversation ID for steering messages
+    intervention_message?: string  // Steering message sent to agent
+}
+
+STEERING_ISSUED → {
+    agent_id: string,
+    conversation_id: string,
+    steering_type: "guidance" | "correction" | "emergency",
+    message: string,
+    alignment_score: number,  // 0-1 alignment score when intervention triggered
+    trajectory_summary: string,
+    timestamp: string,
+    delivered: boolean  // Whether message was successfully delivered to conversation
 }
 ```
 
 ### 11.5.6 Agent Discovery & Workflow Branching
+
+**Overview**: Agents autonomously discover issues, opportunities, and missing requirements during execution, automatically spawning new tasks and creating tickets to address them. This creates a dynamic, adaptive workflow where the system evolves based on agent discoveries.
 
 **Discovery Types:**
 - **Bug Discovery**: Agent finds a bug, spawns new task to fix it
@@ -3099,6 +3333,19 @@ GUARDIAN_INTERVENTION → {
 - **Missing Requirement**: Agent discovers missing requirement
 - **Dependency Issue**: Agent finds unhandled dependency
 - **Security Concern**: Agent identifies security issue
+
+**Agent-Driven Task Creation**:
+- **MCP Tools**: Agents use `create_ticket` MCP tool to create tickets during execution
+- **DiscoveryService**: Agents call `DiscoveryService.record_discovery_and_branch()` to:
+  - Record what was discovered (bug, optimization, etc.)
+  - Automatically spawn new tasks linked to the discovery
+  - Track workflow branching via `TaskDiscovery` model
+- **Automatic Linking**: Spawned tasks are automatically linked to source task via `parent_task_id` and `TaskDiscovery.spawned_task_ids`
+
+**Real-Time Updates**:
+- When agent creates ticket → `TICKET_CREATED` WebSocket event → Dashboard updates Kanban board
+- When agent spawns task → `TASK_CREATED` WebSocket event → Dashboard updates dependency graph
+- When agent links tasks → `TASK_DEPENDENCY_UPDATED` WebSocket event → Dashboard updates graph edges
 
 **Discovery UI Component:**
 ```
@@ -3162,6 +3409,15 @@ See [API Specifications - Discovery API](./project_management_dashboard_api.md#1
 
 ### 11.5.7 Agent Workflow: Start & Let Discover
 
+**Core Workflow Philosophy**: Agents are autonomous actors that create, link, and manage their own work. The dashboard provides real-time visibility into this dynamic, agent-driven workflow.
+
+**Agent-Driven Workflow Characteristics**:
+1. **Autonomous Creation**: Agents create tickets and tasks as they discover needs
+2. **Automatic Linking**: Agents identify and link related work items through dependency analysis
+3. **Real-Time Updates**: All agent actions trigger immediate WebSocket events
+4. **Adaptive Branching**: Workflow branches dynamically based on agent discoveries
+5. **Guardian Steering**: Guardian monitors and intervenes in real-time when agents drift or need guidance
+
 **Simplified Agent Spawning Flow:**
 
 ```
@@ -3200,9 +3456,11 @@ See [API Specifications - Discovery API](./project_management_dashboard_api.md#1
    ├─→ Agent Discovery (if enabled)
    │   │
    │   ├─→ Agent identifies bug/optimization/issue
-   │   ├─→ Creates TaskDiscovery record
-   │   ├─→ Optionally spawns new task automatically
-   │   └─→ EventBusService.publish(DISCOVERY_MADE)
+   │   ├─→ Creates TaskDiscovery record via DiscoveryService
+   │   ├─→ Optionally spawns new task automatically (via `record_discovery_and_branch()`)
+   │   ├─→ Agent may create ticket via MCP tool if clarification needed
+   │   ├─→ Agent links tasks via dependency detection
+   │   └─→ EventBusService.publish(DISCOVERY_MADE) → Dashboard updates in real-time
    │
    └─→ Agent Completion
        │
@@ -4189,7 +4447,40 @@ This design provides a complete blueprint for building a real-time project manag
 - 📦 **Data retention & archiving** (needs implementation)
 - 💾 **Backup & recovery** (needs implementation)
 
-**Key Differentiator**: The ability to "view exactly which code changes each agent made" with complete audit trails provides unprecedented transparency into AI agent work, enabling full traceability from ticket → task → agent → commit → code changes.
+**Key Differentiators**:
+1. **Agent-Driven Workflow**: Agents autonomously create tickets, spawn tasks, and link work items - the system adapts dynamically to agent discoveries
+2. **Real-Time Guardian Interventions**: Guardian sends steering messages directly to active agent conversations, enabling live course correction without interrupting agent execution
+3. **Complete Traceability**: Full audit trail from ticket → task → agent → commit → code changes, with real-time updates via WebSocket
+4. **Adaptive Workflow Branching**: System automatically branches workflow based on agent discoveries (bugs, optimizations, missing requirements)
 
-The WebSocket infrastructure we just built is the foundation that enables all real-time features!
+**Recent Implementation Highlights**:
+- ✅ **Guardian Intervention Delivery**: Real-time steering messages sent to active OpenHands conversations via `ConversationInterventionService`
+- ✅ **Conversation Persistence**: All conversations persisted with `conversation_id` and `persistence_dir` stored in `Task` model for intervention delivery
+- ✅ **Agent-Driven Creation**: Agents use MCP tools (`create_ticket`) to create tickets and `DiscoveryService` to spawn tasks during execution
+- ✅ **Discovery Tracking**: Complete workflow branching history via `TaskDiscovery` model, tracking WHY workflows branch and WHAT agents discovered
+- ✅ **Real-Time Updates**: WebSocket infrastructure enables live dashboard updates for all agent actions (ticket creation, task spawning, linking, interventions)
+
+**Modifications Made**:
+1. **Database Schema**: Added `persistence_dir` field to `Task` model (migration `028_add_persistence_dir_to_tasks.py`)
+2. **AgentExecutor**: Enhanced with `prepare_conversation()` method to enable conversation persistence before execution
+3. **ConversationInterventionService**: New service for resuming conversations and sending Guardian intervention messages
+4. **IntelligentGuardian**: Updated `_execute_intervention_action()` to deliver interventions via OpenHands conversations
+5. **Worker Integration**: Updated both `execute_task()` and `execute_task_with_retry()` to store conversation metadata early
+
+**How Agent-Driven Workflow Works**:
+- Agents create tickets via MCP tools when they discover new requirements or need clarification
+- Agents spawn tasks via `DiscoveryService.record_discovery_and_branch()` when they find bugs, optimizations, or missing requirements
+- Agents automatically link tasks through dependency detection and discovery tracking
+- All agent actions trigger WebSocket events → Dashboard updates in real-time
+- Guardian monitors agent trajectories and sends intervention messages directly to active conversations when agents drift or need guidance
+- **OpenHands Message-While-Processing**: Guardian interventions use OpenHands's built-in capability to send messages to running conversations - agents process interventions asynchronously without interrupting current work
+
+**OpenHands Capabilities Leveraged**:
+- **Message While Running**: `Conversation.send_message()` works even while `conversation.run()` is executing ([OpenHands examples](https://docs.openhands.dev/sdk/guides/agent-server/local-server))
+- **Pause/Resume**: Conversations support `conversation.pause()` and `conversation.run()` for controlled execution
+- **Multi-Agent Workflows**: Planning agent + execution agent patterns (planning creates plan, execution implements)
+- **Remote Conversations**: Support for `RemoteConversation` via `Workspace(host=...)` for distributed agent execution
+- **Event-Driven Architecture**: Agent's `step()` processes all queued events including newly added messages
+
+The WebSocket infrastructure and Guardian intervention system provide the foundation for real-time, agent-driven project management with live steering and adaptive workflow branching!
 

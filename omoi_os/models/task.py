@@ -40,6 +40,10 @@ class Task(Base):
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # pending, assigned, running, completed, failed
     assigned_agent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # OpenHands conversation ID
+    persistence_dir: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True,
+        comment="OpenHands conversation persistence directory for resumption and intervention delivery"
+    )
     result: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Task result/output
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     dependencies: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Task dependencies: {"depends_on": ["task_id_1", "task_id_2"]}

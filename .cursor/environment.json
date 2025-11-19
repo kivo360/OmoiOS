@@ -1,7 +1,3 @@
 {
-  "terminals": [],
-  "build": {
-    "context": ".",
-    "dockerfile": "Dockerfile.cloud-agent"
-  }
+  "terminals": []
 }

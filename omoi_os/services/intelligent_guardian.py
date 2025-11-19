@@ -14,12 +14,14 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.llm_service import LLMService
 from omoi_os.services.trajectory_context import TrajectoryContext
 from omoi_os.services.agent_output_collector import AgentOutputCollector
 from omoi_os.services.guardian import GuardianService
+from omoi_os.services.conversation_intervention import ConversationInterventionService
 from omoi_os.utils.datetime import utc_now
 
 logger = logging.getLogger(__name__)
@@ -538,43 +540,112 @@ class IntelligentGuardian:
         )
 
     def _execute_intervention_action(self, intervention: SteeringIntervention) -> bool:
-        """Execute the actual intervention action."""
+        """Execute the actual intervention action by sending message to OpenHands conversation."""
         try:
-            # Publish intervention event
-            if self.event_bus:
-                event = SystemEvent(
-                    event_type="guardian.steering.intervention",
-                    entity_type="agent",
-                    entity_id=intervention.agent_id,
-                    payload={
-                        "steering_type": intervention.steering_type,
-                        "message": intervention.message,
-                        "actor_type": intervention.actor_type,
-                        "actor_id": intervention.actor_id,
-                        "reason": intervention.reason,
-                        "confidence": intervention.confidence,
-                    },
-                )
-                self.event_bus.publish(event)
+            # Get agent's current task to find conversation info
+            with self.db.get_session() as session:
+                agent = session.query(Agent).filter_by(id=intervention.agent_id).first()
+                if not agent:
+                    logger.warning(f"Agent {intervention.agent_id} not found for intervention")
+                    return False
 
-            # Log the intervention
-            self.output_collector.log_agent_event(
-                intervention.agent_id,
-                "steering_intervention",
-                intervention.message,
-                {
+                # Find the agent's current running task
+                task = (
+                    session.query(Task)
+                    .filter_by(assigned_agent_id=intervention.agent_id, status="running")
+                    .order_by(Task.started_at.desc())
+                    .first()
+                )
+
+                if not task or not task.conversation_id or not task.persistence_dir:
+                    logger.warning(
+                        f"Task with conversation info not found for agent {intervention.agent_id}. "
+                        f"Task: {task.id if task else None}, "
+                        f"conversation_id: {task.conversation_id if task else None}"
+                    )
+                    # Still publish event and log, but can't send to conversation
+                    self._publish_intervention_event(intervention)
+                    self._log_intervention(intervention)
+                    return False
+
+                # Get workspace directory for the task
+                workspace_dir = self._get_workspace_dir(agent)
+                if not workspace_dir:
+                    # Fallback: construct from task ID
+                    workspace_dir = f"{self.workspace_root}/{task.id}" if self.workspace_root else None
+
+                if not workspace_dir:
+                    logger.error(f"Cannot determine workspace directory for task {task.id}")
+                    self._publish_intervention_event(intervention)
+                    self._log_intervention(intervention)
+                    return False
+
+                # Send intervention via ConversationInterventionService
+                intervention_service = ConversationInterventionService()
+                success = intervention_service.send_intervention(
+                    conversation_id=task.conversation_id,
+                    persistence_dir=task.persistence_dir,
+                    workspace_dir=workspace_dir,
+                    message=intervention.message,
+                )
+
+                if success:
+                    logger.info(
+                        f"Successfully sent Guardian intervention to conversation {task.conversation_id} "
+                        f"for agent {intervention.agent_id}: {intervention.steering_type}"
+                    )
+                else:
+                    logger.warning(
+                        f"Failed to send intervention to conversation {task.conversation_id}"
+                    )
+
+                # Always publish event and log, regardless of conversation delivery success
+                self._publish_intervention_event(intervention)
+                self._log_intervention(intervention)
+
+                return success
+
+        except Exception as e:
+            logger.error(f"Failed to execute intervention action: {e}", exc_info=True)
+            # Still try to publish event and log
+            try:
+                self._publish_intervention_event(intervention)
+                self._log_intervention(intervention)
+            except:
+                pass
+            return False
+
+    def _publish_intervention_event(self, intervention: SteeringIntervention) -> None:
+        """Publish intervention event to event bus."""
+        if self.event_bus:
+            event = SystemEvent(
+                event_type="guardian.steering.intervention",
+                entity_type="agent",
+                entity_id=intervention.agent_id,
+                payload={
                     "steering_type": intervention.steering_type,
+                    "message": intervention.message,
                     "actor_type": intervention.actor_type,
                     "actor_id": intervention.actor_id,
+                    "reason": intervention.reason,
                     "confidence": intervention.confidence,
                 },
             )
+            self.event_bus.publish(event)
 
-            return True
-
-        except Exception as e:
-            logger.error(f"Failed to execute intervention action: {e}")
-            return False
+    def _log_intervention(self, intervention: SteeringIntervention) -> None:
+        """Log intervention to agent output collector."""
+        self.output_collector.log_agent_event(
+            intervention.agent_id,
+            "steering_intervention",
+            intervention.message,
+            {
+                "steering_type": intervention.steering_type,
+                "actor_type": intervention.actor_type,
+                "actor_id": intervention.actor_id,
+                "confidence": intervention.confidence,
+            },
+        )
 
     def _get_recent_interventions(self, agent_id: str) -> List[Dict[str, Any]]:
         """Get recent interventions for an agent."""

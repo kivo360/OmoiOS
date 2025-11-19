@@ -600,11 +600,36 @@ def execute_task_with_retry(
         # Create agent executor
         executor = AgentExecutor(phase_id=task.phase_id, workspace_dir=task_workspace)
 
-        # Execute task
-        result = executor.execute_task(task.description or "")
+        # Prepare conversation and store metadata BEFORE execution starts
+        # This enables Guardian to send interventions during execution
+        conversation_metadata = executor.prepare_conversation(task_id=str(task.id))
+        conversation_id = conversation_metadata["conversation_id"]
+        persistence_dir = conversation_metadata["persistence_dir"]
 
-        # Update task status to completed
-        task_queue.update_task_status(task.id, "completed", result=result)
+        # Store conversation info in database immediately (before running)
+        # This allows Guardian to send interventions while agent is executing
+        task_queue.update_task_status(
+            task.id,
+            "running",
+            conversation_id=conversation_id,
+            persistence_dir=persistence_dir,
+        )
+
+        # Execute task with pre-prepared conversation
+        result = executor.execute_task(
+            task.description or "",
+            task_id=str(task.id),
+            conversation_metadata=conversation_metadata,
+        )
+
+        # Update task status to completed with final result
+        task_queue.update_task_status(
+            task.id,
+            "completed",
+            result=result,
+            conversation_id=conversation_id,
+            persistence_dir=persistence_dir,
+        )
 
         # Publish completion event
         event_bus.publish(
@@ -771,9 +796,6 @@ def execute_task(
         if agent:
             agent.status = AgentStatus.RUNNING.value
 
-    # Update task status to running
-    task_queue.update_task_status(task.id, "running")
-
     # Create workspace directory for this task
     task_workspace = os.path.join(workspace_dir, str(task.id))
     os.makedirs(task_workspace, exist_ok=True)
@@ -782,11 +804,36 @@ def execute_task(
         # Create agent executor
         executor = AgentExecutor(phase_id=task.phase_id, workspace_dir=task_workspace)
 
-        # Execute task
-        result = executor.execute_task(task.description or "")
+        # Prepare conversation and store metadata BEFORE execution starts
+        # This enables Guardian to send interventions during execution
+        conversation_metadata = executor.prepare_conversation(task_id=str(task.id))
+        conversation_id = conversation_metadata["conversation_id"]
+        persistence_dir = conversation_metadata["persistence_dir"]
 
-        # Update task status to completed
-        task_queue.update_task_status(task.id, "completed", result=result)
+        # Store conversation info in database immediately (before running)
+        # This allows Guardian to send interventions while agent is executing
+        task_queue.update_task_status(
+            task.id,
+            "running",
+            conversation_id=conversation_id,
+            persistence_dir=persistence_dir,
+        )
+
+        # Execute task with pre-prepared conversation
+        result = executor.execute_task(
+            task.description or "",
+            task_id=str(task.id),
+            conversation_metadata=conversation_metadata,
+        )
+
+        # Update task status to completed with final result
+        task_queue.update_task_status(
+            task.id,
+            "completed",
+            result=result,
+            conversation_id=conversation_id,
+            persistence_dir=persistence_dir,
+        )
 
         # Publish completion event
         event_bus.publish(

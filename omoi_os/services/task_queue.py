@@ -236,6 +236,7 @@ class TaskQueueService:
         result: dict | None = None,
         error_message: str | None = None,
         conversation_id: str | None = None,
+        persistence_dir: str | None = None,
     ) -> None:
         """
         Update task status and result.
@@ -246,6 +247,7 @@ class TaskQueueService:
             result: Optional task result dictionary
             error_message: Optional error message if failed
             conversation_id: Optional OpenHands conversation ID
+            persistence_dir: Optional OpenHands conversation persistence directory
         """
         from omoi_os.utils.datetime import utc_now
 
@@ -259,6 +261,8 @@ class TaskQueueService:
                     task.error_message = error_message
                 if conversation_id:
                     task.conversation_id = conversation_id
+                if persistence_dir:
+                    task.persistence_dir = persistence_dir
                 if status == "running" and not task.started_at:
                     task.started_at = utc_now()
                 elif status in ("completed", "failed") and not task.completed_at:
