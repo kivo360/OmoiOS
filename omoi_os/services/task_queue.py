@@ -1,10 +1,13 @@
 """Task queue service for managing task assignment and retrieval."""
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_scorer import TaskScorer
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class TaskQueueService:
@@ -28,6 +31,7 @@ class TaskQueueService:
         description: str,
         priority: str,
         dependencies: dict | None = None,
+        session: Optional["Session"] = None,
     ) -> Task:
         """
         Add a task to the queue.
@@ -39,11 +43,13 @@ class TaskQueueService:
             description: Task description
             priority: Task priority (CRITICAL, HIGH, MEDIUM, LOW)
             dependencies: Optional dependencies dict: {"depends_on": ["task_id_1", "task_id_2"]}
+            session: Optional database session to use. If not provided, creates a new session.
 
         Returns:
             Created Task object
         """
-        with self.db.get_session() as session:
+        if session is not None:
+            # Use provided session
             task = Task(
                 ticket_id=ticket_id,
                 phase_id=phase_id,
@@ -60,11 +66,33 @@ class TaskQueueService:
             # Compute initial score (REQ-TQM-PRI-002)
             task.score = self.scorer.compute_score(task)
 
-            session.commit()
+            # Don't commit here - let the caller handle it
             session.refresh(task)
-            # Expunge the task so it can be used outside the session
-            session.expunge(task)
             return task
+        else:
+            # Create new session (original behavior)
+            with self.db.get_session() as session:
+                task = Task(
+                    ticket_id=ticket_id,
+                    phase_id=phase_id,
+                    task_type=task_type,
+                    description=description,
+                    priority=priority,
+                    status="pending",
+                    dependencies=dependencies,
+                )
+                session.add(task)
+                session.flush()
+                session.refresh(task)
+
+                # Compute initial score (REQ-TQM-PRI-002)
+                task.score = self.scorer.compute_score(task)
+
+                session.commit()
+                session.refresh(task)
+                # Expunge the task so it can be used outside the session
+                session.expunge(task)
+                return task
 
     def get_next_task(
         self, phase_id: str, agent_capabilities: Optional[List[str]] = None

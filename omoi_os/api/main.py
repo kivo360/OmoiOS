@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from omoi_os.api.routes import (
     agents,
@@ -77,23 +78,27 @@ async def orchestrator_loop():
             # Simple assignment: get next pending task and assign to first available worker
             # TODO: Implement proper agent registry lookup
             phase_id = "PHASE_IMPLEMENTATION"  # For MVP, hardcode phase
-            
+
             # Get available agent first to check capabilities (REQ-TQM-ASSIGN-001)
             from omoi_os.models.agent import Agent
             from omoi_os.models.agent_status import AgentStatus
 
             with db.get_session() as session:
                 available_agent = (
-                    session.query(Agent).filter(Agent.status == AgentStatus.IDLE.value).first()
+                    session.query(Agent)
+                    .filter(Agent.status == AgentStatus.IDLE.value)
+                    .first()
                 )
                 if not available_agent:
                     # No available agents, wait and retry
                     await asyncio.sleep(5)
                     continue
-                
+
                 # Get task matching agent's phase and capabilities (REQ-TQM-ASSIGN-001)
                 agent_capabilities = available_agent.capabilities or []
-                task = queue.get_next_task(phase_id, agent_capabilities=agent_capabilities)
+                task = queue.get_next_task(
+                    phase_id, agent_capabilities=agent_capabilities
+                )
 
             if task:
                 # Assign task to available agent
@@ -265,7 +270,9 @@ async def approval_timeout_loop():
 
             if timed_out_ids:
                 for ticket_id in timed_out_ids:
-                    print(f"⏰ TICKET TIMEOUT - Ticket {ticket_id} approval deadline exceeded")
+                    print(
+                        f"⏰ TICKET TIMEOUT - Ticket {ticket_id} approval deadline exceeded"
+                    )
 
             # Check every 10 seconds (frequent enough to catch timeouts quickly per REQ-THA-009)
             await asyncio.sleep(10)
@@ -359,7 +366,9 @@ async def anomaly_monitoring_loop():
                         f"🚨 AGENT ANOMALY DETECTED - Agent {agent_id} has anomaly_score={anomaly_score:.3f} "
                         f"({consecutive_readings} consecutive readings)"
                     )
-                    print(f"🔍 Creating diagnostic agent for anomalous agent {agent_id}")
+                    print(
+                        f"🔍 Creating diagnostic agent for anomalous agent {agent_id}"
+                    )
 
                     # Get workflow ID from agent's current task or recent tasks
                     with db.get_session() as session:
@@ -370,7 +379,9 @@ async def anomaly_monitoring_loop():
                             session.query(Task)
                             .filter(
                                 Task.assigned_agent_id == agent_id,
-                                Task.status.in_(["assigned", "running", "completed", "failed"]),
+                                Task.status.in_(
+                                    ["assigned", "running", "completed", "failed"]
+                                ),
                             )
                             .order_by(Task.created_at.desc())
                             .first()
@@ -387,13 +398,15 @@ async def anomaly_monitoring_loop():
                             )
 
                             # Update context with anomaly info
-                            context.update({
-                                "trigger": "agent_anomaly",
-                                "agent_id": agent_id,
-                                "anomaly_score": anomaly_score,
-                                "consecutive_readings": consecutive_readings,
-                                "should_quarantine": should_quarantine,
-                            })
+                            context.update(
+                                {
+                                    "trigger": "agent_anomaly",
+                                    "agent_id": agent_id,
+                                    "anomaly_score": anomaly_score,
+                                    "consecutive_readings": consecutive_readings,
+                                    "should_quarantine": should_quarantine,
+                                }
+                            )
 
                             # Spawn diagnostic agent focusing on this agent
                             diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
@@ -464,7 +477,9 @@ async def lifespan(app: FastAPI):
     agent_status_manager = AgentStatusManager(db, event_bus)
     approval_service = ApprovalService(db, event_bus)
     health_service = AgentHealthService(db, agent_status_manager)
-    heartbeat_protocol_service = HeartbeatProtocolService(db, event_bus, agent_status_manager)
+    heartbeat_protocol_service = HeartbeatProtocolService(
+        db, event_bus, agent_status_manager
+    )
     registry_service = AgentRegistryService(db, event_bus, agent_status_manager)
     collaboration_service = CollaborationService(db, event_bus)
     lock_service = ResourceLockService(db)
@@ -526,6 +541,7 @@ async def lifespan(app: FastAPI):
 
     # Unified LLM service
     from omoi_os.services.llm_service import get_llm_service
+
     llm_service = get_llm_service()
 
     # Create database tables if they don't exist
@@ -583,6 +599,15 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify actual origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Include routers
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["tickets"])
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
@@ -601,6 +626,11 @@ app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagno
 app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
 app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
+
+# Dependency graph routes
+from omoi_os.api.routes import graph
+
+app.include_router(graph.router, prefix="/api/v1/graph", tags=["graph"])
 
 # Conditionally include monitor router if Phase 4 is available
 try:

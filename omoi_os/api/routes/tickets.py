@@ -101,6 +101,7 @@ async def create_ticket(
                 task_type="analyze_requirements",
                 description=f"Analyze requirements for: {ticket_data.title}",
                 priority=ticket_data.priority,
+                session=session,  # Use the same session so ticket is visible
             )
 
         session.commit()
