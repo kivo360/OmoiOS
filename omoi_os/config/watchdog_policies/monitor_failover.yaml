@@ -1,0 +1,15 @@
+policy:
+  actions:
+  - backup_agent_id: null
+    priority: 1
+    type: failover
+  description: Failover to backup monitor when primary fails
+  escalation:
+    max_attempts: 1
+    on_failure: escalate_to_guardian
+  name: monitor_failover
+  triggers:
+  - condition: status == 'FAILED' OR status == 'UNRESPONSIVE'
+    description: Monitor agent has failed or become unresponsive
+    type: agent_status
+  version: '1.0'

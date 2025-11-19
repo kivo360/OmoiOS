@@ -83,7 +83,16 @@ class WatchdogService:
             self._create_default_policies()
             return
         
-        for policy_file in self.policies_dir.glob("*.yaml"):
+        # Load existing YAML files
+        yaml_files = list(self.policies_dir.glob("*.yaml"))
+        
+        # If no policies exist, create defaults
+        if not yaml_files:
+            self._create_default_policies()
+            # Reload after creating defaults
+            yaml_files = list(self.policies_dir.glob("*.yaml"))
+        
+        for policy_file in yaml_files:
             try:
                 with open(policy_file, "r") as f:
                     policy_data = yaml.safe_load(f)

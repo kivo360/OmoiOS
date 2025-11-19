@@ -1,0 +1,15 @@
+policy:
+  actions:
+  - priority: 1
+    timeout_seconds: 60
+    type: restart
+  description: Restart unresponsive monitor agents
+  escalation:
+    max_attempts: 2
+    on_failure: escalate_to_guardian
+  name: monitor_restart
+  triggers:
+  - condition: consecutive_missed_heartbeats >= 3
+    description: Monitor agent missed 3 consecutive heartbeats
+    type: heartbeat_missed
+  version: '1.0'
