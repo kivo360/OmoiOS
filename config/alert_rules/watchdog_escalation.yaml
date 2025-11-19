@@ -1,0 +1,17 @@
+rules:
+  - name: watchdog_remediation_failed
+    metric: watchdog.remediation.failed
+    condition: "value > 0"
+    severity: critical
+    routing: [slack, email, webhook]
+    deduplication_window: 30s
+    enabled: true
+    
+  - name: watchdog_escalation
+    metric: watchdog.escalation
+    condition: "value > 0"
+    severity: critical
+    routing: [slack, email, webhook]
+    deduplication_window: 30s
+    enabled: true
+

@@ -30,6 +30,13 @@ PHASE_GATE_REQUIREMENTS: dict[str, dict[str, Any]] = {
             "code_changes": {"must_have_tests": True},
         },
     },
+    "PHASE_BUILDING_DONE": {
+        "required_artifacts": ["packaging_bundle", "handoff_documentation"],
+        "required_tasks_completed": True,
+        "validation_criteria": {
+            "packaging_bundle": {"must_exist": True},
+        },
+    },
     "PHASE_TESTING": {
         "required_artifacts": ["test_results", "test_evidence"],
         "required_tasks_completed": True,

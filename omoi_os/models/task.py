@@ -43,6 +43,10 @@ class Task(Base):
     result: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Task result/output
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     dependencies: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)  # Task dependencies: {"depends_on": ["task_id_1", "task_id_2"]}
+    required_capabilities: Mapped[Optional[list[str]]] = mapped_column(
+        JSONB, nullable=True,
+        comment="Required capabilities: ['python', 'fastapi', 'postgres'] (REQ-TQM-ASSIGN-001)"
+    )  # Required agent capabilities for this task
 
     # Retry fields for error handling
     retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Current retry attempt count

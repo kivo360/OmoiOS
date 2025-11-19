@@ -1,5 +1,7 @@
 """Task queue service for managing task assignment and retrieval."""
 
+from typing import List, Optional
+
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_scorer import TaskScorer
@@ -64,16 +66,20 @@ class TaskQueueService:
             session.expunge(task)
             return task
 
-    def get_next_task(self, phase_id: str) -> Task | None:
+    def get_next_task(
+        self, phase_id: str, agent_capabilities: Optional[List[str]] = None
+    ) -> Task | None:
         """
         Get highest-scored pending task for a phase that has all dependencies completed.
         Uses dynamic scoring per REQ-TQM-PRI-002.
+        Verifies capability matching per REQ-TQM-ASSIGN-001.
 
         Args:
             phase_id: Phase identifier to filter by
+            agent_capabilities: Optional list of agent capabilities for matching (REQ-TQM-ASSIGN-001)
 
         Returns:
-            Task object or None if no pending tasks with completed dependencies
+            Task object or None if no pending tasks with completed dependencies and matching capabilities
         """
         with self.db.get_session() as session:
             tasks = (
@@ -84,13 +90,21 @@ class TaskQueueService:
             if not tasks:
                 return None
 
-            # Filter out tasks with incomplete dependencies
+            # Filter out tasks with incomplete dependencies and capability mismatches
             available_tasks = []
             for task in tasks:
-                if self._check_dependencies_complete(session, task):
-                    # Compute and update score (REQ-TQM-PRI-002)
-                    task.score = self.scorer.compute_score(task)
-                    available_tasks.append(task)
+                if not self._check_dependencies_complete(session, task):
+                    continue
+
+                # Check capability matching (REQ-TQM-ASSIGN-001)
+                if agent_capabilities is not None and not self._check_capability_match(
+                    task, agent_capabilities
+                ):
+                    continue  # Skip tasks that don't match capabilities
+
+                # Compute and update score (REQ-TQM-PRI-002)
+                task.score = self.scorer.compute_score(task)
+                available_tasks.append(task)
 
             if not available_tasks:
                 return None
@@ -109,37 +123,47 @@ class TaskQueueService:
 
     def get_ready_tasks(
         self,
-        phase_id: str,
+        phase_id: Optional[str] = None,
         limit: int = 10,
+        agent_capabilities: Optional[List[str]] = None,
     ) -> list[Task]:
         """
         Get multiple ready tasks for parallel execution (DAG batching).
         Uses dynamic scoring per REQ-TQM-PRI-002.
+        Verifies capability matching per REQ-TQM-ASSIGN-001.
 
         Args:
-            phase_id: Phase identifier to filter by
+            phase_id: Optional phase identifier to filter by
             limit: Maximum number of tasks to return
+            agent_capabilities: Optional list of agent capabilities for matching (REQ-TQM-ASSIGN-001)
 
         Returns:
             List of Task objects ready for execution, sorted by score descending
         """
         with self.db.get_session() as session:
-            tasks = (
-                session.query(Task)
-                .filter(Task.status == "pending", Task.phase_id == phase_id)
-                .all()
-            )
+            query = session.query(Task).filter(Task.status == "pending")
+            if phase_id:
+                query = query.filter(Task.phase_id == phase_id)
+            tasks = query.all()
 
             if not tasks:
                 return []
 
-            # Filter out tasks with incomplete dependencies and compute scores
+            # Filter out tasks with incomplete dependencies and capability mismatches
             available_tasks = []
             for task in tasks:
-                if self._check_dependencies_complete(session, task):
-                    # Compute and update score (REQ-TQM-PRI-002)
-                    task.score = self.scorer.compute_score(task)
-                    available_tasks.append(task)
+                if not self._check_dependencies_complete(session, task):
+                    continue
+
+                # Check capability matching (REQ-TQM-ASSIGN-001)
+                if agent_capabilities is not None and not self._check_capability_match(
+                    task, agent_capabilities
+                ):
+                    continue  # Skip tasks that don't match capabilities
+
+                # Compute and update score (REQ-TQM-PRI-002)
+                task.score = self.scorer.compute_score(task)
+                available_tasks.append(task)
 
             # Sort by score descending (REQ-TQM-PRI-002)
             available_tasks.sort(key=lambda t: t.score, reverse=True)
@@ -263,6 +287,39 @@ class TaskQueueService:
 
         # All dependencies must be completed
         return all(dep_task.status == "completed" for dep_task in dependency_tasks)
+
+    def _check_capability_match(
+        self, task: Task, agent_capabilities: List[str]
+    ) -> bool:
+        """
+        Check if agent capabilities match task requirements per REQ-TQM-ASSIGN-001.
+
+        Args:
+            task: Task to check capabilities for
+            agent_capabilities: List of agent capabilities
+
+        Returns:
+            True if agent has all required capabilities, False otherwise
+        """
+        if not task.required_capabilities:
+            return True  # No requirements = any agent can handle
+
+        required = set(task.required_capabilities)
+        agent_caps = set(agent_capabilities or [])
+
+        # All required capabilities must be present
+        if not required.issubset(agent_caps):
+            missing = required - agent_caps
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Capability mismatch for task {task.id}: "
+                f"missing {missing}, agent has {agent_capabilities}"
+            )
+            return False
+
+        return True
 
     def check_dependencies_complete(self, task_id: str) -> bool:
         """

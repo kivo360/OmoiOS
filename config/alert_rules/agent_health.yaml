@@ -1,0 +1,25 @@
+rules:
+  - name: agent_heartbeat_missed
+    metric: agent.heartbeat.missed
+    condition: "value > 2"
+    severity: warning
+    routing: [slack, email]
+    deduplication_window: 300s
+    enabled: true
+    
+  - name: agent_anomaly_high
+    metric: agent.anomaly_score
+    condition: "value >= 0.8"
+    severity: critical
+    routing: [slack, webhook]
+    deduplication_window: 60s
+    enabled: true
+    
+  - name: agent_unresponsive
+    metric: agent.status.unresponsive
+    condition: "value > 0"
+    severity: error
+    routing: [slack, email, webhook]
+    deduplication_window: 120s
+    enabled: true
+

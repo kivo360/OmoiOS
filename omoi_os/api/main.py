@@ -8,6 +8,7 @@ from fastapi import FastAPI
 
 from omoi_os.api.routes import (
     agents,
+    alerts,
     board,
     collaboration,
     costs,
@@ -75,25 +76,28 @@ async def orchestrator_loop():
             # Simple assignment: get next pending task and assign to first available worker
             # TODO: Implement proper agent registry lookup
             phase_id = "PHASE_IMPLEMENTATION"  # For MVP, hardcode phase
-            task = queue.get_next_task(phase_id)
+            
+            # Get available agent first to check capabilities (REQ-TQM-ASSIGN-001)
+            from omoi_os.models.agent import Agent
+            from omoi_os.models.agent_status import AgentStatus
+
+            with db.get_session() as session:
+                available_agent = (
+                    session.query(Agent).filter(Agent.status == AgentStatus.IDLE.value).first()
+                )
+                if not available_agent:
+                    # No available agents, wait and retry
+                    await asyncio.sleep(5)
+                    continue
+                
+                # Get task matching agent's phase and capabilities (REQ-TQM-ASSIGN-001)
+                agent_capabilities = available_agent.capabilities or []
+                task = queue.get_next_task(phase_id, agent_capabilities=agent_capabilities)
 
             if task:
-                # For MVP, assign to first available agent
-                # TODO: Implement proper agent selection logic
-                from omoi_os.models.agent import Agent
-
-                from omoi_os.models.agent_status import AgentStatus
-
-                with db.get_session() as session:
-                    available_agent = (
-                        session.query(Agent).filter(Agent.status == AgentStatus.IDLE.value).first()
-                    )
-                    if available_agent:
-                        queue.assign_task(task.id, available_agent.id)
-                        agent_id = str(available_agent.id)
-                    else:
-                        # No available agents, skip this task
-                        continue
+                # Assign task to available agent
+                queue.assign_task(task.id, available_agent.id)
+                agent_id = str(available_agent.id)
 
                 # Publish assignment event
                 from omoi_os.services.event_bus import SystemEvent
@@ -587,6 +591,7 @@ app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"
 app.include_router(costs.router, prefix="/api/v1/costs", tags=["costs"])
 app.include_router(guardian.router, prefix="/api/v1/guardian", tags=["guardian"])
 app.include_router(watchdog.router, prefix="/api/v1/watchdog", tags=["watchdog"])
+app.include_router(alerts.router, prefix="/api/v1", tags=["alerts"])
 app.include_router(memory.router, prefix="/api/v1", tags=["memory"])
 app.include_router(board.router, prefix="/api/v1", tags=["board"])
 app.include_router(quality.router, prefix="/api/v1", tags=["quality"])

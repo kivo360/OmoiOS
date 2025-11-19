@@ -1,0 +1,17 @@
+rules:
+  - name: ticket_blocked
+    metric: ticket.blocked
+    condition: "value > 0"
+    severity: warning
+    routing: [slack]
+    deduplication_window: 600s
+    enabled: true
+    
+  - name: ticket_blocked_critical
+    metric: ticket.blocked.critical
+    condition: "value > 0"
+    severity: critical
+    routing: [slack, email, webhook]
+    deduplication_window: 60s
+    enabled: true
+

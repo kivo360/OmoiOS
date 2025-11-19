@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String
-from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
@@ -22,6 +22,10 @@ class Agent(Base):
 
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid4())
+    )
+    agent_name: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True, index=True,
+        comment="Human-readable name: {type}-{phase}-{sequence} (REQ-ALM-001)"
     )
     agent_type: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
@@ -68,6 +72,24 @@ class Agent(Base):
     )
     consecutive_anomalous_readings: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, comment="Count of consecutive readings with anomaly_score >= threshold"
+    )
+    
+    # Registration enhancement fields (REQ-ALM-001)
+    crypto_public_key: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+        comment="Public key from cryptographic identity pair (REQ-ALM-001)"
+    )
+    crypto_identity_metadata: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True,
+        comment="Cryptographic identity metadata: key_id, algorithm, created_at (REQ-ALM-001)"
+    )
+    metadata: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True,
+        comment="Additional agent metadata: version, binary_path, config, resource_requirements (REQ-ALM-001)"
+    )
+    registered_by: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True,
+        comment="Orchestrator instance that registered this agent (REQ-ALM-001)"
     )
 
     created_at: Mapped[datetime] = mapped_column(
