@@ -5,10 +5,11 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends, Body
 from pydantic import BaseModel
 
-from omoi_os.api.dependencies import get_db_service, get_task_queue
+from omoi_os.api.dependencies import get_db_service, get_task_queue, get_event_bus_service
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
+from omoi_os.services.event_bus import EventBusService, SystemEvent
 
 router = APIRouter()
 
@@ -21,6 +22,16 @@ class CancelTaskRequest(BaseModel):
 class TaskTimeoutRequest(BaseModel):
     """Request model for setting task timeout."""
     timeout_seconds: int
+
+
+class AddDependenciesRequest(BaseModel):
+    """Request model for adding dependencies."""
+    depends_on: List[str]
+
+
+class SetDependenciesRequest(BaseModel):
+    """Request model for setting all dependencies."""
+    depends_on: List[str]
 
 
 @router.get("/{task_id}", response_model=dict)
@@ -175,6 +186,229 @@ async def check_circular_dependencies(
         "has_circular_dependency": False,
         "cycle": None,
     }
+
+
+@router.post("/{task_id}/dependencies", response_model=dict)
+async def add_task_dependencies(
+    task_id: str,
+    request: AddDependenciesRequest = Body(...),
+    db: DatabaseService = Depends(get_db_service),
+    queue: TaskQueueService = Depends(get_task_queue),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Add dependencies to a task.
+
+    Args:
+        task_id: Task UUID
+        request: Dependencies to add
+        db: Database service
+        queue: Task queue service
+        event_bus: Event bus service
+
+    Returns:
+        Updated task dependencies
+    """
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        # Get current dependencies
+        current_deps = task.dependencies or {}
+        current_depends_on = set(current_deps.get("depends_on", []))
+        
+        # Add new dependencies
+        new_depends_on = set(request.depends_on)
+        combined_depends_on = list(current_depends_on | new_depends_on)
+        
+        # Check for circular dependencies
+        cycle = queue.detect_circular_dependencies(task_id, combined_depends_on)
+        if cycle:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Circular dependency detected: {' -> '.join(cycle)}"
+            )
+        
+        # Verify all dependency tasks exist
+        dependency_tasks = session.query(Task).filter(Task.id.in_(new_depends_on)).all()
+        if len(dependency_tasks) != len(new_depends_on):
+            found_ids = {t.id for t in dependency_tasks}
+            missing = new_depends_on - found_ids
+            raise HTTPException(
+                status_code=404,
+                detail=f"Dependency tasks not found: {', '.join(missing)}"
+            )
+        
+        # Update dependencies
+        task.dependencies = {"depends_on": combined_depends_on}
+        session.commit()
+        session.refresh(task)
+        
+        # Publish event
+        event_bus.publish(
+            SystemEvent(
+                event_type="TASK_DEPENDENCY_UPDATED",
+                entity_type="task",
+                entity_id=task_id,
+                payload={
+                    "depends_on": combined_depends_on,
+                    "added": list(new_depends_on),
+                }
+            )
+        )
+        
+        return {
+            "task_id": task_id,
+            "depends_on": combined_depends_on,
+            "dependencies_complete": queue.check_dependencies_complete(task_id),
+        }
+
+
+@router.put("/{task_id}/dependencies", response_model=dict)
+async def set_task_dependencies(
+    task_id: str,
+    request: SetDependenciesRequest = Body(...),
+    db: DatabaseService = Depends(get_db_service),
+    queue: TaskQueueService = Depends(get_task_queue),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Replace all dependencies for a task.
+
+    Args:
+        task_id: Task UUID
+        request: New dependencies to set
+        db: Database service
+        queue: Task queue service
+        event_bus: Event bus service
+
+    Returns:
+        Updated task dependencies
+    """
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        # Check for circular dependencies
+        cycle = queue.detect_circular_dependencies(task_id, request.depends_on)
+        if cycle:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Circular dependency detected: {' -> '.join(cycle)}"
+            )
+        
+        # Verify all dependency tasks exist
+        if request.depends_on:
+            dependency_tasks = session.query(Task).filter(Task.id.in_(request.depends_on)).all()
+            if len(dependency_tasks) != len(request.depends_on):
+                found_ids = {t.id for t in dependency_tasks}
+                missing = set(request.depends_on) - found_ids
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Dependency tasks not found: {', '.join(missing)}"
+                )
+        
+        # Get old dependencies for event
+        old_depends_on = []
+        if task.dependencies:
+            old_depends_on = task.dependencies.get("depends_on", [])
+        
+        # Update dependencies
+        if request.depends_on:
+            task.dependencies = {"depends_on": request.depends_on}
+        else:
+            task.dependencies = None
+        
+        session.commit()
+        session.refresh(task)
+        
+        # Publish event
+        event_bus.publish(
+            SystemEvent(
+                event_type="TASK_DEPENDENCY_UPDATED",
+                entity_type="task",
+                entity_id=task_id,
+                payload={
+                    "depends_on": request.depends_on,
+                    "old_depends_on": old_depends_on,
+                }
+            )
+        )
+        
+        return {
+            "task_id": task_id,
+            "depends_on": request.depends_on,
+            "dependencies_complete": queue.check_dependencies_complete(task_id),
+        }
+
+
+@router.delete("/{task_id}/dependencies/{depends_on_task_id}", response_model=dict)
+async def remove_task_dependency(
+    task_id: str,
+    depends_on_task_id: str,
+    db: DatabaseService = Depends(get_db_service),
+    queue: TaskQueueService = Depends(get_task_queue),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Remove a specific dependency from a task.
+
+    Args:
+        task_id: Task UUID
+        depends_on_task_id: Task ID to remove from dependencies
+        db: Database service
+        queue: Task queue service
+        event_bus: Event bus service
+
+    Returns:
+        Updated task dependencies
+    """
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        
+        if not task.dependencies:
+            raise HTTPException(status_code=400, detail="Task has no dependencies")
+        
+        depends_on = task.dependencies.get("depends_on", [])
+        if depends_on_task_id not in depends_on:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Task {depends_on_task_id} is not a dependency of {task_id}"
+            )
+        
+        # Remove the dependency
+        updated_depends_on = [dep_id for dep_id in depends_on if dep_id != depends_on_task_id]
+        
+        if updated_depends_on:
+            task.dependencies = {"depends_on": updated_depends_on}
+        else:
+            task.dependencies = None
+        
+        session.commit()
+        session.refresh(task)
+        
+        # Publish event
+        event_bus.publish(
+            SystemEvent(
+                event_type="TASK_DEPENDENCY_UPDATED",
+                entity_type="task",
+                entity_id=task_id,
+                payload={
+                    "depends_on": updated_depends_on,
+                    "removed": [depends_on_task_id],
+                }
+            )
+        )
+        
+        return {
+            "task_id": task_id,
+            "depends_on": updated_depends_on,
+            "dependencies_complete": queue.check_dependencies_complete(task_id),
+        }
 
 
 # Task Timeout & Cancellation Endpoints (Agent D)
