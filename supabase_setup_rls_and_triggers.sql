@@ -7,20 +7,23 @@
 -- ============================================================================
 
 -- Policy: Users can view their own profile
-CREATE POLICY IF NOT EXISTS "Users can view own profile"
+DROP POLICY IF EXISTS "Users can view own profile" ON public.users;
+CREATE POLICY "Users can view own profile"
     ON public.users
     FOR SELECT
     USING (auth.uid() = id);
 
 -- Policy: Users can update their own profile
-CREATE POLICY IF NOT EXISTS "Users can update own profile"
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
+CREATE POLICY "Users can update own profile"
     ON public.users
     FOR UPDATE
     USING (auth.uid() = id)
     WITH CHECK (auth.uid() = id);
 
 -- Policy: Service role has full access
-CREATE POLICY IF NOT EXISTS "Service role full access"
+DROP POLICY IF EXISTS "Service role full access" ON public.users;
+CREATE POLICY "Service role full access"
     ON public.users
     FOR ALL
     USING (auth.jwt()->>'role' = 'service_role');
@@ -30,13 +33,15 @@ CREATE POLICY IF NOT EXISTS "Service role full access"
 -- ============================================================================
 
 -- Trigger: Replicate new/updated users from auth.users to public.users
-CREATE TRIGGER IF NOT EXISTS on_auth_user_created
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
     AFTER INSERT OR UPDATE ON auth.users
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_new_user();
 
 -- Trigger: Mark users as deleted when removed from auth.users
-CREATE TRIGGER IF NOT EXISTS on_auth_user_deleted
+DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;
+CREATE TRIGGER on_auth_user_deleted
     AFTER DELETE ON auth.users
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_user_deleted();
