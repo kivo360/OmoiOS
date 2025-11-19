@@ -27,12 +27,15 @@ class BoardService:
         """
         self.event_bus = event_bus
 
-    def get_board_view(self, session: Session) -> Dict[str, Any]:
+    def get_board_view(
+        self, session: Session, project_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Get complete Kanban board view with all columns and tickets.
 
         Args:
             session: Database session.
+            project_id: Optional project ID to filter tickets. If None, shows all tickets (cross-project board).
 
         Returns:
             Dictionary with columns and tickets organized by column.
@@ -45,18 +48,19 @@ class BoardService:
         )
 
         # Build board view
-        board = {"columns": []}
+        board = {"columns": [], "project_id": project_id}
 
         for column in columns:
             # Get tickets in this column (match phase_id to column's phase_mapping)
             tickets_in_column = []
 
             for phase_id in column.phase_mapping:
-                tickets = (
-                    session.execute(select(Ticket).where(Ticket.phase_id == phase_id))
-                    .scalars()
-                    .all()
-                )
+                query = select(Ticket).where(Ticket.phase_id == phase_id)
+                # Filter by project if specified
+                if project_id is not None:
+                    query = query.where(Ticket.project_id == project_id)
+                
+                tickets = session.execute(query).scalars().all()
                 tickets_in_column.extend(tickets)
 
             # Count active tasks per ticket
@@ -93,6 +97,7 @@ class BoardService:
         ticket_id: str,
         target_column_id: str,
         force: bool = False,
+        project_id: Optional[str] = None,
     ) -> Ticket:
         """
         Move ticket to a different board column.
@@ -124,7 +129,9 @@ class BoardService:
 
         # Check WIP limit
         if not force:
-            current_count = self._count_tickets_in_column(session, column)
+            # Use ticket's project_id if not explicitly provided
+            filter_project_id = project_id or ticket.project_id
+            current_count = self._count_tickets_in_column(session, column, filter_project_id)
             if not column.can_accept_more_work(current_count):
                 raise ValueError(
                     f"Column {target_column_id} WIP limit exceeded "
@@ -162,12 +169,15 @@ class BoardService:
 
         return ticket
 
-    def check_wip_limits(self, session: Session) -> List[Dict[str, Any]]:
+    def check_wip_limits(
+        self, session: Session, project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Check WIP limits for all columns.
 
         Args:
             session: Database session.
+            project_id: Optional project ID to filter tickets. If None, checks all projects.
 
         Returns:
             List of columns with WIP violations.
@@ -177,7 +187,7 @@ class BoardService:
         violations = []
         for column in columns:
             if column.wip_limit is not None:
-                current_count = self._count_tickets_in_column(session, column)
+                current_count = self._count_tickets_in_column(session, column, project_id)
                 if current_count > column.wip_limit:
                     violations.append(
                         {
@@ -243,12 +253,15 @@ class BoardService:
             # WIP limit exceeded or other error, don't auto-transition
             return None
 
-    def get_column_stats(self, session: Session) -> List[Dict[str, Any]]:
+    def get_column_stats(
+        self, session: Session, project_id: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         """
         Get statistics for all board columns.
 
         Args:
             session: Database session.
+            project_id: Optional project ID to filter tickets. If None, shows all projects.
 
         Returns:
             List of column statistics.
@@ -261,7 +274,7 @@ class BoardService:
 
         stats = []
         for column in columns:
-            ticket_count = self._count_tickets_in_column(session, column)
+            ticket_count = self._count_tickets_in_column(session, column, project_id)
 
             stats.append(
                 {
@@ -280,13 +293,17 @@ class BoardService:
 
         return stats
 
-    def _count_tickets_in_column(self, session: Session, column: BoardColumn) -> int:
+    def _count_tickets_in_column(
+        self, session: Session, column: BoardColumn, project_id: Optional[str] = None
+    ) -> int:
         """Count tickets in a column based on phase mapping."""
         total = 0
         for phase_id in column.phase_mapping:
-            count = session.execute(
-                select(func.count(Ticket.id)).where(Ticket.phase_id == phase_id)
-            ).scalar()
+            query = select(func.count(Ticket.id)).where(Ticket.phase_id == phase_id)
+            # Filter by project if specified
+            if project_id is not None:
+                query = query.where(Ticket.project_id == project_id)
+            count = session.execute(query).scalar()
             total += count or 0
         return total
 

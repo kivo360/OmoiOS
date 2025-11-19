@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
@@ -58,6 +58,7 @@ def get_board_service() -> BoardService:
 
 @router.get("/view", response_model=BoardViewResponse)
 def get_board_view(
+    project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for cross-project board."),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> BoardViewResponse:
@@ -66,6 +67,9 @@ def get_board_view(
 
     Returns all columns with tickets organized by current phase.
     Automatically initializes default board columns if none exist.
+    
+    Args:
+        project_id: Optional project ID to filter tickets. If omitted, shows all tickets (cross-project board).
     """
     try:
         with db.get_session() as session:
@@ -79,7 +83,7 @@ def get_board_view(
                 board_service.create_default_board(session=session)
                 session.commit()
             
-            board_data = board_service.get_board_view(session=session)
+            board_data = board_service.get_board_view(session=session, project_id=project_id)
             return BoardViewResponse(**board_data)
     except Exception as e:
         raise HTTPException(
@@ -123,6 +127,7 @@ def move_ticket(
 
 @router.get("/stats", response_model=List[ColumnStatsResponse])
 def get_column_stats(
+    project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for all projects."),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> List[ColumnStatsResponse]:
@@ -130,10 +135,13 @@ def get_column_stats(
     Get statistics for all board columns.
 
     Includes ticket counts, WIP utilization, and limit violations.
+    
+    Args:
+        project_id: Optional project ID to filter tickets. If omitted, shows all projects.
     """
     try:
         with db.get_session() as session:
-            stats = board_service.get_column_stats(session=session)
+            stats = board_service.get_column_stats(session=session, project_id=project_id)
             return [ColumnStatsResponse(**stat) for stat in stats]
     except Exception as e:
         raise HTTPException(
@@ -143,6 +151,7 @@ def get_column_stats(
 
 @router.get("/wip-violations", response_model=List[WIPViolationResponse])
 def check_wip_violations(
+    project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for all projects."),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> List[WIPViolationResponse]:
@@ -151,10 +160,13 @@ def check_wip_violations(
 
     Returns columns where current ticket count exceeds WIP limit.
     Useful for Guardian monitoring and resource reallocation.
+    
+    Args:
+        project_id: Optional project ID to filter tickets. If omitted, checks all projects.
     """
     try:
         with db.get_session() as session:
-            violations = board_service.check_wip_limits(session=session)
+            violations = board_service.check_wip_limits(session=session, project_id=project_id)
             return [WIPViolationResponse(**v) for v in violations]
     except Exception as e:
         raise HTTPException(

@@ -1,0 +1,206 @@
+# Dockerfile for Cloud Agents - PostgreSQL 18 with PGVector + Redis + Python/UV
+# This single container runs PostgreSQL, Redis, and provides a Python environment
+# 
+# Usage:
+#   docker build -f Dockerfile.cloud-agent -t omoi-cloud-agent .
+#   docker run -d -p 15432:15432 -p 16379:16379 --name omoi-services omoi-cloud-agent
+#
+# Connect to:
+#   PostgreSQL: postgresql://postgres:postgres@localhost:15432/app_db
+#   Redis: redis://localhost:16379
+#
+# To use Python/UV inside the container:
+#   docker exec -it omoi-services bash
+#   cd /app && uv sync
+
+FROM postgres:18
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    postgresql-server-dev-18 \
+    postgresql-client-18 \
+    redis-server \
+    supervisor \
+    curl \
+    gosu \
+    runuser \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install UV package manager
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+RUN chmod +x /usr/local/bin/uv
+
+# Install PGVector extension
+WORKDIR /tmp
+RUN git clone --branch v0.7.2 https://github.com/pgvector/pgvector.git && \
+    cd pgvector && \
+    make && \
+    make install && \
+    cd .. && \
+    rm -rf pgvector
+
+# Configure PostgreSQL environment
+ENV POSTGRES_USER=postgres
+ENV POSTGRES_PASSWORD=postgres
+ENV POSTGRES_DB=app_db
+ENV PGDATA=/var/lib/postgresql/data
+
+# Configure Redis directories
+RUN mkdir -p /var/lib/redis /var/log/redis && \
+    chown redis:redis /var/lib/redis /var/log/redis
+
+# Create Redis config to use non-standard port (16379)
+RUN mkdir -p /etc/redis && \
+    echo "port 16379" > /etc/redis/redis-custom.conf && \
+    echo "appendonly yes" >> /etc/redis/redis-custom.conf && \
+    echo "dir /var/lib/redis" >> /etc/redis/redis-custom.conf && \
+    echo "bind 0.0.0.0" >> /etc/redis/redis-custom.conf
+
+# Create supervisord configuration
+RUN mkdir -p /etc/supervisor/conf.d /var/log/supervisor
+
+# Supervisord main config
+RUN echo '[supervisord]' > /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'nodaemon=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'logfile=/var/log/supervisor/supervisord.log' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'pidfile=/var/run/supervisord.pid' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '[program:postgresql]' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/usr/lib/postgresql/18/bin/postgres -D /var/lib/postgresql/data -p 15432' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'user=postgres' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'stderr_logfile=/var/log/supervisor/postgresql.err.log' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'stdout_logfile=/var/log/supervisor/postgresql.out.log' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'environment=PGDATA="/var/lib/postgresql/data"' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo '[program:redis]' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'command=/usr/bin/redis-server /etc/redis/redis-custom.conf' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'user=redis' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autostart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'autorestart=true' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'stderr_logfile=/var/log/supervisor/redis.err.log' >> /etc/supervisor/conf.d/supervisord.conf && \
+    echo 'stdout_logfile=/var/log/supervisor/redis.out.log' >> /etc/supervisor/conf.d/supervisord.conf
+
+# Create database initialization script (runs on first start via postgres entrypoint)
+RUN mkdir -p /docker-entrypoint-initdb.d && \
+    echo '-- Create useful extensions on first database init' > /docker-entrypoint-initdb.d/01_extensions.sql && \
+    echo 'CREATE EXTENSION IF NOT EXISTS vector;' >> /docker-entrypoint-initdb.d/01_extensions.sql && \
+    echo 'CREATE EXTENSION IF NOT EXISTS pg_trgm;' >> /docker-entrypoint-initdb.d/01_extensions.sql && \
+    echo 'CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;' >> /docker-entrypoint-initdb.d/01_extensions.sql && \
+    echo '-- vchord extension (uncomment if available)' >> /docker-entrypoint-initdb.d/01_extensions.sql && \
+    echo '-- CREATE EXTENSION IF NOT EXISTS vchord CASCADE;' >> /docker-entrypoint-initdb.d/01_extensions.sql
+
+# Set up Python project directory
+WORKDIR /app
+ENV PYTHONPATH=/app
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Backup original entrypoint FIRST (before we overwrite it)
+RUN if [ -f /usr/local/bin/docker-entrypoint.sh ]; then \
+        cp /usr/local/bin/docker-entrypoint.sh /usr/local/bin/docker-entrypoint-original.sh; \
+    elif [ -f /docker-entrypoint.sh ]; then \
+        cp /docker-entrypoint.sh /usr/local/bin/docker-entrypoint-original.sh; \
+    else \
+        echo '#!/bin/bash' > /usr/local/bin/docker-entrypoint-original.sh && \
+        echo 'exec /usr/lib/postgresql/18/bin/postgres "$@"' >> /usr/local/bin/docker-entrypoint-original.sh; \
+    fi && \
+    chmod +x /usr/local/bin/docker-entrypoint-original.sh
+
+# Create custom entrypoint that initializes DB, then starts supervisord
+RUN echo '#!/bin/bash' > /usr/local/bin/docker-entrypoint.sh && \
+    echo 'set -e' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '# Initialize PostgreSQL if needed' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'if [ ! -s "$PGDATA/PG_VERSION" ]; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    echo "Initializing PostgreSQL database..."' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    mkdir -p "$PGDATA"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    chown -R postgres:postgres "$PGDATA"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Initialize database' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    if command -v gosu > /dev/null; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        gosu postgres initdb --username=postgres --auth-local=trust --auth-host=scram-sha-256' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    elif command -v runuser > /dev/null; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        runuser -u postgres -- initdb --username=postgres --auth-local=trust --auth-host=scram-sha-256' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    else' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        su postgres -c "initdb --username=postgres --auth-local=trust --auth-host=scram-sha-256"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    fi' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Configure PostgreSQL to listen on port 15432' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    echo "" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    echo "# Custom port configuration for Cloud Agents" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    echo "port = 15432" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    echo "listen_addresses = '\''*'\''" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Start PostgreSQL temporarily to create database and run init scripts' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    if command -v gosu > /dev/null; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        gosu postgres postgres -D "$PGDATA" -p 15432 &' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    elif command -v runuser > /dev/null; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        runuser -u postgres -- postgres -D "$PGDATA" -p 15432 &' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    else' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        su postgres -c "postgres -D $PGDATA -p 15432" &' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    fi' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    POSTGRES_PID=$!' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Wait for PostgreSQL to be ready' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    for i in {1..30}; do' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        if PGPASSWORD=postgres psql -h localhost -p 15432 -U postgres -c "SELECT 1" > /dev/null 2>&1; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '            break' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        fi' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        sleep 1' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    done' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Create database if it doesn'\''t exist' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    PGPASSWORD=postgres psql -h localhost -p 15432 -U postgres -c "CREATE DATABASE app_db;" 2>/dev/null || true' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Run initialization scripts' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    for f in /docker-entrypoint-initdb.d/*.sql; do' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        if [ -f "$f" ]; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '            echo "Running $f..."' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '            PGPASSWORD=postgres psql -h localhost -p 15432 -U postgres -d app_db -f "$f"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        fi' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    done' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    ' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Stop temporary PostgreSQL' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    kill $POSTGRES_PID' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    wait $POSTGRES_PID 2>/dev/null || true' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'else' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    # Database already exists, ensure port config is set' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    if ! grep -q "port = 15432" "$PGDATA/postgresql.conf" 2>/dev/null; then' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        echo "" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        echo "# Custom port configuration for Cloud Agents" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        echo "port = 15432" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '        echo "listen_addresses = '\''*'\''" >> "$PGDATA/postgresql.conf"' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '    fi' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'fi' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'echo "Starting services with supervisord..."' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo '# Start supervisord to manage both PostgreSQL and Redis' >> /usr/local/bin/docker-entrypoint.sh && \
+    echo 'exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf' >> /usr/local/bin/docker-entrypoint.sh && \
+    chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Healthcheck script (using non-standard ports)
+RUN echo '#!/bin/bash' > /usr/local/bin/healthcheck.sh && \
+    echo 'set -e' >> /usr/local/bin/healthcheck.sh && \
+    echo '' >> /usr/local/bin/healthcheck.sh && \
+    echo '# Check PostgreSQL on port 15432' >> /usr/local/bin/healthcheck.sh && \
+    echo 'PGPASSWORD=postgres psql -h localhost -p 15432 -U postgres -d app_db -c "SELECT 1" > /dev/null 2>&1 || exit 1' >> /usr/local/bin/healthcheck.sh && \
+    echo '' >> /usr/local/bin/healthcheck.sh && \
+    echo '# Check Redis on port 16379' >> /usr/local/bin/healthcheck.sh && \
+    echo 'redis-cli -p 16379 ping || exit 1' >> /usr/local/bin/healthcheck.sh && \
+    echo '' >> /usr/local/bin/healthcheck.sh && \
+    echo 'exit 0' >> /usr/local/bin/healthcheck.sh && \
+    chmod +x /usr/local/bin/healthcheck.sh
+
+# Expose ports matching .env.local configuration
+# PostgreSQL: 15432, Redis: 16379
+EXPOSE 15432 16379
+
+HEALTHCHECK --interval=5s --timeout=3s --retries=10 \
+    CMD /usr/local/bin/healthcheck.sh
+
+# Use custom entrypoint
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD []
