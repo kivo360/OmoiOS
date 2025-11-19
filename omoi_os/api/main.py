@@ -23,14 +23,18 @@ from omoi_os.api.routes import (
 )
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
+from omoi_os.services.agent_status_manager import AgentStatusManager
+from omoi_os.services.approval import ApprovalService
 from omoi_os.services.budget_enforcer import BudgetEnforcerService
 from omoi_os.services.collaboration import CollaborationService
 from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
+from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.resource_lock import ResourceLockService
 from omoi_os.services.task_queue import TaskQueueService
+from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
 
 
 # Global services (initialized in lifespan)
@@ -40,14 +44,18 @@ event_bus: EventBusService | None = None
 health_service: AgentHealthService | None = None
 heartbeat_protocol_service: HeartbeatProtocolService | None = None
 registry_service: AgentRegistryService | None = None
+agent_status_manager: AgentStatusManager | None = None
+approval_service: ApprovalService | None = None
 collaboration_service: CollaborationService | None = None
 lock_service: ResourceLockService | None = None
 monitor_service = None  # Defined below in lifespan
+phase_gate_service: PhaseGateService | None = None
 cost_tracking_service: CostTrackingService | None = None
 budget_enforcer_service: BudgetEnforcerService | None = None
 result_submission_service = None  # Defined below in lifespan
 diagnostic_service = None  # Defined below in lifespan
 validation_orchestrator = None  # Defined below in lifespan
+ticket_workflow_orchestrator = None  # Defined below in lifespan
 
 
 async def orchestrator_loop():
@@ -71,9 +79,11 @@ async def orchestrator_loop():
                 # TODO: Implement proper agent selection logic
                 from omoi_os.models.agent import Agent
 
+                from omoi_os.models.agent_status import AgentStatus
+
                 with db.get_session() as session:
                     available_agent = (
-                        session.query(Agent).filter(Agent.status == "idle").first()
+                        session.query(Agent).filter(Agent.status == AgentStatus.IDLE.value).first()
                     )
                     if available_agent:
                         queue.assign_task(task.id, available_agent.id)
@@ -127,6 +137,7 @@ async def heartbeat_monitoring_loop():
         agent_registry=registry_service,
         task_queue=queue,
         event_bus=event_bus,
+        status_manager=agent_status_manager,
     )
 
     while True:
@@ -225,6 +236,188 @@ async def diagnostic_monitoring_loop():
             await asyncio.sleep(60)
 
 
+async def approval_timeout_loop():
+    """
+    Check for ticket approval timeouts and process them per REQ-THA-004, REQ-THA-009.
+
+    Monitors tickets in pending_review state for deadline expiration and processes timeouts.
+    Timeout processing P95 < 2s from deadline per REQ-THA-009.
+    """
+    global db, approval_service
+
+    if not db or not approval_service:
+        return
+
+    print("Approval timeout monitoring loop started")
+
+    while True:
+        try:
+            # Check for timed out tickets (REQ-THA-004, REQ-THA-009)
+            timed_out_ids = approval_service.check_timeouts()
+
+            if timed_out_ids:
+                for ticket_id in timed_out_ids:
+                    print(f"⏰ TICKET TIMEOUT - Ticket {ticket_id} approval deadline exceeded")
+
+            # Check every 10 seconds (frequent enough to catch timeouts quickly per REQ-THA-009)
+            await asyncio.sleep(10)
+
+        except Exception as e:
+            print(f"Error in approval timeout loop: {e}")
+            await asyncio.sleep(10)
+
+
+async def blocking_detection_loop():
+    """
+    Detect and mark blocked tickets per REQ-TKT-BL-001.
+
+    Monitors tickets for blocking conditions (no task progress for BLOCKING_THRESHOLD)
+    and automatically marks them as blocked.
+    """
+    global db, queue, phase_gate_service, event_bus, ticket_workflow_orchestrator
+
+    if not db or not queue or not phase_gate_service:
+        return
+
+    print("Blocking detection loop started")
+
+    while True:
+        try:
+            # Detect blocking tickets
+            results = ticket_workflow_orchestrator.detect_blocking()
+
+            # Mark tickets as blocked
+            for result in results:
+                if result["should_block"]:
+                    print(
+                        f"🚫 BLOCKING DETECTED - Ticket {result['ticket_id']} "
+                        f"blocked ({result['blocker_type']}, "
+                        f"{result['time_in_state_minutes']:.1f} min in state)"
+                    )
+
+                    ticket_workflow_orchestrator.mark_blocked(
+                        result["ticket_id"],
+                        result["blocker_type"],
+                        initiated_by="blocking-detector",
+                    )
+
+            # Check every 5 minutes (frequent enough to catch blocking quickly)
+            await asyncio.sleep(300)  # 5 minutes
+
+        except Exception as e:
+            print(f"Error in blocking detection loop: {e}")
+            await asyncio.sleep(300)
+
+
+async def anomaly_monitoring_loop():
+    """
+    Check for agent anomalies and auto-spawn diagnostic agents per REQ-FT-DIAG-001.
+
+    Monitors agents for composite anomaly scores >= 0.8 for 3 consecutive readings
+    and automatically spawns diagnostic agents to investigate.
+    """
+    global db, monitor_service, diagnostic_service, event_bus
+
+    if not db or not monitor_service or not diagnostic_service:
+        return
+
+    print("Anomaly monitoring loop started")
+
+    # Track agents that have already triggered diagnostic runs (to avoid duplicate spawns)
+    triggered_agents = set()
+
+    while True:
+        try:
+            # Compute anomaly scores for all active agents
+            anomaly_results = monitor_service.compute_agent_anomaly_scores(
+                anomaly_threshold=0.8,  # REQ-FT-AN-001 default
+                consecutive_threshold=3,  # REQ-FT-AN-003 default
+            )
+
+            for result in anomaly_results:
+                agent_id = result["agent_id"]
+                anomaly_score = result["anomaly_score"]
+                consecutive_readings = result["consecutive_readings"]
+                should_quarantine = result["should_quarantine"]
+
+                # Auto-spawn diagnostic agent if anomaly_score >= threshold for 3 consecutive readings
+                # per REQ-FT-DIAG-001
+                if (
+                    anomaly_score >= 0.8
+                    and consecutive_readings >= 3
+                    and agent_id not in triggered_agents
+                ):
+                    print(
+                        f"🚨 AGENT ANOMALY DETECTED - Agent {agent_id} has anomaly_score={anomaly_score:.3f} "
+                        f"({consecutive_readings} consecutive readings)"
+                    )
+                    print(f"🔍 Creating diagnostic agent for anomalous agent {agent_id}")
+
+                    # Get workflow ID from agent's current task or recent tasks
+                    with db.get_session() as session:
+                        from omoi_os.models.task import Task
+
+                        # Find a workflow associated with this agent (via tasks)
+                        task = (
+                            session.query(Task)
+                            .filter(
+                                Task.assigned_agent_id == agent_id,
+                                Task.status.in_(["assigned", "running", "completed", "failed"]),
+                            )
+                            .order_by(Task.created_at.desc())
+                            .first()
+                        )
+
+                        if task:
+                            workflow_id = task.ticket_id
+
+                            # Build diagnostic context for agent anomaly
+                            context = diagnostic_service.build_diagnostic_context(
+                                workflow_id=workflow_id,
+                                max_agents=15,
+                                max_analyses=5,
+                            )
+
+                            # Update context with anomaly info
+                            context.update({
+                                "trigger": "agent_anomaly",
+                                "agent_id": agent_id,
+                                "anomaly_score": anomaly_score,
+                                "consecutive_readings": consecutive_readings,
+                                "should_quarantine": should_quarantine,
+                            })
+
+                            # Spawn diagnostic agent focusing on this agent
+                            diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
+                                workflow_id=workflow_id,
+                                context=context,
+                            )
+
+                            print(
+                                f"✅ Diagnostic run {diagnostic_run.id} created for agent {agent_id} anomaly "
+                                f"(workflow {workflow_id})"
+                            )
+
+                            # Mark agent as triggered to avoid duplicate spawns
+                            triggered_agents.add(agent_id)
+
+                            # Reset trigger after cooldown period (60 seconds)
+                            # (in production, use a more sophisticated cooldown mechanism)
+                            await asyncio.sleep(60)
+                            triggered_agents.discard(agent_id)
+
+                # Reset trigger for agents with anomaly_score < threshold
+                elif anomaly_score < 0.8:
+                    triggered_agents.discard(agent_id)
+
+            # Check every 60 seconds (same frequency as diagnostic loop)
+            await asyncio.sleep(60)
+
+        except Exception as e:
+            print(f"Error in anomaly monitoring loop: {e}")
+            await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app."""
@@ -235,14 +428,18 @@ async def lifespan(app: FastAPI):
         health_service, \
         heartbeat_protocol_service, \
         registry_service, \
+        agent_status_manager, \
+        approval_service, \
         collaboration_service, \
         lock_service, \
         monitor_service, \
+        phase_gate_service, \
         cost_tracking_service, \
         budget_enforcer_service, \
         result_submission_service, \
         diagnostic_service, \
-        validation_orchestrator
+        validation_orchestrator, \
+        ticket_workflow_orchestrator
 
     # Initialize services
     db = DatabaseService(
@@ -255,11 +452,14 @@ async def lifespan(app: FastAPI):
     event_bus = EventBusService(
         redis_url=os.getenv("REDIS_URL", "redis://localhost:16379")
     )
-    health_service = AgentHealthService(db)
-    heartbeat_protocol_service = HeartbeatProtocolService(db, event_bus)
-    registry_service = AgentRegistryService(db, event_bus)
+    agent_status_manager = AgentStatusManager(db, event_bus)
+    approval_service = ApprovalService(db, event_bus)
+    health_service = AgentHealthService(db, agent_status_manager)
+    heartbeat_protocol_service = HeartbeatProtocolService(db, event_bus, agent_status_manager)
+    registry_service = AgentRegistryService(db, event_bus, agent_status_manager)
     collaboration_service = CollaborationService(db, event_bus)
     lock_service = ResourceLockService(db)
+    phase_gate_service = PhaseGateService(db)
 
     # Import MonitorService here to avoid issues if Phase 4 not complete
     try:
@@ -307,6 +507,14 @@ async def lifespan(app: FastAPI):
         event_bus=event_bus,
     )
 
+    # Ticket workflow orchestrator
+    ticket_workflow_orchestrator = TicketWorkflowOrchestrator(
+        db=db,
+        task_queue=queue,
+        phase_gate=phase_gate_service,
+        event_bus=event_bus,
+    )
+
     # Create database tables if they don't exist
     db.create_tables()
 
@@ -314,6 +522,9 @@ async def lifespan(app: FastAPI):
     orchestrator_task = asyncio.create_task(orchestrator_loop())
     heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
     diagnostic_task = asyncio.create_task(diagnostic_monitoring_loop())
+    anomaly_task = asyncio.create_task(anomaly_monitoring_loop())
+    blocking_detection_task = asyncio.create_task(blocking_detection_loop())
+    approval_timeout_task = asyncio.create_task(approval_timeout_loop())
 
     yield
 
@@ -321,6 +532,9 @@ async def lifespan(app: FastAPI):
     orchestrator_task.cancel()
     heartbeat_task.cancel()
     diagnostic_task.cancel()
+    anomaly_task.cancel()
+    blocking_detection_task.cancel()
+    approval_timeout_task.cancel()
     try:
         await orchestrator_task
     except asyncio.CancelledError:
@@ -331,6 +545,18 @@ async def lifespan(app: FastAPI):
         pass
     try:
         await diagnostic_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await anomaly_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await blocking_detection_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await approval_timeout_task
     except asyncio.CancelledError:
         pass
     event_bus.close()

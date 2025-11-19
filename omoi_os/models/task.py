@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -33,6 +33,10 @@ class Task(Base):
     task_type: Mapped[str] = mapped_column(String(100), nullable=False)  # analyze_requirements, implement_feature, etc.
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     priority: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # CRITICAL, HIGH, MEDIUM, LOW
+    score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, index=True,
+        comment="Dynamic scheduling score computed from priority, age, deadline, blocker count, and retry penalty (REQ-TQM-PRI-002)"
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # pending, assigned, running, completed, failed
     assigned_agent_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
     conversation_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # OpenHands conversation ID
@@ -46,6 +50,16 @@ class Task(Base):
 
     # Timeout field for cancellation
     timeout_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # Timeout in seconds
+
+    # Dynamic scoring fields (REQ-TQM-PRI-002, REQ-TQM-DM-001)
+    deadline_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+        comment="Optional SLA deadline for this task (REQ-TQM-PRI-003)"
+    )
+    parent_task_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("tasks.id", ondelete="CASCADE"), nullable=True, index=True,
+        comment="Parent task ID for branching and sub-tasks (REQ-TQM-DM-001)"
+    )
 
     # Validation fields (REQ-VAL-DM-001)
     validation_enabled: Mapped[bool] = mapped_column(

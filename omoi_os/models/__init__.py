@@ -1,7 +1,12 @@
 """Database models for OmoiOS"""
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.agent_baseline import AgentBaseline
+from omoi_os.models.agent_status import AgentStatus
+from omoi_os.models.agent_status_transition import AgentStatusTransition
+from omoi_os.models.approval_status import ApprovalStatus
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
+from omoi_os.models.memory_type import MemoryType
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.agent_result import AgentResult
 from omoi_os.models.base import Base
@@ -14,6 +19,8 @@ from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
 from omoi_os.models.learned_pattern import LearnedPattern, TaskPattern
 from omoi_os.models.monitor_anomaly import Alert, MonitorAnomaly
 from omoi_os.models.phase import PhaseModel
+from omoi_os.models.playbook_entry import PlaybookEntry
+from omoi_os.models.playbook_change import PlaybookChange
 from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.phase_gate_result import PhaseGateResult
@@ -25,12 +32,18 @@ from omoi_os.models.task import Task
 from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task_memory import TaskMemory
 from omoi_os.models.ticket import Ticket
+from omoi_os.models.ticket_status import TicketStatus
 from omoi_os.models.validation_review import ValidationReview
 from omoi_os.models.workflow_result import WorkflowResult
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 
 __all__ = [
     "Agent",
+    "AgentBaseline",
+    "AgentStatus",
+    "AgentStatusTransition",
+    "ApprovalStatus",
+    "MemoryType",
     "AgentMessage",
     "AgentResult",
     "Alert",
@@ -53,6 +66,8 @@ __all__ = [
     "PhaseGateResult",
     "PhaseHistory",
     "PhaseModel",
+    "PlaybookEntry",
+    "PlaybookChange",
     "QualityGate",
     "QualityMetric",
     "ResourceLock",
@@ -61,6 +76,7 @@ __all__ = [
     "TaskMemory",
     "TaskPattern",
     "Ticket",
+    "TicketStatus",
     "ValidationReview",
     "WorkflowResult",
     "HeartbeatMessage",

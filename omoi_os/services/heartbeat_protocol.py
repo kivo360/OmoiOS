@@ -8,7 +8,9 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy import or_
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.agent_status import AgentStatus
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
+from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -28,11 +30,13 @@ class HeartbeatProtocolService:
 
     # TTL thresholds per REQ-FT-HB-002
     TTL_THRESHOLDS = {
-        "idle": 30,  # IDLE agents: 30s
-        "running": 15,  # RUNNING agents: 15s
+        AgentStatus.IDLE.value.lower(): 30,  # IDLE agents: 30s
+        AgentStatus.RUNNING.value.lower(): 15,  # RUNNING agents: 15s
         "monitor": 15,  # MONITOR agents: 15s
         "watchdog": 15,  # WATCHDOG agents: 15s
         "guardian": 60,  # GUARDIAN agents: 60s (less frequent)
+        "idle": 30,  # Legacy lowercase support
+        "running": 15,  # Legacy lowercase support
     }
 
     # Escalation thresholds per REQ-FT-AR-001
@@ -42,16 +46,23 @@ class HeartbeatProtocolService:
         3: "unresponsive",  # 3 missed → UNRESPONSIVE
     }
 
-    def __init__(self, db: DatabaseService, event_bus: Optional[EventBusService] = None):
+    def __init__(
+        self,
+        db: DatabaseService,
+        event_bus: Optional[EventBusService] = None,
+        status_manager: Optional[AgentStatusManager] = None,
+    ):
         """
         Initialize HeartbeatProtocolService.
 
         Args:
             db: Database service instance
             event_bus: Optional event bus for publishing heartbeat events
+            status_manager: Optional status manager for state machine enforcement
         """
         self.db = db
         self.event_bus = event_bus
+        self.status_manager = status_manager
 
     def _calculate_checksum(self, payload: dict) -> str:
         """
@@ -162,9 +173,22 @@ class HeartbeatProtocolService:
             if agent.consecutive_missed_heartbeats > 0:
                 agent.consecutive_missed_heartbeats = 0
 
-            # Update status if was stale
-            if agent.status == "stale":
-                agent.status = "idle"
+            # Update status if was stale (legacy status should be IDLE)
+            # Use status manager if available
+            if agent.status in ["stale", "STALE"]:
+                if self.status_manager:
+                    try:
+                        self.status_manager.transition_status(
+                            agent.id,
+                            to_status=AgentStatus.IDLE.value,
+                            initiated_by="heartbeat_service",
+                            reason="Heartbeat received, recovering from stale state",
+                        )
+                    except Exception:
+                        # If transition fails, update directly as fallback
+                        agent.status = AgentStatus.IDLE.value
+                else:
+                    agent.status = AgentStatus.IDLE.value
             agent.health_status = "healthy"
 
             # Publish heartbeat received event
@@ -235,7 +259,13 @@ class HeartbeatProtocolService:
 
         with self.db.get_session() as session:
             agents = session.query(Agent).filter(
-                Agent.status.in_(["idle", "running", "degraded"])
+                Agent.status.in_(
+                    [
+                        AgentStatus.IDLE.value,
+                        AgentStatus.RUNNING.value,
+                        AgentStatus.DEGRADED.value,
+                    ]
+                )
             ).all()
 
             for agent in agents:
@@ -306,23 +336,40 @@ class HeartbeatProtocolService:
                     )
                 )
         elif missed_count == 2:
-            # 2 consecutive missed → DEGRADED
-            if agent.status != "degraded":
-                agent.status = "degraded"
-                agent.health_status = "degraded"
-                if self.event_bus:
-                    self.event_bus.publish(
-                        SystemEvent(
-                            event_type="AGENT_STATUS_CHANGED",
-                            entity_type="agent",
-                            entity_id=agent.id,
-                            payload={
-                                "old_status": agent.status,
-                                "new_status": "degraded",
-                                "reason": "2 consecutive missed heartbeats",
-                            },
+            # 2 consecutive missed → DEGRADED per REQ-ALM-004
+            if agent.status != AgentStatus.DEGRADED.value:
+                old_status = agent.status
+                if self.status_manager:
+                    try:
+                        self.status_manager.transition_status(
+                            agent.id,
+                            to_status=AgentStatus.DEGRADED.value,
+                            initiated_by="heartbeat_service",
+                            reason=f"{missed_count} consecutive missed heartbeats",
                         )
-                    )
+                    except Exception:
+                        # If transition fails, update directly as fallback
+                        agent.status = AgentStatus.DEGRADED.value
+                        agent.health_status = "degraded"
+                else:
+                    agent.status = AgentStatus.DEGRADED.value
+                    agent.health_status = "degraded"
+                    if self.event_bus:
+                        self.event_bus.publish(
+                            SystemEvent(
+                                event_type="AGENT_STATUS_CHANGED",
+                                entity_type="agent",
+                                entity_id=agent.id,
+                                payload={
+                                    "old_status": old_status,
+                                    "new_status": AgentStatus.DEGRADED.value,
+                                    "reason": "2 consecutive missed heartbeats",
+                                },
+                            )
+                        )
+                
+                # Publish heartbeat missed event (status manager already published status changed)
+                if self.event_bus and not self.status_manager:
                     self.event_bus.publish(
                         SystemEvent(
                             event_type="HEARTBEAT_MISSED",
@@ -336,23 +383,41 @@ class HeartbeatProtocolService:
                         )
                     )
         elif missed_count >= 3:
-            # 3 consecutive missed → UNRESPONSIVE
-            if agent.status != "unresponsive":
-                agent.status = "unresponsive"
-                agent.health_status = "unresponsive"
-                if self.event_bus:
-                    self.event_bus.publish(
-                        SystemEvent(
-                            event_type="AGENT_STATUS_CHANGED",
-                            entity_type="agent",
-                            entity_id=agent.id,
-                            payload={
-                                "old_status": agent.status,
-                                "new_status": "unresponsive",
-                                "reason": "3 consecutive missed heartbeats",
-                            },
+            # 3 consecutive missed → FAILED per REQ-ALM-004 (UNRESPONSIVE is not a valid status)
+            # FAILED triggers restart protocol
+            if agent.status != AgentStatus.FAILED.value:
+                old_status = agent.status
+                if self.status_manager:
+                    try:
+                        self.status_manager.transition_status(
+                            agent.id,
+                            to_status=AgentStatus.FAILED.value,
+                            initiated_by="heartbeat_service",
+                            reason=f"{missed_count} consecutive missed heartbeats - unresponsive",
                         )
-                    )
+                    except Exception:
+                        # If transition fails, update directly as fallback
+                        agent.status = AgentStatus.FAILED.value
+                        agent.health_status = "unresponsive"
+                else:
+                    agent.status = AgentStatus.FAILED.value
+                    agent.health_status = "unresponsive"
+                    if self.event_bus:
+                        self.event_bus.publish(
+                            SystemEvent(
+                                event_type="AGENT_STATUS_CHANGED",
+                                entity_type="agent",
+                                entity_id=agent.id,
+                                payload={
+                                    "old_status": old_status,
+                                    "new_status": AgentStatus.FAILED.value,
+                                    "reason": "3 consecutive missed heartbeats",
+                                },
+                            )
+                        )
+                
+                # Publish heartbeat missed event (status manager already published status changed)
+                if self.event_bus and not self.status_manager:
                     self.event_bus.publish(
                         SystemEvent(
                             event_type="HEARTBEAT_MISSED",

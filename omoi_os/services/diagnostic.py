@@ -13,6 +13,8 @@ from omoi_os.models.ticket import Ticket
 from omoi_os.models.workflow_result import WorkflowResult
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.schemas.diagnostic_analysis import DiagnosticAnalysis
 from omoi_os.utils.datetime import utc_now
 
 if TYPE_CHECKING:
@@ -35,6 +37,7 @@ class DiagnosticService:
         memory: "MemoryService",
         monitor: "MonitorService",
         event_bus: Optional[EventBusService] = None,
+        ai_service: Optional[PydanticAIService] = None,
     ):
         """Initialize diagnostic service.
         
@@ -44,12 +47,14 @@ class DiagnosticService:
             memory: Memory service for context building
             monitor: Monitor service for metrics
             event_bus: Optional event bus for publishing events
+            ai_service: Optional PydanticAI service for hypothesis generation
         """
         self.db = db
         self.discovery = discovery
         self.memory = memory
         self.monitor = monitor
         self.event_bus = event_bus
+        self.ai_service = ai_service or PydanticAIService()
         self._last_diagnostic: Dict[str, float] = {}  # workflow_id -> timestamp
 
     def find_stuck_workflows(
@@ -219,6 +224,57 @@ class DiagnosticService:
                 )
 
             return diagnostic_run
+
+    async def generate_hypotheses(
+        self,
+        context: dict,
+    ) -> DiagnosticAnalysis:
+        """
+        Generate hypotheses and recommendations for a stuck workflow using PydanticAI.
+        
+        Args:
+            context: Diagnostic context from build_diagnostic_context()
+            
+        Returns:
+            DiagnosticAnalysis with hypotheses and recommendations
+        """
+        # Create agent with structured output
+        agent = self.ai_service.create_agent(
+            output_type=DiagnosticAnalysis,
+            system_prompt=(
+                "You are a diagnostic agent analyzing stuck workflows. "
+                "Analyze the provided context to identify root causes and generate "
+                "actionable hypotheses ranked by likelihood. Provide recommendations "
+                "with priority levels (CRITICAL, HIGH, MEDIUM, LOW) and effort estimates (S, M, L)."
+            ),
+        )
+
+        # Build comprehensive prompt from context
+        prompt_parts = [
+            f"Workflow Goal: {context.get('workflow_goal', 'Unknown')}",
+            f"Current Phase: {context.get('current_phase', 'Unknown')}",
+            f"Total Tasks: {context.get('total_tasks', 0)}",
+            f"Completed Tasks: {context.get('done_tasks', 0)}",
+            f"Failed Tasks: {context.get('failed_tasks', 0)}",
+            f"Time Stuck: {context.get('time_stuck_seconds', 0)} seconds",
+        ]
+
+        if context.get("recent_tasks"):
+            prompt_parts.append("\nRecent Tasks:")
+            for task in context["recent_tasks"][:10]:  # Limit to 10 most recent
+                prompt_parts.append(
+                    f"- {task.get('task_type', 'unknown')}: {task.get('status', 'unknown')} - "
+                    f"{task.get('description', '')[:100]}"
+                )
+                if task.get("error_message"):
+                    prompt_parts.append(f"  Error: {task['error_message'][:200]}")
+
+        prompt = "\n".join(prompt_parts)
+        prompt += "\n\nAnalyze why this workflow is stuck and generate hypotheses with recommendations."
+
+        # Run analysis
+        result = await agent.run(prompt)
+        return result.data
 
     def build_diagnostic_context(
         self,

@@ -10,6 +10,8 @@ from omoi_os.api.dependencies import get_db_service
 from omoi_os.services.memory import MemoryService
 from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
 from omoi_os.services.event_bus import EventBusService
+from omoi_os.services.ace_engine import ACEEngine
+from omoi_os.services.database import DatabaseService
 
 router = APIRouter(prefix="/memory", tags=["memory"])
 
@@ -26,6 +28,10 @@ class StoreExecutionRequest(BaseModel):
     )
     auto_extract_patterns: bool = Field(
         True, description="Auto-extract patterns from successful executions"
+    )
+    memory_type: Optional[str] = Field(
+        None,
+        description="Memory type (error_fix, discovery, decision, learning, warning, codebase_knowledge). If not provided, will be auto-classified.",
     )
 
 
@@ -49,6 +55,9 @@ class SearchSimilarRequest(BaseModel):
         0.7, ge=0.0, le=1.0, description="Minimum similarity"
     )
     success_only: bool = Field(False, description="Only return successful tasks")
+    memory_types: Optional[List[str]] = Field(
+        None, description="Filter by memory types (REQ-MEM-SEARCH-005)"
+    )
 
 
 class TaskContextResponse(BaseModel):
@@ -91,6 +100,32 @@ class PatternFeedbackRequest(BaseModel):
     )
 
 
+class ToolUsage(BaseModel):
+    """Tool usage record (REQ-MEM-ACE-001)."""
+    
+    tool_name: str = Field(..., description="Name of the tool (e.g., file_read, file_edit)")
+    arguments: Dict[str, Any] = Field(..., description="Tool-specific arguments")
+    result: Optional[str] = Field(None, description="Tool output result")
+
+
+class CompleteTaskRequest(BaseModel):
+    """Request to execute ACE workflow (REQ-MEM-API-001, REQ-MEM-ACE-004)."""
+    
+    task_id: str = Field(..., description="Task ID")
+    goal: str = Field(..., min_length=10, description="What you were trying to accomplish")
+    result: str = Field(..., min_length=10, description="What actually happened")
+    tool_usage: List[ToolUsage] = Field(..., min_items=1, description="Tools used during task")
+    feedback: str = Field(..., description="Output from environment (stdout, stderr, test results)")
+    agent_id: str = Field(..., description="Agent ID that completed the task")
+
+
+class CompleteTaskResponse(BaseModel):
+    """Response from ACE workflow (REQ-MEM-API-001, REQ-MEM-ACE-004)."""
+    
+    success: bool
+    ace_result: Dict[str, Any]
+
+
 # Dependency: Get MemoryService
 def get_memory_service(
     db: Session = Depends(get_db_service),
@@ -99,6 +134,26 @@ def get_memory_service(
     embedding_service = EmbeddingService(provider=EmbeddingProvider.LOCAL)
     event_bus = EventBusService()
     return MemoryService(embedding_service=embedding_service, event_bus=event_bus)
+
+
+# Dependency: Get ACEEngine
+def get_ace_engine() -> ACEEngine:
+    """Get ACE engine with dependencies."""
+    from omoi_os.api.main import db, event_bus
+    
+    if db is None:
+        raise RuntimeError("Database service not initialized")
+    if event_bus is None:
+        event_bus = EventBusService()
+    
+    embedding_service = EmbeddingService(provider=EmbeddingProvider.LOCAL)
+    memory_service = MemoryService(embedding_service=embedding_service, event_bus=event_bus)
+    return ACEEngine(
+        db=db,
+        memory_service=memory_service,
+        embedding_service=embedding_service,
+        event_bus=event_bus,
+    )
 
 
 @router.post("/store", status_code=201)
@@ -121,6 +176,7 @@ def store_execution(
             success=request.success,
             error_patterns=request.error_patterns,
             auto_extract_patterns=request.auto_extract_patterns,
+            memory_type=request.memory_type,
         )
         db.commit()
         return {"memory_id": memory.id, "status": "stored"}
@@ -151,6 +207,7 @@ def search_similar(
             top_k=request.top_k,
             similarity_threshold=request.similarity_threshold,
             success_only=request.success_only,
+            memory_types=request.memory_types,
         )
         db.commit()  # Commit reuse counter updates
         return [
@@ -317,4 +374,71 @@ def provide_pattern_feedback(
         db.rollback()
         raise HTTPException(
             status_code=500, detail=f"Failed to record feedback: {str(e)}"
+        )
+
+
+@router.post("/complete-task", response_model=CompleteTaskResponse, status_code=200)
+def complete_task(
+    request: CompleteTaskRequest,
+    ace_engine: ACEEngine = Depends(get_ace_engine),
+) -> CompleteTaskResponse:
+    """
+    Execute ACE workflow on task completion (REQ-MEM-API-001, REQ-MEM-ACE-004).
+    
+    Executes the complete ACE workflow (Executor → Reflector → Curator) to transform
+    task completion into knowledge. This endpoint:
+    
+    1. **Executor Phase**: Parses tool usage, classifies memory type, generates embeddings,
+       and creates a memory record.
+    2. **Reflector Phase**: Analyzes feedback for errors, searches playbook for related
+       entries, tags entries, and extracts insights.
+    3. **Curator Phase**: Proposes playbook updates, generates deltas, validates, and
+       applies changes.
+    
+    Returns:
+        CompleteTaskResponse with memory_id, tags, insights, errors, related playbook
+        entries, playbook delta, and updated bullets.
+    """
+    try:
+        # Convert ToolUsage models to dictionaries
+        tool_usage_dicts = [
+            {
+                "tool_name": tool.tool_name,
+                "arguments": tool.arguments,
+                "result": tool.result,
+            }
+            for tool in request.tool_usage
+        ]
+        
+        # Execute ACE workflow
+        ace_result = ace_engine.execute_workflow(
+            task_id=request.task_id,
+            goal=request.goal,
+            result=request.result,
+            tool_usage=tool_usage_dicts,
+            feedback=request.feedback,
+            agent_id=request.agent_id,
+        )
+        
+        # Convert ACEResult to dictionary
+        return CompleteTaskResponse(
+            success=True,
+            ace_result={
+                "memory_id": ace_result.memory_id,
+                "memory_type": ace_result.memory_type,
+                "files_linked": ace_result.files_linked,
+                "tags_added": ace_result.tags_added,
+                "insights_found": ace_result.insights_found,
+                "errors_identified": ace_result.errors_identified,
+                "related_playbook_entries": ace_result.related_playbook_entries,
+                "playbook_delta": ace_result.playbook_delta,
+                "updated_bullets": ace_result.updated_bullets,
+                "change_id": ace_result.change_id,
+            },
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"ACE workflow failed: {str(e)}"
         )

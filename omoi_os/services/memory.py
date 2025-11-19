@@ -9,9 +9,12 @@ from sqlalchemy.orm import Session
 
 from omoi_os.models.task_memory import TaskMemory
 from omoi_os.models.learned_pattern import LearnedPattern, TaskPattern
+from omoi_os.models.memory_type import MemoryType
 from omoi_os.models.task import Task
 from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.schemas.memory_analysis import MemoryClassification, PatternExtraction
 from omoi_os.utils.datetime import utc_now
 
 
@@ -42,6 +45,7 @@ class MemoryService:
         self,
         embedding_service: EmbeddingService,
         event_bus: Optional[EventBusService] = None,
+        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize memory service.
@@ -49,9 +53,94 @@ class MemoryService:
         Args:
             embedding_service: Service for generating text embeddings.
             event_bus: Optional event bus for publishing memory events.
+            ai_service: Optional PydanticAI service for structured analysis.
         """
         self.embedding_service = embedding_service
         self.event_bus = event_bus
+        self.ai_service = ai_service or PydanticAIService()
+
+    async def classify_memory_type(
+        self,
+        execution_summary: str,
+        task_description: Optional[str] = None,
+    ) -> str:
+        """
+        Classify memory type based on execution summary and task description (REQ-MEM-TAX-001).
+
+        Uses PydanticAI for structured classification with confidence scoring.
+
+        Args:
+            execution_summary: Summary of task execution and results
+            task_description: Optional task description for additional context
+
+        Returns:
+            Memory type string (one of MemoryType enum values)
+        """
+        # Create agent with structured output
+        agent = self.ai_service.create_agent(
+            output_type=MemoryClassification,
+            system_prompt=(
+                "You are a memory classification expert. Classify task execution summaries "
+                "into one of these memory types:\n"
+                "- error_fix: Contains fixes, errors, bugs, or issues\n"
+                "- decision: Contains choices, decisions, or selections\n"
+                "- learning: Contains discoveries, learnings, or realizations\n"
+                "- warning: Contains warnings, gotchas, or cautions\n"
+                "- codebase_knowledge: Contains architecture, structure, patterns, or design\n"
+                "- discovery: Default category for other insights\n\n"
+                "Provide a confidence score and brief reasoning for your classification."
+            ),
+        )
+
+        # Build prompt
+        prompt = f"Execution summary: {execution_summary}"
+        if task_description:
+            prompt += f"\nTask description: {task_description}"
+
+        # Run classification
+        result = await agent.run(prompt)
+        classification = result.data
+
+        # Validate memory type
+        memory_type = classification.memory_type
+        if not MemoryType.is_valid(memory_type):
+            # Fallback to discovery if invalid
+            return MemoryType.DISCOVERY.value
+
+        return memory_type
+
+    def classify_memory_type_sync(
+        self,
+        execution_summary: str,
+        task_description: Optional[str] = None,
+    ) -> str:
+        """
+        Synchronous wrapper for classify_memory_type (fallback to rule-based).
+
+        Args:
+            execution_summary: Summary of task execution and results
+            task_description: Optional task description for additional context
+
+        Returns:
+            Memory type string (one of MemoryType enum values)
+        """
+        # Fallback to simple rule-based classification for sync contexts
+        text = execution_summary.lower()
+        if task_description:
+            text = f"{text} {task_description.lower()}"
+
+        if any(word in text for word in ["fix", "error", "bug", "issue", "bugfix"]):
+            return MemoryType.ERROR_FIX.value
+        elif any(word in text for word in ["chose", "decided", "selected", "choice", "decision"]):
+            return MemoryType.DECISION.value
+        elif any(word in text for word in ["learned", "found", "realized", "discovered", "learn"]):
+            return MemoryType.LEARNING.value
+        elif any(word in text for word in ["warning", "gotcha", "careful", "watch", "caution"]):
+            return MemoryType.WARNING.value
+        elif any(word in text for word in ["architecture", "structure", "pattern", "design", "codebase", "system"]):
+            return MemoryType.CODEBASE_KNOWLEDGE.value
+        else:
+            return MemoryType.DISCOVERY.value
 
     def store_execution(
         self,
@@ -61,9 +150,10 @@ class MemoryService:
         success: bool,
         error_patterns: Optional[Dict[str, Any]] = None,
         auto_extract_patterns: bool = True,
+        memory_type: Optional[str] = None,
     ) -> TaskMemory:
         """
-        Store task execution in memory with embedding.
+        Store task execution in memory with embedding and memory type classification (REQ-MEM-TAX-001).
 
         Args:
             session: Database session.
@@ -72,6 +162,7 @@ class MemoryService:
             success: Whether execution was successful.
             error_patterns: Optional error patterns if failed.
             auto_extract_patterns: Whether to automatically extract patterns.
+            memory_type: Optional memory type (if not provided, will be auto-classified).
 
         Returns:
             Created TaskMemory record.
@@ -81,6 +172,22 @@ class MemoryService:
         if not task:
             raise ValueError(f"Task {task_id} not found")
 
+        # Classify memory type if not provided (REQ-MEM-TAX-001)
+        if memory_type is None:
+            # Use sync fallback for now (can be made async in future)
+            classified_type = self.classify_memory_type_sync(
+                execution_summary=execution_summary,
+                task_description=task.description,
+            )
+        else:
+            # Validate provided memory type (REQ-MEM-TAX-002)
+            if not MemoryType.is_valid(memory_type):
+                raise ValueError(
+                    f"Invalid memory_type: {memory_type}. "
+                    f"Must be one of: {', '.join(MemoryType.all_types())}"
+                )
+            classified_type = memory_type
+
         # Generate embedding for the summary
         embedding = self.embedding_service.generate_embedding(execution_summary)
 
@@ -88,6 +195,7 @@ class MemoryService:
         memory = TaskMemory(
             task_id=task_id,
             execution_summary=execution_summary,
+            memory_type=classified_type,
             context_embedding=embedding,
             success=success,
             error_patterns=error_patterns,
@@ -113,6 +221,7 @@ class MemoryService:
                         "task_id": task_id,
                         "success": success,
                         "has_embedding": True,
+                        "memory_type": classified_type,
                     },
                 )
             )
@@ -126,9 +235,10 @@ class MemoryService:
         top_k: int = 5,
         similarity_threshold: float = 0.7,
         success_only: bool = False,
+        memory_types: Optional[List[str]] = None,
     ) -> List[SimilarTask]:
         """
-        Search for similar past tasks using embedding similarity.
+        Search for similar past tasks using embedding similarity (REQ-MEM-SEARCH-001).
 
         Args:
             session: Database session.
@@ -136,6 +246,7 @@ class MemoryService:
             top_k: Number of results to return.
             similarity_threshold: Minimum similarity score (0.0 to 1.0).
             success_only: Only return successful task executions.
+            memory_types: Optional list of memory types to filter by (REQ-MEM-SEARCH-005).
 
         Returns:
             List of similar tasks ordered by similarity.
@@ -148,6 +259,17 @@ class MemoryService:
 
         if success_only:
             query = query.where(TaskMemory.success == True)  # noqa: E712
+
+        # Filter by memory types if provided (REQ-MEM-SEARCH-005)
+        if memory_types:
+            # Validate all memory types (REQ-MEM-TAX-002)
+            for mem_type in memory_types:
+                if not MemoryType.is_valid(mem_type):
+                    raise ValueError(
+                        f"Invalid memory_type in filter: {mem_type}. "
+                        f"Must be one of: {', '.join(MemoryType.all_types())}"
+                    )
+            query = query.where(TaskMemory.memory_type.in_(memory_types))
 
         memories = session.execute(query).scalars().all()
 
@@ -370,10 +492,10 @@ class MemoryService:
         if len(matching_memories) < min_samples:
             return None
 
-        # Extract common indicators
-        success_indicators = self._extract_indicators(
-            [m[1].execution_summary for m in matching_memories if m[1].success]
-        )
+        # Extract common indicators (using sync fallback for now)
+        # TODO: Make extract_pattern async to use PydanticAI
+        summaries = [m[1].execution_summary for m in matching_memories if m[1].success]
+        success_indicators = self._extract_indicators_fallback(summaries)
 
         # Generate pattern embedding (average of task embeddings)
         embeddings = [
@@ -449,9 +571,37 @@ class MemoryService:
             # Try to extract new pattern
             self.extract_pattern(session, pattern_regex, min_samples=2)
 
-    def _extract_indicators(self, summaries: List[str]) -> List[str]:
-        """Extract common indicators from execution summaries."""
-        # Simple keyword extraction (can be enhanced with NLP)
+    async def _extract_indicators(self, summaries: List[str]) -> List[str]:
+        """Extract common indicators from execution summaries using PydanticAI."""
+        if not summaries:
+            return []
+
+        # Create agent for pattern extraction
+        agent = self.ai_service.create_agent(
+            output_type=PatternExtraction,
+            system_prompt=(
+                "You are a pattern extraction expert. Analyze execution summaries "
+                "to identify common success and failure indicators. Extract patterns "
+                "that appear across multiple summaries."
+            ),
+        )
+
+        # Combine summaries for analysis
+        combined_text = "\n\n".join([f"Summary {i+1}: {s}" for i, s in enumerate(summaries)])
+        prompt = f"Analyze these execution summaries and extract common indicators:\n\n{combined_text}"
+
+        try:
+            result = await agent.run(prompt)
+            pattern = result.data
+            # Combine success and failure indicators
+            all_indicators = pattern.success_indicators + pattern.failure_indicators
+            return all_indicators[:10]  # Top 10
+        except Exception:
+            # Fallback to simple keyword extraction
+            return self._extract_indicators_fallback(summaries)
+
+    def _extract_indicators_fallback(self, summaries: List[str]) -> List[str]:
+        """Fallback keyword extraction method."""
         indicators = []
         common_words = ["completed", "successful", "passed", "validated", "deployed"]
 

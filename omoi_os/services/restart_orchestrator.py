@@ -4,8 +4,10 @@ from datetime import timedelta
 from typing import List, Optional
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.agent_status import AgentStatus
 from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
 from omoi_os.services.agent_registry import AgentRegistryService
+from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.task_queue import TaskQueueService
@@ -35,6 +37,7 @@ class RestartOrchestrator:
         agent_registry: AgentRegistryService,
         task_queue: TaskQueueService,
         event_bus: Optional[EventBusService] = None,
+        status_manager: Optional[AgentStatusManager] = None,
     ):
         """
         Initialize RestartOrchestrator.
@@ -44,11 +47,13 @@ class RestartOrchestrator:
             agent_registry: Agent registry service for spawning replacements
             task_queue: Task queue service for task reassignment
             event_bus: Optional event bus for publishing restart events
+            status_manager: Optional status manager for state machine enforcement
         """
         self.db = db
         self.agent_registry = agent_registry
         self.task_queue = task_queue
         self.event_bus = event_bus
+        self.status_manager = status_manager
 
     def initiate_restart(
         self, agent_id: str, reason: str, authority: AuthorityLevel = AuthorityLevel.MONITOR
@@ -127,10 +132,37 @@ class RestartOrchestrator:
                     )
                 )
 
-            # Update agent restart tracking
-            agent.status = "terminated"
-            agent.health_status = "terminated"
+            # Update agent restart tracking using status manager if available
+            agent_id_for_status = agent.id
+            session.expunge(agent)  # Expunge before closing session
             session.commit()
+
+            # Update status using status manager outside session
+            if self.status_manager:
+                try:
+                    self.status_manager.transition_status(
+                        agent_id_for_status,
+                        to_status=AgentStatus.TERMINATED.value,
+                        initiated_by="restart_orchestrator",
+                        reason=reason,
+                        force=True,  # Force transition for restart protocol
+                    )
+                except Exception:
+                    # Fallback to direct update if status manager fails
+                    with self.db.get_session() as session:
+                        agent = session.get(Agent, agent_id_for_status)
+                        if agent:
+                            agent.status = AgentStatus.TERMINATED.value
+                            agent.health_status = "terminated"
+                            session.commit()
+            else:
+                # Fallback to direct update if status manager not available
+                with self.db.get_session() as session:
+                    agent = session.get(Agent, agent_id_for_status)
+                    if agent:
+                        agent.status = AgentStatus.TERMINATED.value
+                        agent.health_status = "terminated"
+                        session.commit()
 
             return restart_event
 
@@ -185,12 +217,31 @@ class RestartOrchestrator:
         # 2. Mark agent as terminated
         # 3. Force-release all resources
 
-        with self.db.get_session() as session:
-            agent = session.query(Agent).filter(Agent.id == agent_id).first()
-            if agent:
-                agent.status = "terminated"
-                agent.health_status = "terminated"
-                session.commit()
+        if self.status_manager:
+            try:
+                self.status_manager.transition_status(
+                    agent_id,
+                    to_status=AgentStatus.TERMINATED.value,
+                    initiated_by="restart_orchestrator",
+                    reason="Force terminate after graceful stop failed",
+                    force=True,  # Force transition for restart protocol
+                )
+            except Exception:
+                # Fallback to direct update if status manager fails
+                with self.db.get_session() as session:
+                    agent = session.query(Agent).filter(Agent.id == agent_id).first()
+                    if agent:
+                        agent.status = AgentStatus.TERMINATED.value
+                        agent.health_status = "terminated"
+                        session.commit()
+        else:
+            # Fallback to direct update if status manager not available
+            with self.db.get_session() as session:
+                agent = session.query(Agent).filter(Agent.id == agent_id).first()
+                if agent:
+                    agent.status = AgentStatus.TERMINATED.value
+                    agent.health_status = "terminated"
+                    session.commit()
 
     def _spawn_replacement(self, original_agent: Agent) -> str:
         """
@@ -208,7 +259,7 @@ class RestartOrchestrator:
             phase_id=original_agent.phase_id,
             capabilities=original_agent.capabilities,
             capacity=original_agent.capacity,
-            status="idle",
+            status=AgentStatus.IDLE.value,  # Use AgentStatus enum
             tags=original_agent.tags,
         )
         return replacement.id

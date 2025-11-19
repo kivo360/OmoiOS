@@ -6,6 +6,8 @@ from typing import Dict, List, Optional
 from sqlalchemy import or_
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.agent_status import AgentStatus
+from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
@@ -13,14 +15,16 @@ from omoi_os.utils.datetime import utc_now
 class AgentHealthService:
     """Service for monitoring agent health and managing heartbeats."""
 
-    def __init__(self, db: DatabaseService):
+    def __init__(self, db: DatabaseService, status_manager: Optional[AgentStatusManager] = None):
         """
         Initialize AgentHealthService.
 
         Args:
             db: Database service instance
+            status_manager: Optional status manager for state machine enforcement
         """
         self.db = db
+        self.status_manager = status_manager
 
     def emit_heartbeat(self, agent_id: str) -> bool:
         """
@@ -37,11 +41,36 @@ class AgentHealthService:
             if not agent:
                 return False
 
-            # Update heartbeat and restore status if it was stale
+            # Update heartbeat and restore status if it was stale (legacy) or DEGRADED
             agent.last_heartbeat = utc_now()
-            if agent.status == "stale":
-                agent.status = "idle"
-            agent.health_status = "healthy"
+            if agent.status in ["stale", "STALE"]:
+                # Use status manager if available, otherwise direct update
+                agent_id_for_status = agent.id
+                session.expunge(agent)
+                session.commit()
+                if self.status_manager:
+                    try:
+                        self.status_manager.transition_status(
+                            agent_id_for_status,
+                            to_status=AgentStatus.IDLE.value,
+                            initiated_by="agent_health_service",
+                            reason="Heartbeat received, recovering from stale state",
+                        )
+                    except Exception:
+                        # Fallback: direct update
+                        with self.db.get_session() as session:
+                            agent = session.get(Agent, agent_id_for_status)
+                            if agent:
+                                agent.status = AgentStatus.IDLE.value
+                                session.commit()
+                else:
+                    with self.db.get_session() as session:
+                        agent = session.get(Agent, agent_id_for_status)
+                        if agent:
+                            agent.status = AgentStatus.IDLE.value
+                            session.commit()
+            else:
+                agent.health_status = "healthy"
 
             session.commit()
             return True

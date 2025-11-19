@@ -8,6 +8,8 @@ from typing import List, Optional
 from sqlalchemy import and_
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.agent_status import AgentStatus
+from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 
@@ -28,9 +30,11 @@ class AgentRegistryService:
         self,
         db: DatabaseService,
         event_bus: Optional[EventBusService] = None,
+        status_manager: Optional[AgentStatusManager] = None,
     ):
         self.db = db
         self.event_bus = event_bus
+        self.status_manager = status_manager
 
     # ---------------------------------------------------------------------
     # CRUD
@@ -43,7 +47,7 @@ class AgentRegistryService:
         phase_id: Optional[str],
         capabilities: List[str],
         capacity: int = 1,
-        status: str = "idle",
+        status: str = AgentStatus.IDLE.value,  # Default to IDLE per REQ-ALM-004
         tags: Optional[List[str]] = None,
     ) -> Agent:
         """Register a new agent in the registry."""
@@ -51,10 +55,12 @@ class AgentRegistryService:
         normalized_tags = self._normalize_tokens(tags or [])
 
         with self.db.get_session() as session:
+            # Use SPAWNING status initially, then transition to IDLE after registration
+            # Per REQ-ALM-004, agents start in SPAWNING state
             agent = Agent(
                 agent_type=agent_type,
                 phase_id=phase_id,
-                status=status,
+                status=AgentStatus.SPAWNING.value,  # Start in SPAWNING
                 capabilities=normalized_caps,
                 capacity=max(1, capacity),
                 tags=normalized_tags or None,
@@ -64,6 +70,34 @@ class AgentRegistryService:
             session.commit()
             session.refresh(agent)
             session.expunge(agent)
+
+            # Transition to requested status (default IDLE) using status manager if available
+            if self.status_manager:
+                try:
+                    self.status_manager.transition_status(
+                        agent.id,
+                        to_status=status,
+                        initiated_by="system",
+                        reason="Agent registration completed",
+                    )
+                    # Refresh agent to get updated status
+                    with self.db.get_session() as session:
+                        agent = session.get(Agent, agent.id)
+                        session.expunge(agent)
+                except Exception:
+                    # If transition fails, agent remains in SPAWNING
+                    # This will be handled by monitoring/cleanup
+                    pass
+            else:
+                # Fallback: direct status update if status manager not available
+                # This should not happen in production but allows backward compatibility
+                if status != AgentStatus.SPAWNING.value:
+                    with self.db.get_session() as session:
+                        agent = session.get(Agent, agent.id)
+                        agent.status = status
+                        session.commit()
+                        session.refresh(agent)
+                        session.expunge(agent)
 
             self._publish_capability_event(agent.id, agent.capabilities)
             return agent
@@ -100,13 +134,43 @@ class AgentRegistryService:
                 agent.capacity = max(1, capacity)
 
             if status is not None:
-                agent.status = status
+                # Use status manager if available for state machine enforcement
+                if self.status_manager:
+                    # Status manager handles validation and events, but needs to be
+                    # called outside this session context to avoid conflicts
+                    # Store agent_id for status update after session closes
+                    agent_id_for_status_update = agent.id
+                    target_status = status
+                else:
+                    # Fallback: direct status update if status manager not available
+                    # This should not happen in production but allows backward compatibility
+                    agent.status = status
 
             if health_status is not None:
                 agent.health_status = health_status
 
             session.commit()
             session.refresh(agent)
+            
+            # If status update was requested and status manager is available,
+            # update status outside session context
+            if status is not None and self.status_manager and 'agent_id_for_status_update' in locals():
+                # Expunge agent before closing session
+                session.expunge(agent)
+                # Now update status using status manager
+                try:
+                    updated_agent = self.status_manager.transition_status(
+                        agent_id_for_status_update,
+                        to_status=target_status,
+                        initiated_by="system",
+                        reason="Agent metadata update",
+                    )
+                    return updated_agent
+                except Exception:
+                    # If transition fails, return agent with original status
+                    # This allows backward compatibility
+                    pass
+            
             session.expunge(agent)
 
             if capabilities_changed:
@@ -115,8 +179,21 @@ class AgentRegistryService:
             return agent
 
     def toggle_availability(self, agent_id: str, available: bool) -> Optional[Agent]:
-        """Mark an agent as available (idle) or unavailable (maintenance)."""
-        new_status = "idle" if available else "maintenance"
+        """Mark an agent as available (idle) or unavailable (degraded)."""
+        # Per REQ-ALM-004, maintenance is not a valid status
+        # Unavailable agents should be DEGRADED or TERMINATED
+        new_status = AgentStatus.IDLE.value if available else AgentStatus.DEGRADED.value
+        if self.status_manager:
+            try:
+                return self.status_manager.transition_status(
+                    agent_id,
+                    to_status=new_status,
+                    initiated_by="system",
+                    reason="Availability toggle",
+                )
+            except Exception:
+                # Fallback to direct update if status manager not available
+                pass
         return self.update_agent(agent_id, status=new_status)
 
     # ---------------------------------------------------------------------
@@ -143,7 +220,15 @@ class AgentRegistryService:
             if agent_type:
                 filters.append(Agent.agent_type == agent_type)
             if not include_degraded:
-                filters.append(Agent.status.notin_(["terminated", "quarantined"]))
+                filters.append(
+                    Agent.status.notin_(
+                        [
+                            AgentStatus.TERMINATED.value,
+                            AgentStatus.QUARANTINED.value,
+                            AgentStatus.FAILED.value,
+                        ]
+                    )
+                )
 
             if filters:
                 query = query.filter(and_(*filters))
@@ -193,7 +278,9 @@ class AgentRegistryService:
         overlap = sorted(set(required) & set(agent_caps))
         coverage = len(overlap) / len(required) if required else 0.0
 
-        availability_bonus = 0.2 if agent.status == "idle" else 0.0
+        availability_bonus = (
+            0.2 if agent.status == AgentStatus.IDLE.value else 0.0
+        )
         health_bonus = 0.2 if agent.health_status == "healthy" else 0.0
         capacity_bonus = min(agent.capacity, 5) * 0.05
 

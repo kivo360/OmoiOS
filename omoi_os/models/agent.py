@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -31,7 +31,7 @@ class Agent(Base):
     )  # For worker agents: which phase they handle
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
-    )  # idle, running, degraded, failed
+    )  # SPAWNING, IDLE, RUNNING, DEGRADED, FAILED, QUARANTINED, TERMINATED (REQ-ALM-004)
     capabilities: Mapped[list[str]] = mapped_column(
         PG_ARRAY(String(100)), nullable=False, default=list
     )  # Tools, skills available to agent
@@ -61,9 +61,20 @@ class Agent(Base):
     kept_alive_for_validation: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )  # Whether the agent should be retained across iterations for validation-driven work
+    
+    # Anomaly detection field (REQ-FT-AN-001)
+    anomaly_score: Mapped[Optional[float]] = mapped_column(
+        Float, nullable=True, index=True, comment="Composite anomaly score (0-1) from latency, error rate, resource skew, queue impact"
+    )
+    consecutive_anomalous_readings: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, comment="Count of consecutive readings with anomaly_score >= threshold"
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
 
     # Relationships

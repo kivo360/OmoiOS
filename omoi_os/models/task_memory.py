@@ -17,6 +17,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from whenever import Instant
 
 from omoi_os.models.base import Base
+from omoi_os.models.memory_type import MemoryType
 from omoi_os.utils.datetime import utc_now
 
 if TYPE_CHECKING:
@@ -40,6 +41,26 @@ class TaskMemory(Base):
     )
     execution_summary: Mapped[str] = mapped_column(
         Text, nullable=False, comment="Summary of task execution and results"
+    )
+    memory_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default=MemoryType.DISCOVERY.value,
+        index=True,
+        comment="Memory type: error_fix, discovery, decision, learning, warning, codebase_knowledge (REQ-MEM-TAX-001)",
+    )
+    # ACE workflow fields (REQ-MEM-ACE-001)
+    goal: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="What the agent was trying to accomplish (REQ-MEM-ACE-001)"
+    )
+    result: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="What actually happened (REQ-MEM-ACE-001)"
+    )
+    feedback: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="Output from environment (stdout, stderr, test results) (REQ-MEM-ACE-001)"
+    )
+    tool_usage: Mapped[Optional[Dict[str, Any]]] = mapped_column(
+        JSONB, nullable=True, comment="Tools used during task execution (REQ-MEM-ACE-001)"
     )
     context_embedding: Mapped[Optional[List[float]]] = mapped_column(
         ARRAY(Float, dimensions=1),
@@ -87,6 +108,11 @@ class TaskMemory(Base):
             "id": self.id,
             "task_id": self.task_id,
             "execution_summary": self.execution_summary,
+            "memory_type": self.memory_type,
+            "goal": self.goal,
+            "result": self.result,
+            "feedback": self.feedback,
+            "tool_usage": self.tool_usage,
             "has_embedding": self.context_embedding is not None,
             "embedding_dimensions": (
                 len(self.context_embedding) if self.context_embedding else 0

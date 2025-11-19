@@ -7,8 +7,10 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from omoi_os.models.task import Task
     from omoi_os.models.phase_history import PhaseHistory
+    from omoi_os.models.playbook_entry import PlaybookEntry
+    from omoi_os.models.playbook_change import PlaybookChange
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -29,12 +31,26 @@ class Ticket(Base):
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
-    )  # pending, in_progress, completed, failed
+    )  # backlog, analyzing, building, building-done, testing, done (REQ-TKT-SM-001)
     priority: Mapped[str] = mapped_column(
         String(20), nullable=False, index=True
     )  # CRITICAL, HIGH, MEDIUM, LOW
     previous_phase_id: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True, index=True
+    )
+
+    # Blocking overlay mechanism (REQ-TKT-SM-001, REQ-TKT-BL-001)
+    is_blocked: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, index=True,
+        comment="Blocked overlay flag (used alongside current status)"
+    )
+    blocked_reason: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True,
+        comment="Blocker classification: dependency, waiting_on_clarification, failing_checks, environment (REQ-TKT-BL-002)"
+    )
+    blocked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="Timestamp when ticket was marked as blocked"
     )
 
     created_at: Mapped[datetime] = mapped_column(
@@ -49,6 +65,24 @@ class Ticket(Base):
     context: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Approval fields (REQ-THA-005)
+    approval_status: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="approved", index=True,
+        comment="Approval status: pending_review, approved, rejected, timed_out (REQ-THA-001)"
+    )
+    approval_deadline_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+        comment="Deadline for approval timeout (REQ-THA-005)"
+    )
+    requested_by_agent_id: Mapped[Optional[str]] = mapped_column(
+        String, nullable=True, index=True,
+        comment="Agent ID that requested this ticket (REQ-THA-005)"
+    )
+    rejection_reason: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True,
+        comment="Reason for rejection if ticket was rejected (REQ-THA-005)"
+    )
+
     # Relationship
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="ticket", cascade="all, delete-orphan"
@@ -58,4 +92,14 @@ class Ticket(Base):
         back_populates="ticket",
         cascade="all, delete-orphan",
         order_by="PhaseHistory.created_at",
+    )
+    playbook_entries: Mapped[list["PlaybookEntry"]] = relationship(
+        "PlaybookEntry",
+        back_populates="ticket",
+        cascade="all, delete-orphan",
+    )
+    playbook_changes: Mapped[list["PlaybookChange"]] = relationship(
+        "PlaybookChange",
+        back_populates="ticket",
+        cascade="all, delete-orphan",
     )

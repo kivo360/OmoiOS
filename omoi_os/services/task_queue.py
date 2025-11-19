@@ -1,8 +1,8 @@
 """Task queue service for managing task assignment and retrieval."""
 
-
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
+from omoi_os.services.task_scorer import TaskScorer
 
 
 class TaskQueueService:
@@ -16,6 +16,7 @@ class TaskQueueService:
             db: DatabaseService instance
         """
         self.db = db
+        self.scorer = TaskScorer(db)
 
     def enqueue_task(
         self,
@@ -53,13 +54,20 @@ class TaskQueueService:
             session.add(task)
             session.flush()
             session.refresh(task)
+
+            # Compute initial score (REQ-TQM-PRI-002)
+            task.score = self.scorer.compute_score(task)
+
+            session.commit()
+            session.refresh(task)
             # Expunge the task so it can be used outside the session
             session.expunge(task)
             return task
 
     def get_next_task(self, phase_id: str) -> Task | None:
         """
-        Get highest priority pending task for a phase that has all dependencies completed.
+        Get highest-scored pending task for a phase that has all dependencies completed.
+        Uses dynamic scoring per REQ-TQM-PRI-002.
 
         Args:
             phase_id: Phase identifier to filter by
@@ -68,8 +76,6 @@ class TaskQueueService:
             Task object or None if no pending tasks with completed dependencies
         """
         with self.db.get_session() as session:
-            # Priority order: CRITICAL > HIGH > MEDIUM > LOW
-            priority_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
             tasks = (
                 session.query(Task)
                 .filter(Task.status == "pending", Task.phase_id == phase_id)
@@ -77,18 +83,26 @@ class TaskQueueService:
             )
             if not tasks:
                 return None
-            
+
             # Filter out tasks with incomplete dependencies
             available_tasks = []
             for task in tasks:
                 if self._check_dependencies_complete(session, task):
+                    # Compute and update score (REQ-TQM-PRI-002)
+                    task.score = self.scorer.compute_score(task)
                     available_tasks.append(task)
-            
+
             if not available_tasks:
                 return None
-            
-            # Sort by priority descending
-            task = max(available_tasks, key=lambda t: priority_order.get(t.priority, 0))
+
+            # Sort by score descending (REQ-TQM-PRI-002)
+            task = max(available_tasks, key=lambda t: t.score)
+
+            # Update score in database
+            session.query(Task).filter(Task.id == task.id).update({"score": task.score})
+            session.commit()
+            session.refresh(task)  # Refresh to ensure all attributes are loaded
+
             # Expunge so it can be used outside the session
             session.expunge(task)
             return task
@@ -100,46 +114,53 @@ class TaskQueueService:
     ) -> list[Task]:
         """
         Get multiple ready tasks for parallel execution (DAG batching).
+        Uses dynamic scoring per REQ-TQM-PRI-002.
 
         Args:
             phase_id: Phase identifier to filter by
             limit: Maximum number of tasks to return
 
         Returns:
-            List of Task objects ready for execution
+            List of Task objects ready for execution, sorted by score descending
         """
         with self.db.get_session() as session:
-            # Priority order: CRITICAL > HIGH > MEDIUM > LOW
-            priority_order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
-            
             tasks = (
                 session.query(Task)
                 .filter(Task.status == "pending", Task.phase_id == phase_id)
                 .all()
             )
-            
+
             if not tasks:
                 return []
-            
-            # Filter out tasks with incomplete dependencies
+
+            # Filter out tasks with incomplete dependencies and compute scores
             available_tasks = []
             for task in tasks:
                 if self._check_dependencies_complete(session, task):
+                    # Compute and update score (REQ-TQM-PRI-002)
+                    task.score = self.scorer.compute_score(task)
                     available_tasks.append(task)
-            
-            # Sort by priority descending
-            available_tasks.sort(
-                key=lambda t: priority_order.get(t.priority, 0),
-                reverse=True
-            )
-            
+
+            # Sort by score descending (REQ-TQM-PRI-002)
+            available_tasks.sort(key=lambda t: t.score, reverse=True)
+
             # Take top N tasks
             batch = available_tasks[:limit]
-            
+
+            # Update scores in database
+            for task in batch:
+                session.query(Task).filter(Task.id == task.id).update(
+                    {"score": task.score}
+                )
+            session.commit()
+            # Refresh all tasks to ensure all attributes are loaded
+            for task in batch:
+                session.refresh(task)
+
             # Expunge all tasks for use outside session
             for task in batch:
                 session.expunge(task)
-            
+
             return batch
 
     def assign_task(self, task_id: str, agent_id: str) -> None:
@@ -204,7 +225,10 @@ class TaskQueueService:
         with self.db.get_session() as session:
             tasks = (
                 session.query(Task)
-                .filter(Task.assigned_agent_id == agent_id, Task.status.in_(["assigned", "running"]))
+                .filter(
+                    Task.assigned_agent_id == agent_id,
+                    Task.status.in_(["assigned", "running"]),
+                )
                 .all()
             )
             # Expunge all tasks so they can be used outside the session
@@ -225,22 +249,18 @@ class TaskQueueService:
         """
         if not task.dependencies:
             return True
-        
+
         depends_on = task.dependencies.get("depends_on", [])
         if not depends_on:
             return True
-        
+
         # Check if all dependency tasks are completed
-        dependency_tasks = (
-            session.query(Task)
-            .filter(Task.id.in_(depends_on))
-            .all()
-        )
-        
+        dependency_tasks = session.query(Task).filter(Task.id.in_(depends_on)).all()
+
         # If we can't find all dependencies, consider them incomplete
         if len(dependency_tasks) != len(depends_on):
             return False
-        
+
         # All dependencies must be completed
         return all(dep_task.status == "completed" for dep_task in dependency_tasks)
 
@@ -274,19 +294,21 @@ class TaskQueueService:
             # Find all tasks that have this task_id in their dependencies
             all_tasks = session.query(Task).all()
             blocked_tasks = []
-            
+
             for task in all_tasks:
                 if task.dependencies:
                     depends_on = task.dependencies.get("depends_on", [])
                     if task_id in depends_on:
                         blocked_tasks.append(task)
-            
+
             # Expunge tasks so they can be used outside the session
             for task in blocked_tasks:
                 session.expunge(task)
             return blocked_tasks
 
-    def detect_circular_dependencies(self, task_id: str, depends_on: list[str], visited: list[str] | None = None) -> list[str] | None:
+    def detect_circular_dependencies(
+        self, task_id: str, depends_on: list[str], visited: list[str] | None = None
+    ) -> list[str] | None:
         """
         Detect circular dependencies using DFS.
 
@@ -300,20 +322,22 @@ class TaskQueueService:
         """
         if visited is None:
             visited = []
-        
+
         if task_id in visited:
             # Found a cycle - return the cycle starting from where we first saw this task
             cycle_start = visited.index(task_id)
             return visited[cycle_start:] + [task_id]
-        
+
         visited.append(task_id)
-        
+
         with self.db.get_session() as session:
             for dep_id in depends_on:
                 dep_task = session.query(Task).filter(Task.id == dep_id).first()
                 if dep_task and dep_task.dependencies:
                     dep_depends_on = dep_task.dependencies.get("depends_on", [])
-                    cycle = self.detect_circular_dependencies(dep_id, dep_depends_on, visited.copy())
+                    cycle = self.detect_circular_dependencies(
+                        dep_id, dep_depends_on, visited.copy()
+                    )
                     if cycle:
                         return cycle
 
@@ -364,7 +388,9 @@ class TaskQueueService:
             task.retry_count += 1
             task.status = "pending"
             task.error_message = None  # Clear previous error message
-            task.assigned_agent_id = None  # Clear assignment so it can be picked up again
+            task.assigned_agent_id = (
+                None  # Clear assignment so it can be picked up again
+            )
 
             session.commit()
             return True
@@ -388,7 +414,9 @@ class TaskQueueService:
             tasks = query.all()
 
             # Filter by retry count vs max retries
-            retryable_tasks = [task for task in tasks if task.retry_count < task.max_retries]
+            retryable_tasks = [
+                task for task in tasks if task.retry_count < task.max_retries
+            ]
 
             # Expunge tasks so they can be used outside the session
             for task in retryable_tasks:
@@ -573,7 +601,9 @@ class TaskQueueService:
 
             # Update task status
             task.status = "failed"
-            task.error_message = f"Task timed out after {elapsed_seconds:.1f}s: {reason}"
+            task.error_message = (
+                f"Task timed out after {elapsed_seconds:.1f}s: {reason}"
+            )
             task.completed_at = utc_now()
 
             session.commit()

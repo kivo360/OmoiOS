@@ -5,6 +5,7 @@ import pytest
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.task_memory import TaskMemory
+from omoi_os.models.memory_type import MemoryType
 from omoi_os.services.memory import MemoryService
 from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
 from omoi_os.services.event_bus import EventBusService
@@ -81,6 +82,7 @@ def test_store_execution_success(
         assert memory.task_id == test_task.id
         assert memory.execution_summary == summary
         assert memory.success is True
+        assert memory.memory_type is not None
         assert memory.context_embedding is not None
         assert len(memory.context_embedding) == 1536  # Expected dimensions
         assert memory.reused_count == 0
@@ -431,3 +433,239 @@ def test_memory_to_dict(
 
         assert data["has_embedding"] is True
         assert data["embedding_dimensions"] == 1536
+        assert "memory_type" in data
+
+
+def test_store_execution_auto_classify_memory_type(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test that memory type is auto-classified based on summary content (REQ-MEM-TAX-001)."""
+    # Test error_fix classification
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Fixed bug with authentication error",
+            success=True,
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.ERROR_FIX.value
+
+    # Test decision classification
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Chose to use JWT instead of session tokens",
+            success=True,
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.DECISION.value
+
+    # Test learning classification
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Learned that OAuth2 requires proper redirect URLs",
+            success=True,
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.LEARNING.value
+
+    # Test warning classification
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Warning: be careful with token expiration times",
+            success=True,
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.WARNING.value
+
+    # Test codebase_knowledge classification
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="The architecture uses a microservices pattern for auth",
+            success=True,
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.CODEBASE_KNOWLEDGE.value
+
+    # Test default discovery classification
+    # Use a summary that clearly won't match any other classification keywords
+    # Note: test_task has description "Implement user authentication system" which contains "system"
+    # So we need to create a new task without keywords in its description
+    with db_service.get_session() as session:
+        # Create a task with a description that won't match any keywords
+        simple_task = Task(
+            ticket_id=test_task.ticket_id,
+            phase_id="PHASE_IMPLEMENTATION",
+            task_type="implement_feature",
+            description="Add user profile page",
+            priority="MEDIUM",
+            status="completed",
+        )
+        session.add(simple_task)
+        session.flush()
+
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=simple_task.id,
+            execution_summary="Completed task successfully and deployed to production",
+            success=True,
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.DISCOVERY.value
+
+
+def test_store_execution_explicit_memory_type(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test that explicitly provided memory type is used (REQ-MEM-TAX-001)."""
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Some summary that would auto-classify as discovery",
+            success=True,
+            memory_type=MemoryType.ERROR_FIX.value,  # Explicit type
+        )
+        session.commit()
+        assert memory.memory_type == MemoryType.ERROR_FIX.value
+
+
+def test_store_execution_invalid_memory_type(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test that invalid memory type raises ValueError (REQ-MEM-TAX-002)."""
+    with db_service.get_session() as session:
+        with pytest.raises(ValueError, match="Invalid memory_type"):
+            memory_service.store_execution(
+                session=session,
+                task_id=test_task.id,
+                execution_summary="Some summary",
+                success=True,
+                memory_type="invalid_type",
+            )
+
+
+def test_search_similar_filter_by_memory_type(
+    db_service,
+    memory_service: MemoryService,
+    test_ticket: Ticket,
+):
+    """Test that search_similar can filter by memory types (REQ-MEM-SEARCH-005)."""
+    with db_service.get_session() as session:
+        # Create tasks with different memory types
+        task1 = Task(
+            ticket_id=test_ticket.id,
+            phase_id="PHASE_IMPLEMENTATION",
+            task_type="implement_feature",
+            description="Fix authentication bug",
+            priority="HIGH",
+            status="completed",
+        )
+        session.add(task1)
+        session.flush()
+
+        memory_service.store_execution(
+            session=session,
+            task_id=task1.id,
+            execution_summary="Fixed authentication error",
+            success=True,
+            memory_type=MemoryType.ERROR_FIX.value,
+        )
+
+        task2 = Task(
+            ticket_id=test_ticket.id,
+            phase_id="PHASE_IMPLEMENTATION",
+            task_type="implement_feature",
+            description="Learn OAuth2 patterns",
+            priority="MEDIUM",
+            status="completed",
+        )
+        session.add(task2)
+        session.flush()
+
+        memory_service.store_execution(
+            session=session,
+            task_id=task2.id,
+            execution_summary="Learned OAuth2 flow",
+            success=True,
+            memory_type=MemoryType.LEARNING.value,
+        )
+
+        session.commit()
+
+        # Search with memory_type filter for ERROR_FIX only
+        results = memory_service.search_similar(
+            session=session,
+            task_description="Fix authentication issue",
+            top_k=10,
+            similarity_threshold=0.1,
+            memory_types=[MemoryType.ERROR_FIX.value],
+        )
+
+        assert len(results) >= 1
+        # All results should have ERROR_FIX memory type
+        for result in results:
+            # Get the memory to check its type
+            memory = session.get(TaskMemory, result.memory_id)
+            assert memory.memory_type == MemoryType.ERROR_FIX.value
+
+
+def test_search_similar_invalid_memory_type_filter(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test that invalid memory type in filter raises ValueError (REQ-MEM-TAX-002)."""
+    with db_service.get_session() as session:
+        with pytest.raises(ValueError, match="Invalid memory_type in filter"):
+            memory_service.search_similar(
+                session=session,
+                task_description="Some task",
+                top_k=5,
+                similarity_threshold=0.7,
+                memory_types=["invalid_type"],
+            )
+
+
+def test_classify_memory_type_helper(
+    memory_service: MemoryService,
+):
+    """Test classify_memory_type helper method directly (REQ-MEM-TAX-001)."""
+    # Test various classifications
+    assert memory_service.classify_memory_type("Fixed bug") == MemoryType.ERROR_FIX.value
+    assert memory_service.classify_memory_type("Chose JWT") == MemoryType.DECISION.value
+    assert memory_service.classify_memory_type("Learned OAuth2") == MemoryType.LEARNING.value
+    assert memory_service.classify_memory_type("Warning: be careful") == MemoryType.WARNING.value
+    assert memory_service.classify_memory_type("Architecture uses microservices") == MemoryType.CODEBASE_KNOWLEDGE.value
+    assert memory_service.classify_memory_type("Implemented feature") == MemoryType.DISCOVERY.value
+
+
+def test_memory_type_enum_methods():
+    """Test MemoryType enum helper methods (REQ-MEM-TAX-002)."""
+    # Test all_types()
+    all_types = MemoryType.all_types()
+    assert MemoryType.ERROR_FIX.value in all_types
+    assert MemoryType.DISCOVERY.value in all_types
+    assert MemoryType.DECISION.value in all_types
+    assert MemoryType.LEARNING.value in all_types
+    assert MemoryType.WARNING.value in all_types
+    assert MemoryType.CODEBASE_KNOWLEDGE.value in all_types
+
+    # Test is_valid()
+    assert MemoryType.is_valid(MemoryType.ERROR_FIX.value) is True
+    assert MemoryType.is_valid(MemoryType.DISCOVERY.value) is True
+    assert MemoryType.is_valid("invalid_type") is False

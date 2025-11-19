@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.agent_status import AgentStatus
 from omoi_os.models.task import Task
 from omoi_os.services.agent_executor import AgentExecutor
 from omoi_os.services.agent_health import AgentHealthService
@@ -484,10 +485,11 @@ def register_agent(
         Agent ID
     """
     with db.get_session() as session:
+        # Start in SPAWNING state per REQ-ALM-004, then transition to IDLE
         agent = Agent(
             agent_type=agent_type,
             phase_id=phase_id,
-            status="idle",
+            status=AgentStatus.SPAWNING.value,  # Start in SPAWNING
             capabilities=["bash", "file_editor"],
             capacity=capacity,
             health_status="healthy",
@@ -495,7 +497,13 @@ def register_agent(
         session.add(agent)
         session.commit()
         session.refresh(agent)
-        return agent.id
+        agent_id = agent.id
+        
+        # Transition to IDLE after registration (simplified - should use AgentRegistryService in production)
+        agent.status = AgentStatus.IDLE.value
+        session.commit()
+        
+        return agent_id
 
 
 def deregister_agent(db: DatabaseService, agent_id: UUID) -> None:
@@ -509,7 +517,7 @@ def deregister_agent(db: DatabaseService, agent_id: UUID) -> None:
     with db.get_session() as session:
         agent = session.get(Agent, agent_id)
         if agent:
-            agent.status = "terminated"
+            agent.status = AgentStatus.TERMINATED.value
             session.commit()
 
 
@@ -573,7 +581,7 @@ def execute_task_with_retry(
     with db.get_session() as session:
         agent = session.get(Agent, agent_id)
         if agent:
-            agent.status = "running"
+            agent.status = AgentStatus.RUNNING.value
 
     # Update task status to running
     task_queue.update_task_status(task.id, "running")
@@ -730,7 +738,7 @@ def execute_task_with_retry(
         with db.get_session() as session:
             agent = session.get(Agent, agent_id)
             if agent:
-                agent.status = "idle"
+                agent.status = AgentStatus.IDLE.value
                 agent.last_heartbeat = utc_now()
 
 
@@ -761,7 +769,7 @@ def execute_task(
     with db.get_session() as session:
         agent = session.get(Agent, agent_id)
         if agent:
-            agent.status = "running"
+            agent.status = AgentStatus.RUNNING.value
 
     # Update task status to running
     task_queue.update_task_status(task.id, "running")
@@ -816,7 +824,7 @@ def execute_task(
         with db.get_session() as session:
             agent = session.get(Agent, agent_id)
             if agent:
-                agent.status = "idle"
+                agent.status = AgentStatus.IDLE.value
                 agent.last_heartbeat = utc_now()
 
 

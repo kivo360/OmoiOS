@@ -5,11 +5,23 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel, ConfigDict
 
-from omoi_os.api.dependencies import get_db_service, get_task_queue
+from omoi_os.api.dependencies import (
+    get_db_service,
+    get_task_queue,
+    get_phase_gate_service,
+    get_event_bus_service,
+    get_approval_service,
+)
 from omoi_os.models.ticket import Ticket
+from omoi_os.models.ticket_status import TicketStatus
+from omoi_os.models.approval_status import ApprovalStatus
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.context_service import ContextService
+from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
+from omoi_os.services.phase_gate import PhaseGateService
+from omoi_os.services.event_bus import EventBusService
+from omoi_os.services.approval import ApprovalService, InvalidApprovalStateError
 
 
 router = APIRouter()
@@ -40,16 +52,20 @@ class TicketResponse(BaseModel):
 @router.post("", response_model=TicketResponse)
 async def create_ticket(
     ticket_data: TicketCreate,
+    requested_by_agent_id: str | None = None,
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
+    approval_service: ApprovalService = Depends(get_approval_service),
 ):
     """
-    Create a new ticket and enqueue initial tasks.
+    Create a new ticket and enqueue initial tasks (with approval gate if enabled).
 
     Args:
         ticket_data: Ticket creation data
+        requested_by_agent_id: Optional agent ID that requested this ticket
         db: Database service
         queue: Task queue service
+        approval_service: Approval service for human-in-the-loop approval
 
     Returns:
         Created ticket
@@ -58,21 +74,34 @@ async def create_ticket(
         ticket = Ticket(
             title=ticket_data.title,
             description=ticket_data.description,
-            phase_id=ticket_data.phase_id,
-            status="pending",
+            phase_id=ticket_data.phase_id or "PHASE_BACKLOG",
+            status=TicketStatus.BACKLOG.value,  # Start in backlog per REQ-TKT-SM-001
             priority=ticket_data.priority,
         )
         session.add(ticket)
         session.flush()
 
-        # Create initial task for the ticket
-        queue.enqueue_task(
-            ticket_id=ticket.id,
-            phase_id=ticket_data.phase_id,
-            task_type="analyze_requirements",
-            description=f"Analyze requirements for: {ticket_data.title}",
-            priority=ticket_data.priority,
+        # Apply approval gate if enabled (REQ-THA-002, REQ-THA-003)
+        ticket = approval_service.create_ticket_with_approval(
+            ticket, requested_by_agent_id=requested_by_agent_id
         )
+
+        # Flush to get ticket.id before emitting event
+        session.flush()
+
+        # Emit pending event if approval is enabled (REQ-THA-010)
+        if ApprovalStatus.is_pending(ticket.approval_status):
+            approval_service._emit_pending_event(ticket)
+
+        # Only create initial task if ticket is approved (REQ-THA-007)
+        if ApprovalStatus.can_proceed(ticket.approval_status):
+            queue.enqueue_task(
+                ticket_id=ticket.id,
+                phase_id=ticket_data.phase_id,
+                task_type="analyze_requirements",
+                description=f"Analyze requirements for: {ticket_data.title}",
+                priority=ticket_data.priority,
+            )
 
         session.commit()
         session.refresh(ticket)
@@ -133,3 +162,337 @@ async def update_ticket_context_endpoint(
     service = ContextService(db)
     service.update_ticket_context(str(ticket_id), phase_id)
     return {"status": "updated"}
+
+
+class TransitionRequest(BaseModel):
+    """Request model for ticket status transition."""
+
+    to_status: str
+    reason: str | None = None
+    force: bool = False
+
+
+@router.post("/{ticket_id}/transition")
+async def transition_ticket_status(
+    ticket_id: UUID,
+    request: TransitionRequest,
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService | None = Depends(get_event_bus_service),
+):
+    """
+    Transition ticket to new status with state machine validation (REQ-TKT-SM-002).
+
+    Args:
+        ticket_id: Ticket ID
+        request: Transition request
+        db: Database service
+        task_queue: Task queue service
+        phase_gate: Phase gate service
+        event_bus: Event bus service
+
+    Returns:
+        Updated ticket
+    """
+    orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+    ticket = orchestrator.transition_status(
+        str(ticket_id),
+        request.to_status,
+        initiated_by="api",
+        reason=request.reason,
+        force=request.force,
+    )
+    return TicketResponse.model_validate(ticket)
+
+
+@router.post("/{ticket_id}/block")
+async def block_ticket(
+    ticket_id: UUID,
+    blocker_type: str,
+    suggested_remediation: str | None = None,
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService | None = Depends(get_event_bus_service),
+):
+    """
+    Mark ticket as blocked (REQ-TKT-BL-001, REQ-TKT-BL-002).
+
+    Args:
+        ticket_id: Ticket ID
+        blocker_type: Blocker classification
+        suggested_remediation: Optional suggested remediation
+        db: Database service
+        task_queue: Task queue service
+        phase_gate: Phase gate service
+        event_bus: Event bus service
+
+    Returns:
+        Updated ticket
+    """
+    orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+    ticket = orchestrator.mark_blocked(
+        str(ticket_id),
+        blocker_type,
+        suggested_remediation=suggested_remediation,
+        initiated_by="api",
+    )
+    return TicketResponse.model_validate(ticket)
+
+
+@router.post("/{ticket_id}/unblock")
+async def unblock_ticket(
+    ticket_id: UUID,
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService | None = Depends(get_event_bus_service),
+):
+    """
+    Unblock ticket (REQ-TKT-BL-001).
+
+    Args:
+        ticket_id: Ticket ID
+        db: Database service
+        task_queue: Task queue service
+        phase_gate: Phase gate service
+        event_bus: Event bus service
+
+    Returns:
+        Updated ticket
+    """
+    orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+    ticket = orchestrator.unblock_ticket(str(ticket_id), initiated_by="api")
+    return TicketResponse.model_validate(ticket)
+
+
+@router.post("/{ticket_id}/regress")
+async def regress_ticket(
+    ticket_id: UUID,
+    to_status: str,
+    validation_feedback: str | None = None,
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService | None = Depends(get_event_bus_service),
+):
+    """
+    Regress ticket to previous actionable phase (REQ-TKT-SM-004).
+
+    Args:
+        ticket_id: Ticket ID
+        to_status: Target status (typically BUILDING for testing regressions)
+        validation_feedback: Optional validation feedback
+        db: Database service
+        task_queue: Task queue service
+        phase_gate: Phase gate service
+        event_bus: Event bus service
+
+    Returns:
+        Updated ticket
+    """
+    orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+    ticket = orchestrator.regress_ticket(
+        str(ticket_id),
+        to_status,
+        validation_feedback=validation_feedback,
+        initiated_by="api",
+    )
+    return TicketResponse.model_validate(ticket)
+
+
+@router.post("/{ticket_id}/progress")
+async def progress_ticket(
+    ticket_id: UUID,
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService | None = Depends(get_event_bus_service),
+):
+    """
+    Automatically progress ticket to next phase if gate criteria met (REQ-TKT-SM-003).
+
+    Args:
+        ticket_id: Ticket ID
+        db: Database service
+        task_queue: Task queue service
+        phase_gate: Phase gate service
+        event_bus: Event bus service
+
+    Returns:
+        Updated ticket if progressed, None if no progression
+    """
+    orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+    ticket = orchestrator.check_and_progress_ticket(str(ticket_id))
+    if ticket:
+        return TicketResponse.model_validate(ticket)
+    return {"status": "no_progression"}
+
+
+@router.post("/detect-blocking")
+async def detect_blocking(
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService | None = Depends(get_event_bus_service),
+):
+    """
+    Detect tickets that should be marked as blocked (REQ-TKT-BL-001).
+
+    Args:
+        db: Database service
+        task_queue: Task queue service
+        phase_gate: Phase gate service
+        event_bus: Event bus service
+
+    Returns:
+        List of tickets that should be blocked
+    """
+    orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+    results = orchestrator.detect_blocking()
+
+    # Mark tickets as blocked
+    for result in results:
+        if result["should_block"]:
+            orchestrator.mark_blocked(
+                result["ticket_id"],
+                result["blocker_type"],
+                initiated_by="blocking-detector",
+            )
+
+    return {"detected": len(results), "results": results}
+
+
+# Approval endpoints (REQ-THA-*)
+
+
+class ApproveTicketRequest(BaseModel):
+    """Request model for approving a ticket (REQ-THA-*)."""
+
+    ticket_id: str
+
+
+class ApproveTicketResponse(BaseModel):
+    """Response model for approving a ticket (REQ-THA-*)."""
+
+    ticket_id: str
+    status: str  # "approved"
+
+
+class RejectTicketRequest(BaseModel):
+    """Request model for rejecting a ticket (REQ-THA-*)."""
+
+    ticket_id: str
+    rejection_reason: str
+
+
+class RejectTicketResponse(BaseModel):
+    """Response model for rejecting a ticket (REQ-THA-*)."""
+
+    ticket_id: str
+    status: str  # "rejected"
+
+
+@router.post("/approve", response_model=ApproveTicketResponse)
+async def approve_ticket(
+    request: ApproveTicketRequest,
+    approver_id: str = "api_user",  # TODO: Get from auth context
+    approval_service: ApprovalService = Depends(get_approval_service),
+):
+    """
+    Approve a pending ticket (REQ-THA-*).
+
+    Args:
+        request: Approve ticket request
+        approver_id: ID of the approver (human user)
+        approval_service: Approval service
+
+    Returns:
+        Approval response
+
+    Raises:
+        HTTPException: 400 if ticket is not in pending_review state, 404 if not found
+    """
+    try:
+        ticket = approval_service.approve_ticket(request.ticket_id, approver_id)
+        return ApproveTicketResponse(
+            ticket_id=str(ticket.id),
+            status=ticket.approval_status,
+        )
+    except InvalidApprovalStateError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.post("/reject", response_model=RejectTicketResponse)
+async def reject_ticket(
+    request: RejectTicketRequest,
+    rejector_id: str = "api_user",  # TODO: Get from auth context
+    approval_service: ApprovalService = Depends(get_approval_service),
+):
+    """
+    Reject a pending ticket (REQ-THA-*).
+
+    Args:
+        request: Reject ticket request
+        rejector_id: ID of the rejector (human user)
+        approval_service: Approval service
+
+    Returns:
+        Rejection response
+
+    Raises:
+        HTTPException: 400 if ticket is not in pending_review state, 404 if not found
+    """
+    try:
+        ticket = approval_service.reject_ticket(
+            request.ticket_id, request.rejection_reason, rejector_id
+        )
+        return RejectTicketResponse(
+            ticket_id=str(ticket.id),
+            status=ticket.approval_status,
+        )
+    except InvalidApprovalStateError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
+@router.get("/pending-review-count")
+async def get_pending_review_count(
+    approval_service: ApprovalService = Depends(get_approval_service),
+):
+    """
+    Get count of tickets pending approval (REQ-THA-*).
+
+    Returns:
+        Count of pending tickets
+    """
+    count = approval_service.get_pending_count()
+    return {"pending_count": count}
+
+
+@router.get("/approval-status")
+async def get_approval_status(
+    ticket_id: str,
+    approval_service: ApprovalService = Depends(get_approval_service),
+):
+    """
+    Get approval status for a ticket (REQ-THA-*).
+
+    Args:
+        ticket_id: Ticket ID
+        approval_service: Approval service
+
+    Returns:
+        Approval status dict
+
+    Raises:
+        HTTPException: 404 if ticket not found
+    """
+    status = approval_service.get_approval_status(ticket_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+    return status

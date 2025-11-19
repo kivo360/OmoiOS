@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import timedelta
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy import func
 
@@ -12,6 +12,8 @@ from omoi_os.models.agent import Agent
 from omoi_os.models.monitor_anomaly import MonitorAnomaly
 from omoi_os.models.resource_lock import ResourceLock
 from omoi_os.models.task import Task
+from omoi_os.services.baseline_learner import BaselineLearner
+from omoi_os.services.composite_anomaly_scorer import CompositeAnomalyScorer
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.telemetry import MetricSample
@@ -36,6 +38,10 @@ class MonitorService:
         self.db = db
         self.event_bus = event_bus
         self._metric_history: Dict[str, List[float]] = defaultdict(list)
+        
+        # Initialize baseline learner and composite scorer for agent-level anomaly detection
+        self.baseline_learner = BaselineLearner(db)
+        self.composite_scorer = CompositeAnomalyScorer(db, self.baseline_learner)
 
     # ---------------------------------------------------------------------
     # Metrics Collection
@@ -368,4 +374,189 @@ class MonitorService:
             anomaly.acknowledged_at = utc_now()
             session.commit()
             return True
+
+    # ---------------------------------------------------------------------
+    # Agent-Level Composite Anomaly Detection (REQ-FT-AN-001)
+    # ---------------------------------------------------------------------
+
+    def compute_agent_anomaly_scores(
+        self,
+        agent_ids: Optional[List[str]] = None,
+        anomaly_threshold: float = 0.8,
+        consecutive_threshold: int = 3,
+    ) -> List[Dict[str, Any]]:
+        """
+        Compute composite anomaly scores for agents per REQ-FT-AN-001.
+
+        Args:
+            agent_ids: Optional list of agent IDs to check (None = all active agents)
+            anomaly_threshold: Threshold for anomaly score (default 0.8)
+            consecutive_threshold: Consecutive readings before action (default 3)
+
+        Returns:
+            List of dicts with agent_id, anomaly_score, consecutive_readings, and should_quarantine
+        """
+        results = []
+
+        with self.db.get_session() as session:
+            # Get agents to check
+            query = session.query(Agent).filter(
+                Agent.status.in_(["idle", "running", "degraded"])
+            )
+            if agent_ids:
+                query = query.filter(Agent.id.in_(agent_ids))
+
+            agents = query.all()
+
+            for agent in agents:
+                # Get health metrics from last heartbeat (if available)
+                health_metrics = {}
+                if agent.last_heartbeat:
+                    # Try to get health metrics from heartbeat message
+                    # For now, we'll compute from task metrics
+                    health_metrics = self._get_agent_health_metrics(agent.id, session)
+
+                # Compute composite anomaly score
+                anomaly_score = self.composite_scorer.compute_anomaly_score(
+                    agent.id,
+                    health_metrics=health_metrics,
+                )
+
+                # Update agent's anomaly_score
+                agent.anomaly_score = anomaly_score
+
+                # Check if above threshold
+                if anomaly_score >= anomaly_threshold:
+                    agent.consecutive_anomalous_readings += 1
+                else:
+                    agent.consecutive_anomalous_readings = 0
+
+                # Update baseline with current metrics
+                if agent.status in ["idle", "running"]:
+                    metrics = self._collect_agent_metrics_for_baseline(agent.id, session)
+                    if metrics:
+                        self.baseline_learner.learn_baseline(
+                            agent.agent_type,
+                            agent.phase_id,
+                            metrics,
+                        )
+
+                # Check if should quarantine (consecutive readings >= threshold)
+                should_quarantine = (
+                    agent.consecutive_anomalous_readings >= consecutive_threshold
+                )
+
+                results.append({
+                    "agent_id": agent.id,
+                    "agent_type": agent.agent_type,
+                    "phase_id": agent.phase_id,
+                    "anomaly_score": anomaly_score,
+                    "consecutive_readings": agent.consecutive_anomalous_readings,
+                    "should_quarantine": should_quarantine,
+                })
+
+            session.commit()
+
+            # Publish events for anomalous agents
+            if self.event_bus:
+                for result in results:
+                    if result["anomaly_score"] >= anomaly_threshold:
+                        self.event_bus.publish(
+                            SystemEvent(
+                                event_type="monitor.agent.anomaly",
+                                entity_type="agent",
+                                entity_id=result["agent_id"],
+                                payload={
+                                    "anomaly_score": result["anomaly_score"],
+                                    "consecutive_readings": result["consecutive_readings"],
+                                    "should_quarantine": result["should_quarantine"],
+                                },
+                            )
+                        )
+
+        return results
+
+    def _get_agent_health_metrics(self, agent_id: str, session) -> Dict[str, any]:
+        """Get health metrics for agent from tasks and heartbeats."""
+        # This is a placeholder - in production, health metrics would come from
+        # heartbeat messages stored in database or real-time metrics collection
+        # For now, we'll compute basic metrics from task data
+        
+        from sqlalchemy import func
+        from datetime import timedelta
+        
+        one_hour_ago = utc_now() - timedelta(hours=1)
+        
+        # Get CPU/Memory from health metrics if stored
+        # For now, return empty dict (composite scorer will compute from tasks)
+        return {}
+
+    def _collect_agent_metrics_for_baseline(
+        self, agent_id: str, session
+    ) -> Optional[Dict[str, float]]:
+        """Collect current metrics for baseline learning."""
+        from sqlalchemy import func
+        from datetime import timedelta
+
+        one_hour_ago = utc_now() - timedelta(hours=1)
+
+        # Compute latency
+        latency_result = (
+            session.query(
+                func.avg(
+                    func.extract("epoch", Task.completed_at - Task.started_at) * 1000
+                ).label("avg_latency_ms"),
+                func.stddev(
+                    func.extract("epoch", Task.completed_at - Task.started_at) * 1000
+                ).label("latency_std"),
+            )
+            .filter(
+                Task.assigned_agent_id == agent_id,
+                Task.status == "completed",
+                Task.completed_at >= one_hour_ago,
+                Task.started_at.isnot(None),
+            )
+            .first()
+        )
+
+        # Compute error rate
+        total_tasks = (
+            session.query(func.count(Task.id))
+            .filter(
+                Task.assigned_agent_id == agent_id,
+                Task.status.in_(["completed", "failed"]),
+                Task.completed_at >= one_hour_ago,
+            )
+            .scalar()
+        )
+
+        error_rate = 0.0
+        if total_tasks > 0:
+            failed_tasks = (
+                session.query(func.count(Task.id))
+                .filter(
+                    Task.assigned_agent_id == agent_id,
+                    Task.status == "failed",
+                    Task.completed_at >= one_hour_ago,
+                )
+                .scalar()
+            )
+            error_rate = failed_tasks / total_tasks if total_tasks > 0 else 0.0
+
+        metrics = {}
+        if latency_result and latency_result.avg_latency_ms:
+            metrics["latency_ms"] = float(latency_result.avg_latency_ms)
+            metrics["latency_std"] = float(
+                latency_result.latency_std if latency_result.latency_std else 1.0
+            )
+
+        if total_tasks > 0:
+            metrics["error_rate"] = error_rate
+
+        # CPU/Memory would come from heartbeat health_metrics
+        # For now, we'll use defaults (composite scorer will handle None values)
+        metrics["cpu_usage_percent"] = 0.0
+        metrics["memory_usage_mb"] = 0.0
+
+        return metrics if metrics else None
 
