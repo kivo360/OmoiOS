@@ -666,6 +666,79 @@ export function useCancelAgentTask() {
     },
   })
 }
+
+// Pause agent (stops accepting new tasks, preserves state)
+export function usePauseAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ agentId, finishCurrentTask = false }: { agentId: string; finishCurrentTask?: boolean }) => {
+      // Get current agent state
+      const currentAgent = await api.getAgent(agentId)
+      
+      // Set availability to false (agent won't receive new tasks)
+      const availabilityResult = await api.toggleAgentAvailability(agentId, false)
+      
+      // If agent is RUNNING and we want to pause immediately (don't finish current task),
+      // change status to IDLE to stop current work
+      if (!finishCurrentTask && currentAgent.status === 'RUNNING') {
+        await api.updateAgent(agentId, { status: 'IDLE' })
+      }
+      
+      return {
+        ...availabilityResult,
+        paused: true,
+        paused_at: new Date().toISOString(),
+        previous_status: currentAgent.status,
+      }
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      // Update cache with pause state
+      queryClient.setQueryData(agentKeys.detail(variables.agentId), (old: any) => ({
+        ...old,
+        ...data,
+      }))
+    },
+  })
+}
+
+// Resume agent (resumes accepting tasks and work)
+export function useResumeAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: async ({ agentId }: { agentId: string }) => {
+      // Get current agent state to restore previous status if needed
+      const currentAgent = await api.getAgent(agentId)
+      
+      // Restore availability
+      const availabilityResult = await api.toggleAgentAvailability(agentId, true)
+      
+      // Restore status: if agent was RUNNING before pause, keep it IDLE (will transition to RUNNING when task assigned)
+      // Otherwise restore to IDLE (ready for tasks)
+      const targetStatus = currentAgent.previous_status === 'RUNNING' ? 'IDLE' : 'IDLE'
+      await api.updateAgent(agentId, { status: targetStatus })
+      
+      return {
+        ...availabilityResult,
+        paused: false,
+        paused_at: null,
+        resumed_at: new Date().toISOString(),
+      }
+    },
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      // Clear pause state
+      queryClient.setQueryData(agentKeys.detail(variables.agentId), (old: any) => ({
+        ...old,
+        ...data,
+      }))
+    },
+  })
+}
 ```
 
 ### 5.4 Agent WebSocket Event Handling
