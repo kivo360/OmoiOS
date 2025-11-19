@@ -109,3 +109,24 @@ class ApprovalSettings(BaseSettings):
 
 def load_approval_settings() -> ApprovalSettings:
     return ApprovalSettings()
+
+
+class SupabaseSettings(BaseSettings):
+    """Supabase configuration settings."""
+
+    model_config = SettingsConfigDict(
+        env_prefix="SUPABASE_",
+        env_file=(".env",),
+        env_file_encoding="utf-8",
+    )
+
+    url: str  # SUPABASE_URL
+    anon_key: str  # SUPABASE_ANON_KEY (publishable key)
+    service_role_key: str  # SUPABASE_SERVICE_ROLE_KEY (secret key)
+    
+    # Database connection (optional, for direct PostgreSQL access)
+    db_url: Optional[str] = None  # SUPABASE_DB_URL
+
+
+def load_supabase_settings() -> SupabaseSettings:
+    return SupabaseSettings()

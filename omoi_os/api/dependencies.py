@@ -1,6 +1,9 @@
 """FastAPI dependencies for OmoiOS API."""
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from fastapi.security import HTTPAuthorizationCredentials
 
 if TYPE_CHECKING:
     from omoi_os.services.agent_health import AgentHealthService
@@ -193,4 +196,125 @@ def get_guardian_service():
 def get_database_service() -> "DatabaseService":
     """Get database service instance (alias for get_db_service)."""
     return get_db_service()
+
+
+def get_supabase_auth_service():
+    """Get Supabase auth service instance."""
+    from omoi_os.services.supabase_auth import SupabaseAuthService
+    from omoi_os.config import load_supabase_settings
+    
+    settings = load_supabase_settings()
+    return SupabaseAuthService(settings)
+
+
+async def get_current_user(
+    credentials: "HTTPAuthorizationCredentials",
+    supabase_auth = None,
+    db: "DatabaseService" = None,
+):
+    """
+    Get current authenticated user from JWT token.
+
+    Args:
+        credentials: HTTP Bearer token credentials
+        supabase_auth: Supabase auth service
+        db: Database service
+
+    Returns:
+        Authenticated user
+
+    Raises:
+        HTTPException: If token is invalid or user not found
+    """
+    from fastapi import Depends, HTTPException, status
+    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+    
+    if supabase_auth is None:
+        supabase_auth = get_supabase_auth_service()
+    if db is None:
+        db = get_db_service()
+    
+    from omoi_os.models.user import User
+    
+    token = credentials.credentials
+    
+    # Verify JWT token
+    user_info = supabase_auth.verify_jwt_token(token)
+    if not user_info:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Load user from public.users
+    with db.get_session() as session:
+        user = session.get(User, user_info["id"])
+        if not user or user.deleted_at:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        return user
+
+
+async def get_current_user_optional(
+    credentials: Optional["HTTPAuthorizationCredentials"] = None,
+    supabase_auth = None,
+    db: "DatabaseService" = None,
+):
+    """
+    Get current user if authenticated, None otherwise.
+
+    Useful for endpoints that work with or without authentication.
+    """
+    from fastapi.security import HTTPBearer
+    
+    if credentials is None:
+        try:
+            security = HTTPBearer(auto_error=False)
+            # This will be handled by FastAPI's dependency injection
+            return None
+        except Exception:
+            return None
+    
+    if not credentials:
+        return None
+    
+    if supabase_auth is None:
+        supabase_auth = get_supabase_auth_service()
+    if db is None:
+        db = get_db_service()
+    
+    try:
+        return await get_current_user(credentials, supabase_auth, db)
+    except Exception:
+        return None
+
+
+def require_role(allowed_roles: list[str]):
+    """
+    Dependency factory for role-based authorization.
+
+    Usage:
+        @router.post("/admin-only")
+        async def admin_endpoint(
+            current_user: User = Depends(require_role(["admin"]))
+        ):
+            ...
+    """
+    from fastapi import Depends, HTTPException, status
+    from omoi_os.models.user import User
+    
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Requires one of these roles: {', '.join(allowed_roles)}",
+            )
+        return current_user
+    
+    return role_checker
 

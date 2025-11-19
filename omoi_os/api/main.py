@@ -10,15 +10,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from omoi_os.api.routes import (
     agents,
     alerts,
+    auth,
     board,
     collaboration,
+    commits,
     costs,
     diagnostic,
     events,
+    github,
     guardian,
     memory,
     mcp,
     phases,
+    projects,
     quality,
     results,
     tasks,
@@ -631,6 +635,14 @@ app.include_router(events.router, prefix="/api/v1", tags=["events"])
 from omoi_os.api.routes import graph
 
 app.include_router(graph.router, prefix="/api/v1/graph", tags=["graph"])
+
+# Commits, Projects, and GitHub Integration routes
+app.include_router(commits.router, prefix="/api/v1/commits", tags=["commits"])
+app.include_router(projects.router, prefix="/api/v1/projects", tags=["projects"])
+app.include_router(github.router, prefix="/api/v1/github", tags=["github"])
+
+# Authentication routes
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 
 # Conditionally include monitor router if Phase 4 is available
 try:

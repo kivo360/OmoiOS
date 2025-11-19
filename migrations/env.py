@@ -12,11 +12,11 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
+import os
 from omoi_os.models.base import Base
-from omoi_os.ticketing.db import DBSettings
 
 # Import all models to register them with Base.metadata
-from omoi_os.models import Agent, Event, Task, Ticket  # noqa: F401
+from omoi_os.models import Agent, Event, Task, Ticket, User  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -27,9 +27,15 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Inject DB URL from environment/pydantic settings
-settings = DBSettings()
-config.set_main_option("sqlalchemy.url", settings.url())
+# Inject DB URL from environment variable
+# Prefer DATABASE_URL, fallback to DBSettings for backward compatibility
+database_url = os.getenv("DATABASE_URL")
+if not database_url:
+    from omoi_os.ticketing.db import DBSettings
+
+    settings = DBSettings()
+    database_url = settings.url()
+config.set_main_option("sqlalchemy.url", database_url)
 
 # add your model's MetaData object here
 target_metadata = Base.metadata
