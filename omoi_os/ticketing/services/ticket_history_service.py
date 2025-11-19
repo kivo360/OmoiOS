@@ -35,7 +35,7 @@ class TicketHistoryService:
                 old_value=old_value,
                 new_value=new_value,
                 change_description=change_description,
-                metadata=metadata,
+                metadata_json=metadata,
                 changed_at=utc_now(),
             )
         )
