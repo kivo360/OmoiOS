@@ -83,8 +83,8 @@ class Agent(Base):
         JSONB, nullable=True,
         comment="Cryptographic identity metadata: key_id, algorithm, created_at (REQ-ALM-001)"
     )
-    metadata: Mapped[Optional[dict]] = mapped_column(
-        JSONB, nullable=True,
+    agent_metadata: Mapped[Optional[dict]] = mapped_column(
+        JSONB, nullable=True, name="metadata",
         comment="Additional agent metadata: version, binary_path, config, resource_requirements (REQ-ALM-001)"
     )
     registered_by: Mapped[Optional[str]] = mapped_column(

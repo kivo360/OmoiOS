@@ -144,7 +144,7 @@ class AgentRegistryService:
                 health_status="healthy",
                 crypto_public_key=crypto_identity["public_key"],
                 crypto_identity_metadata=crypto_identity["metadata"],
-                metadata=metadata if metadata else None,
+                agent_metadata=metadata if metadata else None,
                 registered_by=registered_by,
             )
             session.add(agent)

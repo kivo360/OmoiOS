@@ -12,9 +12,10 @@ from omoi_os.schemas.alert import (
     AlertResolveRequest,
     AlertRuleResponse,
 )
+from omoi_os.api.dependencies import get_db_service, get_event_bus_service
 from omoi_os.services.alerting import AlertService
-from omoi_os.services.database import DatabaseService, get_db_service
-from omoi_os.services.event_bus import EventBusService, get_event_bus_service
+from omoi_os.services.database import DatabaseService
+from omoi_os.services.event_bus import EventBusService
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
 
