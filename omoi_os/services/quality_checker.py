@@ -9,6 +9,8 @@ from omoi_os.models.quality_metric import QualityMetric, MetricType
 from omoi_os.models.quality_gate import QualityGate
 from omoi_os.models.task import Task
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.schemas.quality_metrics_analysis import QualityMetricsExtraction
 from omoi_os.utils.datetime import utc_now
 
 
@@ -20,14 +22,20 @@ class QualityCheckerService:
     quality indicators against defined thresholds.
     """
 
-    def __init__(self, event_bus: Optional[EventBusService] = None):
+    def __init__(
+        self,
+        event_bus: Optional[EventBusService] = None,
+        ai_service: Optional[PydanticAIService] = None,
+    ):
         """
         Initialize quality checker service.
 
         Args:
             event_bus: Optional event bus for publishing quality events.
+            ai_service: Optional PydanticAI service for metric extraction.
         """
         self.event_bus = event_bus
+        self.ai_service = ai_service or PydanticAIService()
 
     def record_metric(
         self,
@@ -103,11 +111,11 @@ class QualityCheckerService:
 
         return metric
 
-    def check_code_quality(
+    async def check_code_quality(
         self, session: Session, task_id: str, task_result: Dict[str, Any]
     ) -> List[QualityMetric]:
         """
-        Check code quality from task result.
+        Check code quality from task result using PydanticAI for extraction.
 
         Extracts quality metrics from task execution results and records them.
 
@@ -115,6 +123,104 @@ class QualityCheckerService:
             session: Database session.
             task_id: Task to check.
             task_result: Task result dictionary (may contain coverage, lint data).
+
+        Returns:
+            List of quality metrics recorded.
+        """
+        import json
+
+        # Create agent with structured output
+        agent = self.ai_service.create_agent(
+            output_type=QualityMetricsExtraction,
+            system_prompt=(
+                "You are a code quality analysis expert. Extract quality metrics from task execution results. "
+                "Identify test coverage percentages, lint errors with file paths and line numbers, "
+                "complexity scores, and provide an overall code quality score (0.0-1.0). "
+                "List specific lint errors with their file paths, line numbers, error types, messages, and severity."
+            ),
+        )
+
+        # Convert task result to JSON for analysis
+        task_result_str = json.dumps(task_result, indent=2, default=str)
+        prompt = f"Extract quality metrics from this task result:\n\n{task_result_str}"
+
+        try:
+            # Run extraction
+            result = await agent.run(prompt)
+            extraction = result.data
+
+            # Record metrics from structured extraction
+            metrics = []
+
+            # Test coverage
+            if extraction.test_coverage is not None:
+                metric = self.record_metric(
+                    session=session,
+                    task_id=task_id,
+                    metric_type=MetricType.COVERAGE,
+                    metric_name="test_coverage_percentage",
+                    value=extraction.test_coverage,
+                    threshold=80.0,
+                )
+                metrics.append(metric)
+
+            # Lint errors
+            for lint_error in extraction.lint_errors:
+                metric = self.record_metric(
+                    session=session,
+                    task_id=task_id,
+                    metric_type=MetricType.LINT,
+                    metric_name=f"lint_{lint_error.error_type}",
+                    value=1.0,  # Count as 1 error
+                    threshold=0.0,
+                    metadata={
+                        "file_path": lint_error.file_path,
+                        "line_number": lint_error.line_number,
+                        "message": lint_error.message,
+                        "severity": lint_error.severity,
+                    },
+                )
+                metrics.append(metric)
+
+            # Complexity
+            if extraction.complexity_score is not None:
+                metric = self.record_metric(
+                    session=session,
+                    task_id=task_id,
+                    metric_type=MetricType.COMPLEXITY,
+                    metric_name="cyclomatic_complexity",
+                    value=extraction.complexity_score,
+                    threshold=10.0,
+                )
+                metrics.append(metric)
+
+            # Overall quality score
+            metric = self.record_metric(
+                session=session,
+                task_id=task_id,
+                metric_type="overall",
+                metric_name="code_quality_score",
+                value=extraction.code_quality_score,
+                threshold=0.7,  # 70% minimum
+            )
+            metrics.append(metric)
+
+            return metrics
+
+        except Exception:
+            # Fallback to basic extraction
+            return self.check_code_quality_sync(session, task_id, task_result)
+
+    def check_code_quality_sync(
+        self, session: Session, task_id: str, task_result: Dict[str, Any]
+    ) -> List[QualityMetric]:
+        """
+        Synchronous fallback for code quality checking (basic extraction).
+
+        Args:
+            session: Database session.
+            task_id: Task to check.
+            task_result: Task result dictionary.
 
         Returns:
             List of quality metrics recorded.
@@ -130,7 +236,7 @@ class QualityCheckerService:
                 metric_type=MetricType.COVERAGE,
                 metric_name="test_coverage_percentage",
                 value=coverage,
-                threshold=80.0,  # 80% minimum coverage
+                threshold=80.0,
             )
             metrics.append(metric)
 
@@ -143,7 +249,7 @@ class QualityCheckerService:
                 metric_type=MetricType.LINT,
                 metric_name="lint_error_count",
                 value=float(lint_errors),
-                threshold=0.0,  # Zero lint errors
+                threshold=0.0,
             )
             metrics.append(metric)
 
@@ -156,7 +262,7 @@ class QualityCheckerService:
                 metric_type=MetricType.COMPLEXITY,
                 metric_name="cyclomatic_complexity",
                 value=complexity,
-                threshold=10.0,  # Max complexity 10
+                threshold=10.0,
             )
             metrics.append(metric)
 

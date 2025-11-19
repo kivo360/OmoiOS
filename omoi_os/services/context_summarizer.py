@@ -1,35 +1,57 @@
-"""Utility for summarizing aggregated context."""
+"""Utility for summarizing aggregated context using PydanticAI."""
 
 from __future__ import annotations
 
-from typing import Any
+import json
+from typing import Any, Optional
+
+from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.schemas.context_analysis import ContextSummary
 
 
 class ContextSummarizer:
-    """Summarizes structured context dictionaries into concise text."""
+    """Summarizes structured context dictionaries using PydanticAI."""
 
-    def summarize_structured(self, context: dict[str, Any]) -> str:
+    def __init__(self, ai_service: Optional[PydanticAIService] = None):
         """
-        Summarize structured context (decisions, risks, tasks, artifacts).
+        Initialize context summarizer.
 
         Args:
-            context: Structured context dict, typically {"phases": {...}}
+            ai_service: Optional PydanticAI service for structured extraction.
+        """
+        self.ai_service = ai_service or PydanticAIService()
+
+    async def extract_key_points(self, context: dict[str, Any]) -> ContextSummary:
+        """
+        Extract key points (decisions, risks, highlights) from context using PydanticAI.
+
+        Args:
+            context: Structured context dictionary
 
         Returns:
-            Human-readable summary string.
+            ContextSummary with structured decisions, risks, and highlights.
         """
-        key_points = self.extract_key_points(context)
-        if not key_points:
-            return "No contextual insights available yet."
+        # Create agent with structured output
+        agent = self.ai_service.create_agent(
+            output_type=ContextSummary,
+            system_prompt=(
+                "You are a context analysis expert. Extract key decisions, risks, highlights, "
+                "and phase summaries from workflow context. Identify important decisions with "
+                "their rationale, risks with severity levels, and key insights."
+            ),
+        )
 
-        lines = ["Context Summary:"]
-        for point in key_points:
-            lines.append(f"- {point}")
-        return "\n".join(lines)
+        # Convert context to JSON string for analysis
+        context_str = json.dumps(context, indent=2, default=str)
+        prompt = f"Analyze this workflow context and extract structured insights:\n\n{context_str}"
 
-    def extract_key_points(self, context: dict[str, Any]) -> list[str]:
+        # Run extraction
+        result = await agent.run(prompt)
+        return result.data
+
+    def extract_key_points_sync(self, context: dict[str, Any]) -> list[str]:
         """
-        Extract key points (decisions, risks, highlights) from context.
+        Synchronous fallback for key point extraction (rule-based).
 
         Args:
             context: Structured context dictionary
@@ -68,6 +90,25 @@ class ContextSummarizer:
 
         # Limit to reasonable number of bullet points to avoid overlong summaries
         return key_points[:20]
+
+    def summarize_structured(self, context: dict[str, Any]) -> str:
+        """
+        Summarize structured context (decisions, risks, tasks, artifacts).
+
+        Args:
+            context: Structured context dict, typically {"phases": {...}}
+
+        Returns:
+            Human-readable summary string.
+        """
+        key_points = self.extract_key_points_sync(context)
+        if not key_points:
+            return "No contextual insights available yet."
+
+        lines = ["Context Summary:"]
+        for point in key_points:
+            lines.append(f"- {point}")
+        return "\n".join(lines)
 
 
 def _safe_iterable(value: Any) -> list[Any]:

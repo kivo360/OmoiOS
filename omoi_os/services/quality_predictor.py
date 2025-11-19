@@ -10,6 +10,8 @@ from omoi_os.models.quality_metric import QualityMetric
 from omoi_os.models.task import Task
 from omoi_os.services.memory import MemoryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.schemas.quality_analysis import QualityPrediction
 
 
 class QualityPredictorService:
@@ -24,6 +26,7 @@ class QualityPredictorService:
         self,
         memory_service: MemoryService,
         event_bus: Optional[EventBusService] = None,
+        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize quality predictor.
@@ -31,15 +34,17 @@ class QualityPredictorService:
         Args:
             memory_service: Memory service for pattern retrieval.
             event_bus: Optional event bus for publishing predictions.
+            ai_service: Optional PydanticAI service for structured predictions.
         """
         self.memory_service = memory_service
         self.event_bus = event_bus
+        self.ai_service = ai_service or PydanticAIService()
 
-    def predict_quality(
+    async def predict_quality(
         self, session: Session, task_description: str, task_type: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> QualityPrediction:
         """
-        Predict quality score for a planned task.
+        Predict quality score for a planned task using PydanticAI.
 
         Args:
             session: Database session.
@@ -47,7 +52,91 @@ class QualityPredictorService:
             task_type: Optional task type filter.
 
         Returns:
-            Prediction result with score, confidence, and recommendations.
+            QualityPrediction with structured score, confidence, and recommendations.
+        """
+        # Get similar successful tasks
+        similar_tasks = self.memory_service.search_similar(
+            session=session,
+            task_description=task_description,
+            top_k=5,
+            similarity_threshold=0.5,
+            success_only=True,
+        )
+
+        # Get matching patterns
+        patterns = self.memory_service.search_patterns(
+            session=session, task_type=task_type, pattern_type="success", limit=5
+        )
+
+        # Create agent with structured output
+        agent = self.ai_service.create_agent(
+            output_type=QualityPrediction,
+            system_prompt=(
+                "You are a quality prediction expert. Analyze task descriptions and "
+                "historical patterns to predict quality scores (0.0-1.0), assess risk levels "
+                "(low, medium, high), and provide actionable recommendations with priority levels."
+            ),
+        )
+
+        # Build prompt with context
+        prompt_parts = [f"Task Description: {task_description}"]
+        if task_type:
+            prompt_parts.append(f"Task Type: {task_type}")
+
+        if similar_tasks:
+            prompt_parts.append(f"\nFound {len(similar_tasks)} similar successful tasks:")
+            for i, task in enumerate(similar_tasks[:3], 1):
+                prompt_parts.append(f"{i}. Similarity: {task.similarity_score:.2f} - {task.summary[:100]}")
+
+        if patterns:
+            prompt_parts.append(f"\nFound {len(patterns)} matching patterns:")
+            for i, pattern in enumerate(patterns[:3], 1):
+                prompt_parts.append(
+                    f"{i}. Confidence: {pattern.confidence_score:.2f} - "
+                    f"Indicators: {', '.join(pattern.success_indicators[:3])}"
+                )
+
+        prompt = "\n".join(prompt_parts)
+        prompt += "\n\nPredict the quality score, risk level, and provide recommendations."
+
+        # Run prediction
+        result = await agent.run(prompt)
+        prediction = result.data
+
+        # Ensure counts are set
+        prediction.similar_task_count = len(similar_tasks)
+        prediction.pattern_count = len(patterns)
+
+        # Publish event
+        if self.event_bus:
+            self.event_bus.publish(
+                SystemEvent(
+                    event_type="quality.prediction.generated",
+                    entity_type="task",
+                    entity_id="new",
+                    payload={
+                        "quality_score": prediction.predicted_quality_score,
+                        "confidence": prediction.confidence,
+                        "risk_level": prediction.risk_level,
+                    },
+                )
+            )
+
+        return prediction
+
+    def predict_quality_sync(
+        self, session: Session, task_description: str, task_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Synchronous fallback for quality prediction (uses rule-based calculation).
+
+        Args:
+            session: Database session.
+            task_description: Description of the task.
+            task_type: Optional task type filter.
+
+        Returns:
+            Dictionary with prediction results.
         """
         # Get similar successful tasks
         similar_tasks = self.memory_service.search_similar(
@@ -80,21 +169,6 @@ class QualityPredictorService:
             "recommendations": recommendations,
             "risk_level": self._assess_risk_level(quality_score, confidence),
         }
-
-        # Publish event
-        if self.event_bus:
-            self.event_bus.publish(
-                SystemEvent(
-                    event_type="quality.prediction.generated",
-                    entity_type="task",
-                    entity_id="new",
-                    payload={
-                        "quality_score": quality_score,
-                        "confidence": confidence,
-                        "risk_level": prediction["risk_level"],
-                    },
-                )
-            )
 
         return prediction
 

@@ -15,6 +15,8 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.task_queue import TaskQueueService
+from omoi_os.services.pydantic_ai_service import PydanticAIService
+from omoi_os.schemas.blocker_analysis import BlockerAnalysis
 from omoi_os.utils.datetime import utc_now
 
 
@@ -64,6 +66,7 @@ class TicketWorkflowOrchestrator:
         task_queue: TaskQueueService,
         phase_gate: PhaseGateService,
         event_bus: Optional[EventBusService] = None,
+        ai_service: Optional[PydanticAIService] = None,
     ):
         """
         Initialize ticket workflow orchestrator.
@@ -73,11 +76,13 @@ class TicketWorkflowOrchestrator:
             task_queue: Task queue service
             phase_gate: Phase gate service
             event_bus: Optional event bus for publishing events
+            ai_service: Optional PydanticAI service for blocker analysis
         """
         self.db = db
         self.task_queue = task_queue
         self.phase_gate = phase_gate
         self.event_bus = event_bus
+        self.ai_service = ai_service or PydanticAIService()
 
     # ---------------------------------------------------------------------
     # State Machine Transitions (REQ-TKT-SM-001, REQ-TKT-SM-002)
@@ -483,7 +488,8 @@ class TicketWorkflowOrchestrator:
 
                 if not has_progress:
                     # Classify blocker type
-                    blocker_type = self._classify_blocker(session, ticket)
+                    # Use sync fallback for now (async version available)
+                    blocker_type = self._classify_blocker_sync(session, ticket)
                     results.append({
                         "ticket_id": ticket.id,
                         "should_block": True,
@@ -534,9 +540,78 @@ class TicketWorkflowOrchestrator:
 
         return completed_count > 0 or active_count > 0 or started_count > 0
 
-    def _classify_blocker(self, session, ticket: Ticket) -> str:
+    async def _classify_blocker(self, session, ticket: Ticket) -> BlockerAnalysis:
         """
-        Classify blocker type per REQ-TKT-BL-002.
+        Classify blocker type using PydanticAI per REQ-TKT-BL-002.
+
+        Args:
+            session: Database session
+            ticket: Ticket to analyze
+
+        Returns:
+            BlockerAnalysis with structured blocker classification and unblocking steps
+        """
+        # Gather context about the ticket
+        failing_tasks = (
+            session.query(Task)
+            .filter(
+                Task.ticket_id == ticket.id,
+                Task.status == "failed",
+            )
+            .all()
+        )
+
+        pending_tasks = (
+            session.query(Task)
+            .filter(
+                Task.ticket_id == ticket.id,
+                Task.status == "pending",
+            )
+            .all()
+        )
+
+        # Create agent with structured output
+        agent = self.ai_service.create_agent(
+            output_type=BlockerAnalysis,
+            system_prompt=(
+                "You are a blocker analysis expert. Analyze tickets to identify why they are blocked. "
+                "Classify blocker types (dependency, resource, validation, approval, etc.) and provide "
+                "actionable unblocking steps with priority levels (CRITICAL, HIGH, MEDIUM, LOW) and "
+                "effort estimates (S, M, L)."
+            ),
+        )
+
+        # Build prompt with ticket context
+        prompt_parts = [
+            f"Ticket ID: {ticket.id}",
+            f"Title: {ticket.title}",
+            f"Description: {ticket.description or 'No description'}",
+            f"Status: {ticket.status}",
+            f"Phase: {ticket.phase_id}",
+        ]
+
+        if failing_tasks:
+            prompt_parts.append(f"\nFailing Tasks ({len(failing_tasks)}):")
+            for task in failing_tasks[:5]:
+                prompt_parts.append(
+                    f"- {task.task_type}: {task.error_message or 'No error message'}"
+                )
+
+        if pending_tasks:
+            prompt_parts.append(f"\nPending Tasks ({len(pending_tasks)}):")
+            for task in pending_tasks[:5]:
+                prompt_parts.append(f"- {task.task_type}: {task.description or 'No description'}")
+
+        prompt = "\n".join(prompt_parts)
+        prompt += "\n\nAnalyze why this ticket is blocked and provide unblocking steps."
+
+        # Run analysis
+        result = await agent.run(prompt)
+        return result.data
+
+    def _classify_blocker_sync(self, session, ticket: Ticket) -> str:
+        """
+        Synchronous fallback for blocker classification (rule-based).
 
         Returns:
             Blocker classification: dependency, waiting_on_clarification, failing_checks, environment
@@ -553,10 +628,6 @@ class TicketWorkflowOrchestrator:
 
         if failing_tasks > 0:
             return "failing_checks"
-
-        # Check for dependency blockers (if ticket has blocked_by_ticket_ids)
-        # Note: This would require checking the ticketing module's blocked_by_ticket_ids field
-        # For now, we'll default to waiting_on_clarification
 
         # Default classification
         return "waiting_on_clarification"

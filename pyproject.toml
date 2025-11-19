@@ -26,7 +26,6 @@ dependencies = [
     "numpy>=2.3.4",
     "anthropic>=0.73.0",
     "pydantic-ai>=0.0.14",
-    "pydantic-ai-litellm>=0.0.1",
 ]
 
 [build-system]
