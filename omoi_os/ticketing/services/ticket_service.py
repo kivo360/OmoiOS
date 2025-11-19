@@ -81,7 +81,7 @@ class TicketService:
                 old_value=None,
                 new_value=None,
                 change_description="Ticket created",
-                metadata=None,
+                metadata_json=None,
                 changed_at=utc_now(),
             )
         )
@@ -114,7 +114,7 @@ class TicketService:
                         old_value=str(old) if old is not None else None,
                         new_value=str(v) if v is not None else None,
                         change_description=f"Updated {k}",
-                        metadata=None,
+                        metadata_json=None,
                         changed_at=utc_now(),
                     )
                 )
@@ -158,7 +158,7 @@ class TicketService:
                 old_value=old_status,
                 new_value=new_status,
                 change_description="Status transition",
-                metadata=None,
+                metadata_json=None,
                 changed_at=now,
             )
         )
@@ -201,7 +201,7 @@ class TicketService:
                 old_value=None,
                 new_value=None,
                 change_description="Comment added",
-                metadata=None,
+                metadata_json=None,
                 changed_at=utc_now(),
             )
         )
@@ -291,7 +291,7 @@ class TicketService:
                 old_value=None,
                 new_value=commit_sha,
                 change_description="Commit linked",
-                metadata=None,
+                metadata_json=None,
                 changed_at=utc_now(),
             )
         )
@@ -329,7 +329,7 @@ class TicketService:
                         old_value=None,
                         new_value=ticket.id,
                         change_description=f"Unblocked - {ticket.id} was resolved",
-                        metadata=None,
+                        metadata_json=None,
                         changed_at=now,
                     )
                 )
