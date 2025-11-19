@@ -18,6 +18,7 @@ from omoi_os.api.routes import (
     diagnostic,
     events,
     github,
+    graph,
     guardian,
     memory,
     mcp,
@@ -66,6 +67,7 @@ diagnostic_service = None
 llm_service = None  # Unified LLM service  # Defined below in lifespan
 validation_orchestrator = None  # Defined below in lifespan
 ticket_workflow_orchestrator = None  # Defined below in lifespan
+monitoring_loop = None  # Intelligent monitoring loop  # Defined below in lifespan
 
 
 async def orchestrator_loop():
@@ -465,7 +467,8 @@ async def lifespan(app: FastAPI):
         diagnostic_service, \
         validation_orchestrator, \
         ticket_workflow_orchestrator, \
-        llm_service
+        llm_service, \
+        monitoring_loop
 
     # Initialize services
     db = DatabaseService(
@@ -548,6 +551,42 @@ async def lifespan(app: FastAPI):
 
     llm_service = get_llm_service()
 
+    # Intelligent Monitoring Loop (Guardian + Conductor)
+    try:
+        from omoi_os.services.monitoring_loop import MonitoringLoop, MonitoringConfig
+
+        # Get workspace root from environment or use default
+        workspace_root = os.getenv(
+            "WORKSPACE_ROOT", os.path.join(os.getcwd(), "workspaces")
+        )
+
+        monitoring_config = MonitoringConfig(
+            guardian_interval_seconds=int(os.getenv("GUARDIAN_INTERVAL_SECONDS", "60")),
+            conductor_interval_seconds=int(
+                os.getenv("CONDUCTOR_INTERVAL_SECONDS", "300")
+            ),
+            health_check_interval_seconds=int(
+                os.getenv("HEALTH_CHECK_INTERVAL_SECONDS", "30")
+            ),
+            auto_steering_enabled=os.getenv("AUTO_STEERING_ENABLED", "false").lower()
+            == "true",
+            max_concurrent_analyses=int(os.getenv("MAX_CONCURRENT_ANALYSES", "5")),
+            workspace_root=workspace_root,
+        )
+
+        monitoring_loop = MonitoringLoop(
+            db=db,
+            event_bus=event_bus,
+            config=monitoring_config,
+        )
+        print("✅ Intelligent Monitoring Loop initialized")
+    except ImportError as e:
+        print(f"⚠️  MonitoringLoop not available: {e}")
+        monitoring_loop = None
+    except Exception as e:
+        print(f"⚠️  Failed to initialize MonitoringLoop: {e}")
+        monitoring_loop = None
+
     # Create database tables if they don't exist
     db.create_tables()
 
@@ -559,6 +598,14 @@ async def lifespan(app: FastAPI):
     blocking_detection_task = asyncio.create_task(blocking_detection_loop())
     approval_timeout_task = asyncio.create_task(approval_timeout_loop())
 
+    # Start intelligent monitoring loop if available
+    if monitoring_loop:
+        try:
+            await monitoring_loop.start()
+            print("✅ Intelligent Monitoring Loop started")
+        except Exception as e:
+            print(f"⚠️  Failed to start MonitoringLoop: {e}")
+
     yield
 
     # Cleanup
@@ -568,6 +615,15 @@ async def lifespan(app: FastAPI):
     anomaly_task.cancel()
     blocking_detection_task.cancel()
     approval_timeout_task.cancel()
+
+    # Stop intelligent monitoring loop if running
+    if monitoring_loop:
+        try:
+            await monitoring_loop.stop()
+            print("✅ Intelligent Monitoring Loop stopped")
+        except Exception as e:
+            print(f"⚠️  Error stopping MonitoringLoop: {e}")
+
     try:
         await orchestrator_task
     except asyncio.CancelledError:
@@ -632,8 +688,6 @@ app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
 
 # Dependency graph routes
-from omoi_os.api.routes import graph
-
 app.include_router(graph.router, prefix="/api/v1/graph", tags=["graph"])
 
 # Commits, Projects, and GitHub Integration routes

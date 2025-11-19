@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from omoi_os.api.dependencies import get_monitor_service
+from omoi_os.api.dependencies import get_monitor_service, get_monitoring_loop
 from omoi_os.services.monitor import MonitorService
 from omoi_os.telemetry import MetricSample
 
@@ -161,5 +161,82 @@ async def get_dashboard_summary(
     except Exception as exc:
         raise HTTPException(
             status_code=500, detail=f"Failed to get dashboard summary: {exc}"
+        ) from exc
+
+
+@router.get("/monitor/intelligent/status")
+async def get_intelligent_monitoring_status(
+    monitoring_loop = Depends(get_monitoring_loop),
+):
+    """Get intelligent monitoring loop status and metrics."""
+    try:
+        status = monitoring_loop.get_status()
+        return status
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Monitoring loop not available: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get monitoring status: {exc}"
+        ) from exc
+
+
+@router.get("/monitor/intelligent/health")
+async def get_intelligent_monitoring_health(
+    monitoring_loop = Depends(get_monitoring_loop),
+):
+    """Get system health from intelligent monitoring."""
+    try:
+        health = await monitoring_loop.get_system_health()
+        return health.dict()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Monitoring loop not available: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get system health: {exc}"
+        ) from exc
+
+
+@router.post("/monitor/intelligent/analyze/{agent_id}")
+async def analyze_agent_trajectory(
+    agent_id: str,
+    force: bool = Query(False, description="Force fresh analysis"),
+    monitoring_loop = Depends(get_monitoring_loop),
+):
+    """Trigger trajectory analysis for a specific agent."""
+    try:
+        analysis = await monitoring_loop.analyze_agent_trajectory(agent_id, force_analysis=force)
+        if not analysis:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found or no analysis available")
+        return analysis.dict()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Monitoring loop not available: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to analyze agent: {exc}"
+        ) from exc
+
+
+@router.post("/monitor/intelligent/emergency")
+async def trigger_emergency_analysis(
+    agent_ids: List[str],
+    monitoring_loop = Depends(get_monitoring_loop),
+):
+    """Trigger emergency analysis for specific agents."""
+    try:
+        result = await monitoring_loop.trigger_emergency_analysis(agent_ids)
+        return result
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503, detail=f"Monitoring loop not available: {exc}"
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to trigger emergency analysis: {exc}"
         ) from exc
 

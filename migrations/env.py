@@ -1,22 +1,22 @@
 from __future__ import annotations
 
+import os
 import sys
+from logging.config import fileConfig
 from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Add project root to Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config, pool
-from alembic import context
-
-import os
-from omoi_os.models.base import Base
+# Import project modules after path modification (required for Alembic)
+from omoi_os.models.base import Base  # noqa: E402
 
 # Import all models to register them with Base.metadata
-from omoi_os.models import Agent, Event, Task, Ticket, User  # noqa: F401
+from omoi_os.models import Agent, Event, Task, Ticket, User  # noqa: E402, F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

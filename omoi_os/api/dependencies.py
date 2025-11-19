@@ -198,6 +198,15 @@ def get_database_service() -> "DatabaseService":
     return get_db_service()
 
 
+def get_monitoring_loop():
+    """Get MonitoringLoop instance."""
+    from omoi_os.api.main import monitoring_loop
+    
+    if monitoring_loop is None:
+        raise RuntimeError("Monitoring loop not initialized")
+    return monitoring_loop
+
+
 def get_supabase_auth_service():
     """Get Supabase auth service instance."""
     from omoi_os.services.supabase_auth import SupabaseAuthService
