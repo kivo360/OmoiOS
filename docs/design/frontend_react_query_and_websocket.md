@@ -492,12 +492,161 @@ export function useAgentStats(id: string) {
   })
 }
 
-// Spawn agent
+// Agent Lifecycle Commands
+
+// Register agent
+export function useRegisterAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: (request: {
+      agent_type: string
+      phase_id?: string
+      capabilities: string[]
+      capacity?: number
+      status?: string
+      tags?: string[]
+    }) => api.registerAgent(request),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      queryClient.setQueryData(agentKeys.detail(data.agent_id), data)
+    },
+  })
+}
+
+// Update agent
+export function useUpdateAgent() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ 
+      agentId, 
+      updates 
+    }: { 
+      agentId: string
+      updates: {
+        capabilities?: string[]
+        capacity?: number
+        status?: string
+        tags?: string[]
+        health_status?: string
+      }
+    }) => api.updateAgent(agentId, updates),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+    },
+  })
+}
+
+// Toggle agent availability
+export function useToggleAgentAvailability() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ agentId, available }: { agentId: string; available: boolean }) =>
+      api.toggleAgentAvailability(agentId, available),
+    onSuccess: (data, variables) => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.detail(variables.agentId) })
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+    },
+  })
+}
+
+// Emit agent heartbeat (for manual heartbeat sending from frontend)
+export function useAgentHeartbeat() {
+  const queryClient = useQueryClient()
+  const { updateAgentHealth } = useAgentStore()
+  
+  return useMutation({
+    mutationFn: ({ 
+      agentId, 
+      heartbeat 
+    }: { 
+      agentId: string
+      heartbeat: {
+        sequence_number: number
+        health_metrics?: Record<string, any>
+        checksum?: string
+      }
+    }) => api.emitHeartbeat(agentId, heartbeat),
+    onSuccess: (ack, variables) => {
+      // Update health in store
+      updateAgentHealth(variables.agentId, {
+        lastHeartbeat: new Date().toISOString(),
+        isStale: false,
+      })
+      // Invalidate health query
+      queryClient.invalidateQueries({ queryKey: agentKeys.health(variables.agentId) })
+    },
+  })
+}
+
+// Search agents
+export function useSearchAgents() {
+  return useQuery({
+    queryKey: agentKeys.lists(),
+    queryFn: (options?: {
+      capabilities?: string[]
+      phase_id?: string
+      agent_type?: string
+      limit?: number
+    }) => api.searchAgents(options),
+  })
+}
+
+// Get best fit agent
+export function useBestFitAgent() {
+  return useQuery({
+    queryKey: ['agents', 'best-fit'],
+    queryFn: (options?: {
+      capabilities?: string[]
+      phase_id?: string
+      agent_type?: string
+    }) => api.getBestFitAgent(options),
+    enabled: false, // Only fetch when explicitly called
+  })
+}
+
+// Get stale agents
+export function useStaleAgents(timeoutSeconds?: number) {
+  return useQuery({
+    queryKey: ['agents', 'stale', timeoutSeconds],
+    queryFn: () => api.getStaleAgents(timeoutSeconds),
+    refetchInterval: 30000, // Refetch every 30s
+  })
+}
+
+// Cleanup stale agents
+export function useCleanupStaleAgents() {
+  const queryClient = useQueryClient()
+  
+  return useMutation({
+    mutationFn: ({ 
+      timeoutSeconds, 
+      markAs 
+    }: { 
+      timeoutSeconds?: number
+      markAs?: string 
+    }) => api.cleanupStaleAgents(timeoutSeconds, markAs),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ['agents', 'stale'] })
+    },
+  })
+}
+
+// Spawn agent (high-level wrapper that may call register + additional setup)
 export function useSpawnAgent() {
   const queryClient = useQueryClient()
   
   return useMutation({
-    mutationFn: api.spawnAgent,
+    mutationFn: (request: {
+      project_id?: string
+      agent_type: string
+      phase_id?: string
+      allow_discoveries?: boolean
+    }) => api.spawnAgent(request),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: agentKeys.lists() })
     },
