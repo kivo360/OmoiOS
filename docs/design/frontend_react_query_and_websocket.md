@@ -1112,7 +1112,7 @@ export function useAppNavigation() {
 ```typescript
 // hooks/auth/usePermissions.ts
 import { useQuery } from '@tanstack/react-query'
-import { useMemo } from 'react'
+import { useCallback } from 'react'
 
 export function usePermissions() {
   const { data: user } = useQuery({
@@ -1838,7 +1838,280 @@ export function useCacheManager() {
 }
 ```
 
+### 7.17 Terminal Streaming Hook
+
+#### `useTerminalStream.ts` - Real-time Terminal Output Streaming
+
+```typescript
+// hooks/terminal/useTerminalStream.ts
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { useWebSocketConnection } from './useWebSocketConnection'
+
+interface UseTerminalStreamOptions {
+  taskId?: string
+  agentId?: string
+  projectId?: string
+  maxLines?: number
+}
+
+export function useTerminalStream(options: UseTerminalStreamOptions = {}) {
+  const { taskId, agentId, projectId, maxLines = 1000 } = options
+  const { send, isConnected, lastMessage } = useWebSocketConnection()
+  const [output, setOutput] = useState<string[]>([])
+  const outputRef = useRef<string[]>([])
+  
+  // Subscribe to terminal stream
+  useEffect(() => {
+    if (!isConnected) return
+    
+    const subscription = {
+      task_id: taskId,
+      agent_id: agentId,
+      project_id: projectId,
+    }
+    
+    send('SUBSCRIBE_TERMINAL', subscription)
+    
+    return () => {
+      send('UNSUBSCRIBE_TERMINAL', subscription)
+    }
+  }, [isConnected, taskId, agentId, projectId, send])
+  
+  // Handle terminal output messages
+  useEffect(() => {
+    if (!lastMessage) return
+    
+    try {
+      const message = JSON.parse(lastMessage.data)
+      
+      if (message.type === 'TERMINAL_OUTPUT') {
+        const { line, task_id, agent_id } = message.payload
+        
+        // Filter by subscription if needed
+        if (taskId && task_id !== taskId) return
+        if (agentId && agent_id !== agentId) return
+        
+        setOutput(prev => {
+          const newOutput = [...prev, line]
+          // Truncate if exceeds maxLines
+          if (newOutput.length > maxLines) {
+            return newOutput.slice(-maxLines)
+          }
+          return newOutput
+        })
+      }
+    } catch (error) {
+      console.error('Error parsing terminal message:', error)
+    }
+  }, [lastMessage, taskId, agentId, maxLines])
+  
+  const clear = useCallback(() => {
+    setOutput([])
+    outputRef.current = []
+  }, [])
+  
+  const isStreaming = useRef(false)
+  useEffect(() => {
+    // Detect if streaming is active (output received in last 2 seconds)
+    const timer = setInterval(() => {
+      // This would be set by a timestamp in the message
+      isStreaming.current = true
+    }, 2000)
+    
+    return () => clearInterval(timer)
+  }, [])
+  
+  return {
+    output,
+    isStreaming: isStreaming.current,
+    clear,
+    lineCount: output.length,
+  }
+}
+```
+
+#### `useTerminalCommand.ts` - Execute Commands and Stream Output
+
+```typescript
+// hooks/terminal/useTerminalCommand.ts
+import { useState, useCallback } from 'react'
+import { useMutation } from '@tanstack/react-query'
+
+interface ExecuteCommandOptions {
+  taskId?: string
+  agentId?: string
+  projectId?: string
+  command: string
+  workingDirectory?: string
+}
+
+export function useTerminalCommand() {
+  const [isExecuting, setIsExecuting] = useState(false)
+  
+  const execute = useMutation({
+    mutationFn: async (options: ExecuteCommandOptions) => {
+      setIsExecuting(true)
+      const res = await fetch('/api/v1/terminal/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(options),
+      })
+      return res.json()
+    },
+    onSettled: () => {
+      setIsExecuting(false)
+    },
+  })
+  
+  return {
+    execute: execute.mutate,
+    isExecuting,
+    error: execute.error,
+  }
+}
+```
+
 ---
 
-This completes the comprehensive system-wide reusable hooks documentation covering UI state, forms, navigation, permissions, optimistic updates, pagination, search/filters, storage, WebSocket, keyboard shortcuts, clipboard, file upload, export/import, theme, real-time subscriptions, and cache management.
+## 8. Code Highlighting Configuration
+
+### 8.1 Syntax Highlighting Setup
+
+**Recommended Library**: `react-syntax-highlighter` with Prism
+
+**Installation**:
+```bash
+npm install react-syntax-highlighter @types/react-syntax-highlighter
+```
+
+**Theme Support**: 
+- Dark mode: `vscDarkPlus`, `dracula`, `nightOwl`
+- Light mode: `oneLight`, `prism`, `ghcolors`
+
+**Language Detection**: Auto-detect from file extension or explicit `language` prop
+
+**Performance Optimization**: Use dynamic imports for large language grammars:
+```typescript
+// lib/code-highlighting.ts
+import dynamic from 'next/dynamic'
+
+export const SyntaxHighlighter = dynamic(
+  () => import('react-syntax-highlighter').then(mod => mod.Prism),
+  { ssr: false }
+)
+
+export const CodeBlock = dynamic(
+  () => import('@/components/shared/CodeBlock'),
+  { ssr: false }
+)
+```
+
+### 8.2 Language Detection Hook
+
+```typescript
+// hooks/code/useLanguageDetection.ts
+import { useMemo } from 'react'
+
+export function useLanguageDetection(filename?: string, explicitLanguage?: string) {
+  return useMemo(() => {
+    if (explicitLanguage) return explicitLanguage
+    
+    if (!filename) return 'text'
+    
+    const ext = filename.split('.').pop()?.toLowerCase()
+    
+    const languageMap: Record<string, string> = {
+      'js': 'javascript',
+      'jsx': 'javascript',
+      'ts': 'typescript',
+      'tsx': 'typescript',
+      'py': 'python',
+      'rb': 'ruby',
+      'go': 'go',
+      'rs': 'rust',
+      'java': 'java',
+      'cpp': 'cpp',
+      'c': 'c',
+      'cs': 'csharp',
+      'php': 'php',
+      'swift': 'swift',
+      'kt': 'kotlin',
+      'scala': 'scala',
+      'sh': 'bash',
+      'bash': 'bash',
+      'zsh': 'bash',
+      'yaml': 'yaml',
+      'yml': 'yaml',
+      'json': 'json',
+      'xml': 'xml',
+      'html': 'html',
+      'css': 'css',
+      'scss': 'scss',
+      'sass': 'sass',
+      'md': 'markdown',
+      'sql': 'sql',
+      'dockerfile': 'dockerfile',
+      'makefile': 'makefile',
+      'env': 'bash',
+      'gitignore': 'text',
+      'txt': 'text',
+    }
+    
+    return languageMap[ext || ''] || 'text'
+  }, [filename, explicitLanguage])
+}
+```
+
+### 8.3 Diff Highlighting Hook
+
+```typescript
+// hooks/code/useDiffHighlighting.ts
+import { useMemo } from 'react'
+import { useLanguageDetection } from './useLanguageDetection'
+
+interface DiffLine {
+  type: 'added' | 'deleted' | 'unchanged' | 'context'
+  content: string
+  oldLine?: number
+  newLine?: number
+}
+
+export function useDiffHighlighting(
+  diff: string,
+  filename?: string,
+  language?: string
+) {
+  const detectedLanguage = useLanguageDetection(filename, language)
+  
+  const parsedDiff = useMemo(() => {
+    const lines = diff.split('\n')
+    const result: DiffLine[] = []
+    
+    lines.forEach((line, index) => {
+      if (line.startsWith('+++') || line.startsWith('---')) {
+        result.push({ type: 'context', content: line })
+      } else if (line.startsWith('+')) {
+        result.push({ type: 'added', content: line.slice(1) })
+      } else if (line.startsWith('-')) {
+        result.push({ type: 'deleted', content: line.slice(1) })
+      } else if (line.startsWith('@@')) {
+        result.push({ type: 'context', content: line })
+      } else {
+        result.push({ type: 'unchanged', content: line })
+      }
+    })
+    
+    return result
+  }, [diff])
+  
+  return {
+    lines: parsedDiff,
+    language: detectedLanguage,
+  }
+}
+```
+
+---
+
+This completes the comprehensive system-wide reusable hooks documentation covering UI state, forms, navigation, permissions, optimistic updates, pagination, search/filters, storage, WebSocket, keyboard shortcuts, clipboard, file upload, export/import, theme, real-time subscriptions, cache management, terminal streaming, and code highlighting.
 

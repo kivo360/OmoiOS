@@ -3583,6 +3583,449 @@ export function TaskCreator({ ticketId, projectId }: { ticketId?: string; projec
 
 ---
 
-This completes the scaffold documentation with all missing components.
+## 34. Code Highlighting Components
+
+### `src/components/shared/CodeBlock.tsx`
+
+Reusable code block component with syntax highlighting.
+
+```tsx
+"use client"
+
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { vscDarkPlus, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism"
+import { useTheme } from "next-themes"
+import { Copy, Check } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { useState } from "react"
+import { useClipboard } from "@/hooks/clipboard/useClipboard"
+
+interface CodeBlockProps {
+  code: string
+  language?: string
+  filename?: string
+  showLineNumbers?: boolean
+  highlightLines?: number[]
+  className?: string
+}
+
+export function CodeBlock({
+  code,
+  language = "text",
+  filename,
+  showLineNumbers = true,
+  highlightLines = [],
+  className,
+}: CodeBlockProps) {
+  const { theme } = useTheme()
+  const { copy, copied } = useClipboard()
+  const isDark = theme === "dark"
+
+  const handleCopy = () => {
+    copy(code)
+  }
+
+  return (
+    <div className={`relative group ${className}`}>
+      {filename && (
+        <div className="px-4 py-2 bg-muted border-b text-sm font-mono">
+          {filename}
+        </div>
+      )}
+      <div className="relative">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity"
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <Check className="h-4 w-4 text-green-600" />
+          ) : (
+            <Copy className="h-4 w-4" />
+          )}
+        </Button>
+        <SyntaxHighlighter
+          language={language}
+          style={isDark ? vscDarkPlus : oneLight}
+          showLineNumbers={showLineNumbers}
+          lineNumberStyle={{ minWidth: "3em", paddingRight: "1em" }}
+          customStyle={{
+            margin: 0,
+            borderRadius: filename ? "0 0 0.5rem 0.5rem" : "0.5rem",
+            fontSize: "0.875rem",
+          }}
+          lineProps={(lineNumber) => {
+            const isHighlighted = highlightLines.includes(lineNumber)
+            return {
+              style: {
+                backgroundColor: isHighlighted
+                  ? isDark
+                    ? "rgba(255, 255, 0, 0.1)"
+                    : "rgba(255, 255, 0, 0.2)"
+                  : "transparent",
+                display: "block",
+                width: "100%",
+              },
+            }
+          }}
+        >
+          {code}
+        </SyntaxHighlighter>
+      </div>
+    </div>
+  )
+}
+```
+
+### `src/components/shared/InlineCode.tsx`
+
+Inline code snippet component.
+
+```tsx
+"use client"
+
+import { cn } from "@/lib/utils"
+
+interface InlineCodeProps {
+  children: React.ReactNode
+  className?: string
+}
+
+export function InlineCode({ children, className }: InlineCodeProps) {
+  return (
+    <code
+      className={cn(
+        "relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold",
+        className
+      )}
+    >
+      {children}
+    </code>
+  )
+}
+```
+
+### `src/components/shared/CodeEditor.tsx`
+
+Editable code editor with syntax highlighting (for specs, requirements, etc.).
+
+```tsx
+"use client"
+
+import { useState } from "react"
+import { CodeBlock } from "./CodeBlock"
+import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
+import { Edit, Save, X } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+interface CodeEditorProps {
+  code: string
+  language?: string
+  filename?: string
+  onSave?: (code: string) => void
+  readOnly?: boolean
+}
+
+export function CodeEditor({
+  code: initialCode,
+  language = "text",
+  filename,
+  onSave,
+  readOnly = false,
+}: CodeEditorProps) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [code, setCode] = useState(initialCode)
+
+  const handleSave = () => {
+    onSave?.(code)
+    setIsEditing(false)
+  }
+
+  const handleCancel = () => {
+    setCode(initialCode)
+    setIsEditing(false)
+  }
+
+  if (readOnly) {
+    return <CodeBlock code={code} language={language} filename={filename} />
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm">{filename || "Code"}</CardTitle>
+          {!isEditing ? (
+            <Button variant="ghost" size="sm" onClick={() => setIsEditing(true)}>
+              <Edit className="h-4 w-4 mr-2" /> Edit
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={handleCancel}>
+                <X className="h-4 w-4 mr-2" /> Cancel
+              </Button>
+              <Button size="sm" onClick={handleSave}>
+                <Save className="h-4 w-4 mr-2" /> Save
+              </Button>
+            </div>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isEditing ? (
+          <Textarea
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            className="font-mono text-sm min-h-[400px]"
+            placeholder="Enter code..."
+          />
+        ) : (
+          <CodeBlock code={code} language={language} filename={filename} />
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+---
+
+## 35. Terminal Streaming Components
+
+### `src/components/terminal/TerminalViewer.tsx`
+
+Real-time terminal output viewer with streaming support.
+
+```tsx
+"use client"
+
+import { useEffect, useRef, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Terminal, Copy, Trash2, Download } from "lucide-react"
+import { useTerminalStream } from "@/hooks/terminal/useTerminalStream"
+import { useClipboard } from "@/hooks/clipboard/useClipboard"
+import { cn } from "@/lib/utils"
+
+interface TerminalViewerProps {
+  taskId?: string
+  agentId?: string
+  projectId?: string
+  autoScroll?: boolean
+  maxLines?: number
+  className?: string
+}
+
+export function TerminalViewer({
+  taskId,
+  agentId,
+  projectId,
+  autoScroll = true,
+  maxLines = 1000,
+  className,
+}: TerminalViewerProps) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const { output, isStreaming, clear } = useTerminalStream({
+    taskId,
+    agentId,
+    projectId,
+  })
+  const { copy } = useClipboard()
+  const [isPaused, setIsPaused] = useState(false)
+
+  // Auto-scroll to bottom when new output arrives
+  useEffect(() => {
+    if (autoScroll && !isPaused && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [output, autoScroll, isPaused])
+
+  const handleCopy = () => {
+    copy(output.join("\n"))
+  }
+
+  const handleDownload = () => {
+    const content = output.join("\n")
+    const blob = new Blob([content], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `terminal-${taskId || agentId || "output"}-${Date.now()}.log`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // Truncate output if exceeds maxLines
+  const displayOutput = output.length > maxLines 
+    ? output.slice(-maxLines)
+    : output
+
+  return (
+    <Card className={cn("flex flex-col", className)}>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <Terminal className="h-4 w-4" />
+            Terminal Output
+            {isStreaming && (
+              <span className="text-xs text-muted-foreground font-normal">
+                (streaming...)
+              </span>
+            )}
+          </CardTitle>
+          <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsPaused(!isPaused)}
+            >
+              {isPaused ? "Resume" : "Pause"}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleCopy}>
+              <Copy className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleDownload}>
+              <Download className="h-4 w-4" />
+            </Button>
+            <Button variant="ghost" size="sm" onClick={clear}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-0 flex-1 min-h-0">
+        <ScrollArea className="h-full" ref={scrollRef}>
+          <div className="p-4 font-mono text-sm">
+            {output.length > maxLines && (
+              <div className="text-muted-foreground mb-2 text-xs">
+                ... {output.length - maxLines} lines truncated (showing last {maxLines})
+              </div>
+            )}
+            <pre className="whitespace-pre-wrap break-words">
+              {displayOutput.map((line, idx) => (
+                <div
+                  key={idx}
+                  className={cn(
+                    "py-0.5",
+                    line.startsWith("ERROR") || line.includes("error:")
+                      ? "text-red-500"
+                      : line.startsWith("WARN") || line.includes("warning:")
+                      ? "text-yellow-500"
+                      : line.startsWith("INFO") || line.includes("info:")
+                      ? "text-blue-500"
+                      : "text-foreground"
+                  )}
+                >
+                  {line}
+                </div>
+              ))}
+              {isStreaming && (
+                <div className="inline-block w-2 h-4 bg-foreground animate-pulse ml-1" />
+              )}
+            </pre>
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  )
+}
+```
+
+### `src/components/terminal/TerminalPanel.tsx`
+
+Collapsible terminal panel for agent/task views.
+
+```tsx
+"use client"
+
+import { useState } from "react"
+import { TerminalViewer } from "./TerminalViewer"
+import { Button } from "@/components/ui/button"
+import { ChevronUp, ChevronDown, Terminal } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+interface TerminalPanelProps {
+  taskId?: string
+  agentId?: string
+  projectId?: string
+  defaultOpen?: boolean
+  className?: string
+}
+
+export function TerminalPanel({
+  taskId,
+  agentId,
+  projectId,
+  defaultOpen = false,
+  className,
+}: TerminalPanelProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen)
+
+  return (
+    <div className={cn("border-t", className)}>
+      <Button
+        variant="ghost"
+        className="w-full justify-between rounded-none"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center gap-2">
+          <Terminal className="h-4 w-4" />
+          <span className="text-sm">Terminal Output</span>
+        </div>
+        {isOpen ? (
+          <ChevronDown className="h-4 w-4" />
+        ) : (
+          <ChevronUp className="h-4 w-4" />
+        )}
+      </Button>
+      {isOpen && (
+        <div className="h-[400px]">
+          <TerminalViewer
+            taskId={taskId}
+            agentId={agentId}
+            projectId={projectId}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+---
+
+## 36. Code Highlighting Configuration
+
+### Syntax Highlighting Setup
+
+**Recommended Library**: `react-syntax-highlighter` with Prism
+
+**Installation**:
+```bash
+npm install react-syntax-highlighter @types/react-syntax-highlighter
+```
+
+**Theme Support**: 
+- Dark mode: `vscDarkPlus`, `dracula`, `nightOwl`
+- Light mode: `oneLight`, `prism`, `ghcolors`
+
+**Language Detection**: Auto-detect from file extension or explicit `language` prop
+
+**Performance**: Use dynamic imports for large language grammars:
+```tsx
+import dynamic from 'next/dynamic'
+
+const SyntaxHighlighter = dynamic(
+  () => import('react-syntax-highlighter').then(mod => mod.Prism),
+  { ssr: false }
+)
+```
+
+---
+
+This completes the code highlighting and terminal streaming components documentation.
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
 read_file
