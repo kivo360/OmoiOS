@@ -3792,20 +3792,26 @@ export function CodeEditor({
 
 ---
 
-## 35. Terminal Streaming Components
+## 35. Terminal Streaming Components (Xterm.js)
 
 ### `src/components/terminal/TerminalViewer.tsx`
 
-Real-time terminal output viewer with streaming support.
+Real-time terminal output viewer using Xterm.js for full terminal emulation.
 
 ```tsx
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { Terminal as XTerm } from "xterm"
+import { FitAddon } from "xterm-addon-fit"
+import { WebLinksAddon } from "xterm-addon-web-links"
+import { SearchAddon } from "xterm-addon-search"
+import { Unicode11Addon } from "xterm-addon-unicode11"
+import { SerializeAddon } from "xterm-addon-serialize"
+import "xterm/css/xterm.css"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Terminal, Copy, Trash2, Download } from "lucide-react"
+import { Terminal, Copy, Trash2, Download, Maximize2, Minimize2 } from "lucide-react"
 import { useTerminalStream } from "@/hooks/terminal/useTerminalStream"
 import { useClipboard } from "@/hooks/clipboard/useClipboard"
 import { cn } from "@/lib/utils"
@@ -3814,57 +3820,180 @@ interface TerminalViewerProps {
   taskId?: string
   agentId?: string
   projectId?: string
-  autoScroll?: boolean
-  maxLines?: number
   className?: string
+  options?: {
+    fontSize?: number
+    fontFamily?: string
+    theme?: any
+    cursorBlink?: boolean
+    cursorStyle?: "block" | "underline" | "bar"
+  }
 }
 
 export function TerminalViewer({
   taskId,
   agentId,
   projectId,
-  autoScroll = true,
-  maxLines = 1000,
   className,
+  options = {},
 }: TerminalViewerProps) {
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const { output, isStreaming, clear } = useTerminalStream({
+  const terminalRef = useRef<HTMLDivElement>(null)
+  const xtermRef = useRef<XTerm | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const serializeAddonRef = useRef<SerializeAddon | null>(null)
+  const { isStreaming, clear, write } = useTerminalStream({
     taskId,
     agentId,
     projectId,
+    onData: (data) => {
+      xtermRef.current?.write(data)
+    },
   })
   const { copy } = useClipboard()
-  const [isPaused, setIsPaused] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // Auto-scroll to bottom when new output arrives
+  // Initialize Xterm.js (only once)
   useEffect(() => {
-    if (autoScroll && !isPaused && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    if (!terminalRef.current || xtermRef.current) return
+
+    const xterm = new XTerm({
+      fontSize: options.fontSize || 14,
+      fontFamily: options.fontFamily || "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      cursorBlink: options.cursorBlink ?? true,
+      cursorStyle: options.cursorStyle || "block",
+      theme: options.theme || {
+        background: "hsl(var(--background))",
+        foreground: "hsl(var(--foreground))",
+        cursor: "hsl(var(--foreground))",
+        selection: "hsl(var(--accent))",
+        black: "#000000",
+        red: "#cd3131",
+        green: "#0dbc79",
+        yellow: "#e5e510",
+        blue: "#2472c8",
+        magenta: "#bc3fbc",
+        cyan: "#11a8cd",
+        white: "#e5e5e5",
+        brightBlack: "#666666",
+        brightRed: "#f14c4c",
+        brightGreen: "#23d18b",
+        brightYellow: "#f5f543",
+        brightBlue: "#3b8eea",
+        brightMagenta: "#d670d6",
+        brightCyan: "#29b8db",
+        brightWhite: "#e5e5e5",
+      },
+      allowProposedApi: true,
+    })
+
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon()
+    const searchAddon = new SearchAddon()
+    const unicode11Addon = new Unicode11Addon()
+    const serializeAddon = new SerializeAddon()
+
+    xterm.loadAddon(fitAddon)
+    xterm.loadAddon(webLinksAddon)
+    xterm.loadAddon(searchAddon)
+    xterm.loadAddon(unicode11Addon)
+    xterm.loadAddon(serializeAddon)
+
+    xterm.open(terminalRef.current)
+    fitAddon.fit()
+
+    xtermRef.current = xterm
+    fitAddonRef.current = fitAddon
+    serializeAddonRef.current = serializeAddon
+
+    // Note: Auto-copy on selection can be annoying, so we'll just enable selection
+    // Users can manually copy via Ctrl/Cmd+C or the copy button
+
+    // Handle paste
+    xterm.attachCustomKeyEventHandler((event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "v") {
+        navigator.clipboard.readText().then((text) => {
+          xterm.paste(text)
+        })
+        return false
+      }
+      return true
+    })
+
+    // Handle resize
+    const handleResize = () => {
+      if (fitAddonRef.current) {
+        fitAddonRef.current.fit()
+      }
     }
-  }, [output, autoScroll, isPaused])
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      window.removeEventListener("resize", handleResize)
+      xterm.dispose()
+      xtermRef.current = null
+      fitAddonRef.current = null
+    }
+  }, []) // Only initialize once
+
+  // Update theme when it changes (without reinitializing)
+  useEffect(() => {
+    if (xtermRef.current && options.theme) {
+      xtermRef.current.options.theme = options.theme
+    }
+  }, [options.theme])
+
+  // Handle fullscreen
+  useEffect(() => {
+    if (isFullscreen && fitAddonRef.current) {
+      fitAddonRef.current.fit()
+    }
+  }, [isFullscreen])
 
   const handleCopy = () => {
-    copy(output.join("\n"))
+    if (xtermRef.current?.hasSelection()) {
+      const selection = xtermRef.current.getSelection()
+      if (selection) {
+        copy(selection)
+      }
+    } else {
+      // Copy all terminal content
+      xtermRef.current?.selectAll()
+      const allContent = xtermRef.current?.getSelection() || ""
+      copy(allContent)
+      xtermRef.current?.clearSelection()
+    }
   }
 
   const handleDownload = () => {
-    const content = output.join("\n")
-    const blob = new Blob([content], { type: "text/plain" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `terminal-${taskId || agentId || "output"}-${Date.now()}.log`
-    a.click()
-    URL.revokeObjectURL(url)
+    if (serializeAddonRef.current) {
+      // Use SerializeAddon for better export
+      const content = serializeAddonRef.current.serialize()
+      const blob = new Blob([content], { type: "text/plain" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `terminal-${taskId || agentId || "output"}-${Date.now()}.log`
+      a.click()
+      URL.revokeObjectURL(url)
+    }
   }
 
-  // Truncate output if exceeds maxLines
-  const displayOutput = output.length > maxLines 
-    ? output.slice(-maxLines)
-    : output
+  const handleClear = () => {
+    xtermRef.current?.clear()
+    clear()
+  }
+
+  const handleFullscreen = () => {
+    setIsFullscreen(!isFullscreen)
+    if (!isFullscreen) {
+      terminalRef.current?.requestFullscreen()
+    } else {
+      document.exitFullscreen()
+    }
+  }
 
   return (
-    <Card className={cn("flex flex-col", className)}>
+    <Card className={cn("flex flex-col", className, isFullscreen && "fixed inset-0 z-50 m-0 rounded-none")}>
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -3877,12 +4006,12 @@ export function TerminalViewer({
             )}
           </CardTitle>
           <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsPaused(!isPaused)}
-            >
-              {isPaused ? "Resume" : "Pause"}
+            <Button variant="ghost" size="sm" onClick={handleFullscreen}>
+              {isFullscreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
             </Button>
             <Button variant="ghost" size="sm" onClick={handleCopy}>
               <Copy className="h-4 w-4" />
@@ -3890,44 +4019,18 @@ export function TerminalViewer({
             <Button variant="ghost" size="sm" onClick={handleDownload}>
               <Download className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="sm" onClick={clear}>
+            <Button variant="ghost" size="sm" onClick={handleClear}>
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
         </div>
       </CardHeader>
       <CardContent className="p-0 flex-1 min-h-0">
-        <ScrollArea className="h-full" ref={scrollRef}>
-          <div className="p-4 font-mono text-sm">
-            {output.length > maxLines && (
-              <div className="text-muted-foreground mb-2 text-xs">
-                ... {output.length - maxLines} lines truncated (showing last {maxLines})
-              </div>
-            )}
-            <pre className="whitespace-pre-wrap break-words">
-              {displayOutput.map((line, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    "py-0.5",
-                    line.startsWith("ERROR") || line.includes("error:")
-                      ? "text-red-500"
-                      : line.startsWith("WARN") || line.includes("warning:")
-                      ? "text-yellow-500"
-                      : line.startsWith("INFO") || line.includes("info:")
-                      ? "text-blue-500"
-                      : "text-foreground"
-                  )}
-                >
-                  {line}
-                </div>
-              ))}
-              {isStreaming && (
-                <div className="inline-block w-2 h-4 bg-foreground animate-pulse ml-1" />
-              )}
-            </pre>
-          </div>
-        </ScrollArea>
+        <div
+          ref={terminalRef}
+          className="h-full w-full"
+          style={{ minHeight: "400px" }}
+        />
       </CardContent>
     </Card>
   )
@@ -4026,6 +4129,238 @@ const SyntaxHighlighter = dynamic(
 
 ---
 
-This completes the code highlighting and terminal streaming components documentation.
+## 37. Xterm.js Terminal Configuration
+
+### Installation
+
+**Core Package**:
+```bash
+npm install xterm
+```
+
+**Official Addons**:
+```bash
+npm install xterm-addon-fit xterm-addon-web-links xterm-addon-search xterm-addon-unicode11 xterm-addon-serialize
+```
+
+**Optional Addons**:
+```bash
+npm install xterm-addon-image xterm-addon-ligatures xterm-addon-clipboard xterm-addon-attach
+```
+
+### Available Xterm.js Addons
+
+#### Core Addons (Recommended)
+
+1. **FitAddon** (`xterm-addon-fit`)
+   - Auto-resize terminal to fit container
+   - Essential for responsive layouts
+   - Usage: `fitAddon.fit()` on resize
+
+2. **WebLinksAddon** (`xterm-addon-web-links`)
+   - Makes URLs clickable in terminal
+   - Opens links in new tab
+   - Great for error messages with stack traces
+
+3. **SearchAddon** (`xterm-addon-search`)
+   - Text search within terminal
+   - Keyboard shortcuts (Ctrl+F)
+   - Highlight search results
+
+4. **Unicode11Addon** (`xterm-addon-unicode11`)
+   - Unicode 11 support
+   - Better emoji and special character rendering
+   - Useful for internationalized output
+
+5. **SerializeAddon** (`xterm-addon-serialize`)
+   - Serialize terminal state
+   - Save/restore terminal content
+   - Export terminal output
+
+#### Optional Addons
+
+6. **ImageAddon** (`xterm-addon-image`)
+   - Display images in terminal
+   - Useful for ASCII art, diagrams
+   - Supports various image formats
+
+7. **LigaturesAddon** (`xterm-addon-ligatures`)
+   - Font ligature support
+   - Better code readability (->, =>, etc.)
+   - Requires ligature-enabled fonts (Fira Code, JetBrains Mono)
+
+8. **ClipboardAddon** (`xterm-addon-clipboard`)
+   - Enhanced clipboard integration
+   - Better copy/paste handling
+   - Cross-platform support
+
+9. **AttachAddon** (`xterm-addon-attach`)
+   - Direct WebSocket attachment
+   - Alternative to manual WebSocket handling
+   - Simplifies connection management
+
+10. **WebglAddon** (`xterm-addon-webgl`)
+    - WebGL-based renderer
+    - Better performance for large outputs
+    - Hardware acceleration
+
+### Xterm.js Setup
+
+**Required CSS**: Import Xterm.js styles in your global CSS or layout:
+```tsx
+// app/layout.tsx or app/globals.css
+import "xterm/css/xterm.css"
+```
+
+**Dynamic Import** (Recommended for Next.js):
+```tsx
+// components/terminal/TerminalViewer.tsx
+import dynamic from 'next/dynamic'
+
+export const TerminalViewer = dynamic(
+  () => import('./TerminalViewer').then(mod => mod.TerminalViewer),
+  { ssr: false }
+)
+```
+
+### Enhanced TerminalViewer with All Addons
+
+```tsx
+"use client"
+
+import { useEffect, useRef, useState } from "react"
+import { Terminal as XTerm } from "xterm"
+import { FitAddon } from "xterm-addon-fit"
+import { WebLinksAddon } from "xterm-addon-web-links"
+import { SearchAddon } from "xterm-addon-search"
+import { Unicode11Addon } from "xterm-addon-unicode11"
+import { SerializeAddon } from "xterm-addon-serialize"
+import { ImageAddon } from "xterm-addon-image"
+import { LigaturesAddon } from "xterm-addon-ligatures"
+import "xterm/css/xterm.css"
+// ... rest of component
+
+// In initialization:
+const fitAddon = new FitAddon()
+const webLinksAddon = new WebLinksAddon()
+const searchAddon = new SearchAddon()
+const unicode11Addon = new Unicode11Addon()
+const serializeAddon = new SerializeAddon()
+const imageAddon = new ImageAddon()
+const ligaturesAddon = new LigaturesAddon()
+
+xterm.loadAddon(fitAddon)
+xterm.loadAddon(webLinksAddon)
+xterm.loadAddon(searchAddon)
+xterm.loadAddon(unicode11Addon)
+xterm.loadAddon(serializeAddon)
+xterm.loadAddon(imageAddon)
+xterm.loadAddon(ligaturesAddon)
+```
+
+### Terminal Options
+
+**Theme Configuration**:
+```typescript
+const terminalTheme = {
+  // Light mode
+  light: {
+    background: "#ffffff",
+    foreground: "#000000",
+    cursor: "#000000",
+    selection: "#e5e5e5",
+    // ... ANSI colors
+  },
+  // Dark mode
+  dark: {
+    background: "hsl(var(--background))",
+    foreground: "hsl(var(--foreground))",
+    cursor: "hsl(var(--foreground))",
+    selection: "hsl(var(--accent))",
+    // ... ANSI colors
+  }
+}
+```
+
+**Performance Considerations**:
+- Use `scrollback` limit to prevent memory issues (default: 1000)
+- Use `fastScrollModifier` for better scrolling performance
+- Consider WebGL renderer for very large outputs
+- Limit `scrollback` based on use case
+
+### WebSocket Integration
+
+Xterm.js works seamlessly with WebSocket streaming:
+- Write data directly to terminal: `xterm.write(data)`
+- Handle ANSI escape sequences automatically
+- Support for colors, formatting, and cursor control
+- Use `AttachAddon` for direct WebSocket attachment (alternative approach)
+
+### Addon Usage Examples
+
+**SerializeAddon** - Export terminal content:
+```typescript
+const serializeAddon = new SerializeAddon()
+xterm.loadAddon(serializeAddon)
+
+// Export terminal content
+const content = serializeAddon.serialize()
+// Save to file or send to server
+```
+
+**SearchAddon** - Search functionality:
+```typescript
+const searchAddon = new SearchAddon()
+xterm.loadAddon(searchAddon)
+
+// Programmatic search
+searchAddon.findNext("error")
+searchAddon.findPrevious("error")
+```
+
+**ImageAddon** - Display images:
+```typescript
+const imageAddon = new ImageAddon()
+xterm.loadAddon(imageAddon)
+
+// Display image (via ANSI escape sequences from server)
+// Server sends: \x1b]1337;File=...;inline=1:base64encodedimage\x07
+```
+
+**AttachAddon** - Direct WebSocket attachment (Alternative approach):
+```typescript
+import { AttachAddon } from 'xterm-addon-attach'
+
+// Alternative to manual WebSocket handling
+const ws = new WebSocket('ws://localhost:8080/terminal')
+const attachAddon = new AttachAddon(ws)
+xterm.loadAddon(attachAddon)
+
+// Automatically handles:
+// - Writing incoming data to terminal
+// - Sending terminal input to WebSocket
+// - Connection lifecycle
+```
+
+### Recommended Addon Combinations
+
+**For Agent Terminal Streaming**:
+- ✅ FitAddon (essential)
+- ✅ WebLinksAddon (clickable error URLs)
+- ✅ SearchAddon (find errors/logs)
+- ✅ Unicode11Addon (emoji support)
+- ✅ SerializeAddon (export logs)
+- ⚠️ AttachAddon (if using direct WebSocket, otherwise use manual handling)
+
+**For Code Display**:
+- ✅ LigaturesAddon (better code readability)
+- ✅ Unicode11Addon (special characters)
+
+**For Performance**:
+- ✅ WebglAddon (large outputs, hardware acceleration)
+
+---
+
+This completes the code highlighting and terminal streaming components documentation with comprehensive Xterm.js addon support.
 <｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
 read_file

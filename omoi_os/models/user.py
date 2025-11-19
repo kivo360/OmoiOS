@@ -15,9 +15,6 @@ from omoi_os.utils.datetime import utc_now
 if TYPE_CHECKING:
     from omoi_os.models.organization import Organization, OrganizationMembership
     from omoi_os.models.auth import Session, APIKey
-    from omoi_os.models.project import Project
-    from omoi_os.models.ticket import Ticket
-    from omoi_os.models.agent import Agent
 
 
 class User(Base):
@@ -27,24 +24,30 @@ class User(Base):
 
     # Identity
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
-    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    email: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True
+    )
+    hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    full_name: Mapped[Optional[str]] = mapped_column(
+        "name", String(255), nullable=True
+    )  # DB column: name
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
+
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
-    
+    is_super_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+
     # ABAC Attributes
-    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    department: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, index=True
+    )
     attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
@@ -55,41 +58,39 @@ class User(Base):
     last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    
+
     # Soft delete
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
-    
+
     # Relationships
     memberships: Mapped[list["OrganizationMembership"]] = relationship(
         back_populates="user",
         foreign_keys="OrganizationMembership.user_id",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     owned_organizations: Mapped[list["Organization"]] = relationship(
-        back_populates="owner",
-        foreign_keys="Organization.owner_id"
+        back_populates="owner", foreign_keys="Organization.owner_id"
     )
     api_keys: Mapped[list["APIKey"]] = relationship(
         back_populates="user",
         foreign_keys="APIKey.user_id",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     sessions: Mapped[list["Session"]] = relationship(
-        back_populates="user",
-        cascade="all, delete-orphan"
+        back_populates="user", cascade="all, delete-orphan"
     )
-    spawned_agents: Mapped[list["Agent"]] = relationship(
-        back_populates="spawned_by_user",
-        foreign_keys="Agent.spawned_by"
-    )
-    
+    # Note: spawned_agents relationship not included due to Agent.id type mismatch
+    # (Agent.id is VARCHAR, need UUID for FK relationship)
+
     __table_args__ = (
         Index("idx_users_email", "email"),
         Index("idx_users_department", "department"),
-        Index("idx_users_is_super_admin", "is_super_admin", 
-              postgresql_where=text("is_super_admin = true")),
+        Index(
+            "idx_users_is_super_admin",
+            "is_super_admin",
+            postgresql_where=text("is_super_admin = true"),
+        ),
         Index("idx_users_deleted_at", "deleted_at"),
     )
-

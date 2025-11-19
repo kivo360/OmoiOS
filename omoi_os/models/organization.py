@@ -110,11 +110,12 @@ class OrganizationMembership(Base):
         nullable=True,
         index=True
     )
-    agent_id: Mapped[Optional[UUID]] = mapped_column(
-        PGUUID(as_uuid=True),
+    agent_id: Mapped[Optional[str]] = mapped_column(
+        String,
         ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=True,
-        index=True
+        index=True,
+        comment="VARCHAR to match agents.id type"
     )
 
     organization_id: Mapped[UUID] = mapped_column(

@@ -331,14 +331,13 @@ def require_role(allowed_roles: list[str]):
 # New auth system dependencies
 
 async def get_db_session():
-    """Get async database session."""
-    from omoi_os.services.database import DatabaseService
+    """Get async database session from DatabaseService."""
     from omoi_os.api.main import db
     
     if db is None:
         raise RuntimeError("Database service not initialized")
     
-    # Use async context manager
+    # Use async context manager from DatabaseService
     async with db.get_async_session() as session:
         yield session
 

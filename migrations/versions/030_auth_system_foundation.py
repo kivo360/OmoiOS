@@ -115,12 +115,13 @@ def upgrade() -> None:
     safe_create_index('idx_roles_inherits', 'roles', ['inherits_from'])
     
     # 4. Create organization_memberships table
+    # Note: agent_id uses VARCHAR to match existing agents table
     print("\n🤝 Creating organization_memberships table...")
     safe_create_table(
         'organization_memberships',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('agent_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('agent_id', sa.String(), nullable=True),  # VARCHAR to match agents.id
         sa.Column('organization_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('role_id', postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column('invited_by', postgresql.UUID(as_uuid=True), nullable=True),
@@ -175,12 +176,13 @@ def upgrade() -> None:
     safe_create_index('idx_sessions_expires', 'sessions', ['expires_at'])
     
     # 6. Create api_keys table
+    # Note: agent_id uses VARCHAR to match existing agents table
     print("\n🔑 Creating api_keys table...")
     safe_create_table(
         'api_keys',
         sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column('user_id', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('agent_id', postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column('agent_id', sa.String(), nullable=True),  # VARCHAR to match agents.id
         sa.Column('organization_id', postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column('name', sa.String(255), nullable=False),
         sa.Column('key_prefix', sa.String(16), nullable=False),

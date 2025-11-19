@@ -1838,9 +1838,9 @@ export function useCacheManager() {
 }
 ```
 
-### 7.17 Terminal Streaming Hook
+### 7.17 Terminal Streaming Hook (Xterm.js)
 
-#### `useTerminalStream.ts` - Real-time Terminal Output Streaming
+#### `useTerminalStream.ts` - Real-time Terminal Output Streaming for Xterm.js
 
 ```typescript
 // hooks/terminal/useTerminalStream.ts
@@ -1851,14 +1851,15 @@ interface UseTerminalStreamOptions {
   taskId?: string
   agentId?: string
   projectId?: string
-  maxLines?: number
+  onData?: (data: string) => void // Callback for Xterm.js write
 }
 
 export function useTerminalStream(options: UseTerminalStreamOptions = {}) {
-  const { taskId, agentId, projectId, maxLines = 1000 } = options
+  const { taskId, agentId, projectId, onData } = options
   const { send, isConnected, lastMessage } = useWebSocketConnection()
-  const [output, setOutput] = useState<string[]>([])
-  const outputRef = useRef<string[]>([])
+  const [isStreaming, setIsStreaming] = useState(false)
+  const lastMessageTimeRef = useRef<number>(0)
+  const streamingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   
   // Subscribe to terminal stream
   useEffect(() => {
@@ -1885,47 +1886,49 @@ export function useTerminalStream(options: UseTerminalStreamOptions = {}) {
       const message = JSON.parse(lastMessage.data)
       
       if (message.type === 'TERMINAL_OUTPUT') {
-        const { line, task_id, agent_id } = message.payload
+        const { data, task_id, agent_id, timestamp } = message.payload
         
         // Filter by subscription if needed
         if (taskId && task_id !== taskId) return
         if (agentId && agent_id !== agentId) return
         
-        setOutput(prev => {
-          const newOutput = [...prev, line]
-          // Truncate if exceeds maxLines
-          if (newOutput.length > maxLines) {
-            return newOutput.slice(-maxLines)
-          }
-          return newOutput
-        })
+        // Write directly to Xterm.js via callback
+        if (onData) {
+          onData(data)
+        }
+        
+        // Update streaming status
+        setIsStreaming(true)
+        lastMessageTimeRef.current = timestamp || Date.now()
+        
+        // Clear streaming status after 2 seconds of inactivity
+        if (streamingTimeoutRef.current) {
+          clearTimeout(streamingTimeoutRef.current)
+        }
+        streamingTimeoutRef.current = setTimeout(() => {
+          setIsStreaming(false)
+        }, 2000)
       }
     } catch (error) {
       console.error('Error parsing terminal message:', error)
     }
-  }, [lastMessage, taskId, agentId, maxLines])
+  }, [lastMessage, taskId, agentId, onData])
   
   const clear = useCallback(() => {
-    setOutput([])
-    outputRef.current = []
+    // Clear is handled by Xterm.js terminal instance
+    setIsStreaming(false)
   }, [])
   
-  const isStreaming = useRef(false)
-  useEffect(() => {
-    // Detect if streaming is active (output received in last 2 seconds)
-    const timer = setInterval(() => {
-      // This would be set by a timestamp in the message
-      isStreaming.current = true
-    }, 2000)
-    
-    return () => clearInterval(timer)
-  }, [])
+  const write = useCallback((data: string) => {
+    if (onData) {
+      onData(data)
+    }
+  }, [onData])
   
   return {
-    output,
-    isStreaming: isStreaming.current,
+    isStreaming,
     clear,
-    lineCount: output.length,
+    write,
   }
 }
 ```
@@ -1936,6 +1939,7 @@ export function useTerminalStream(options: UseTerminalStreamOptions = {}) {
 // hooks/terminal/useTerminalCommand.ts
 import { useState, useCallback } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { useWebSocketConnection } from './useWebSocketConnection'
 
 interface ExecuteCommandOptions {
   taskId?: string
@@ -1943,20 +1947,35 @@ interface ExecuteCommandOptions {
   projectId?: string
   command: string
   workingDirectory?: string
+  onOutput?: (data: string) => void // For Xterm.js
 }
 
-export function useTerminalCommand() {
+export function useTerminalCommand(onOutput?: (data: string) => void) {
+  const { send, isConnected } = useWebSocketConnection()
   const [isExecuting, setIsExecuting] = useState(false)
   
   const execute = useMutation({
     mutationFn: async (options: ExecuteCommandOptions) => {
       setIsExecuting(true)
-      const res = await fetch('/api/v1/terminal/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(options),
-      })
-      return res.json()
+      
+      // Send command via WebSocket for real-time streaming
+      if (isConnected) {
+        send('EXECUTE_COMMAND', {
+          task_id: options.taskId,
+          agent_id: options.agentId,
+          project_id: options.projectId,
+          command: options.command,
+          working_directory: options.workingDirectory,
+        })
+      } else {
+        // Fallback to HTTP API
+        const res = await fetch('/api/v1/terminal/execute', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(options),
+        })
+        return res.json()
+      }
     },
     onSettled: () => {
       setIsExecuting(false)
@@ -1967,6 +1986,131 @@ export function useTerminalCommand() {
     execute: execute.mutate,
     isExecuting,
     error: execute.error,
+  }
+}
+```
+
+#### `useXterm.ts` - Xterm.js Terminal Instance Management
+
+```typescript
+// hooks/terminal/useXterm.ts
+import { useEffect, useRef, useState } from 'react'
+import { Terminal as XTerm } from 'xterm'
+import { FitAddon } from 'xterm-addon-fit'
+import { WebLinksAddon } from 'xterm-addon-web-links'
+import { SearchAddon } from 'xterm-addon-search'
+import { Unicode11Addon } from 'xterm-addon-unicode11'
+import { SerializeAddon } from 'xterm-addon-serialize'
+import { useTheme } from 'next-themes'
+
+interface UseXtermOptions {
+  containerRef: React.RefObject<HTMLDivElement>
+  fontSize?: number
+  fontFamily?: string
+  cursorBlink?: boolean
+  cursorStyle?: 'block' | 'underline' | 'bar'
+  scrollback?: number
+}
+
+export function useXterm(options: UseXtermOptions) {
+  const { containerRef, fontSize = 14, fontFamily, cursorBlink = true, cursorStyle = 'block', scrollback = 1000 } = options
+  const { theme } = useTheme()
+  const xtermRef = useRef<XTerm | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const [isReady, setIsReady] = useState(false)
+  
+  useEffect(() => {
+    if (!containerRef.current) return
+    
+    const xterm = new XTerm({
+      fontSize,
+      fontFamily: fontFamily || "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace",
+      cursorBlink,
+      cursorStyle,
+      scrollback,
+      theme: {
+        background: theme === 'dark' 
+          ? 'hsl(var(--background))' 
+          : '#ffffff',
+        foreground: theme === 'dark'
+          ? 'hsl(var(--foreground))'
+          : '#000000',
+        cursor: theme === 'dark'
+          ? 'hsl(var(--foreground))'
+          : '#000000',
+        selection: 'hsl(var(--accent))',
+        // ANSI colors
+        black: '#000000',
+        red: '#cd3131',
+        green: '#0dbc79',
+        yellow: '#e5e510',
+        blue: '#2472c8',
+        magenta: '#bc3fbc',
+        cyan: '#11a8cd',
+        white: '#e5e5e5',
+        brightBlack: '#666666',
+        brightRed: '#f14c4c',
+        brightGreen: '#23d18b',
+        brightYellow: '#f5f543',
+        brightBlue: '#3b8eea',
+        brightMagenta: '#d670d6',
+        brightCyan: '#29b8db',
+        brightWhite: '#e5e5e5',
+      },
+      allowProposedApi: true,
+    })
+    
+    const fitAddon = new FitAddon()
+    const webLinksAddon = new WebLinksAddon()
+    const searchAddon = new SearchAddon()
+    const unicode11Addon = new Unicode11Addon()
+    const serializeAddon = new SerializeAddon()
+    
+    xterm.loadAddon(fitAddon)
+    xterm.loadAddon(webLinksAddon)
+    xterm.loadAddon(searchAddon)
+    xterm.loadAddon(unicode11Addon)
+    xterm.loadAddon(serializeAddon)
+    
+    xterm.open(containerRef.current)
+    fitAddon.fit()
+    
+    xtermRef.current = xterm
+    fitAddonRef.current = fitAddon
+    setIsReady(true)
+    
+    // Handle resize
+    const handleResize = () => {
+      fitAddon.fit()
+    }
+    window.addEventListener('resize', handleResize)
+    
+    return () => {
+      window.removeEventListener('resize', handleResize)
+      xterm.dispose()
+      setIsReady(false)
+    }
+  }, [containerRef, fontSize, fontFamily, cursorBlink, cursorStyle, scrollback, theme])
+  
+  const write = useCallback((data: string) => {
+    xtermRef.current?.write(data)
+  }, [])
+  
+  const clear = useCallback(() => {
+    xtermRef.current?.clear()
+  }, [])
+  
+  const fit = useCallback(() => {
+    fitAddonRef.current?.fit()
+  }, [])
+  
+  return {
+    xterm: xtermRef.current,
+    fitAddon: fitAddonRef.current,
+    isReady,
+    write,
+    clear,
+    fit,
   }
 }
 ```
@@ -2113,5 +2257,156 @@ export function useDiffHighlighting(
 
 ---
 
-This completes the comprehensive system-wide reusable hooks documentation covering UI state, forms, navigation, permissions, optimistic updates, pagination, search/filters, storage, WebSocket, keyboard shortcuts, clipboard, file upload, export/import, theme, real-time subscriptions, cache management, terminal streaming, and code highlighting.
+## 9. Xterm.js Terminal Integration
+
+### 9.1 Installation & Setup
+
+**Installation**:
+```bash
+# Core package
+npm install xterm
+
+# Essential addons
+npm install xterm-addon-fit xterm-addon-web-links xterm-addon-search xterm-addon-unicode11 xterm-addon-serialize
+
+# Optional addons
+npm install xterm-addon-image xterm-addon-ligatures xterm-addon-clipboard xterm-addon-attach
+```
+
+**CSS Import** (Required):
+```typescript
+// app/layout.tsx or app/globals.css
+import "xterm/css/xterm.css"
+```
+
+**Dynamic Import** (Recommended for Next.js SSR):
+```typescript
+// components/terminal/TerminalViewer.tsx
+import dynamic from 'next/dynamic'
+
+export const TerminalViewer = dynamic(
+  () => import('./TerminalViewer').then(mod => mod.TerminalViewer),
+  { ssr: false }
+)
+```
+
+### 9.2 WebSocket Event Format
+
+**TERMINAL_OUTPUT Event**:
+```typescript
+{
+  type: 'TERMINAL_OUTPUT',
+  payload: {
+    data: string,        // Raw terminal data (ANSI escape sequences supported)
+    task_id?: string,
+    agent_id?: string,
+    project_id?: string,
+    timestamp: number,
+  }
+}
+```
+
+**EXECUTE_COMMAND Event** (Client → Server):
+```typescript
+{
+  type: 'EXECUTE_COMMAND',
+  payload: {
+    task_id?: string,
+    agent_id?: string,
+    project_id?: string,
+    command: string,
+    working_directory?: string,
+  }
+}
+```
+
+### 9.3 Terminal Features
+
+**Supported Features**:
+- ✅ ANSI color codes
+- ✅ Cursor control
+- ✅ Text selection and copy
+- ✅ Paste support (Ctrl/Cmd+V)
+- ✅ Web links (clickable URLs) - WebLinksAddon
+- ✅ Search functionality - SearchAddon
+- ✅ Auto-fit to container - FitAddon
+- ✅ Scrollback buffer
+- ✅ Fullscreen mode
+- ✅ Theme support (dark/light)
+- ✅ Unicode 11 support - Unicode11Addon
+- ✅ Terminal serialization - SerializeAddon
+- ✅ Image display - ImageAddon (optional)
+- ✅ Font ligatures - LigaturesAddon (optional)
+- ✅ Enhanced clipboard - ClipboardAddon (optional)
+
+**Performance Optimizations**:
+- Limit scrollback buffer size
+- Use `fastScrollModifier` for large outputs
+- Debounce resize events
+- Virtual scrolling for very long outputs (if needed)
+- Use WebGL renderer for very large outputs (100k+ lines)
+
+### 9.4 AttachAddon Alternative (Direct WebSocket)
+
+For simpler WebSocket integration, you can use `AttachAddon` instead of manual handling:
+
+```typescript
+// hooks/terminal/useTerminalAttach.ts
+import { useEffect, useRef } from 'react'
+import { Terminal as XTerm } from 'xterm'
+import { AttachAddon } from 'xterm-addon-attach'
+import { FitAddon } from 'xterm-addon-fit'
+
+export function useTerminalAttach(
+  xterm: XTerm | null,
+  wsUrl: string,
+  enabled: boolean = true
+) {
+  const attachAddonRef = useRef<AttachAddon | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  
+  useEffect(() => {
+    if (!xterm || !enabled) return
+    
+    const ws = new WebSocket(wsUrl)
+    const attachAddon = new AttachAddon(ws)
+    
+    xterm.loadAddon(attachAddon)
+    attachAddonRef.current = attachAddon
+    wsRef.current = ws
+    
+    ws.onopen = () => {
+      console.log('Terminal WebSocket connected')
+    }
+    
+    ws.onerror = (error) => {
+      console.error('Terminal WebSocket error:', error)
+    }
+    
+    ws.onclose = () => {
+      console.log('Terminal WebSocket closed')
+    }
+    
+    return () => {
+      attachAddon.dispose()
+      ws.close()
+      attachAddonRef.current = null
+      wsRef.current = null
+    }
+  }, [xterm, wsUrl, enabled])
+  
+  return {
+    isConnected: wsRef.current?.readyState === WebSocket.OPEN,
+    reconnect: () => {
+      // Reconnection logic
+    },
+  }
+}
+```
+
+**Note**: AttachAddon automatically handles bidirectional communication, but our manual approach gives more control over message formatting and filtering.
+
+---
+
+This completes the comprehensive system-wide reusable hooks documentation covering UI state, forms, navigation, permissions, optimistic updates, pagination, search/filters, storage, WebSocket, keyboard shortcuts, clipboard, file upload, export/import, theme, real-time subscriptions, cache management, terminal streaming with Xterm.js, and code highlighting.
 

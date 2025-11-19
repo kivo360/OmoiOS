@@ -1,14 +1,13 @@
 """Reflector service for ACE workflow (REQ-MEM-ACE-002)."""
 
 import re
-from typing import TYPE_CHECKING, List, Optional, Dict, Any
+from typing import TYPE_CHECKING, List, Optional, Any
 from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from omoi_os.models.playbook_entry import PlaybookEntry
-from omoi_os.models.task_memory import TaskMemory
 from omoi_os.services.embedding import EmbeddingService
 
 if TYPE_CHECKING:
