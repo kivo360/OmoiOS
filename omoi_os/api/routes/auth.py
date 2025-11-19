@@ -1,217 +1,381 @@
 """Authentication API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 
-from omoi_os.api.dependencies import (
-    get_supabase_auth_service,
-    get_db_service,
-)
+from omoi_os.api.dependencies import get_db_session, get_current_user, get_auth_service
 from omoi_os.models.user import User
-from omoi_os.services.supabase_auth import SupabaseAuthService
-from omoi_os.services.database import DatabaseService
+from omoi_os.schemas.auth import (
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+    LoginRequest,
+    TokenResponse,
+    RefreshTokenRequest,
+    VerifyEmailRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    APIKeyCreate,
+    APIKeyResponse,
+    APIKeyWithSecret,
+    ChangePasswordRequest,
+)
+from omoi_os.services.auth_service import AuthService
 
 router = APIRouter()
 security = HTTPBearer()
 
 
-class SignUpRequest(BaseModel):
-    """Request model for user signup."""
-
-    email: EmailStr
-    password: str
-    name: Optional[str] = None
-
-
-class SignInRequest(BaseModel):
-    """Request model for user signin."""
-
-    email: EmailStr
-    password: str
-
-
-class UserResponse(BaseModel):
-    """Response model for user."""
-
-    id: str
-    email: str
-    name: Optional[str] = None
-    role: str
-    avatar_url: Optional[str] = None
-    created_at: str
-
-    class Config:
-        from_attributes = True
-
-
-class TokenResponse(BaseModel):
-    """Response model for authentication tokens."""
-
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-    expires_in: int
-    user: dict
-
-
-@router.post("/signup", response_model=UserResponse)
-async def signup(
-    request: SignUpRequest,
-    supabase_auth: SupabaseAuthService = Depends(get_supabase_auth_service),
-    db: DatabaseService = Depends(get_db_service),
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+async def register(
+    request: UserCreate,
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
 ):
     """
-    Create a new user account.
-
-    Note: This endpoint uses Supabase admin API to create users.
-    For production, consider using Supabase Auth directly from frontend.
-    """
-    # Create user via Supabase
-    user_data = supabase_auth.create_user(
-        email=request.email,
-        password=request.password,
-        user_metadata={"name": request.name} if request.name else None,
-    )
+    Register a new user account.
     
-    if not user_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Failed to create user",
-        )
-    
-    # Wait for trigger to replicate to public.users, then fetch
-    import time
-    time.sleep(0.5)  # Small delay for trigger to execute
-    
-    with db.get_session() as session:
-        user = session.get(User, user_data["id"])
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="User created but not found in database",
-            )
-        
-        return UserResponse.model_validate(user)
-
-
-@router.post("/signin", response_model=TokenResponse)
-async def signin(
-    request: SignInRequest,
-    supabase_auth: SupabaseAuthService = Depends(get_supabase_auth_service),
-):
-    """
-    Sign in user and return JWT token.
-
-    Note: This endpoint uses Supabase client. For production,
-    consider handling sign-in directly from frontend.
+    Creates a new user with email/password authentication.
+    User will need to verify email before full access.
     """
     try:
-        response = supabase_auth.client.auth.sign_in_with_password(
-            {
-                "email": request.email,
-                "password": request.password,
-            }
+        user = await auth_service.register_user(
+            email=request.email,
+            password=request.password,
+            full_name=request.full_name,
+            department=request.department
         )
-        
-        if not response.session:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid credentials",
-            )
-        
-        return TokenResponse(
-            access_token=response.session.access_token,
-            refresh_token=response.session.refresh_token,
-            token_type="bearer",
-            expires_in=response.session.expires_in,
-            user={
-                "id": response.user.id,
-                "email": response.user.email,
-                "user_metadata": response.user.user_metadata or {},
-            },
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        ) from e
 
-
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    supabase_auth: SupabaseAuthService = Depends(get_supabase_auth_service),
-    db: DatabaseService = Depends(get_db_service),
-):
-    """Get current authenticated user information."""
-    from fastapi import HTTPException, status
-    
-    token = credentials.credentials
-    
-    # Verify JWT token
-    user_info = supabase_auth.verify_jwt_token(token)
-    if not user_info:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    
-    # Load user from public.users
-    with db.get_session() as session:
-        user = session.get(User, user_info["id"])
-        if not user or user.deleted_at:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="User not found",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        
         return UserResponse.model_validate(user)
 
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
-@router.post("/signout")
-async def signout(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    supabase_auth: SupabaseAuthService = Depends(get_supabase_auth_service),
+
+@router.post("/login", response_model=TokenResponse)
+async def login(
+    request: LoginRequest,
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
 ):
-    """Sign out current user."""
-    # Supabase handles signout on client side
-    # This endpoint is mainly for logging/auditing
-    return {"message": "Signed out successfully"}
+    """
+    Authenticate user and return JWT tokens.
+    
+    Returns access token (15min) and refresh token (7d).
+    """
+    user = await auth_service.authenticate_user(
+        email=request.email,
+        password=request.password
+    )
+
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid email or password"
+        )
+
+    # Create tokens
+    access_token = auth_service.create_access_token(user.id)
+    refresh_token = auth_service.create_refresh_token(user.id)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        expires_in=auth_service.access_token_expire_minutes * 60
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    refresh_token: str,
-    supabase_auth: SupabaseAuthService = Depends(get_supabase_auth_service),
+    request: RefreshTokenRequest,
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
 ):
-    """Refresh access token using refresh token."""
-    try:
-        response = supabase_auth.client.auth.refresh_session(refresh_token)
-        
-        if not response.session:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid refresh token",
-            )
-        
-        return TokenResponse(
-            access_token=response.session.access_token,
-            refresh_token=response.session.refresh_token,
-            token_type="bearer",
-            expires_in=response.session.expires_in,
-            user={
-                "id": response.user.id,
-                "email": response.user.email,
-                "user_metadata": response.user.user_metadata or {},
-            },
-        )
-    except Exception:
+    """
+    Refresh access token using refresh token.
+    
+    Returns new access token and refresh token.
+    """
+    # Verify refresh token
+    token_data = auth_service.verify_token(
+        request.refresh_token,
+        token_type="refresh"
+    )
+
+    if not token_data:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token",
+            detail="Invalid refresh token"
         )
 
+    # Verify user still exists and is active
+    user = await auth_service.get_user_by_id(token_data.user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found"
+        )
+
+    # Create new tokens
+    access_token = auth_service.create_access_token(user.id)
+    new_refresh_token = auth_service.create_refresh_token(user.id)
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=new_refresh_token,
+        expires_in=auth_service.access_token_expire_minutes * 60
+    )
+
+
+@router.post("/logout")
+async def logout(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    Logout current user.
+    
+    Invalidates current session (if using session-based auth).
+    For JWT, client should discard tokens.
+    """
+    # TODO: Track logout in audit log
+    return {"message": "Logged out successfully"}
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_user)
+):
+    """Get current authenticated user information."""
+    return UserResponse.model_validate(current_user)
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_current_user(
+    request: UserUpdate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """Update current user profile."""
+    from sqlalchemy import update
+    from omoi_os.models.user import User as UserModel
+
+    # Update user
+    update_data = {}
+    if request.full_name is not None:
+        update_data["full_name"] = request.full_name
+    if request.department is not None:
+        update_data["department"] = request.department
+    if request.attributes is not None:
+        update_data["attributes"] = request.attributes
+
+    if update_data:
+        await db.execute(
+            update(UserModel)
+            .where(UserModel.id == current_user.id)
+            .values(**update_data)
+        )
+        await db.commit()
+
+        # Refresh user
+        result = await db.execute(
+            select(UserModel).where(UserModel.id == current_user.id)
+        )
+        user = result.scalar_one()
+        return UserResponse.model_validate(user)
+
+    return UserResponse.model_validate(current_user)
+
+
+@router.post("/verify-email")
+async def verify_email(
+    request: VerifyEmailRequest,
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """Verify user email using verification token."""
+    success = await auth_service.verify_email(request.token)
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token"
+        )
+
+    return {"message": "Email verified successfully"}
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    Request password reset.
+    
+    Sends reset token via email (email sending not implemented yet).
+    """
+    user = await auth_service.get_user_by_email(request.email)
+
+    if user:
+        # Generate reset token
+        reset_token = auth_service.create_reset_token(user.id)
+
+        # TODO: Send email with reset link
+        # For now, return token (ONLY FOR DEVELOPMENT!)
+        return {
+            "message": "Password reset email sent",
+            "reset_token": reset_token  # Remove in production!
+        }
+
+    # Always return success to prevent email enumeration
+    return {"message": "Password reset email sent"}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """Reset password using reset token."""
+    try:
+        success = await auth_service.reset_password(
+            request.token,
+            request.new_password
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
+            )
+
+        return {"message": "Password reset successfully"}
+
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """Change password for authenticated user."""
+    # Verify current password
+    if not auth_service.verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+
+    # Validate new password
+    is_valid, error_msg = auth_service.validate_password_strength(request.new_password)
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg
+        )
+
+    # Update password
+    from sqlalchemy import update
+    from omoi_os.models.user import User as UserModel
+
+    await db.execute(
+        update(UserModel)
+        .where(UserModel.id == current_user.id)
+        .values(hashed_password=auth_service.hash_password(request.new_password))
+    )
+    await db.commit()
+
+    return {"message": "Password changed successfully"}
+
+
+# API Key endpoints
+
+@router.post("/api-keys", response_model=APIKeyWithSecret, status_code=status.HTTP_201_CREATED)
+async def create_api_key(
+    request: APIKeyCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """
+    Create API key for programmatic access.
+    
+    Returns the full key ONLY ONCE - save it securely!
+    """
+    api_key, full_key = await auth_service.create_api_key(
+        user_id=current_user.id,
+        name=request.name,
+        scopes=request.scopes,
+        organization_id=request.organization_id,
+        expires_in_days=request.expires_in_days
+    )
+
+    response = APIKeyWithSecret.model_validate(api_key)
+    response.key = full_key  # Add full key to response
+
+    return response
+
+
+@router.get("/api-keys", response_model=List[APIKeyResponse])
+async def list_api_keys(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session)
+):
+    """List user's API keys."""
+    from sqlalchemy import select
+    from omoi_os.models.auth import APIKey
+
+    result = await db.execute(
+        select(APIKey).where(APIKey.user_id == current_user.id)
+    )
+    api_keys = result.scalars().all()
+
+    return [APIKeyResponse.model_validate(key) for key in api_keys]
+
+
+@router.delete("/api-keys/{key_id}")
+async def revoke_api_key(
+    key_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service)
+):
+    """Revoke an API key."""
+    from uuid import UUID
+    from sqlalchemy import select
+    from omoi_os.models.auth import APIKey
+
+    # Verify key belongs to user
+    result = await db.execute(
+        select(APIKey).where(
+            APIKey.id == UUID(key_id),
+            APIKey.user_id == current_user.id
+        )
+    )
+    api_key = result.scalar_one_or_none()
+
+    if not api_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="API key not found"
+        )
+
+    await auth_service.revoke_api_key(UUID(key_id))
+
+    return {"message": "API key revoked successfully"}

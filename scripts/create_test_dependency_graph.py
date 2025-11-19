@@ -11,7 +11,6 @@ This script creates:
 Run with: uv run python scripts/create_test_dependency_graph.py
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -19,6 +18,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from omoi_os.config import get_app_settings
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.event_bus import EventBusService
@@ -30,11 +30,10 @@ from omoi_os.utils.datetime import utc_now
 def create_test_dependency_graph():
     """Create test tickets and tasks with dependencies."""
 
-    # Initialize services with connection strings from environment
-    database_url = os.getenv(
-        "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
-    )
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
+    # Initialize services with centralized configuration
+    app_settings = get_app_settings()
+    database_url = app_settings.database.url
+    redis_url = app_settings.redis.url
 
     db = DatabaseService(connection_string=database_url)
     event_bus = EventBusService(redis_url=redis_url)

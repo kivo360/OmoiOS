@@ -4,25 +4,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def get_env_files():
-    """Get environment files in priority order for PydanticSettings.
+    """Get environment files in correct priority order for PydanticSettings.
 
-    NOTE: PydanticSettings v2.12.0 seems to have reversed priority behavior
-    compared to documentation. The first file in the list gets LOWEST priority,
-    not HIGHEST priority as documented. So we reverse the order to work around this.
-
-    Intended priority: .env.local (highest) > .env > environment variables
-    Actual behavior: .env (highest) > .env.local > environment variables
+    According to PydanticSettings docs: Files are loaded in order, with each file overriding the previous one.
+    So .env.local should come last to override .env
     """
-    # Workaround: Put .env first so it gets overridden by .env.local (backwards but works)
     env_files = []
-
     import os
 
-    # Check for .env first (will be overridden by .env.local due to PydanticSettings bug)
+    # Load .env first (lower priority)
     if os.path.exists(".env"):
         env_files.append(".env")
 
-    # Then .env.local (will take priority due to reversed behavior)
+    # Load .env.local second (higher priority - overrides .env)
     if os.path.exists(".env.local"):
         env_files.append(".env.local")
 
@@ -64,7 +58,7 @@ class DatabaseSettings(BaseSettings):
         extra="ignore",
     )
 
-    url: str = "postgresql://postgres:postgres@localhost:15432/app_db"
+    url: str = "postgresql://postgres:postgres@localhost:15432/omoi_os"
 
 
 class RedisSettings(BaseSettings):

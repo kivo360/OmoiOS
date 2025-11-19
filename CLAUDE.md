@@ -146,6 +146,39 @@ with db.get_session() as session:
     session.commit()  # Auto-commits on context exit
 ```
 
+### 🚨 CRITICAL: SQLAlchemy Reserved Keywords
+**NEVER use reserved attribute names in SQLAlchemy models** - they cause import failures and runtime errors:
+
+**Forbidden Attribute Names (ABSOLUTELY NEVER USE):**
+- `metadata` - Reserved by SQLAlchemy's Declarative API
+- `registry` - Reserved by SQLAlchemy's internal registry system
+- `declared_attr` - Reserved by SQLAlchemy's declarative system
+
+**Safe Alternatives:**
+- Instead of `metadata`, use: `change_metadata`, `item_metadata`, `config_data`, `extra_data`
+- Instead of `registry`, use: `agent_registry`, `service_registry`
+- Instead of `declared_attr`, use: `custom_field`, `dynamic_attribute`
+
+**Why This Matters:**
+- Using `metadata` in model classes causes `sqlalchemy.exc.InvalidRequestError`
+- This error blocks server startup and makes the application unusable
+- The error occurs during model definition, not during database operations
+- This affects ALL models that inherit from `Base`
+
+**Example of What NOT To Do:**
+```python
+# ❌ THIS WILL CRASH YOUR APPLICATION
+class TicketHistory(Base):
+    metadata: Mapped[Optional[dict]] = mapped_column(JSONB)  # CRASHES!
+```
+
+**Example of What To Do:**
+```python
+# ✅ THIS WORKS CORRECTLY
+class TicketHistory(Base):
+    change_metadata: Mapped[Optional[dict]] = mapped_column(JSONB)  # Safe!
+```
+
 ### Error Classification in Retries
 The system distinguishes between retryable errors (network timeouts, temporary failures) and permanent errors (permission denied, syntax errors, authentication failures).
 

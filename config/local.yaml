@@ -1,0 +1,30 @@
+llm:
+  api_key: local-dev-llm-key
+  fireworks_api_key: local-fireworks-key
+
+supabase:
+  url: https://example.supabase.co
+  anon_key: local-anon-key
+  service_role_key: local-service-role-key
+  db_url: null
+
+database:
+  url: postgresql+psycopg://postgres:postgres@localhost:15432/app_db
+
+redis:
+  url: redis://localhost:16379
+
+workspace:
+  root: ./workspaces
+  worker_dir: /tmp/omoi_os_workspaces
+
+integrations:
+  mcp_server_url: http://localhost:18000/mcp
+  enable_mcp_tools: true
+
+demo:
+  sdk_example: activate_skill
+  persistence_dir: ./.conversations
+  add_security_analyzer: false
+  confirm_all: true
+

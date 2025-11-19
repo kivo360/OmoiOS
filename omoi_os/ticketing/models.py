@@ -135,7 +135,7 @@ class TicketHistory(Base):
     new_value: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     change_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    change_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     changed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )

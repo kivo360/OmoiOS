@@ -2,13 +2,15 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
     from omoi_os.models.ticket import Ticket
+    from omoi_os.models.organization import Organization
+    from omoi_os.models.user import User
 
-from sqlalchemy import Boolean, DateTime, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
@@ -23,6 +25,23 @@ class Project(Base):
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: f"project-{uuid4()}"
     )
+    
+    # Organization relationship
+    organization_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+    
+    # Creator
+    created_by: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True
+    )
+    
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
@@ -54,6 +73,12 @@ class Project(Base):
     )
     
     # Relationships
+    organization: Mapped[Optional["Organization"]] = relationship(
+        back_populates="projects"
+    )
+    creator: Mapped[Optional["User"]] = relationship(
+        foreign_keys=[created_by]
+    )
     tickets: Mapped[list["Ticket"]] = relationship(
         "Ticket", back_populates="project", cascade="all, delete-orphan"
     )

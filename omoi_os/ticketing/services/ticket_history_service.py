@@ -22,7 +22,7 @@ class TicketHistoryService:
         change_type: str,
         old_value: Optional[str],
         new_value: Optional[str],
-        metadata: Optional[dict[str, Any]],
+        change_metadata: Optional[dict[str, Any]],
         field_name: Optional[str],
         change_description: Optional[str],
     ) -> None:
@@ -35,7 +35,7 @@ class TicketHistoryService:
                 old_value=old_value,
                 new_value=new_value,
                 change_description=change_description,
-                metadata=metadata,
+                change_metadata=change_metadata,
                 changed_at=utc_now(),
             )
         )
@@ -47,7 +47,7 @@ class TicketHistoryService:
             change_type="status_changed",
             old_value=from_status,
             new_value=to_status,
-            metadata=None,
+            change_metadata=None,
             field_name="status",
             change_description="Status transition",
         )
@@ -59,7 +59,7 @@ class TicketHistoryService:
             change_type="commit_linked",
             old_value=None,
             new_value=commit_sha,
-            metadata={"message": message},
+            change_metadata={"message": message},
             field_name=None,
             change_description="Commit linked",
         )

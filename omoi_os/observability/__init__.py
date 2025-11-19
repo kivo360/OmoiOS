@@ -11,6 +11,8 @@ import os
 from contextlib import contextmanager
 from typing import Any, Optional
 
+from omoi_os.config import get_app_settings
+
 # Lazy import to avoid hard dependency during tests
 try:
     import logfire
@@ -99,7 +101,13 @@ def get_tracer(service_name: str = "omoi-os") -> LogfireTracer:
     """
     global _tracer
     if _tracer is None:
-        enabled = os.getenv("LOGFIRE_TOKEN") is not None or os.getenv("ENABLE_TRACING", "false").lower() == "true"
+        observability_settings = get_app_settings().observability
+        if observability_settings.logfire_token:
+            os.environ.setdefault("LOGFIRE_TOKEN", observability_settings.logfire_token)
+        enabled = (
+            observability_settings.enable_tracing
+            or bool(observability_settings.logfire_token)
+        )
         _tracer = LogfireTracer(service_name=service_name, enabled=enabled)
     return _tracer
 

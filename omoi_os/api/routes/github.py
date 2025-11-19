@@ -1,12 +1,12 @@
 """GitHub Integration API routes."""
 
-import os
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel
 
 from omoi_os.api.dependencies import get_db_service, get_event_bus_service
+from omoi_os.config import get_app_settings
 from omoi_os.models.project import Project
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
@@ -46,7 +46,7 @@ def get_github_service(
     event_bus: EventBusService = Depends(get_event_bus_service),
 ) -> GitHubIntegrationService:
     """Get GitHub integration service instance."""
-    github_token = os.getenv("GITHUB_TOKEN")  # TODO: Get from user settings/auth
+    github_token = get_app_settings().integrations.github_token
     return GitHubIntegrationService(
         db=db, event_bus=event_bus, github_token=github_token
     )

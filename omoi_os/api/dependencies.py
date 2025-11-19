@@ -327,3 +327,114 @@ def require_role(allowed_roles: list[str]):
     
     return role_checker
 
+
+# New auth system dependencies
+
+async def get_db_session():
+    """Get async database session."""
+    from omoi_os.services.database import DatabaseService
+    from omoi_os.api.main import db
+    
+    if db is None:
+        raise RuntimeError("Database service not initialized")
+    
+    # Use async context manager
+    async with db.get_async_session() as session:
+        yield session
+
+
+def get_auth_service(db_session = Depends(get_db_session)) -> "AuthService":
+    """Get authentication service instance."""
+    from omoi_os.services.auth_service import AuthService
+    from omoi_os.config import settings
+    
+    return AuthService(
+        db=db_session,
+        jwt_secret=settings.jwt_secret_key,
+        jwt_algorithm=settings.jwt_algorithm,
+        access_token_expire_minutes=settings.access_token_expire_minutes,
+        refresh_token_expire_days=settings.refresh_token_expire_days
+    )
+
+
+def get_authorization_service(db_session = Depends(get_db_session)) -> "AuthorizationService":
+    """Get authorization service instance."""
+    from omoi_os.services.authorization_service import AuthorizationService
+    
+    return AuthorizationService(db=db_session)
+
+
+async def get_current_user_from_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db_session = Depends(get_db_session),
+    auth_service: "AuthService" = Depends(get_auth_service)
+) -> User:
+    """
+    Get current authenticated user from JWT token.
+    
+    This is the new auth system version (replaces Supabase).
+    """
+    from fastapi import HTTPException, status
+    from sqlalchemy import select
+    from omoi_os.models.user import User
+    
+    token = credentials.credentials
+    
+    # Try to verify as JWT first
+    token_data = auth_service.verify_token(token, token_type="access")
+    
+    if token_data:
+        # Load user
+        user = await auth_service.get_user_by_id(token_data.user_id)
+        if user:
+            return user
+    
+    # Try to verify as API key
+    api_key_result = await auth_service.verify_api_key(token)
+    if api_key_result:
+        user, api_key = api_key_result
+        return user
+    
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid authentication credentials",
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+
+
+def require_permission(permission: str, organization_id: UUID):
+    """
+    Dependency factory for permission-based authorization.
+    
+    Usage:
+        @router.get("/projects")
+        async def list_projects(
+            auth=Depends(require_permission("project:read", org_id))
+        ):
+            ...
+    """
+    from fastapi import Depends, HTTPException, status
+    from omoi_os.services.authorization_service import ActorType
+    
+    async def permission_checker(
+        current_user: User = Depends(get_current_user_from_token),
+        auth_service: "AuthorizationService" = Depends(get_authorization_service)
+    ):
+        allowed, reason, details = await auth_service.is_authorized(
+            actor_id=current_user.id,
+            actor_type=ActorType.USER,
+            action=permission,
+            organization_id=organization_id
+        )
+        
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Unauthorized: {reason}",
+                headers={"X-Auth-Details": str(details)}
+            )
+        
+        return details
+    
+    return permission_checker
+

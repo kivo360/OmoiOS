@@ -1,12 +1,13 @@
 """Service for sending Guardian interventions to active OpenHands conversations."""
 
-import os
 import logging
 from typing import Optional
 
 from openhands.sdk import Conversation, Agent
 from openhands.tools.preset.default import get_default_agent
 from openhands.sdk import LLM
+
+from omoi_os.config import load_llm_settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,12 @@ class ConversationInterventionService:
         """Initialize the conversation intervention service."""
         # Create LLM and agent for conversation resumption
         # Note: Agent must have same tools as original for reconciliation
+        llm_settings = load_llm_settings()
+        if not llm_settings.api_key:
+            raise ValueError("LLM_API_KEY must be configured for interventions")
         self.llm = LLM(
-            model="openhands/claude-sonnet-4-5-20250929",
-            api_key=os.getenv("LLM_API_KEY"),
+            model=llm_settings.model,
+            api_key=llm_settings.api_key,
         )
         self.agent = get_default_agent(llm=self.llm, cli_mode=True)
 

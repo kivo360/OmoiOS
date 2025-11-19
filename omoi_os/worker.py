@@ -8,6 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
+from omoi_os.config import get_app_settings
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_status import AgentStatus
 from omoi_os.models.task import Task
@@ -25,7 +26,7 @@ if TYPE_CHECKING:
 class HeartbeatManager:
     """
     Enhanced heartbeat manager per REQ-ALM-002.
-    
+
     Features:
     - Adaptive frequency based on agent status (30s IDLE, 15s RUNNING)
     - Sequence number tracking
@@ -175,7 +176,9 @@ class HeartbeatManager:
                 heartbeat_message = self._create_heartbeat_message()
 
                 # Send heartbeat and get acknowledgment
-                ack = self.heartbeat_protocol_service.receive_heartbeat(heartbeat_message)
+                ack = self.heartbeat_protocol_service.receive_heartbeat(
+                    heartbeat_message
+                )
 
                 if not ack.received:
                     print(
@@ -342,14 +345,11 @@ class TimeoutManager:
 def main():
     """Main worker loop with concurrent task execution."""
     # Initialize services
-    database_url = os.getenv(
-        "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
-    )
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
-    workspace_dir = os.getenv("WORKSPACE_DIR", "/tmp/omoi_os_workspaces")
-    max_workers = int(
-        os.getenv("WORKER_CONCURRENCY", "2")
-    )  # Default 2 concurrent tasks
+    app_settings = get_app_settings()
+    database_url = app_settings.database.url
+    redis_url = app_settings.redis.url
+    workspace_dir = app_settings.workspace.worker_dir
+    max_workers = app_settings.worker.concurrency
 
     db = DatabaseService(database_url)
     event_bus = EventBusService(redis_url)
@@ -358,7 +358,7 @@ def main():
 
     # Import heartbeat protocol service for enhanced heartbeat
     from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
-    
+
     heartbeat_protocol_service = HeartbeatProtocolService(db, event_bus)
 
     # Register agent with capacity
@@ -389,7 +389,9 @@ def main():
             "cpu_usage_percent": 0.0,
             "memory_usage_mb": 0,
             "active_connections": 0,
-            "pending_operations": len(task_queue.get_assigned_tasks(agent_id)) if task_queue else 0,
+            "pending_operations": len(task_queue.get_assigned_tasks(agent_id))
+            if task_queue
+            else 0,
             "last_error_timestamp": None,
             "custom_metrics": {},
         }
@@ -423,7 +425,7 @@ def main():
                     for task in tasks:
                         # Update current task for heartbeat
                         current_task_ref["id"] = str(task.id)
-                        
+
                         future = executor.submit(
                             execute_task_with_retry,
                             task,
@@ -498,11 +500,11 @@ def register_agent(
         session.commit()
         session.refresh(agent)
         agent_id = agent.id
-        
+
         # Transition to IDLE after registration (simplified - should use AgentRegistryService in production)
         agent.status = AgentStatus.IDLE.value
         session.commit()
-        
+
         return agent_id
 
 
@@ -597,8 +599,12 @@ def execute_task_with_retry(
     os.makedirs(task_workspace, exist_ok=True)
 
     try:
-        # Create agent executor
-        executor = AgentExecutor(phase_id=task.phase_id, workspace_dir=task_workspace)
+        # Create agent executor with database service for phase context loading
+        executor = AgentExecutor(
+            phase_id=task.phase_id,
+            workspace_dir=task_workspace,
+            db=db,
+        )
 
         # Prepare conversation and store metadata BEFORE execution starts
         # This enables Guardian to send interventions during execution
@@ -801,8 +807,12 @@ def execute_task(
     os.makedirs(task_workspace, exist_ok=True)
 
     try:
-        # Create agent executor
-        executor = AgentExecutor(phase_id=task.phase_id, workspace_dir=task_workspace)
+        # Create agent executor with database service for phase context loading
+        executor = AgentExecutor(
+            phase_id=task.phase_id,
+            workspace_dir=task_workspace,
+            db=db,
+        )
 
         # Prepare conversation and store metadata BEFORE execution starts
         # This enables Guardian to send interventions during execution

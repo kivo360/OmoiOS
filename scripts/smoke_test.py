@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Smoke test script to verify the minimal E2E flow works."""
 
-import os
 import sys
 from pathlib import Path
 
@@ -9,6 +8,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from omoi_os.config import get_app_settings
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
@@ -24,11 +24,9 @@ def main():
     print("=" * 60)
 
     # Initialize services
-    database_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
-    )
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
+    app_settings = get_app_settings()
+    database_url = app_settings.database.url
+    redis_url = app_settings.redis.url
 
     print(f"\n1. Initializing services...")
     print(f"   Database: {database_url}")

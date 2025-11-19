@@ -1,10 +1,11 @@
 """Embedding service for generating text embeddings."""
 
-import os
 from typing import List, Optional
 from enum import Enum
 
 import numpy as np
+
+from omoi_os.config import get_app_settings
 
 
 class EmbeddingProvider(str, Enum):
@@ -41,22 +42,32 @@ class EmbeddingService:
         Initialize embedding service.
 
         Args:
-            provider: Embedding provider (openai or local). Defaults to env var EMBEDDING_PROVIDER.
-            openai_api_key: OpenAI API key. Defaults to env var OPENAI_API_KEY.
+            provider: Embedding provider (openai or local). Defaults to settings.embedding.provider.
+            openai_api_key: OpenAI API key. Defaults to settings.embedding.openai_api_key.
             model_name: Model name override. Defaults based on provider.
         """
-        self.provider = provider or EmbeddingProvider(
-            os.getenv("EMBEDDING_PROVIDER", "local")
+        embedding_settings = get_app_settings().embedding
+
+        resolved_provider = (
+            provider.value if isinstance(provider, EmbeddingProvider) else provider
         )
-        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        provider_value = resolved_provider or embedding_settings.provider
+        self.provider = (
+            provider_value
+            if isinstance(provider_value, EmbeddingProvider)
+            else EmbeddingProvider(provider_value)
+        )
+        self.openai_api_key = openai_api_key or embedding_settings.openai_api_key
 
         # Set model names
         if self.provider == EmbeddingProvider.OPENAI:
-            self.model_name = model_name or "text-embedding-3-small"
+            default_openai_model = embedding_settings.model_name or "text-embedding-3-small"
+            self.model_name = model_name or default_openai_model
             self.dimensions = 1536
             self._init_openai()
         else:
-            self.model_name = model_name or "intfloat/multilingual-e5-large"
+            default_local_model = embedding_settings.model_name or "intfloat/multilingual-e5-large"
+            self.model_name = model_name or default_local_model
             self.dimensions = 1536  # Padded to match OpenAI
             self._init_local()
 
@@ -65,7 +76,7 @@ class EmbeddingService:
         if not self.openai_api_key:
             raise ValueError(
                 "OpenAI API key required for OpenAI embeddings. "
-                "Set OPENAI_API_KEY environment variable."
+                "Configure embedding.openai_api_key in YAML or EMBEDDING_OPENAI_API_KEY env var."
             )
         try:
             from openai import OpenAI

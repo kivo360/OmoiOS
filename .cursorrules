@@ -1,0 +1,82 @@
+# Cursor Rules for OmoiOS Project
+
+You are an AI assistant working with the OmoiOS codebase. Follow these rules when working with Python files, especially those containing SQLAlchemy models.
+
+## SQLAlchemy Model Rules (CRITICAL)
+
+### Reserved Keywords - ABSOLUTELY FORBIDDEN
+NEVER use these attribute names in SQLAlchemy model classes:
+- `metadata` - RESERVED by SQLAlchemy Declarative API
+- `registry` - RESERVED by SQLAlchemy internal system
+- `declared_attr` - RESERVED by SQLAlchemy declarative system
+
+### Safe Alternatives for Common Patterns
+- For change tracking: `change_metadata`, `item_metadata`, `config_data`, `extra_data`
+- For registry patterns: `agent_registry`, `service_registry`, `component_registry`
+- For dynamic attributes: `custom_field`, `dynamic_attribute`, `computed_field`
+
+### Model Validation Checklist
+When editing or creating SQLAlchemy models, ALWAYS check:
+1. [ ] No `metadata` attributes in model classes
+2. [ ] No `registry` attributes in model classes
+3. [ ] No `declared_attr` attributes in model classes
+4. [ ] All JSONB fields use descriptive names ending with `_data`, `_config`, or `_metadata`
+5. [ ] Model inherits from `Base` correctly
+6. [ ] All relationships are properly typed
+
+### Trigger Patterns
+Apply these rules when files contain:
+- `from sqlalchemy import` or `import sqlalchemy`
+- `class.*Base)` (SQLAlchemy model inheritance)
+- `Mapped[`, `mapped_column`, `relationship`
+- File paths: `**/models.py`, `**/model*.py`
+
+### Error Prevention
+If you see `metadata:` as a model attribute, IMMEDIATELY:
+1. Stop the operation
+2. Alert the user to the SQLAlchemy conflict
+3. Suggest alternatives: `change_metadata`, `item_metadata`, etc.
+4. Reference the CLAUDE.md rule for detailed explanation
+
+## General Python Best Practices
+
+### Type Safety
+- Use proper type hints for all function parameters and return values
+- Prefer `Mapped[T]` over `Column(T)` for SQLAlchemy models
+- Use `Optional[T]` for nullable database fields
+
+### Import Organization
+1. Standard library imports first
+2. Third-party imports second (sqlalchemy, pydantic, fastapi)
+3. Local imports third (omoi_os.*)
+4. Use relative imports within the same package
+
+### Database Operations
+- Always use context managers: `with db.get_session() as session:`
+- Never use `datetime.utcnow()` - use `omoi_os.utils.datetime.utc_now()`
+- Handle exceptions properly in database operations
+- Use transactions for multi-step operations
+
+## Project-Specific Patterns
+
+### Event Publishing
+When modifying models that should trigger events:
+```python
+# Always publish events for significant state changes
+event_bus.publish(SystemEvent(
+    event_type="TASK_COMPLETED",
+    entity_type="task",
+    entity_id=str(task.id),
+    payload={"result": result}
+))
+```
+
+### Agent Registration
+For worker-related code:
+```python
+agent_id = register_agent(db, agent_type="worker", phase_id="PHASE_IMPLEMENTATION")
+heartbeat_manager = HeartbeatManager(agent_id, health_service)
+heartbeat_manager.start()
+```
+
+Remember: The `metadata` attribute conflict will prevent server startup and must be avoided at all costs!

@@ -1,0 +1,84 @@
+llm:
+  model: openhands/claude-sonnet-4-5-20250929
+  api_key: change-me
+  base_url: null
+  fireworks_api_key: null
+
+database:
+  url: postgresql+psycopg://postgres:postgres@localhost:15432/app_db
+
+redis:
+  url: redis://localhost:16379
+
+task_queue:
+  age_ceiling: 3600
+  sla_urgency_window: 900
+  starvation_limit: 7200
+  blocker_ceiling: 10
+  w_p: 0.45
+  w_a: 0.2
+  w_d: 0.15
+  w_b: 0.15
+  w_r: 0.05
+  sla_boost_multiplier: 1.25
+  starvation_floor_score: 0.6
+
+approval:
+  ticket_human_review: false
+  approval_timeout_seconds: 1800
+  on_reject: delete
+
+supabase:
+  url: null
+  anon_key: null
+  service_role_key: null
+  db_url: null
+
+auth:
+  jwt_secret_key: dev-secret-key-change-in-production
+  jwt_algorithm: HS256
+  access_token_expire_minutes: 15
+  refresh_token_expire_days: 7
+  min_password_length: 8
+  require_uppercase: true
+  require_lowercase: true
+  require_digit: true
+  require_special_char: false
+  max_login_attempts: 5
+  login_attempt_window_minutes: 15
+  session_expire_days: 30
+
+workspace:
+  root: ./workspaces
+  worker_dir: /tmp/omoi_os_workspaces
+
+monitoring:
+  guardian_interval_seconds: 60
+  conductor_interval_seconds: 300
+  health_check_interval_seconds: 30
+  auto_steering_enabled: false
+  max_concurrent_analyses: 5
+
+worker:
+  concurrency: 2
+
+integrations:
+  mcp_server_url: http://localhost:18000/mcp
+  enable_mcp_tools: true
+  github_token: null
+
+embedding:
+  provider: local
+  openai_api_key: null
+  model_name: intfloat/multilingual-e5-large
+
+observability:
+  enable_tracing: false
+  logfire_token: null
+
+demo:
+  sdk_example: activate_skill
+  persistence_dir: ./.conversations
+  add_security_analyzer: false
+  confirm_all: true
+

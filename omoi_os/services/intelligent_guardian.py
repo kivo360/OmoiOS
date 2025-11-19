@@ -7,14 +7,15 @@ and LLM-powered agent understanding.
 
 import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
+from datetime import timedelta
+from typing import Dict, List, Optional, Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
+from omoi_os.models.phase import PhaseModel
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.llm_service import LLMService
@@ -22,6 +23,7 @@ from omoi_os.services.trajectory_context import TrajectoryContext
 from omoi_os.services.agent_output_collector import AgentOutputCollector
 from omoi_os.services.guardian import GuardianService
 from omoi_os.services.conversation_intervention import ConversationInterventionService
+from omoi_os.services.template_service import get_template_service
 from omoi_os.utils.datetime import utc_now
 
 logger = logging.getLogger(__name__)
@@ -146,7 +148,9 @@ class IntelligentGuardian:
             with self.db.get_session() as session:
                 agent = session.query(Agent).filter_by(id=agent_id).first()
                 if not agent:
-                    logger.warning(f"Agent {agent_id} not found for trajectory analysis")
+                    logger.warning(
+                        f"Agent {agent_id} not found for trajectory analysis"
+                    )
                     return None
 
                 # Build trajectory context
@@ -175,14 +179,20 @@ class IntelligentGuardian:
                 # Create trajectory analysis object
                 trajectory_analysis = TrajectoryAnalysis(
                     agent_id=agent_id,
-                    current_phase=analysis_result.get("current_phase", agent.phase_id or "unknown"),
+                    current_phase=analysis_result.get(
+                        "current_phase", agent.phase_id or "unknown"
+                    ),
                     trajectory_aligned=analysis_result.get("trajectory_aligned", True),
                     alignment_score=analysis_result.get("alignment_score", 0.8),
                     needs_steering=analysis_result.get("needs_steering", False),
                     steering_type=analysis_result.get("steering_type"),
-                    steering_recommendation=analysis_result.get("steering_recommendation"),
+                    steering_recommendation=analysis_result.get(
+                        "steering_recommendation"
+                    ),
                     trajectory_summary=analysis_result.get("trajectory_summary", ""),
-                    last_claude_message_marker=analysis_result.get("last_claude_message_marker"),
+                    last_claude_message_marker=analysis_result.get(
+                        "last_claude_message_marker"
+                    ),
                     accumulated_goal=analysis_result.get("accumulated_goal"),
                     current_focus=analysis_result.get("current_focus", "Unknown"),
                     session_duration=analysis_result.get("session_duration"),
@@ -191,7 +201,9 @@ class IntelligentGuardian:
                 )
 
                 # Store analysis in database
-                self._store_guardian_analysis(session, trajectory_analysis, agent_output)
+                self._store_guardian_analysis(
+                    session, trajectory_analysis, agent_output
+                )
                 session.commit()
 
                 return trajectory_analysis
@@ -300,7 +312,9 @@ class IntelligentGuardian:
                 recent_interventions = self._get_recent_interventions(agent_id)
 
                 # Calculate health score
-                health_score = self._calculate_health_score(analysis, recent_interventions)
+                health_score = self._calculate_health_score(
+                    analysis, recent_interventions
+                )
 
                 return {
                     "status": "healthy",
@@ -410,48 +424,123 @@ class IntelligentGuardian:
 
         return None
 
+    def _get_past_summaries_timeline(
+        self, agent_id: str, limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Get past summaries timeline for trajectory context.
+
+        Args:
+            agent_id: Agent ID to get summaries for
+            limit: Maximum number of past summaries to retrieve
+
+        Returns:
+            List of summary dictionaries with time_ago, trajectory_summary, alignment_score, current_focus
+        """
+        try:
+            with self.db.get_session() as session:
+                query = text("""
+                    SELECT 
+                        trajectory_summary,
+                        alignment_score,
+                        current_focus,
+                        created_at,
+                        EXTRACT(EPOCH FROM (NOW() - created_at)) / 60 as minutes_ago
+                    FROM guardian_analyses
+                    WHERE agent_id = :agent_id
+                    ORDER BY created_at DESC
+                    LIMIT :limit
+                """)
+                result = session.execute(
+                    query,
+                    {"agent_id": agent_id, "limit": limit},
+                )
+
+                summaries = []
+                for row in result.fetchall():
+                    data = dict(row._mapping)
+                    minutes_ago = int(data["minutes_ago"] or 0)
+
+                    # Format time ago
+                    if minutes_ago < 1:
+                        time_ago = "just now"
+                    elif minutes_ago < 60:
+                        time_ago = f"{minutes_ago} min ago"
+                    else:
+                        hours_ago = minutes_ago // 60
+                        time_ago = f"{hours_ago} hour{'s' if hours_ago > 1 else ''} ago"
+
+                    summaries.append(
+                        {
+                            "time_ago": time_ago,
+                            "trajectory_summary": data["trajectory_summary"] or "",
+                            "alignment_score": float(data["alignment_score"] or 0.0),
+                            "current_focus": data["current_focus"] or None,
+                        }
+                    )
+
+                return summaries
+
+        except Exception as e:
+            logger.error(f"Failed to get past summaries timeline for {agent_id}: {e}")
+            return []
+
+    def _get_phase_context(self, phase_id: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Get phase context including done definitions, expected outputs, and phase prompt.
+
+        Args:
+            phase_id: Phase ID to get context for
+
+        Returns:
+            Dictionary with phase context or None if phase not found
+        """
+        if not phase_id:
+            return None
+
+        try:
+            with self.db.get_session() as session:
+                phase = session.query(PhaseModel).filter_by(id=phase_id).first()
+                if not phase:
+                    return None
+
+                return phase.to_dict()
+
+        except Exception as e:
+            logger.error(f"Failed to get phase context for {phase_id}: {e}")
+            return None
+
     def _llm_trajectory_analysis(
         self,
         agent: Agent,
         trajectory_data: Dict[str, Any],
         agent_output: str,
     ) -> Optional[Dict[str, Any]]:
-        """Perform LLM-powered trajectory analysis."""
+        """Perform LLM-powered trajectory analysis using Jinja2 template.
+
+        Args:
+            agent: Agent to analyze
+            trajectory_data: Trajectory context data from TrajectoryContext
+            agent_output: Recent agent output from AgentOutputCollector
+
+        Returns:
+            Dictionary with analysis results or None if analysis failed
+        """
         try:
-            prompt = f"""
-            Analyze this agent's trajectory and behavior for alignment with goals:
+            # Get past summaries timeline for trajectory context
+            past_summaries = self._get_past_summaries_timeline(agent.id, limit=10)
 
-            Agent Information:
-            - ID: {agent.id}
-            - Type: {agent.agent_type}
-            - Current Phase: {agent.phase_id}
-            - Status: {agent.status}
-            - Last Task: {agent.current_task_id}
+            # Get phase context for validation
+            phase_context = self._get_phase_context(agent.phase_id)
 
-            Trajectory Context:
-            - Accumulated Context: {trajectory_data.get('accumulated_context', 'N/A')}
-            - Persistent Constraints: {trajectory_data.get('persistent_constraints', 'N/A')}
-            - Session Duration: {trajectory_data.get('session_duration', 'N/A')}
-            - Conversation Events: {len(trajectory_data.get('conversation_events', []))}
-            - Task Completion Rate: {trajectory_data.get('task_completion_rate', 0)}
-
-            Recent Agent Output:
-            {agent_output[:2000]}...
-
-            Analyze and return JSON with:
-            - trajectory_aligned (boolean): Is the agent aligned with its goals?
-            - alignment_score (0-1): How well aligned is the agent?
-            - needs_steering (boolean): Does the agent need intervention?
-            - steering_type (string): Type of steering needed (guidance/correction/emergency)
-            - steering_recommendation (string): Specific guidance for the agent
-            - trajectory_summary (string): Summary of what the agent is doing
-            - current_focus (string): What the agent is currently focused on
-            - accumulated_goal (string): What the agent is trying to accomplish
-            - conversation_length (int): Length of conversation if applicable
-            - session_duration (string): How long the agent has been working
-            - last_claude_message_marker (string): Last significant Claude message
-            - details (object): Additional analysis details
-            """
+            # Render template with all context
+            template_service = get_template_service()
+            prompt = template_service.render(
+                "prompts/guardian_analysis.md.j2",
+                agent=agent,
+                trajectory_data=trajectory_data,
+                agent_output=agent_output,
+                past_summaries=past_summaries,
+                phase_context=phase_context,
+            )
 
             response = self.llm_service.ainvoke(prompt)
             return response
@@ -546,13 +635,17 @@ class IntelligentGuardian:
             with self.db.get_session() as session:
                 agent = session.query(Agent).filter_by(id=intervention.agent_id).first()
                 if not agent:
-                    logger.warning(f"Agent {intervention.agent_id} not found for intervention")
+                    logger.warning(
+                        f"Agent {intervention.agent_id} not found for intervention"
+                    )
                     return False
 
                 # Find the agent's current running task
                 task = (
                     session.query(Task)
-                    .filter_by(assigned_agent_id=intervention.agent_id, status="running")
+                    .filter_by(
+                        assigned_agent_id=intervention.agent_id, status="running"
+                    )
                     .order_by(Task.started_at.desc())
                     .first()
                 )
@@ -572,10 +665,16 @@ class IntelligentGuardian:
                 workspace_dir = self._get_workspace_dir(agent)
                 if not workspace_dir:
                     # Fallback: construct from task ID
-                    workspace_dir = f"{self.workspace_root}/{task.id}" if self.workspace_root else None
+                    workspace_dir = (
+                        f"{self.workspace_root}/{task.id}"
+                        if self.workspace_root
+                        else None
+                    )
 
                 if not workspace_dir:
-                    logger.error(f"Cannot determine workspace directory for task {task.id}")
+                    logger.error(
+                        f"Cannot determine workspace directory for task {task.id}"
+                    )
                     self._publish_intervention_event(intervention)
                     self._log_intervention(intervention)
                     return False
@@ -690,7 +789,9 @@ class IntelligentGuardian:
 
         return max(0.0, min(1.0, base_score))
 
-    def _get_phase_distribution(self, analyses: List[TrajectoryAnalysis]) -> Dict[str, int]:
+    def _get_phase_distribution(
+        self, analyses: List[TrajectoryAnalysis]
+    ) -> Dict[str, int]:
         """Get distribution of agents across phases."""
         phase_counts = {}
         for analysis in analyses:
@@ -698,11 +799,15 @@ class IntelligentGuardian:
             phase_counts[phase] = phase_counts.get(phase, 0) + 1
         return phase_counts
 
-    def _get_steering_type_distribution(self, analyses: List[TrajectoryAnalysis]) -> Dict[str, int]:
+    def _get_steering_type_distribution(
+        self, analyses: List[TrajectoryAnalysis]
+    ) -> Dict[str, int]:
         """Get distribution of steering types."""
         steering_counts = {}
         for analysis in analyses:
             if analysis.needs_steering and analysis.steering_type:
                 steering_type = analysis.steering_type
-                steering_counts[steering_type] = steering_counts.get(steering_type, 0) + 1
+                steering_counts[steering_type] = (
+                    steering_counts.get(steering_type, 0) + 1
+                )
         return steering_counts

@@ -42,7 +42,7 @@ class DBSettings(BaseSettings):
 
     host: str = "localhost"
     port: int = 15432  # Updated to match our non-standard port
-    name: str = "app_db"  # Updated to match docker-compose
+    name: str = "omoi_os"  # Updated to match local database
     user: str = "postgres"
     password: str = "postgres"
     sslmode: Optional[str] = None  # e.g., "require"

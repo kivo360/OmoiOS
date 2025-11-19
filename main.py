@@ -1,6 +1,5 @@
 from openhands.sdk import LLM
 
-from config import load_llm_settings
 import os
 
 from openhands.sdk import (
@@ -27,6 +26,7 @@ from openhands.sdk.conversation.state import (
 )
 
 from grep_tool import register_grep_toolset
+from omoi_os.config import get_app_settings, load_llm_settings
 
 install()
 
@@ -34,11 +34,13 @@ console = Console()
 
 
 async def main():
-    example = os.getenv("SDK_EXAMPLE", "activate_skill").lower()
+    app_settings = get_app_settings()
+    demo_settings = app_settings.demo
+    example = demo_settings.sdk_example.lower()
     settings = load_llm_settings()
-    persistence_dir = os.getenv(
-        "PERSISTENCE_DIR", os.path.join(os.getcwd(), ".conversations")
-    )
+    persistence_dir = demo_settings.persistence_dir or ".conversations"
+    if not os.path.isabs(persistence_dir):
+        persistence_dir = os.path.join(os.getcwd(), persistence_dir)
     os.makedirs(persistence_dir, exist_ok=True)
     llm = LLM(
         model=settings.model,
@@ -63,7 +65,13 @@ async def main():
     elif example == "activate_skill":
         await run_activate_skill(llm, conversation_callback, persistence_dir)
     elif example == "confirmation_mode":
-        await run_confirmation_mode(llm, conversation_callback, persistence_dir)
+        await run_confirmation_mode(
+            llm,
+            conversation_callback,
+            persistence_dir,
+            add_security_analyzer=demo_settings.add_security_analyzer,
+            approve_all_actions=demo_settings.confirm_all,
+        )
     elif example == "llm_registry":
         await run_llm_registry(llm, conversation_callback, persistence_dir)
     elif example == "interactive_terminal_reasoning":
@@ -220,8 +228,14 @@ async def run_activate_skill(llm: LLM, on_event, persistence_dir: str):
     conversation.run()
 
 
-async def run_confirmation_mode(llm: LLM, on_event, persistence_dir: str):
-    add_security_analyzer = bool(os.getenv("ADD_SECURITY_ANALYZER", "").strip())
+async def run_confirmation_mode(
+    llm: LLM,
+    on_event,
+    persistence_dir: str,
+    *,
+    add_security_analyzer: bool,
+    approve_all_actions: bool,
+):
     agent = get_default_agent(llm=llm, add_security_analyzer=add_security_analyzer)
     conversation = Conversation(
         agent=agent,
@@ -233,10 +247,9 @@ async def run_confirmation_mode(llm: LLM, on_event, persistence_dir: str):
     def non_interactive_confirmer(pending_actions) -> bool:
         """
         Return True to approve, False to reject.
-        Controlled via CONFIRM_ALL env (yes/true/1 => approve; otherwise reject).
+        Controlled via demo.confirm_all configuration.
         """
-        confirm = os.getenv("CONFIRM_ALL", "yes").strip().lower()
-        return confirm in ("y", "yes", "true", "1")
+        return approve_all_actions
 
     def _print_action_preview(pending_actions) -> None:
         print(

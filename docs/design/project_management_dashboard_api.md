@@ -30,6 +30,7 @@
 16. [Cost Tracking API](#16-cost-tracking-api)
 17. [Export/Import API](#17-exportimport-api)
 18. [File Attachments API](#18-file-attachments-api)
+19. [Tasks API (Additional)](#19-tasks-api-additional)
 
 ---
 
@@ -1692,6 +1693,65 @@ Delete attachment.
 ```json
 {
   "status": "deleted"
+}
+```
+
+---
+
+## 19. Tasks API (Additional)
+
+**File**: `omoi_os/api/routes/tasks.py` (existing file, new endpoints)
+
+### Endpoints
+
+#### `POST /api/v1/tickets/{ticket_id}/tasks`
+
+Create a new task linked to a ticket.
+
+**Request Body:**
+```json
+{
+  "description": "Task description",
+  "priority": "MEDIUM",
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "task_type": "implementation",
+  "dependencies": {
+    "depends_on": ["task-123"]
+  }
+}
+```
+
+**Response:**
+```json
+{
+  "id": "task-789",
+  "ticket_id": "ticket-123",
+  "description": "Task description",
+  "status": "pending",
+  "priority": "MEDIUM",
+  "created_at": "2025-01-30T12:00:00Z"
+}
+```
+
+#### `PUT /api/v1/tasks/{task_id}`
+
+Update task details.
+
+**Request Body:**
+```json
+{
+  "description": "Updated description",
+  "priority": "HIGH",
+  "status": "in_progress"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "task-789",
+  "description": "Updated description",
+  ...
 }
 ```
 

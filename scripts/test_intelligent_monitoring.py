@@ -8,7 +8,6 @@ monitoring system is working correctly with your actual database setup.
 
 import asyncio
 import logging
-import os
 import sys
 import uuid
 from datetime import datetime, timedelta
@@ -17,6 +16,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from omoi_os.config import get_app_settings
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.llm_service import LLMService
@@ -40,11 +40,10 @@ class IntelligentMonitoringSmokeTest:
 
     def __init__(self):
         """Initialize smoke test with database connection."""
-        database_url = os.getenv(
-            "DATABASE_URL",
-            "postgresql+psycopg://postgres:postgres@localhost:15432/omoi_os",
-        )
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:16379/0")
+        app_settings = get_app_settings()
+        database_url = app_settings.database.url
+        redis_url = app_settings.redis.url
+        self.workspace_root = app_settings.workspace.root
         self.db = DatabaseService(connection_string=database_url)
         self.event_bus = EventBusService(redis_url=redis_url)
         self.llm_service = LLMService()
@@ -189,7 +188,7 @@ class IntelligentMonitoringSmokeTest:
                 self.db,
                 self.llm_service,
                 self.event_bus,
-                workspace_root="/tmp/omoi_os_test_workspaces",
+                workspace_root=self.workspace_root,
             )
 
             # Get a sample agent

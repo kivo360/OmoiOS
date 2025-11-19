@@ -10,6 +10,7 @@ from omoi_os.models.memory_type import MemoryType
 from omoi_os.models.agent_log import AgentLog
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.agent_result import AgentResult
+from omoi_os.models.auth import Session, APIKey
 from omoi_os.models.base import Base
 from omoi_os.models.board_column import BoardColumn
 from omoi_os.models.budget import Budget, BudgetScope
@@ -19,6 +20,7 @@ from omoi_os.models.event import Event
 from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
 from omoi_os.models.learned_pattern import LearnedPattern, TaskPattern
 from omoi_os.models.monitor_anomaly import Alert, MonitorAnomaly
+from omoi_os.models.organization import Organization, OrganizationMembership, Role
 from omoi_os.models.phase import PhaseModel
 from omoi_os.models.playbook_entry import PlaybookEntry
 from omoi_os.models.playbook_change import PlaybookChange
@@ -54,6 +56,7 @@ __all__ = [
     "AgentLog",
     "AgentStatus",
     "AgentStatusTransition",
+    "APIKey",
     "ApprovalStatus",
     "MemoryType",
     "AgentMessage",
@@ -64,41 +67,45 @@ __all__ = [
     "BoardColumn",
     "Budget",
     "BudgetScope",
+    "CircuitBreakerState",
     "CollaborationThread",
     "CostRecord",
     "DiagnosticRun",
     "DiscoveryType",
     "Event",
     "GuardianAction",
+    "HeartbeatAck",
+    "HeartbeatMessage",
     "LearnedPattern",
+    "MCPInvocation",
+    "MCPPolicy",
+    "MCPServer",
+    "MCPToken",
+    "MCPTool",
     "MetricType",
     "MonitorAnomaly",
+    "Organization",
+    "OrganizationMembership",
     "PhaseContext",
     "PhaseGateArtifact",
     "PhaseGateResult",
     "PhaseHistory",
     "PhaseModel",
-    "PlaybookEntry",
     "PlaybookChange",
+    "PlaybookEntry",
     "Project",
     "QualityGate",
-    "User",
     "QualityMetric",
     "ResourceLock",
+    "Role",
+    "Session",
     "Task",
     "TaskDiscovery",
     "TaskMemory",
     "TaskPattern",
     "Ticket",
     "TicketStatus",
+    "User",
     "ValidationReview",
     "WorkflowResult",
-    "HeartbeatMessage",
-    "HeartbeatAck",
-    "MCPServer",
-    "MCPTool",
-    "MCPPolicy",
-    "MCPToken",
-    "CircuitBreakerState",
-    "MCPInvocation",
 ]

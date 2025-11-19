@@ -1,47 +1,49 @@
-"""User model for public.users table."""
+"""User model for authentication and authorization."""
 
 from datetime import datetime
-from typing import Optional
-from uuid import UUID
+from typing import Optional, TYPE_CHECKING
+from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, String, Text, Index
+from sqlalchemy import Boolean, DateTime, String, Text, Index
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.sql import text
 
 from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
 
+if TYPE_CHECKING:
+    from omoi_os.models.organization import Organization, OrganizationMembership
+    from omoi_os.models.auth import Session, APIKey
+    from omoi_os.models.project import Project
+    from omoi_os.models.ticket import Ticket
+    from omoi_os.models.agent import Agent
+
 
 class User(Base):
-    """User model representing replicated auth.users data."""
+    """User model for authentication and multi-tenant organizations."""
 
     __tablename__ = "users"
 
+    # Identity
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
-        comment="References auth.users.id"
+        default=uuid4
     )
     email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
-    email_confirmed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    phone: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
-    phone_confirmed_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    
-    # Profile fields
-    name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    role: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="user", index=True
-    )  # user, admin, project_manager, developer, viewer
     
-    # Metadata
-    user_metadata: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default="{}"
-    )
+    # Status
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_super_admin: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    
+    # ABAC Attributes
+    department: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -50,7 +52,7 @@ class User(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
-    last_sign_in_at: Mapped[Optional[datetime]] = mapped_column(
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     
@@ -59,10 +61,35 @@ class User(Base):
         DateTime(timezone=True), nullable=True, index=True
     )
     
+    # Relationships
+    memberships: Mapped[list["OrganizationMembership"]] = relationship(
+        back_populates="user",
+        foreign_keys="OrganizationMembership.user_id",
+        cascade="all, delete-orphan"
+    )
+    owned_organizations: Mapped[list["Organization"]] = relationship(
+        back_populates="owner",
+        foreign_keys="Organization.owner_id"
+    )
+    api_keys: Mapped[list["APIKey"]] = relationship(
+        back_populates="user",
+        foreign_keys="APIKey.user_id",
+        cascade="all, delete-orphan"
+    )
+    sessions: Mapped[list["Session"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
+    spawned_agents: Mapped[list["Agent"]] = relationship(
+        back_populates="spawned_by_user",
+        foreign_keys="Agent.spawned_by"
+    )
+    
     __table_args__ = (
         Index("idx_users_email", "email"),
-        Index("idx_users_role", "role"),
+        Index("idx_users_department", "department"),
+        Index("idx_users_is_super_admin", "is_super_admin", 
+              postgresql_where=text("is_super_admin = true")),
         Index("idx_users_deleted_at", "deleted_at"),
-        {"comment": "Replicated from auth.users via trigger"},
     )
 

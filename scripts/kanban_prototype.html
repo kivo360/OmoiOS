@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kanban Board Prototype</title>
+    <title>Project Management Dashboard Prototype</title>
     <style>
         * {
             margin: 0;
@@ -26,6 +26,12 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+        }
+
+        .header-subtitle {
+            margin-top: 6px;
+            color: #6b7280;
+            font-size: 14px;
         }
 
         .status {
@@ -493,12 +499,325 @@
             font-size: 13px;
             color: #666;
         }
+
+        .project-workflow {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            margin-bottom: 24px;
+        }
+
+        .workflow-steps {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .workflow-step {
+            flex: 1;
+            min-width: 120px;
+            background: #f3f4f6;
+            border-radius: 999px;
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #6b7280;
+            border: 1px solid transparent;
+        }
+
+        .workflow-step.completed {
+            background: #ecfdf5;
+            color: #047857;
+        }
+
+        .workflow-step.active {
+            background: #e0f2fe;
+            color: #0369a1;
+            border-color: #38bdf8;
+            box-shadow: 0 0 0 1px rgba(56,189,248,0.3);
+        }
+
+        .workflow-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .project-list-panel,
+        .project-overview-panel {
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 16px;
+            min-height: 260px;
+        }
+
+        .project-overview-panel {
+            background: white;
+            box-shadow: inset 0 0 0 1px #f3f4f6;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 14px;
+        }
+
+        .panel-header h2 {
+            font-size: 18px;
+            color: #111827;
+        }
+
+        .project-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .project-card {
+            background: white;
+            border-radius: 10px;
+            padding: 14px;
+            border: 1px solid #e5e7eb;
+            cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .project-card:hover {
+            border-color: #93c5fd;
+            box-shadow: 0 3px 10px rgba(59,130,246,0.12);
+        }
+
+        .project-card.selected {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 2px rgba(37,99,235,0.2);
+        }
+
+        .project-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .project-card-header h3 {
+            font-size: 16px;
+            color: #111827;
+        }
+
+        .project-status {
+            font-size: 12px;
+            text-transform: uppercase;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #e5e7eb;
+            color: #374151;
+            font-weight: 600;
+        }
+
+        .project-status.active {
+            background: #dcfce7;
+            color: #15803d;
+        }
+
+        .project-status.in-progress {
+            background: #fef3c7;
+            color: #b45309;
+        }
+
+        .project-status.paused {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .project-description {
+            font-size: 13px;
+            color: #4b5563;
+            margin-bottom: 12px;
+        }
+
+        .project-card-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .empty-state {
+            background: #f9fafb;
+            border: 1px dashed #d1d5db;
+            border-radius: 10px;
+            padding: 30px;
+            text-align: center;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .project-overview {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .project-overview-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+
+        .project-overview-description {
+            color: #4b5563;
+            line-height: 1.5;
+        }
+
+        .progress-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 10px;
+            background: #e5e7eb;
+            border-radius: 999px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .progress-bar .progress {
+            height: 100%;
+            background: linear-gradient(90deg, #2563eb, #38bdf8);
+            border-radius: 999px;
+        }
+
+        .progress-value {
+            font-size: 12px;
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        .project-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 12px;
+        }
+
+        .project-stat-card {
+            background: #f9fafb;
+            border-radius: 10px;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .project-stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .project-stat-value {
+            font-size: 20px;
+            font-weight: 600;
+            color: #111827;
+        }
+
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .quick-actions .btn {
+            flex: none;
+        }
+
+        .activity-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .activity-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: #4b5563;
+            padding: 10px;
+            border-radius: 8px;
+            background: #f5f5f5;
+        }
+
+        .board-section {
+            margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            padding: 20px;
+        }
+
+        .board-section-heading {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .board-section-heading h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #111827;
+        }
+
+        .board-section-heading p {
+            color: #6b7280;
+            font-size: 13px;
+        }
+
+        .board-meta {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .board-meta span {
+            font-size: 13px;
+            color: #4b5563;
+        }
+
+        @media (max-width: 960px) {
+            .workflow-body {
+                grid-template-columns: 1fr;
+            }
+
+            .board-section-heading {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .board-meta {
+                align-items: flex-start;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="header">
         <div>
-            <h1>Kanban Board Prototype</h1>
+            <h1>Project Management Dashboard</h1>
+            <p class="header-subtitle">Real-time Kanban + project workflow prototype</p>
             <div class="status">
                 <div class="status-indicator" id="wsStatus"></div>
                 <span id="wsStatusText">Connecting...</span>
@@ -510,9 +829,39 @@
         </div>
     </div>
 
-    <div id="errorContainer"></div>
-    <div id="boardContainer" class="board-container">
-        <div class="loading">Loading board...</div>
+    <div id="projectWorkflow" class="project-workflow">
+        <div id="workflowSteps" class="workflow-steps"></div>
+        <div class="workflow-body">
+            <section class="project-list-panel">
+                <div class="panel-header">
+                    <h2>Projects</h2>
+                    <button class="btn btn-secondary" type="button" id="newProjectBtn">+ New Project</button>
+                </div>
+                <div id="projectList" class="project-list">
+                    <div class="empty-state">Loading projects...</div>
+                </div>
+            </section>
+            <section class="project-overview-panel" id="projectOverviewPanel">
+                <div class="empty-state">Select a project to see its overview.</div>
+            </section>
+        </div>
+    </div>
+
+    <div class="board-section">
+        <div class="board-section-heading">
+            <div>
+                <h2 id="boardSectionTitle">Kanban Board</h2>
+                <p id="boardSectionSubtitle">Select a project to focus this board</p>
+            </div>
+            <div class="board-meta">
+                <span id="boardProjectLabel">All projects</span>
+                <span id="boardPhaseLabel">Waiting for selection</span>
+            </div>
+        </div>
+        <div id="errorContainer"></div>
+        <div id="boardContainer" class="board-container">
+            <div class="loading">Loading board...</div>
+        </div>
     </div>
 
     <div class="event-log" id="eventLog">
@@ -577,19 +926,76 @@
         </div>
     </div>
 
+    <!-- New Project Modal -->
+    <div id="newProjectModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Create New Project</h2>
+                <button class="close-btn" onclick="closeNewProjectModal()">&times;</button>
+            </div>
+            <form id="newProjectForm" onsubmit="handleCreateProject(event)">
+                <div class="form-group">
+                    <label for="projectName">Name *</label>
+                    <input type="text" id="projectName" name="name" required placeholder="Authentication System">
+                </div>
+                <div class="form-group">
+                    <label for="projectDescription">Description</label>
+                    <textarea id="projectDescription" name="description" placeholder="Short summary of the project"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="projectStatus">Status</label>
+                    <select id="projectStatus" name="status">
+                        <option value="active">Active</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="paused">Paused</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="projectPhase">Phase</label>
+                    <select id="projectPhase" name="phase">
+                        <option value="PHASE_INITIAL">Phase: Initial</option>
+                        <option value="PHASE_IMPLEMENTATION" selected>Phase: Implementation</option>
+                        <option value="PHASE_INTEGRATION">Phase: Integration</option>
+                        <option value="PHASE_REFACTORING">Phase: Refactoring</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="projectProgress">Progress (%)</label>
+                    <input type="number" id="projectProgress" name="progress" min="0" max="100" value="25">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeNewProjectModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         const API_BASE = 'http://localhost:18000/api/v1';
         const WS_URL = 'ws://localhost:18000/api/v1/ws/events';
+        const workflowStepsConfig = [
+            { id: 'projects', label: 'Projects', icon: '📁' },
+            { id: 'overview', label: 'Overview', icon: '📊' },
+            { id: 'board', label: 'Board', icon: '🗂️' }
+        ];
         
         let ws = null;
         let boardData = null;
         let draggedTicket = null;
         let dragStartPos = null;
         let isDragging = false;
+        let projects = [];
+        let selectedProject = null;
+        let currentWorkflowStep = 'projects';
 
         // Initialize
         window.addEventListener('DOMContentLoaded', () => {
             connectWebSocket();
+            renderWorkflowSteps();
+            attachProjectListHandler();
+            attachProjectActionHandler();
+            loadProjects();
             loadBoard();
         });
 
@@ -682,15 +1088,22 @@
         }
 
         // Load Board Data
-        async function loadBoard() {
+        async function loadBoard(projectId = null) {
             try {
-                const response = await fetch(`${API_BASE}/board/view`);
+                const scopedProjectId = projectId || (selectedProject ? selectedProject.id : null);
+                let boardUrl = `${API_BASE}/board/view`;
+                if (scopedProjectId) {
+                    const joiner = boardUrl.includes('?') ? '&' : '?';
+                    boardUrl = `${boardUrl}${joiner}project_id=${encodeURIComponent(scopedProjectId)}`;
+                }
+                const response = await fetch(boardUrl);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const data = await response.json();
                 boardData = data;
+                updateBoardHeader();
                 
                 // If no columns or tickets, show test data
                 if (!data.columns || data.columns.length === 0 || 
@@ -774,6 +1187,7 @@
             };
             
             boardData = testData;
+            updateBoardHeader();
             renderBoard(testData);
             
             // Show info message
@@ -782,7 +1196,7 @@
             infoMsg.style.background = '#e3f2fd';
             infoMsg.style.color = '#1565c0';
             infoMsg.style.border = '1px solid #2196f3';
-            infoMsg.innerHTML = '⚠️ Showing test data - No real tickets found. Click on any card to test the detail view!';
+            infoMsg.innerHTML = '⚠️ Showing test data - No real tickets found for the selected project. Click on any card to test the detail view!';
             document.getElementById('errorContainer').appendChild(infoMsg);
         }
 
@@ -796,6 +1210,9 @@
 
             // Sort columns by sequence_order
             const columns = [...data.columns].sort((a, b) => a.sequence_order - b.sequence_order);
+            const totalTickets = columns.reduce((acc, column) => acc + (column.current_count || 0), 0);
+            updateBoardSummary(totalTickets);
+            setWorkflowStep(selectedProject ? 'board' : 'projects');
 
             container.innerHTML = columns.map(column => `
                 <div class="column" data-column-id="${column.id}">
@@ -838,6 +1255,337 @@
                     <div class="ticket-status">${ticket.status || 'unknown'}</div>
                 </div>
             `;
+        }
+
+        function updateBoardHeader() {
+            const titleEl = document.getElementById('boardSectionTitle');
+            const subtitleEl = document.getElementById('boardSectionSubtitle');
+            const projectLabelEl = document.getElementById('boardProjectLabel');
+            const phaseLabelEl = document.getElementById('boardPhaseLabel');
+            if (!titleEl || !projectLabelEl || !phaseLabelEl) return;
+
+            if (selectedProject) {
+                titleEl.textContent = `${selectedProject.name} • Kanban Board`;
+                subtitleEl.textContent = 'Tracking live ticket flow for this project';
+                projectLabelEl.textContent = selectedProject.name;
+                phaseLabelEl.textContent = selectedProject.phase || selectedProject.phase_id || 'Phase unspecified';
+            } else {
+                titleEl.textContent = 'Kanban Board';
+                subtitleEl.textContent = 'Select a project to focus this board';
+                projectLabelEl.textContent = 'All projects';
+                phaseLabelEl.textContent = 'Waiting for selection';
+            }
+        }
+
+        function updateBoardSummary(totalTickets = 0) {
+            const phaseLabelEl = document.getElementById('boardPhaseLabel');
+            if (!phaseLabelEl) return;
+            const phaseLabel = selectedProject ? (selectedProject.phase || selectedProject.phase_id || 'Active phase') : 'All phases';
+            phaseLabelEl.textContent = `${phaseLabel} • ${totalTickets} ticket${totalTickets === 1 ? '' : 's'}`;
+        }
+
+        async function loadProjects() {
+            try {
+                const response = await fetch(`${API_BASE}/projects`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                const payload = await response.json();
+                const rawProjects = Array.isArray(payload)
+                    ? payload
+                    : (payload.items || payload.projects || payload.results || []);
+                if (!rawProjects.length) {
+                    throw new Error('No projects returned');
+                }
+                projects = rawProjects.map((project, index) => normalizeProject(project, index));
+            } catch (error) {
+                console.warn('Falling back to test projects:', error);
+                projects = getTestProjects();
+            }
+
+            const selectedId = selectedProject?.id;
+            selectedProject = projects.find(project => project.id === selectedId) || null;
+            renderWorkflowSteps();
+            renderProjectCards();
+            renderProjectOverview(selectedProject);
+            if (selectedProject) {
+                setWorkflowStep('overview');
+            }
+        }
+
+        function normalizeProject(project = {}, index = 0) {
+            return {
+                id: project.id || project.project_id || `project-${index + 1}`,
+                name: project.name || project.title || `Project ${index + 1}`,
+                description: project.description || project.summary || 'No description provided yet.',
+                status: (project.status || project.state || 'active').toLowerCase(),
+                phase: project.phase_id || project.phase || 'PHASE_IMPLEMENTATION',
+                progress: typeof project.progress === 'number' ? project.progress : 0.35,
+                tickets: project.ticket_count ?? project.tickets_total ?? 0,
+                done: project.done_count ?? project.completed_tickets ?? 0,
+                agents: project.active_agents ?? project.agent_count ?? 0,
+                cost: project.cost_usd ?? project.cost ?? 0,
+                activity: project.activity || []
+            };
+        }
+
+        function renderWorkflowSteps() {
+            const container = document.getElementById('workflowSteps');
+            if (!container) return;
+            const currentIndex = workflowStepsConfig.findIndex(step => step.id === currentWorkflowStep);
+            container.innerHTML = workflowStepsConfig.map((step, index) => {
+                const completed = index < currentIndex ? 'completed' : '';
+                const active = index === currentIndex ? 'active' : '';
+                return `
+                    <div class="workflow-step ${completed} ${active}">
+                        <span>${step.icon}</span>
+                        <span>${step.label}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function setWorkflowStep(stepId) {
+            if (currentWorkflowStep === stepId) return;
+            currentWorkflowStep = stepId;
+            renderWorkflowSteps();
+        }
+
+        function renderProjectCards() {
+            const listEl = document.getElementById('projectList');
+            if (!listEl) return;
+            if (!projects.length) {
+                listEl.innerHTML = '<div class="empty-state">No projects available yet.</div>';
+                return;
+            }
+            listEl.innerHTML = projects.map(project => {
+                const statusClass = project.status?.includes('pause') ? 'paused' : project.status?.includes('progress') ? 'in-progress' : 'active';
+                const isSelected = selectedProject && selectedProject.id === project.id;
+                return `
+                    <article class="project-card ${isSelected ? 'selected' : ''}" data-project-id="${project.id}">
+                        <div class="project-card-header">
+                            <h3>${escapeHtml(project.name)}</h3>
+                            <span class="project-status ${statusClass}">${(project.status || 'active').toUpperCase()}</span>
+                        </div>
+                        <p class="project-description">${escapeHtml(project.description)}</p>
+                        <div class="project-card-footer">
+                            <span>Tickets: ${project.tickets ?? 0}</span>
+                            <span>Agents: ${project.agents ?? 0}</span>
+                        </div>
+                    </article>
+                `;
+            }).join('');
+        }
+
+        function attachProjectListHandler() {
+            const listEl = document.getElementById('projectList');
+            if (listEl) {
+                listEl.addEventListener('click', (event) => {
+                    const card = event.target.closest('.project-card');
+                    if (!card) return;
+                    const { projectId } = card.dataset;
+                    selectProject(projectId);
+                });
+            }
+            const newProjectBtn = document.getElementById('newProjectBtn');
+            if (newProjectBtn) {
+                newProjectBtn.addEventListener('click', openNewProjectModal);
+            }
+        }
+
+        function attachProjectActionHandler() {
+            document.addEventListener('click', (event) => {
+                const actionBtn = event.target.closest('[data-project-action]');
+                if (!actionBtn) return;
+                handleProjectAction(actionBtn.dataset.projectAction);
+            });
+        }
+
+        function selectProject(projectId) {
+            const project = projects.find(item => item.id === projectId);
+            if (!project) return;
+            selectedProject = project;
+            updateBoardHeader();
+            renderProjectCards();
+            renderProjectOverview(project);
+            setWorkflowStep('overview');
+            loadBoard(project.id);
+        }
+
+        function renderProjectOverview(project) {
+            const panel = document.getElementById('projectOverviewPanel');
+            if (!panel) return;
+            if (!project) {
+                panel.innerHTML = '<div class="empty-state">Select a project to see its overview.</div>';
+                return;
+            }
+            const progressPercent = Math.min(100, Math.max(5, Math.round((project.progress || 0) * 100)));
+            const stats = [
+                { label: 'Tickets', value: project.tickets ?? 0 },
+                { label: 'Done', value: project.done ?? 0 },
+                { label: 'Agents', value: project.agents ?? 0 },
+                { label: 'Cost', value: `$${(project.cost ?? 0).toLocaleString()}` }
+            ];
+            panel.innerHTML = `
+                <div class="project-overview">
+                    <div class="project-overview-header">
+                        <div>
+                            <h2>${escapeHtml(project.name)}</h2>
+                            <p class="project-overview-description">${escapeHtml(project.description)}</p>
+                        </div>
+                        <span class="project-status ${project.status}">${(project.status || 'active').toUpperCase()}</span>
+                    </div>
+                    <div class="progress-wrapper">
+                        <div class="progress-bar">
+                            <div class="progress" style="width:${progressPercent}%"></div>
+                        </div>
+                        <span class="progress-value">${progressPercent}% Complete</span>
+                    </div>
+                    <div class="project-stats-grid">
+                        ${stats.map(stat => `
+                            <div class="project-stat-card">
+                                <div class="project-stat-label">${stat.label}</div>
+                                <div class="project-stat-value">${stat.value}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="quick-actions">
+                        <button type="button" class="btn btn-primary" data-project-action="view-board">View Board</button>
+                        <button type="button" class="btn btn-secondary" data-project-action="create-ticket">Create Ticket</button>
+                        <button type="button" class="btn btn-secondary" data-project-action="spawn-agent">Spawn Agent</button>
+                    </div>
+                    <div>
+                        <h3 style="font-size:14px; text-transform:uppercase; color:#6b7280; margin-bottom:6px;">Recent Activity</h3>
+                        ${renderActivityList(project.activity)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderActivityList(activity = []) {
+            if (!activity.length) {
+                return '<div class="empty-state" style="padding:16px;">No recent activity yet.</div>';
+            }
+            return `
+                <ul class="activity-list">
+                    ${activity.map(item => `
+                        <li class="activity-item">
+                            <span>${escapeHtml(item.description || item.label || 'Activity recorded')}</span>
+                            <span style="font-size:12px; color:#9ca3af;">${escapeHtml(item.time || 'Just now')}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            `;
+        }
+
+        function handleProjectAction(action) {
+            switch (action) {
+                case 'view-board':
+                    document.getElementById('boardContainer')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    break;
+                case 'create-ticket':
+                    openCreateTicketModal();
+                    break;
+                case 'spawn-agent':
+                    addEvent('Spawn agent flow triggered (prototype placeholder)');
+                    break;
+                case 'new-project':
+                    openNewProjectModal();
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        function getTestProjects() {
+            return [
+                {
+                    id: 'auth-system',
+                    name: 'Authentication System',
+                    description: 'Multi-provider authentication system with OAuth2, JWT, and API key support.',
+                    status: 'active',
+                    phase: 'PHASE_IMPLEMENTATION',
+                    progress: 0.42,
+                    tickets: 24,
+                    done: 12,
+                    agents: 5,
+                    cost: 1234,
+                    activity: [
+                        { description: 'Ticket "Add OAuth2 Provider" completed', time: '2h ago' },
+                        { description: 'Agent worker-9a781fc3 spawned validation task', time: '4h ago' },
+                        { description: 'Commit linked to ticket AUTH-17', time: '5h ago' }
+                    ]
+                },
+                {
+                    id: 'user-profile',
+                    name: 'User Profile Management',
+                    description: 'Self-service profile editor with avatar uploads, audit history, and preferences.',
+                    status: 'in-progress',
+                    phase: 'PHASE_IMPLEMENTATION',
+                    progress: 0.3,
+                    tickets: 18,
+                    done: 6,
+                    agents: 3,
+                    cost: 860,
+                    activity: [
+                        { description: 'Ticket "Add Avatar Resizing" moved to testing', time: '1h ago' },
+                        { description: 'Agent worker-a821d2a discovered dependency on storage API', time: '3h ago' }
+                    ]
+                },
+                {
+                    id: 'payment-service',
+                    name: 'Payment Service Hardening',
+                    description: 'Improve reliability of payment microservice with retries, tracing, and dashboards.',
+                    status: 'paused',
+                    phase: 'PHASE_INITIAL',
+                    progress: 0.12,
+                    tickets: 9,
+                    done: 1,
+                    agents: 1,
+                    cost: 320,
+                    activity: [
+                        { description: 'Waiting on dependency analysis report', time: '1d ago' }
+                    ]
+                }
+            ];
+        }
+
+        function openNewProjectModal() {
+            document.getElementById('newProjectModal')?.classList.add('show');
+        }
+
+        function closeNewProjectModal() {
+            document.getElementById('newProjectModal')?.classList.remove('show');
+            document.getElementById('newProjectForm')?.reset();
+        }
+
+        function handleCreateProject(event) {
+            event.preventDefault();
+            const formData = new FormData(event.target);
+            const name = (formData.get('name') || '').toString().trim();
+            if (!name) {
+                addEvent('Project name is required.');
+                return;
+            }
+            const newProject = {
+                id: `project-${Date.now()}`,
+                name,
+                description: (formData.get('description') || 'No description provided yet.').toString(),
+                status: (formData.get('status') || 'active').toString(),
+                phase: (formData.get('phase') || 'PHASE_IMPLEMENTATION').toString(),
+                progress: Math.min(1, Math.max(0, Number(formData.get('progress') || 0) / 100)),
+                tickets: 0,
+                done: 0,
+                agents: 0,
+                cost: 0,
+                activity: [
+                    { description: 'Project created just now', time: 'Just now' }
+                ]
+            };
+            projects = [newProject, ...projects];
+            closeNewProjectModal();
+            selectProject(newProject.id);
+            addEvent(`Project created: ${newProject.name}`);
         }
 
         // Mouse event handlers to distinguish drag from click

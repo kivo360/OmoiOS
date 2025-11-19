@@ -7,7 +7,6 @@ and result merging.
 """
 
 import asyncio
-import os
 import sys
 from pathlib import Path
 
@@ -15,6 +14,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+from omoi_os.config import get_app_settings
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.coordination import CoordinationService
 from omoi_os.services.database import DatabaseService
@@ -29,11 +29,9 @@ def simulate_parallel_implementation():
     print("=" * 80)
 
     # Initialize services
-    db_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
-    )
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
+    app_settings = get_app_settings()
+    db_url = app_settings.database.url
+    redis_url = app_settings.redis.url
 
     db = DatabaseService(connection_string=db_url)
     queue = TaskQueueService(db)
@@ -166,11 +164,9 @@ def simulate_review_feedback_loop():
     print("=" * 80)
 
     # Initialize services
-    db_url = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
-    )
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
+    app_settings = get_app_settings()
+    db_url = app_settings.database.url
+    redis_url = app_settings.redis.url
 
     db = DatabaseService(connection_string=db_url)
     queue = TaskQueueService(db)

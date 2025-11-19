@@ -1,12 +1,12 @@
 """FastAPI application entry point."""
 
 import asyncio
-import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from omoi_os.config import get_app_settings
 from omoi_os.api.routes import (
     agents,
     alerts,
@@ -22,6 +22,7 @@ from omoi_os.api.routes import (
     guardian,
     memory,
     mcp,
+    organizations,
     phases,
     projects,
     quality,
@@ -468,19 +469,15 @@ async def lifespan(app: FastAPI):
         validation_orchestrator, \
         ticket_workflow_orchestrator, \
         llm_service, \
-        monitoring_loop
+        monitoring_loop, \
+        mcp_app
+
+    app_settings = get_app_settings()
 
     # Initialize services
-    db = DatabaseService(
-        connection_string=os.getenv(
-            "DATABASE_URL",
-            "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
-        )
-    )
+    db = DatabaseService(connection_string=app_settings.database.url)
     queue = TaskQueueService(db)
-    event_bus = EventBusService(
-        redis_url=os.getenv("REDIS_URL", "redis://localhost:16379")
-    )
+    event_bus = EventBusService(redis_url=app_settings.redis.url)
     agent_status_manager = AgentStatusManager(db, event_bus)
     approval_service = ApprovalService(db, event_bus)
     health_service = AgentHealthService(db, agent_status_manager)
@@ -526,6 +523,15 @@ async def lifespan(app: FastAPI):
         monitor=monitor_service,
         event_bus=event_bus,
     )
+    
+    # Initialize FastMCP server with services
+    from omoi_os.mcp.fastmcp_server import initialize_mcp_services, mcp_app
+    initialize_mcp_services(
+        db=db,
+        event_bus=event_bus,
+        task_queue=queue,
+        discovery_service=discovery_service,
+    )
 
     # Validation system services
     from omoi_os.services.validation_orchestrator import ValidationOrchestrator
@@ -555,23 +561,13 @@ async def lifespan(app: FastAPI):
     try:
         from omoi_os.services.monitoring_loop import MonitoringLoop, MonitoringConfig
 
-        # Get workspace root from environment or use default
-        workspace_root = os.getenv(
-            "WORKSPACE_ROOT", os.path.join(os.getcwd(), "workspaces")
-        )
-
         monitoring_config = MonitoringConfig(
-            guardian_interval_seconds=int(os.getenv("GUARDIAN_INTERVAL_SECONDS", "60")),
-            conductor_interval_seconds=int(
-                os.getenv("CONDUCTOR_INTERVAL_SECONDS", "300")
-            ),
-            health_check_interval_seconds=int(
-                os.getenv("HEALTH_CHECK_INTERVAL_SECONDS", "30")
-            ),
-            auto_steering_enabled=os.getenv("AUTO_STEERING_ENABLED", "false").lower()
-            == "true",
-            max_concurrent_analyses=int(os.getenv("MAX_CONCURRENT_ANALYSES", "5")),
-            workspace_root=workspace_root,
+            guardian_interval_seconds=app_settings.monitoring.guardian_interval_seconds,
+            conductor_interval_seconds=app_settings.monitoring.conductor_interval_seconds,
+            health_check_interval_seconds=app_settings.monitoring.health_check_interval_seconds,
+            auto_steering_enabled=app_settings.monitoring.auto_steering_enabled,
+            max_concurrent_analyses=app_settings.monitoring.max_concurrent_analyses,
+            workspace_root=app_settings.workspace.root,
         )
 
         monitoring_loop = MonitoringLoop(
@@ -648,15 +644,34 @@ async def lifespan(app: FastAPI):
         await approval_timeout_task
     except asyncio.CancelledError:
         pass
+    
+    # Shutdown MCP server if it has a lifespan
+    if 'mcp_app' in globals() and mcp_app:
+        try:
+            async with mcp_app.lifespan(app):
+                pass
+        except Exception:
+            pass
+    
     event_bus.close()
 
+
+# Combine lifespans for FastAPI and FastMCP
+@asynccontextmanager
+async def combined_lifespan(app: FastAPI):
+    """Combined lifespan for FastAPI and FastMCP."""
+    # Import here to avoid circular dependencies
+    from omoi_os.mcp.fastmcp_server import mcp_app
+    async with lifespan(app):
+        async with mcp_app.lifespan(app):
+            yield
 
 # Create FastAPI app
 app = FastAPI(
     title="OmoiOS API",
     description="Multi-Agent Orchestration System API",
     version="0.1.0",
-    lifespan=lifespan,
+    lifespan=combined_lifespan,
 )
 
 # Add CORS middleware
@@ -697,6 +712,11 @@ app.include_router(github.router, prefix="/api/v1/github", tags=["github"])
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(organizations.router, prefix="/api/v1/organizations", tags=["organizations"])
+
+# Mount FastMCP server at /mcp
+from omoi_os.mcp.fastmcp_server import mcp_app
+app.mount("/mcp", mcp_app)
 
 # Conditionally include monitor router if Phase 4 is available
 try:

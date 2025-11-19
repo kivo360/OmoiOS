@@ -1,6 +1,5 @@
 """Centralized PydanticAI service using Fireworks.ai backend."""
 
-import os
 from typing import Optional
 
 from pydantic_ai import Agent
@@ -27,14 +26,11 @@ class PydanticAIService:
         self.settings = settings or load_llm_settings()
         self.model_string = self._get_fireworks_model()
 
-        # Get API key - prefer FIREWORKS_API_KEY from environment, fallback to LLM_API_KEY from settings
-        api_key = os.getenv("FIREWORKS_API_KEY")
-        if not api_key:
-            # Fallback to LLM_API_KEY if FIREWORKS_API_KEY not set
-            api_key = self.settings.api_key
+        # Get API key - prefer dedicated Fireworks key, fallback to general LLM key
+        api_key = self.settings.fireworks_api_key or self.settings.api_key
         if not api_key:
             raise ValueError(
-                "FIREWORKS_API_KEY or LLM_API_KEY must be set to use PydanticAI service"
+                "fireworks_api_key or LLM api_key must be set to use PydanticAI service"
             )
 
         # Create Fireworks provider

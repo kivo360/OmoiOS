@@ -1,0 +1,135 @@
+Analyze this agent's trajectory and behavior for alignment with goals:
+
+## Agent Information
+- **ID**: {{ agent.id }}
+- **Type**: {{ agent.agent_type }}
+- **Current Phase**: {{ agent.phase_id }}
+- **Status**: {{ agent.status }}
+- **Last Task**: {{ agent.current_task_id or 'None' }}
+
+{% if past_summaries %}
+## Past Summaries Timeline
+{% for summary in past_summaries %}
+- **{{ summary.time_ago }}**: {{ summary.trajectory_summary }}
+  - Alignment Score: {{ "%.1f%%"|format(summary.alignment_score * 100) }}
+  - Focus: {{ summary.current_focus or 'N/A' }}
+{% endfor %}
+{% else %}
+## Past Summaries Timeline
+No previous analyses available (this is the first analysis for this agent).
+{% endif %}
+
+{% if phase_context %}
+## Phase Context
+**Phase**: {{ phase_context.name }} ({{ phase_context.id }})
+**Description**: {{ phase_context.description or 'N/A' }}
+
+{% if phase_context.done_definitions %}
+**Done Definitions** (completion criteria):
+{% for criterion in phase_context.done_definitions %}
+- {{ criterion }}
+{% endfor %}
+{% endif %}
+
+{% if phase_context.expected_outputs %}
+**Expected Outputs**:
+{% for output in phase_context.expected_outputs %}
+- {{ output.type }}: {{ output.pattern or output.name }} {% if output.required %}(required){% endif %}
+{% endfor %}
+{% endif %}
+
+{% if phase_context.phase_prompt %}
+**Phase Instructions**:
+{{ phase_context.phase_prompt }}
+{% endif %}
+
+{% if phase_context.next_steps_guide %}
+**Next Steps Guide**:
+{% for step in phase_context.next_steps_guide %}
+- {{ step }}
+{% endfor %}
+{% endif %}
+{% else %}
+## Phase Context
+No phase information available (agent phase_id: {{ agent.phase_id }}).
+{% endif %}
+
+## Trajectory Context
+- **Accumulated Context**: {{ trajectory_data.accumulated_context or 'N/A' }}
+- **Persistent Constraints**: 
+{% if trajectory_data.persistent_constraints %}
+{% for constraint in trajectory_data.persistent_constraints %}
+  - {{ constraint }}
+{% endfor %}
+{% else %}
+  None
+{% endif %}
+- **Session Duration**: {{ trajectory_data.session_duration or 'N/A' }}
+- **Conversation Events**: {{ trajectory_data.conversation_events|length if trajectory_data.conversation_events else 0 }}
+- **Task Completion Rate**: {{ "%.1f%%"|format(trajectory_data.task_completion_rate * 100) if trajectory_data.task_completion_rate else 0 }}%
+
+{% if trajectory_data.overall_goal %}
+- **Overall Goal**: {{ trajectory_data.overall_goal }}
+{% endif %}
+
+{% if trajectory_data.current_focus %}
+- **Current Focus**: {{ trajectory_data.current_focus }}
+{% endif %}
+
+{% if trajectory_data.discovered_blockers %}
+- **Discovered Blockers**: 
+{% for blocker in trajectory_data.discovered_blockers %}
+  - {{ blocker }}
+{% endfor %}
+{% endif %}
+
+## Recent Agent Output
+{{ agent_output[:2000] }}{% if agent_output|length > 2000 %}... (truncated){% endif %}
+
+## Analysis Instructions
+
+Analyze the agent's trajectory and return JSON with the following structure:
+
+```json
+{
+  "trajectory_aligned": boolean,  // Is the agent aligned with its goals?
+  "alignment_score": 0.0-1.0,     // How well aligned is the agent? (0.0 = completely off-track, 1.0 = perfectly aligned)
+  "needs_steering": boolean,        // Does the agent need intervention?
+  "steering_type": string,         // Type of steering needed: "guidance" (minor course correction), "correction" (significant redirection), or "emergency" (critical intervention)
+  "steering_recommendation": string, // Specific guidance message for the agent
+  "trajectory_summary": string,    // Summary of what the agent is doing (1-2 sentences)
+  "current_focus": string,         // What the agent is currently focused on
+  "accumulated_goal": string,      // What the agent is trying to accomplish overall
+  "conversation_length": int,      // Length of conversation if applicable
+  "session_duration": string,      // How long the agent has been working (human-readable)
+  "last_claude_message_marker": string, // Last significant Claude message or action marker
+  "details": {
+    "phase_alignment": string,     // How well agent aligns with phase requirements
+    "constraint_violations": [string], // Any constraint violations detected
+    "missing_steps": [string],     // Any mandatory phase steps that appear missing
+    "progress_indicators": [string], // Positive progress indicators
+    "risk_factors": [string]       // Risk factors or concerns
+  }
+}
+```
+
+**Key Analysis Points**:
+1. **Phase Alignment**: Check if agent is following phase instructions and working toward done definitions
+2. **Constraint Compliance**: Verify agent is not violating persistent constraints
+3. **Progress Assessment**: Evaluate if agent is making meaningful progress toward goals
+4. **Steering Needs**: Identify if agent is stuck, drifting, or needs course correction
+5. **Timeline Context**: Consider trajectory changes over time (compare with past summaries)
+
+**Validation Checklist**:
+{% if phase_context and phase_context.done_definitions %}
+- [ ] Agent is working toward phase done definitions
+- [ ] Agent is following phase instructions
+{% endif %}
+{% if phase_context and phase_context.expected_outputs %}
+- [ ] Agent is producing expected outputs
+{% endif %}
+{% if trajectory_data.persistent_constraints %}
+- [ ] Agent is not violating constraints
+{% endif %}
+- [ ] Agent is making progress (not stuck in loops)
+- [ ] Agent focus aligns with overall goal
