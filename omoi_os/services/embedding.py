@@ -20,7 +20,7 @@ class EmbeddingService:
 
     Supports:
     - OpenAI text-embedding-3-small (1536 dimensions, production)
-    - sentence-transformers/all-MiniLM-L6-v2 (384 dimensions, development)
+    - FastEmbed local models (e.g., all-MiniLM-L6-v2, 384 dimensions, development)
 
     The service automatically pads local embeddings to 1536 dimensions for
     consistency with OpenAI embeddings.
@@ -51,7 +51,7 @@ class EmbeddingService:
             self.dimensions = 1536
             self._init_openai()
         else:
-            self.model_name = model_name or "sentence-transformers/all-MiniLM-L6-v2"
+            self.model_name = model_name or "all-MiniLM-L6-v2"
             self.dimensions = 1536  # Padded to match OpenAI
             self._init_local()
 
@@ -70,15 +70,15 @@ class EmbeddingService:
             raise ImportError("openai package not installed. Run: uv add openai")
 
     def _init_local(self) -> None:
-        """Initialize local sentence-transformers model."""
+        """Initialize local FastEmbed model."""
         try:
-            from sentence_transformers import SentenceTransformer
+            from fastembed import TextEmbedding
 
-            self.local_model = SentenceTransformer(self.model_name)
+            # FastEmbed uses different model names, map if needed
+            fastembed_model = self.model_name.replace("sentence-transformers/", "")
+            self.local_model = TextEmbedding(model_name=fastembed_model)
         except ImportError:
-            raise ImportError(
-                "sentence-transformers not installed. Run: uv add sentence-transformers"
-            )
+            raise ImportError("fastembed not installed. Run: uv add fastembed")
 
     def generate_embedding(self, text: str) -> List[float]:
         """
@@ -107,9 +107,10 @@ class EmbeddingService:
         return response.data[0].embedding
 
     def _generate_local_embedding(self, text: str) -> List[float]:
-        """Generate embedding using local sentence-transformers model."""
-        # Generate base embedding (384 dimensions for MiniLM)
-        base_embedding = self.local_model.encode(text, convert_to_numpy=True)
+        """Generate embedding using local FastEmbed model."""
+        # FastEmbed returns an iterator, get first (and only) result
+        embedding_iter = self.local_model.embed([text])
+        base_embedding = next(embedding_iter)
 
         # Pad to 1536 dimensions for consistency with OpenAI
         padded = np.zeros(1536, dtype=np.float32)
@@ -144,8 +145,10 @@ class EmbeddingService:
         return [item.embedding for item in response.data]
 
     def _batch_generate_local_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Batch generate embeddings using local model."""
-        base_embeddings = self.local_model.encode(texts, convert_to_numpy=True)
+        """Batch generate embeddings using local FastEmbed model."""
+        # FastEmbed returns an iterator for batch embeddings
+        embedding_iter = self.local_model.embed(texts)
+        base_embeddings = list(embedding_iter)
 
         # Pad all embeddings to 1536 dimensions
         padded_embeddings = []
