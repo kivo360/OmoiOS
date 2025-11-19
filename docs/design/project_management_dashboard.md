@@ -6,6 +6,10 @@
 
 **Note**: All data is stored on the server in PostgreSQL. There are no external files like PRD.md, requirements.md, design.md, or tasks.md - everything is managed through the API and stored in the database.
 
+**Related Documents:**
+- [API Specifications](./project_management_dashboard_api.md) - Complete API endpoint specifications
+- [Implementation Details](./project_management_dashboard_implementation.md) - Code examples, database models, and technical implementation
+
 ---
 
 ## Executive Summary
@@ -1121,48 +1125,7 @@ Backend Event → Redis Pub/Sub → WebSocket Manager → Frontend
 
 **Kanban Board Component:**
 
-```typescript
-// hooks/useBoard.ts
-export function useBoard(projectId: string) {
-  const [board, setBoard] = useState<BoardView | null>(null);
-  const ws = useWebSocket();
-  
-  // Initial load
-  useEffect(() => {
-    fetch(`/api/v1/board/view?project_id=${projectId}`)
-      .then(res => res.json())
-      .then(setBoard);
-  }, [projectId]);
-  
-  // Real-time updates via WebSocket
-  useEffect(() => {
-    const handler = (event: SystemEvent) => {
-      if (event.entity_type === 'ticket') {
-        // Update ticket in board
-        setBoard(prev => updateTicketInBoard(prev, event));
-      }
-    };
-    
-    ws.subscribe(['TICKET_CREATED', 'TICKET_UPDATED'], handler);
-    return () => ws.unsubscribe(handler);
-  }, [ws]);
-  
-  const moveTicket = async (ticketId: string, columnId: string) => {
-    // Optimistic update
-    setBoard(prev => moveTicketOptimistic(prev, ticketId, columnId));
-    
-    // API call
-    await fetch('/api/v1/board/move', {
-      method: 'POST',
-      body: JSON.stringify({ ticket_id: ticketId, target_column_id: columnId })
-    });
-    
-    // WebSocket event will confirm the move
-  };
-  
-  return { board, moveTicket };
-}
-```
+See [Implementation Details - Frontend Code Examples](./project_management_dashboard_implementation.md#21-frontend-code-examples) for complete code examples including `useBoard` hook, `DependencyGraph` component, and WebSocket integration.
 
 ### 3.3 Real-Time Features
 
@@ -1191,62 +1154,9 @@ export function useBoard(projectId: string) {
 
 ### 4.1 Backend API Design
 
-**New Endpoints Needed:**
+**Note**: Graph API endpoints are already implemented. See [Existing Codebase Mapping](#existing-codebase-mapping) for details.
 
-```python
-# omoi_os/api/routes/graph.py
-
-@router.get("/dependency-graph/{ticket_id}")
-async def get_dependency_graph(
-    ticket_id: str,
-    include_resolved: bool = Query(True),
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """
-    Get dependency graph for a ticket.
-    
-    Returns:
-    {
-        "nodes": [
-            {
-                "id": "task-123",
-                "type": "task",
-                "title": "Implement feature",
-                "status": "running",
-                "phase_id": "PHASE_IMPLEMENTATION",
-                "priority": "HIGH",
-                "is_blocked": false,
-                "blocks_count": 2
-            },
-            ...
-        ],
-        "edges": [
-            {
-                "from": "task-123",
-                "to": "task-456",
-                "type": "depends_on",
-                "discovery_type": "bug_found"  # optional
-            },
-            ...
-        ],
-        "metadata": {
-            "total_tasks": 10,
-            "blocked_count": 3,
-            "resolved_count": 2
-        }
-    }
-    """
-    # Implementation: Query tasks, build graph structure
-    pass
-
-@router.get("/dependency-graph/project/{project_id}")
-async def get_project_graph(
-    project_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """Get dependency graph for entire project (all tickets)."""
-    pass
-```
+For API endpoint specifications, see [API Specifications - Graph API](./project_management_dashboard_api.md).
 
 ### 4.2 Graph Data Structure
 
@@ -1269,53 +1179,7 @@ async def get_project_graph(
 
 ### 4.3 Frontend Graph Component
 
-```typescript
-// components/graph/DependencyGraph.tsx
-import ReactFlow, { Node, Edge } from 'react-flow-renderer';
-
-export function DependencyGraph({ ticketId }: { ticketId: string }) {
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [edges, setEdges] = useState<Edge[]>([]);
-  const ws = useWebSocket();
-  
-  // Load initial graph
-  useEffect(() => {
-    fetch(`/api/v1/graph/dependency-graph/${ticketId}`)
-      .then(res => res.json())
-      .then(data => {
-        setNodes(transformToFlowNodes(data.nodes));
-        setEdges(transformToFlowEdges(data.edges));
-      });
-  }, [ticketId]);
-  
-  // Real-time updates
-  useEffect(() => {
-    const handler = (event: SystemEvent) => {
-      if (event.entity_type === 'task') {
-        // Update node status
-        setNodes(prev => updateNodeStatus(prev, event.entity_id, event.payload));
-        
-        // Update edges if dependencies changed
-        if (event.payload.dependencies_changed) {
-          refreshGraph();
-        }
-      }
-    };
-    
-    ws.subscribe(['TASK_ASSIGNED', 'TASK_COMPLETED', 'TASK_FAILED'], handler);
-    return () => ws.unsubscribe(handler);
-  }, [ws]);
-  
-  return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      onNodeClick={handleNodeClick}
-      onEdgeClick={handleEdgeClick}
-    />
-  );
-}
-```
+See [Implementation Details - Frontend Code Examples](./project_management_dashboard_implementation.md#22-dependency-graph-component) for complete `DependencyGraph` component implementation.
 
 ### 4.4 Interactive Features
 
@@ -1333,22 +1197,7 @@ export function DependencyGraph({ ticketId }: { ticketId: string }) {
 
 ### 5.1 Commit Data Model
 
-**Existing Model** (`TicketCommit`):
-```python
-class TicketCommit(Base):
-    id: str
-    ticket_id: str
-    agent_id: str                    # Which agent made this commit
-    commit_sha: str                  # Full commit SHA
-    commit_message: str
-    commit_timestamp: datetime
-    files_changed: Optional[int]     # Number of files
-    insertions: Optional[int]         # Lines added (+X)
-    deletions: Optional[int]          # Lines deleted (-Y)
-    files_list: Optional[dict]        # JSONB: {file_path: {additions, deletions, changes}}
-    linked_at: datetime
-    link_method: str                  # 'manual', 'webhook', 'auto'
-```
+**Existing Model**: `TicketCommit` model exists. See [Implementation Details - Database Models](./project_management_dashboard_implementation.md#32-ticketcommit-model) for model structure.
 
 ### 5.2 Commit Diff Viewer UI
 
@@ -1404,105 +1253,7 @@ class TicketCommit(Base):
 
 ### 5.4 Commit API Endpoints
 
-**New Endpoints:**
-
-```python
-# omoi_os/api/routes/commits.py
-
-@router.get("/commits/{commit_sha}")
-async def get_commit_details(
-    commit_sha: str,
-    db: DatabaseService = Depends(get_db_service),
-    github_service: GitHubIntegrationService = Depends(get_github_service),
-) -> Dict[str, Any]:
-    """
-    Get commit details including diff.
-    
-    Returns:
-    {
-        "commit_sha": "02979f61095b7d...",
-        "commit_message": "Merge agent work",
-        "author": "Ido Levi",
-        "date": "2025-10-30T12:47:00Z",
-        "summary": {"files": 17, "insertions": 2255, "deletions": 0},
-        "files": [
-            {
-                "path": "backend/core/database.py",
-                "additions": 35,
-                "deletions": 0,
-                "changes": 35,
-                "status": "added"
-            },
-            ...
-        ],
-        "ticket_id": "ticket-123",  # if linked
-        "agent_id": "agent-456",    # if linked
-        "diff_url": "https://github.com/owner/repo/commit/02979f6..."
-    }
-    """
-    pass
-
-@router.get("/tickets/{ticket_id}/commits")
-async def get_ticket_commits(
-    ticket_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Get all commits linked to a ticket."""
-    pass
-
-@router.post("/tickets/{ticket_id}/commits/link")
-async def link_commit_to_ticket(
-    ticket_id: str,
-    request: LinkCommitRequest,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """Manually link a commit to a ticket."""
-    pass
-
-@router.get("/agents/{agent_id}/commits")
-async def get_agent_commits(
-    agent_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Get all commits made by an agent."""
-    pass
-
-@router.get("/commits/{commit_sha}/diff")
-async def get_commit_diff(
-    commit_sha: str,
-    file_path: Optional[str] = None,
-    github_service: GitHubIntegrationService = Depends(get_github_service),
-) -> Dict[str, Any]:
-    """
-    Get commit diff (full or for specific file).
-    
-    Returns:
-    {
-        "commit_sha": "...",
-        "files": [
-            {
-                "path": "backend/core/database.py",
-                "old_content": "...",
-                "new_content": "...",
-                "hunks": [
-                    {
-                        "old_start": 10,
-                        "old_lines": 5,
-                        "new_start": 10,
-                        "new_lines": 7,
-                        "lines": [
-                            {"type": "context", "content": "..."},
-                            {"type": "removed", "content": "-old line"},
-                            {"type": "added", "content": "+new line"},
-                        ]
-                    }
-                ]
-            }
-        ]
-    }
-    """
-    pass
-```
+See [API Specifications - Commits API](./project_management_dashboard_api.md#3-commits-api) for complete endpoint specifications.
 
 ### 5.5 Agent-to-Commit Tracking
 
@@ -1527,80 +1278,7 @@ async def get_commit_diff(
 
 ### 6.1 GitHub Webhook Handler
 
-**New Backend Service:**
-
-```python
-# omoi_os/services/github_integration.py
-
-class GitHubIntegrationService:
-    """Manages GitHub repository connections and webhooks."""
-    
-    def __init__(self, db: DatabaseService, event_bus: EventBusService):
-        self.db = db
-        self.event_bus = event_bus
-        self.github_client = None  # PyGithub client
-    
-    def connect_repository(
-        self,
-        repo_owner: str,
-        repo_name: str,
-        access_token: str,
-    ) -> GitHubRepository:
-        """Connect a GitHub repository and set up webhooks."""
-        # 1. Verify access token
-        # 2. Create repository record
-        # 3. Register webhook with GitHub
-        # 4. Store webhook secret
-        pass
-    
-    def handle_webhook(
-        self,
-        event_type: str,
-        payload: dict,
-        signature: str,
-    ) -> None:
-        """Process incoming GitHub webhook events."""
-        # Verify webhook signature
-        # Route to appropriate handler:
-        # - issues.opened → Create ticket
-        # - pull_request.opened → Link to task
-        # - pull_request.merged → Mark task complete, link commits
-        # - push → Link commits to tickets, update codebase context
-        # - commit_comment → Link comment to ticket/task
-        pass
-    
-    def get_commit_diff(
-        self,
-        repo_owner: str,
-        repo_name: str,
-        commit_sha: str,
-        file_path: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """Fetch commit diff from GitHub API."""
-        # Use GitHub API to get commit details and diff
-        # Return structured diff data
-        pass
-    
-    def link_commit_to_ticket(
-        self,
-        commit_sha: str,
-        ticket_id: str,
-        agent_id: Optional[str] = None,
-    ) -> TicketCommit:
-        """Link a GitHub commit to a ticket."""
-        # Fetch commit details from GitHub
-        # Create TicketCommit record
-        # Publish COMMIT_LINKED event
-        pass
-    
-    def parse_commit_message_for_ticket(
-        self,
-        commit_message: str,
-    ) -> Optional[str]:
-        """Extract ticket ID from commit message patterns."""
-        # Patterns: "Fix #123", "Closes ticket-456", "TICKET-789"
-        pass
-```
+See [Implementation Details - Service Implementations](./project_management_dashboard_implementation.md#41-github-integration-service) for `GitHubIntegrationService` implementation.
 
 ### 6.2 Webhook Events → System Events
 
@@ -1669,54 +1347,7 @@ github.commit_comment → {
 
 ### 6.3 GitHub API Integration
 
-**New API Routes:**
-
-```python
-# omoi_os/api/routes/github.py
-
-@router.post("/repositories/connect")
-async def connect_repository(
-    request: ConnectRepositoryRequest,
-    github_service: GitHubIntegrationService = Depends(get_github_service),
-):
-    """Connect a GitHub repository."""
-    repo = github_service.connect_repository(
-        repo_owner=request.owner,
-        repo_name=request.name,
-        access_token=request.access_token,
-    )
-    return {"repository_id": repo.id, "webhook_url": repo.webhook_url}
-
-@router.post("/webhooks/github")
-async def github_webhook(
-    request: Request,
-    github_service: GitHubIntegrationService = Depends(get_github_service),
-):
-    """Receive GitHub webhook events."""
-    event_type = request.headers.get("X-GitHub-Event")
-    signature = request.headers.get("X-Hub-Signature-256")
-    payload = await request.json()
-    
-    github_service.handle_webhook(event_type, payload, signature)
-    return {"status": "processed"}
-
-@router.get("/repositories/{repo_id}/issues")
-async def list_github_issues(
-    repo_id: str,
-    github_service: GitHubIntegrationService = Depends(get_github_service),
-):
-    """List GitHub issues for a repository."""
-    pass
-
-@router.post("/repositories/{repo_id}/create-issue")
-async def create_github_issue(
-    repo_id: str,
-    request: CreateIssueRequest,
-    github_service: GitHubIntegrationService = Depends(get_github_service),
-):
-    """Create a GitHub issue from a ticket."""
-    pass
-```
+See [API Specifications - GitHub Integration API](./project_management_dashboard_api.md#4-github-integration-api) for complete endpoint specifications.
 
 ### 6.4 Bidirectional Sync
 
@@ -1795,39 +1426,7 @@ interface AuditEntry {
 
 ### 7.3 Change History API
 
-**New Endpoints:**
-
-```python
-# omoi_os/api/routes/audit.py
-
-@router.get("/audit/tickets/{ticket_id}")
-async def get_ticket_audit_trail(
-    ticket_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Get complete audit trail for a ticket."""
-    # Combine TicketHistory + TicketCommit records
-    pass
-
-@router.get("/audit/agents/{agent_id}")
-async def get_agent_audit_trail(
-    agent_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Get all actions by an agent."""
-    # Commits, task assignments, discoveries, etc.
-    pass
-
-@router.get("/audit/projects/{project_id}")
-async def get_project_audit_trail(
-    project_id: str,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Get audit trail for entire project."""
-    pass
-```
+See [API Specifications - Audit API](./project_management_dashboard_api.md#5-audit-api) for complete endpoint specifications.
 
 ---
 
@@ -1867,44 +1466,7 @@ async def get_project_audit_trail(
 
 ### 8.2 Statistics API
 
-**New Endpoints:**
-
-```python
-# omoi_os/api/routes/statistics.py
-
-@router.get("/statistics/projects/{project_id}/overview")
-async def get_project_statistics(
-    project_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """Get comprehensive project statistics."""
-    pass
-
-@router.get("/statistics/tickets")
-async def get_ticket_statistics(
-    project_id: Optional[str] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """Get ticket statistics."""
-    pass
-
-@router.get("/statistics/agents")
-async def get_agent_statistics(
-    project_id: Optional[str] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """Get agent performance statistics."""
-    pass
-
-@router.get("/statistics/commits")
-async def get_commit_statistics(
-    project_id: Optional[str] = None,
-    agent_id: Optional[str] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """Get code change statistics."""
-    pass
-```
+See [API Specifications - Statistics API](./project_management_dashboard_api.md#6-statistics-api) for complete endpoint specifications.
 
 ---
 
@@ -1943,53 +1505,7 @@ async def get_commit_statistics(
 
 ### 9.3 Search API
 
-**New Endpoints:**
-
-```python
-# omoi_os/api/routes/search.py
-
-@router.get("/search")
-async def global_search(
-    q: str,
-    types: Optional[str] = None,  # Comma-separated: ticket,task,commit,agent
-    project_id: Optional[str] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> Dict[str, Any]:
-    """
-    Global search across all entities.
-    
-    Returns:
-    {
-        "tickets": [...],
-        "tasks": [...],
-        "commits": [...],
-        "agents": [...],
-        "total": 42
-    }
-    """
-    pass
-
-@router.get("/search/tickets")
-async def search_tickets(
-    q: str,
-    filters: Optional[Dict[str, Any]] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Search tickets with filters."""
-    pass
-
-@router.get("/search/commits")
-async def search_commits(
-    q: str,
-    agent_id: Optional[str] = None,
-    ticket_id: Optional[str] = None,
-    date_from: Optional[datetime] = None,
-    date_to: Optional[datetime] = None,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[Dict[str, Any]]:
-    """Search commits with filters."""
-    pass
-```
+See [API Specifications - Search API](./project_management_dashboard_api.md#7-search-api) for complete endpoint specifications.
 
 ---
 
@@ -1997,86 +1513,11 @@ async def search_commits(
 
 ### 10.1 Project Model
 
-**New Database Model:**
-
-```python
-# omoi_os/models/project.py
-
-class Project(Base):
-    """Project represents a collection of tickets and agents."""
-    
-    __tablename__ = "projects"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
-    # GitHub integration
-    github_owner: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    github_repo: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    github_webhook_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    
-    # Project settings
-    default_phase_id: Mapped[str] = mapped_column(String(50), nullable=False)
-    board_config: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    
-    # Relationships
-    tickets: Mapped[list["Ticket"]] = relationship("Ticket", back_populates="project")
-    agents: Mapped[list["Agent"]] = relationship("Agent", back_populates="project")
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-```
+See [Implementation Details - Database Models](./project_management_dashboard_implementation.md#31-project-model) for complete `Project` model definition.
 
 ### 10.2 Project API
 
-**New Endpoints:**
-
-```python
-# omoi_os/api/routes/projects.py
-
-@router.get("/projects")
-async def list_projects(
-    db: DatabaseService = Depends(get_db_service),
-) -> List[ProjectDTO]:
-    """List all projects."""
-    pass
-
-@router.post("/projects")
-async def create_project(
-    request: CreateProjectRequest,
-    db: DatabaseService = Depends(get_db_service),
-) -> ProjectDTO:
-    """Create a new project."""
-    pass
-
-@router.get("/projects/{project_id}")
-async def get_project(
-    project_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> ProjectDTO:
-    """Get project details."""
-    pass
-
-@router.post("/projects/{project_id}/spawn-agent")
-async def spawn_agent(
-    project_id: str,
-    request: SpawnAgentRequest,
-    registry: AgentRegistryService = Depends(get_agent_registry_service),
-) -> AgentDTO:
-    """Spawn a new agent for this project."""
-    pass
-
-@router.post("/projects/{project_id}/create-ticket")
-async def create_ticket(
-    project_id: str,
-    request: CreateTicketRequest,
-    db: DatabaseService = Depends(get_db_service),
-    queue: TaskQueueService = Depends(get_task_queue),
-) -> TicketDTO:
-    """Create a ticket in this project."""
-    pass
-```
+See [API Specifications - Projects API](./project_management_dashboard_api.md#8-projects-api) for complete endpoint specifications.
 
 ---
 
@@ -2096,416 +1537,16 @@ async def create_ticket(
 
 ### 10.3.2 Database Models
 
-**New Models:**
-
-```python
-# omoi_os/models/project_exploration.py
-
-class ProjectExploration(Base):
-    """Tracks AI-assisted project exploration sessions."""
-    
-    __tablename__ = "project_explorations"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("projects.id"), nullable=True, index=True
-    )
-    user_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    
-    # Exploration state
-    initial_idea: Mapped[str] = mapped_column(Text, nullable=False)
-    current_stage: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="exploring"
-    )  # exploring, requirements_draft, requirements_review, design_draft, design_review, completed
-    
-    # Generated documents
-    requirements_document_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("requirements.id"), nullable=True
-    )
-    design_document_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("designs.id"), nullable=True
-    )
-    
-    # Conversation history
-    conversation_history: Mapped[dict] = mapped_column(
-        JSONB, nullable=False, default=dict
-    )  # Stores full conversation with AI
-    
-    # Metadata
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-
-
-class Requirements(Base):
-    """Stores requirements documents generated by AI."""
-    
-    __tablename__ = "requirements"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("projects.id"), nullable=True, index=True
-    )
-    exploration_id: Mapped[str] = mapped_column(
-        String, ForeignKey("project_explorations.id"), nullable=False, index=True
-    )
-    
-    # Document metadata
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    
-    # Storage configuration
-    storage_location: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="database", index=True
-    )  # "database" or "s3"
-    content_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Size in bytes
-    
-    # Document content (when stored in database)
-    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Markdown content
-    
-    # S3 storage (when storage_location = "s3")
-    s3_bucket: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    s3_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # Full S3 object key
-    s3_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Pre-signed URL (temporary)
-    s3_region: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    
-    # Content hash for integrity verification
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 hash
-    
-    # Requirements-specific metadata
-    total_requirements: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    requirements_by_category: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    # e.g., {"functional": 15, "non-functional": 8, "security": 5}
-    
-    # Approval workflow
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="draft", index=True
-    )  # draft, pending_review, approved, rejected, superseded
-    approved_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
-    # Relationships
-    previous_version_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("requirements.id"), nullable=True
-    )  # For versioning
-    individual_requirements: Mapped[list["IndividualRequirement"]] = relationship(
-        "IndividualRequirement", back_populates="requirements_document"
-    )
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-
-class IndividualRequirement(Base):
-    """Stores individual requirements extracted from requirements document."""
-    
-    __tablename__ = "individual_requirements"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    requirements_id: Mapped[str] = mapped_column(
-        String, ForeignKey("requirements.id"), nullable=False, index=True
-    )
-    
-    # Requirement identification
-    requirement_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # e.g., "REQ-001"
-    requirement_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    
-    # Requirement content
-    title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    ears_format: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # EARS notation
-    
-    # Requirement metadata
-    category: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True, index=True
-    )  # functional, non-functional, security, performance, etc.
-    priority: Mapped[Optional[str]] = mapped_column(
-        String(20), nullable=True, index=True
-    )  # CRITICAL, HIGH, MEDIUM, LOW
-    source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Which question/answer led to this
-    
-    # Relationships
-    requirements_document: Mapped["Requirements"] = relationship(
-        "Requirements", back_populates="individual_requirements"
-    )
-    linked_tasks: Mapped[list["Task"]] = relationship(
-        "Task", secondary="requirement_task_links", back_populates="requirements"
-    )
-    properties: Mapped[list["SpecProperty"]] = relationship(
-        "SpecProperty", back_populates="requirement"
-    )
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
-
-class Designs(Base):
-    """Stores design documents generated by AI."""
-    
-    __tablename__ = "designs"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    project_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("projects.id"), nullable=True, index=True
-    )
-    exploration_id: Mapped[str] = mapped_column(
-        String, ForeignKey("project_explorations.id"), nullable=False, index=True
-    )
-    requirements_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("requirements.id"), nullable=True, index=True
-    )  # Design is based on approved requirements
-    
-    # Document metadata
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    
-    # Storage configuration
-    storage_location: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="database", index=True
-    )  # "database" or "s3"
-    content_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # Size in bytes
-    
-    # Document content (when stored in database)
-    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Markdown content
-    
-    # S3 storage (when storage_location = "s3")
-    s3_bucket: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    s3_key: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # Full S3 object key
-    s3_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Pre-signed URL (temporary)
-    s3_region: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    
-    # Content hash for integrity verification
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256 hash
-    
-    # Design-specific metadata
-    sections: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
-    # e.g., ["Architecture Overview", "Component Design", "Security Design", ...]
-    components_designed: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
-    # e.g., ["AuthenticationService", "TokenManager", "PasswordValidator", ...]
-    diagrams_included: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
-    # e.g., ["sequence_diagram_auth_flow", "component_diagram", ...]
-    
-    # Approval workflow
-    status: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="draft", index=True
-    )  # draft, pending_review, approved, rejected, superseded
-    approved_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    
-    # Relationships
-    previous_version_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("designs.id"), nullable=True
-    )  # For versioning
-    based_on_requirements: Mapped[Optional["Requirements"]] = relationship(
-        "Requirements", foreign_keys=[requirements_id]
-    )
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
-
+See [Implementation Details - Database Models](./project_management_dashboard_implementation.md#33-project-exploration-models) for complete model definitions including:
+- `ProjectExploration` - Tracks AI-assisted exploration sessions
+- `Requirements` - Stores requirements documents (with database/S3 storage support)
+- `IndividualRequirement` - Stores individual requirements extracted from documents
+- `Designs` - Stores design documents (with database/S3 storage support)
+- `ExplorationQuestion` - Tracks questions asked during exploration
 
 ### 10.3.2.1 Document Storage Strategy
 
-**Storage Options:**
-
-Both `Requirements` and `Designs` models support two storage backends:
-
-1. **Database Storage** (`storage_location = "database"`)
-   - Content stored directly in `content` TEXT field
-   - Best for: Small to medium documents (< 1MB), frequent access, transactional consistency
-   - Pros:
-     - Simple implementation
-     - ACID transactions
-     - Fast queries and full-text search
-     - No external dependencies
-     - Easy versioning and rollback
-   - Cons:
-     - Database size grows with documents
-     - Slower for very large documents
-     - Backup/restore includes all content
-     - Limited to database connection limits
-
-2. **S3/Object Storage** (`storage_location = "s3"`)
-   - Content stored in S3 (or compatible object storage)
-   - Metadata and S3 reference stored in database
-   - Best for: Large documents (> 1MB), infrequent access, cost optimization
-   - Pros:
-     - Scalable storage
-     - Lower cost for large files
-     - Can serve files directly via CDN
-     - Better for binary assets (diagrams, images)
-     - Reduces database size
-   - Cons:
-     - More complex implementation
-     - Eventual consistency considerations
-     - Requires S3 credentials and configuration
-     - Additional latency for retrieval
-     - Need to manage pre-signed URLs for access
-
-**Storage Service Abstraction:**
-
-```python
-# omoi_os/services/document_storage.py
-
-class DocumentStorageService:
-    """Abstracts document storage operations."""
-    
-    async def store_document(
-        self,
-        document_id: str,
-        content: str,
-        storage_location: str = "database",
-        s3_bucket: Optional[str] = None,
-    ) -> Dict[str, Any]:
-        """
-        Store document content.
-        
-        Returns:
-        {
-            "storage_location": "database" | "s3",
-            "content_size": 12345,
-            "content_hash": "sha256...",
-            "s3_bucket": "bucket-name" (if S3),
-            "s3_key": "path/to/file" (if S3),
-        }
-        """
-        if storage_location == "database":
-            return await self._store_in_database(document_id, content)
-        elif storage_location == "s3":
-            return await self._store_in_s3(document_id, content, s3_bucket)
-        else:
-            raise ValueError(f"Unknown storage location: {storage_location}")
-    
-    async def retrieve_document(
-        self,
-        document_id: str,
-        storage_location: str,
-        s3_bucket: Optional[str] = None,
-        s3_key: Optional[str] = None,
-    ) -> str:
-        """Retrieve document content."""
-        if storage_location == "database":
-            return await self._retrieve_from_database(document_id)
-        elif storage_location == "s3":
-            return await self._retrieve_from_s3(s3_bucket, s3_key)
-        else:
-            raise ValueError(f"Unknown storage location: {storage_location}")
-    
-    async def generate_presigned_url(
-        self,
-        s3_bucket: str,
-        s3_key: str,
-        expiration: int = 3600,
-    ) -> str:
-        """Generate pre-signed URL for S3 object access."""
-        pass
-```
-
-**Storage Decision Logic:**
-
-```python
-# Automatic storage selection based on size
-def determine_storage_location(content: str, config: Dict) -> str:
-    """
-    Determine where to store document based on size and configuration.
-    
-    Default thresholds:
-    - < 100KB: Database (fast, simple)
-    - 100KB - 1MB: Database (unless S3 preferred)
-    - > 1MB: S3 (cost-effective, scalable)
-    """
-    size = len(content.encode('utf-8'))
-    max_db_size = config.get("max_database_size_bytes", 100_000)  # 100KB default
-    
-    if size < max_db_size:
-        return "database"
-    else:
-        return config.get("default_large_storage", "s3")
-```
-
-**S3 Bucket Organization:**
-
-```
-s3://{bucket-name}/
-├── requirements/
-│   ├── {project_id}/
-│   │   ├── {exploration_id}/
-│   │   │   ├── v1-{requirements_id}.md
-│   │   │   ├── v2-{requirements_id}.md
-│   │   │   └── latest -> v2-{requirements_id}.md
-├── designs/
-│   ├── {project_id}/
-│   │   ├── {exploration_id}/
-│   │   │   ├── v1-{design_id}.md
-│   │   │   └── diagrams/
-│   │   │       ├── sequence_auth_flow.png
-│   │   │       └── component_diagram.svg
-```
-
-**Migration Strategy:**
-
-- Start with database storage for simplicity
-- Migrate to S3 when documents exceed threshold
-- Support both storage locations simultaneously
-- Provide migration utility to move documents between storage backends
-
-**Configuration:**
-
-```python
-# config.py
-class DocumentStorageSettings(BaseSettings):
-    # Storage defaults
-    default_storage_location: str = "database"
-    max_database_size_bytes: int = 100_000  # 100KB
-    
-    # S3 configuration
-    s3_bucket: Optional[str] = None
-    s3_region: Optional[str] = None
-    s3_access_key_id: Optional[str] = None
-    s3_secret_access_key: Optional[str] = None
-    
-    # Pre-signed URL settings
-    presigned_url_expiration: int = 3600  # 1 hour
-```
-
-**Recommendation:**
-
-- **Start with database storage** for MVP and small projects
-- **Migrate to S3** when:
-  - Documents regularly exceed 100KB
-  - Database size becomes a concern
-  - Need to serve documents via CDN
-  - Cost optimization becomes important
-- **Hybrid approach**: Store small documents in DB, large ones in S3
-- **Automatic migration**: System can automatically move documents based on size thresholds
-
-
-class ExplorationQuestion(Base):
-    """Tracks questions asked during exploration."""
-    
-    __tablename__ = "exploration_questions"
-    
-    id: Mapped[str] = mapped_column(String, primary_key=True)
-    exploration_id: Mapped[str] = mapped_column(
-        String, ForeignKey("project_explorations.id"), nullable=False, index=True
-    )
-    
-    question_text: Mapped[str] = mapped_column(Text, nullable=False)
-    question_category: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )  # scope, technical, user_experience, security, performance, etc.
-    
-    answer_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    answered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    
-    # AI metadata
-    ai_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    follow_up_questions: Mapped[Optional[list[str]]] = mapped_column(JSONB, nullable=True)
-    
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-```
+See [Implementation Details - Document Storage Service](./project_management_dashboard_implementation.md#42-document-storage-service) for complete storage abstraction, S3 bucket organization, migration strategy, and configuration details.
 
 ### 10.3.3 AI Conversation Interface
 
@@ -2646,51 +1687,8 @@ class ProjectExplorationService:
 ```
 
 **API Endpoints:**
-```python
-@router.post("/projects/explore/start")
-async def start_exploration(
-    request: StartExplorationRequest,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> ExplorationDTO:
-    """Start new project exploration session."""
-    # Create exploration record
-    # Generate initial questions
-    pass
 
-@router.post("/projects/explore/{exploration_id}/answer")
-async def answer_question(
-    exploration_id: str,
-    request: AnswerQuestionRequest,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> ExplorationDTO:
-    """Answer a question and get next questions."""
-    # Store answer
-    # Generate follow-up questions
-    # Check if ready for requirements generation
-    pass
-
-@router.post("/projects/explore/{exploration_id}/generate-requirements")
-async def generate_requirements(
-    exploration_id: str,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> ProjectDocumentDTO:
-    """Generate requirements document from exploration."""
-    # Analyze all Q&A
-    # Generate requirements document
-    # Create document record
-    pass
-
-@router.post("/projects/explore/{exploration_id}/refine-requirements")
-async def refine_requirements(
-    exploration_id: str,
-    request: RefineRequirementsRequest,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> ProjectDocumentDTO:
-    """Refine requirements based on user feedback."""
-    # Update requirements document
-    # Create new version
-    pass
-```
+See [API Specifications - Project Exploration API](./project_management_dashboard_api.md#9-project-exploration-api) for complete endpoint specifications.
 
 ### 10.3.6 Design Document Generation
 
@@ -2735,18 +1733,8 @@ async def refine_requirements(
 ```
 
 **API Endpoints:**
-```python
-@router.post("/projects/explore/{exploration_id}/generate-design")
-async def generate_design(
-    exploration_id: str,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> ProjectDocumentDTO:
-    """Generate design document from approved requirements."""
-    # Verify requirements are approved
-    # Generate design document
-    # Create document record
-    pass
-```
+
+See [API Specifications - Project Exploration API](./project_management_dashboard_api.md#9-project-exploration-api) for complete endpoint specifications.
 
 ### 10.3.7 Document Approval Workflow
 
@@ -2764,30 +1752,8 @@ async def generate_design(
 - `DocumentVersionHistory.tsx` - View all versions
 
 **API Endpoints:**
-```python
-@router.post("/documents/{document_id}/approve")
-async def approve_document(
-    document_id: str,
-    user_id: str,
-) -> ProjectDocumentDTO:
-    """Approve a document."""
-    pass
 
-@router.post("/documents/{document_id}/reject")
-async def reject_document(
-    document_id: str,
-    request: RejectDocumentRequest,
-) -> ProjectDocumentDTO:
-    """Reject a document with feedback."""
-    pass
-
-@router.get("/documents/{document_id}/versions")
-async def get_document_versions(
-    document_id: str,
-) -> List[ProjectDocumentDTO]:
-    """Get version history for a document."""
-    pass
-```
+See [API Specifications - Project Exploration API](./project_management_dashboard_api.md#9-project-exploration-api) for complete endpoint specifications including document approval workflow.
 
 ### 10.3.8 Integration with Ticket/Task Creation
 
@@ -2804,26 +1770,8 @@ async def get_document_versions(
 - One-click project initialization
 
 **API Endpoints:**
-```python
-@router.post("/projects/explore/{exploration_id}/initialize-project")
-async def initialize_project(
-    exploration_id: str,
-    request: InitializeProjectRequest,
-    db: DatabaseService = Depends(get_db_service),
-    queue: TaskQueueService = Depends(get_task_queue),
-) -> ProjectDTO:
-    """
-    Create project and initial tickets from approved design.
-    
-    Steps:
-    1. Create project record
-    2. Parse design document for phases/features
-    3. Create tickets for each major feature/phase
-    4. Create initial tasks for each ticket
-    5. Link documents to project
-    """
-    pass
-```
+
+See [API Specifications - Project Exploration API](./project_management_dashboard_api.md#9-project-exploration-api) for complete endpoint specifications.
 
 ### 10.3.9 Document Storage & Versioning
 
@@ -2998,68 +1946,8 @@ class SpecProperty(Base):
 ```
 
 **API Endpoints:**
-```python
-# omoi_os/api/routes/specs.py
 
-@router.post("/projects/explore/{exploration_id}/generate-spec")
-async def generate_spec(
-    exploration_id: str,
-    spec_name: str,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> ProjectSpecDTO:
-    """
-    Generate spec from approved requirements and design.
-    
-    Steps:
-    1. Read approved requirements document
-    2. Convert to EARS notation in requirements (stored in DB)
-    3. Read approved design document (from DB)
-    4. Convert to design format (stored in DB)
-    5. Generate tasks from design (stored in DB)
-    6. Extract properties for PBT
-    7. Store in database
-    """
-    pass
-
-@router.get("/specs")
-async def list_specs(
-    project_id: Optional[str] = None,
-) -> List[ProjectSpecDTO]:
-    """List all specs, optionally filtered by project."""
-
-@router.get("/specs/{spec_id}")
-async def get_spec(
-    spec_id: str,
-) -> ProjectSpecDTO:
-    """Get spec details including all three files."""
-
-@router.post("/specs/{spec_id}/extract-properties")
-async def extract_properties(
-    spec_id: str,
-    llm_service: LLMService = Depends(get_llm_service),
-) -> List[SpecPropertyDTO]:
-    """Extract testable properties from requirements."""
-
-@router.post("/specs/{spec_id}/generate-tasks")
-async def generate_tasks_from_spec(
-    spec_id: str,
-    db: DatabaseService = Depends(get_db_service),
-    queue: TaskQueueService = Depends(get_task_queue),
-) -> List[TicketDTO]:
-    """Create tickets/tasks from project tasks stored in database."""
-
-@router.post("/specs/{spec_id}/run-property-tests")
-async def run_property_tests(
-    spec_id: str,
-) -> PropertyTestResultsDTO:
-    """Run property-based tests for all extracted properties."""
-
-@router.get("/specs/{spec_id}/properties")
-async def get_spec_properties(
-    spec_id: str,
-) -> List[SpecPropertyDTO]:
-    """Get all properties extracted from spec."""
-```
+See [API Specifications - Project Exploration API](./project_management_dashboard_api.md#9-project-exploration-api) for complete endpoint specifications including spec generation, property extraction, and task generation.
 
 **UI Components:**
 - `SpecGenerator.tsx` - Generate spec from exploration
@@ -3627,67 +2515,11 @@ Tasks from the project are automatically converted to system tickets:
 
 ### 11.1 Agent Spawner Component
 
-```typescript
-// components/shared/AgentSpawner.tsx
-
-export function AgentSpawner({ projectId }: { projectId: string }) {
-  const [agentType, setAgentType] = useState('worker');
-  const [phaseId, setPhaseId] = useState('PHASE_IMPLEMENTATION');
-  const [capabilities, setCapabilities] = useState<string[]>([]);
-  
-  const spawnAgent = async () => {
-    const response = await fetch(`/api/v1/projects/${projectId}/spawn-agent`, {
-      method: 'POST',
-      body: JSON.stringify({
-        agent_type: agentType,
-        phase_id: phaseId,
-        capabilities: capabilities,
-        capacity: 1,
-      }),
-    });
-    
-    const agent = await response.json();
-    // WebSocket event will update UI automatically
-  };
-  
-  return (
-    <form onSubmit={spawnAgent}>
-      {/* Agent configuration form */}
-    </form>
-  );
-}
-```
+See [Implementation Details - Frontend Code Examples](./project_management_dashboard_implementation.md#25-agent-spawner-component) for complete `AgentSpawner` component implementation.
 
 ### 11.2 Task Creator Component
 
-```typescript
-// components/shared/TaskCreator.tsx
-
-export function TaskCreator({ projectId, ticketId }: Props) {
-  const [description, setDescription] = useState('');
-  const [priority, setPriority] = useState('MEDIUM');
-  const [dependencies, setDependencies] = useState<string[]>([]);
-  
-  const createTask = async () => {
-    await fetch(`/api/v1/tickets/${ticketId}/tasks`, {
-      method: 'POST',
-      body: JSON.stringify({
-        description,
-        priority,
-        phase_id: 'PHASE_IMPLEMENTATION',
-        dependencies: { depends_on: dependencies },
-      }),
-    });
-    // WebSocket event will update board/graph
-  };
-  
-  return (
-    <form onSubmit={createTask}>
-      {/* Task creation form */}
-    </form>
-  );
-}
-```
+See [Implementation Details - Frontend Code Examples](./project_management_dashboard_implementation.md#26-task-creator-component) for complete `TaskCreator` component implementation.
 
 ---
 
@@ -3695,14 +2527,23 @@ export function TaskCreator({ projectId, ticketId }: Props) {
 
 ### 11.5.1 Overview
 
-**Purpose**: Monitor agent alignment with their goals and track progress on specific tasks in real-time.
+**Purpose**: Monitor agent alignment with their goals and track progress on specific tasks in real-time, based on the monitoring architecture requirements.
+
+**Requirements Documents:**
+- [Monitoring Architecture Requirements](../requirements/monitoring/monitoring_architecture.md) - Guardian/Conductor phases, coherence scoring
+- [Validation System Requirements](../requirements/workflows/validation_system.md) - Validation state machine and workflow
+- [Fault Tolerance Requirements](../requirements/monitoring/fault_tolerance.md) - Heartbeat detection, restart, anomaly detection
+- [Agent Lifecycle Management](../requirements/agents/lifecycle_management.md) - Guardian authority and intervention
 
 **Key Features:**
-- **Goal Alignment Scoring**: Monitor how well agents are aligned with their task goals (0-100%)
-- **Trajectory Analysis**: Track alignment over time, detect drift
-- **Progress Tracking**: Real-time updates on task progress
-- **Discovery Tracking**: Monitor agent discoveries and workflow branching
-- **Background Worker Integration**: Guardian, Validation, Alert systems monitor agents automatically
+- **Monitoring Loop**: Runs every 60s with Guardian Phase (per-agent) and Conductor Phase (system-wide) (REQ-MON-LOOP-001, REQ-MON-LOOP-002)
+- **Guardian Alignment Scoring**: Calculates alignment_score (0-1) based on agent progress vs task goals (REQ-MON-GRD-002)
+- **Trajectory Analysis**: Track alignment over time with trajectory_summary, detect needs_steering (REQ-MON-GRD-002)
+- **Conductor Coherence**: System-wide coherence_score (0-1) with duplicate detection (REQ-MON-CND-001, REQ-MON-CND-002)
+- **Validation State Machine**: pending → assigned → in_progress → under_review → validation_in_progress → done/needs_work (REQ-VAL-SM-001)
+- **Progress Tracking**: Real-time updates on task progress with Guardian analysis
+- **Discovery Tracking**: Monitor agent discoveries and workflow branching via TaskDiscovery model
+- **Background Worker Integration**: Monitoring loop, Validation orchestrator, Guardian service, Alert system
 
 ### 11.5.2 System Overview Dashboard
 
@@ -3791,10 +2632,14 @@ export function TaskCreator({ projectId, ticketId }: Props) {
 ```
 
 **Key Features:**
-- **System Health Panel**: Coherence score, average alignment, active agents/tasks count
+- **System Health Panel**: 
+  - Coherence score (0-1) from Conductor Phase (REQ-MON-CND-001)
+  - Average alignment from Guardian Phase (REQ-MON-GRD-002)
+  - Active agents/tasks count from health service
+  - API: `/api/v1/monitor/dashboard` (GET)
 - **Phase Distribution**: Visual breakdown of tasks/agents across workflow phases
-- **Current System Focus**: Narrative summary of current agent activities (from Guardian/Conductor)
-- **Real-Time Updates**: WebSocket-powered live updates
+- **Current System Focus**: Narrative summary from Conductor Phase (REQ-MON-CND-003)
+- **Real-Time Updates**: WebSocket-powered live updates via `MONITORING_UPDATE` events (REQ-MON-LOOP-002)
 
 ### 11.5.3 Agent Detail with Goal Alignment
 
@@ -3998,11 +2843,36 @@ export function TaskCreator({ projectId, ticketId }: Props) {
 
 ### 11.5.5 Background Worker Integration
 
-**Background Systems:**
-- **Guardian System**: Monitors agent alignment, detects drift, provides trajectory analysis
-- **Validation System**: Validates agent work, checks quality, runs tests
-- **Alert System**: Sends notifications for alignment issues, drift detection, failures
-- **Conductor System**: Orchestrates overall system focus, provides narrative summaries
+**Background Systems** (Requirements-Based):
+
+1. **Monitoring Architecture** (`docs/requirements/monitoring/monitoring_architecture.md`):
+   - **Monitoring Loop**: Runs every 60s (REQ-MON-LOOP-001)
+   - **Guardian Phase**: Per-agent analysis producing alignment_score (0-1), trajectory_summary, needs_steering (REQ-MON-GRD-002)
+   - **Conductor Phase**: System-wide coherence scoring, duplicate detection, intervention decisions (REQ-MON-CND-001, REQ-MON-CND-002, REQ-MON-CND-003)
+   - **Vector Search**: PGVector-based semantic similarity for duplicate detection (REQ-MON-DATA-002)
+   - **API**: `/api/agent_trajectories`, `/api/system_coherence`, `/api/steer_agent`
+
+2. **Validation System** (`docs/requirements/workflows/validation_system.md`):
+   - **State Machine**: pending → assigned → in_progress → under_review → validation_in_progress → done/needs_work (REQ-VAL-SM-001)
+   - **Validator Spawn**: Automatic spawn when task enters `under_review` with `validation_enabled=true` (REQ-VAL-LC-001)
+   - **Review Submission**: Validator agents submit reviews via `/api/validation/give_review` (REQ-VAL-API, REQ-VAL-SEC-001)
+   - **Feedback Delivery**: Transport-agnostic feedback delivery to originating agent (REQ-VAL-LC-002)
+   - **Diagnosis Integration**: Auto-spawn on repeated failures or timeout (REQ-VAL-DIAG-001, REQ-VAL-DIAG-002)
+   - **Memory Integration**: Persist validation outcomes and use prior memories (REQ-VAL-MEM-001, REQ-VAL-MEM-002)
+   - **API**: `/api/validation/give_review`, `/api/validation/spawn_validator`, `/api/validation/send_feedback`, `/api/validation/status`
+
+3. **Guardian Service** (`docs/requirements/agents/lifecycle_management.md`):
+   - **Authority Hierarchy**: SYSTEM(5) > GUARDIAN(4) > MONITOR(3) > WATCHDOG(2) > WORKER(1) (REQ-AGENT-GUARDIAN-002)
+   - **Emergency Intervention**: Task cancellation, capacity reallocation, priority override (REQ-AGENT-GUARDIAN-002)
+   - **Complete Audit Trail**: GuardianAction records all interventions
+   - **API**: `/api/v1/guardian/intervention/cancel-task`, `/api/v1/guardian/intervention/reallocate`, `/api/v1/guardian/intervention/override-priority`
+
+4. **Fault Tolerance** (`docs/requirements/monitoring/fault_tolerance.md`):
+   - **Heartbeat Detection**: Bidirectional heartbeats with TTL thresholds (REQ-FT-HB-001)
+   - **Automatic Restart**: Escalation ladder, graceful stop, force terminate, spawn replacement (REQ-FT-AR-001, REQ-FT-AR-002)
+   - **Anomaly Detection**: Composite anomaly score from latency, error rate, resource skew, queue impact (REQ-FT-AN-001)
+   - **Quarantine Protocol**: Isolation, forensics, clearance by Guardian (REQ-FT-QN-001, REQ-FT-QN-002, REQ-FT-QN-003)
+   - **Escalation**: SEV-1/2/3 mapping with notification matrix (REQ-FT-ES-001, REQ-FT-ES-002)
 
 **Integration Flow:**
 ```
@@ -4012,40 +2882,117 @@ Agent Working on Task
     │       │
     │       └─→ EventBusService.publish(AGENT_HEARTBEAT)
     │
-    ├─→ Guardian System (runs every 60s)
+    ├─→ Monitoring Loop (runs every 60s per REQ-MON-LOOP-001)
     │       │
-    │       ├─→ Analyzes agent progress summaries
-    │       ├─→ Compares against task goal
-    │       ├─→ Calculates alignment score (0-100%)
-    │       ├─→ Detects drift or misalignment
+    │       ├─→ Guardian Phase (per-agent analysis per REQ-MON-GRD-001)
+    │       │   │
+    │       │   ├─→ Trajectory Context Builder
+    │       │   │   • Recent agent logs (last 200 lines)
+    │       │   │   • Prior summaries (last 10 Guardian analyses)
+    │       │   │   • Agent status and resource metrics
+    │       │   │   • Grace period check (min_agent_age: 60s per REQ-MON-GRD-003)
+    │       │   │
+    │       │   ├─→ Guardian Analysis
+    │       │   │   • Calculates alignment_score (0-1) per REQ-MON-GRD-002
+    │       │   │   • Generates trajectory_summary
+    │       │   │   • Detects needs_steering (bool)
+    │       │   │   • Suggests steering_type if needed
+    │       │   │
+    │       │   └─→ EventBusService.publish(
+    │       │           SystemEvent(
+    │       │               event_type="GUARDIAN_ANALYSIS_COMPLETE",
+    │       │               entity_type="agent",
+    │       │               entity_id=agent_id,
+    │       │               payload={
+    │       │                   "alignment_score": 0.68,
+    │       │                   "trajectory_summary": "...",
+    │       │                   "needs_steering": false,
+    │       │                   "steering_type": null,
+    │       │                   "phase": "implementation"
+    │       │               }
+    │       │           )
+    │       │       )
     │       │
-    │       └─→ EventBusService.publish(
-    │               SystemEvent(
-    │                   event_type="AGENT_ALIGNMENT_UPDATED",
-    │                   entity_type="agent",
-    │                   entity_id=agent_id,
-    │                   payload={
-    │                       "alignment_score": 68,
-    │                       "phase": "implementation",
-    │                       "drift_detected": false,
-    │                       "trajectory_data": {...}
-    │                   }
+    │       └─→ Conductor Phase (system-wide aggregation per REQ-MON-CND-001)
+    │           │
+    │           ├─→ Coherence Scoring
+    │           │   • Computes system coherence_score (0-1)
+    │           │   • Based on Guardian alignment outputs
+    │           │   • Thresholds: healthy (0.7), warning (0.5), critical (0.3)
+    │           │
+    │           ├─→ Duplicate Detection (per REQ-MON-CND-002)
+    │           │   • Compares agent work descriptions via vector search
+    │           │   • Detects duplicates above threshold (0.8)
+    │           │   • Persists DuplicatePair records
+    │           │
+    │           ├─→ Actions (per REQ-MON-CND-003)
+    │           │   • Suggests task termination if needed
+    │           │   • Redistributes work for duplicates
+    │           │   • Escalates to Guardian if critical
+    │           │   • All actions auditable
+    │           │
+    │           └─→ EventBusService.publish(
+    │                   SystemEvent(
+    │                       event_type="MONITORING_UPDATE",
+    │                       entity_type="system",
+    │                       payload={
+    │                           "coherence_score": 0.75,
+    │                           "average_alignment": 0.68,
+    │                           "duplicates": [...],
+    │                           "interventions": [...],
+    │                           "system_focus": "Narrative summary of current activities"
+    │                       }
+    │                   )
     │               )
-    │           )
     │
-    ├─→ Validation System (runs on task completion)
+    ├─→ Validation System (state machine per REQ-VAL-SM-001)
     │       │
-    │       ├─→ Validates task completion criteria
-    │       ├─→ Runs tests if applicable
-    │       ├─→ Checks quality metrics
+    │       ├─→ Task enters under_review state
+    │       │   • Agent publishes completion signal
+    │       │   • Commit SHA required (if applicable)
+    │       │   • validation_iteration incremented
+    │       │
+    │       ├─→ Validator Spawn (REQ-VAL-LC-001)
+    │       │   • IF validation_enabled=true AND state=under_review
+    │       │   • Spawn validator agent via /api/validation/spawn_validator
+    │       │   • Transition to validation_in_progress
+    │       │   • Validator accesses workspace at Git commit
+    │       │
+    │       ├─→ Validation Review (REQ-VAL-API)
+    │       │   • Validator calls /api/validation/give_review
+    │       │   • Only validator agents allowed (REQ-VAL-SEC-001)
+    │       │   • Provides validation_passed, feedback, evidence, recommendations
+    │       │   • Creates ValidationReview record (REQ-VAL-DM-003)
+    │       │
+    │       ├─→ State Transition
+    │       │   • IF validation_passed=true → done (REQ-VAL-SM-002)
+    │       │     • Set review_done=true
+    │       │   • IF validation_passed=false → needs_work (REQ-VAL-SM-002)
+    │       │     • Set last_validation_feedback
+    │       │     • Agent resumes (same session)
+    │       │
+    │       ├─→ Feedback Delivery (REQ-VAL-LC-002)
+    │       │   • Via /api/validation/send_feedback
+    │       │   • Transport-agnostic (HTTP, event bus, IPC)
+    │       │
+    │       ├─→ Diagnosis Integration (REQ-VAL-DIAG-001, REQ-VAL-DIAG-002)
+    │       │   • IF consecutive_validation_failures >= 2
+    │       │   • Spawn Diagnosis Agent automatically
+    │       │   • IF validation timeout → spawn diagnosis on timeout causes
+    │       │
+    │       ├─→ Memory Integration (REQ-VAL-MEM-001, REQ-VAL-MEM-002)
+    │       │   • Persist validation outcomes to Memory System
+    │       │   • Validators retrieve prior validation memories
     │       │
     │       └─→ EventBusService.publish(
     │               SystemEvent(
-    │                   event_type="TASK_VALIDATED",
+    │                   event_type="VALIDATION_REVIEW_SUBMITTED",
     │                   entity_type="task",
+    │                   entity_id=task_id,
     │                   payload={
-    │                       "validation_status": "passed",
-    │                       "test_results": {...}
+    │                       "validation_passed": true,
+    │                       "iteration": 1,
+    │                       "validator_agent_id": "..."
     │                   }
     │               )
     │           )
@@ -4069,46 +3016,78 @@ Agent Working on Task
                 )
 ```
 
-**WebSocket Events:**
+**WebSocket Events** (per REQ-MON-LOOP-002, REQ-VAL-API):
+
 ```typescript
-// Agent alignment events
-AGENT_ALIGNMENT_UPDATED → {
+// Monitoring events (per REQ-MON-LOOP-002)
+MONITORING_UPDATE → {
+    cycle_id: string,
+    timestamp: string,
+    agents: Array<{
+        agent_id: string,
+        alignment_score: number,  // 0-1 per REQ-MON-GRD-002
+        trajectory_summary: string,
+        needs_steering: boolean,
+        steering_type: string | null
+    }>,
+    systemCoherence: number,  // 0-1 per REQ-MON-CND-001
+    duplicates: Array<{
+        agent1_id: string,
+        agent2_id: string,
+        similarity_score: number,
+        work_description: string | null
+    }>,
+    interventions: Array<{
+        action_type: string,
+        target_agent_ids: string[],
+        reason: string
+    }>
+}
+
+STEERING_ISSUED → {
     agent_id: string,
+    steering_type: string,
+    message: string,
+    timestamp: string
+}
+
+// Validation events (per REQ-VAL-API)
+VALIDATION_STARTED → {
     task_id: string,
-    alignment_score: number,  // 0-100%
-    phase: string,
-    drift_detected: boolean,
-    trajectory_data: {
-        timestamp: string,
-        alignment: number,
-        progress_summary: string
-    }
+    iteration: number,
+    timestamp: string
 }
 
-// Guardian analysis events
-GUARDIAN_ANALYSIS_COMPLETE → {
-    analysis_timestamp: string,
-    system_coherence: number,
-    average_alignment: number,
-    active_agents: number,
-    running_tasks: number,
-    system_focus: string  // Narrative summary
-}
-
-// Validation events
-TASK_VALIDATED → {
+VALIDATION_REVIEW_SUBMITTED → {
     task_id: string,
-    validation_status: "passed" | "failed" | "warning",
-    test_results: {...},
-    quality_metrics: {...}
+    iteration: number,
+    passed: boolean,
+    validator_agent_id: string,
+    timestamp: string
 }
 
-// Alert events
-AGENT_ALERT → {
-    agent_id: string,
-    alert_type: "alignment_drift" | "stalled" | "failure",
-    severity: "info" | "warning" | "error",
-    message: string
+VALIDATION_PASSED → {
+    task_id: string,
+    iteration: number,
+    timestamp: string
+}
+
+VALIDATION_FAILED → {
+    task_id: string,
+    iteration: number,
+    feedback: string,
+    timestamp: string
+}
+
+// Guardian intervention events
+GUARDIAN_INTERVENTION → {
+    action_id: string,
+    action_type: "cancel_task" | "reallocate" | "override_priority",
+    target_entity: string,
+    authority_level: number,  // 4=GUARDIAN, 5=SYSTEM
+    reason: string,
+    initiated_by: string,
+    timestamp: string
 }
 ```
 
@@ -4170,32 +3149,16 @@ AGENT_ALERT → {
 ```
 
 **Discovery API Endpoints:**
-```python
-# omoi_os/api/routes/discoveries.py
 
-@router.get("/agents/{agent_id}/discoveries")
-async def get_agent_discoveries(
-    agent_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[DiscoveryDTO]:
-    """Get all discoveries made by an agent."""
+See [API Specifications - Discovery API](./project_management_dashboard_api.md#10-discovery-api) for complete endpoint specifications.
 
-@router.get("/tasks/{task_id}/discoveries")
-async def get_task_discoveries(
-    task_id: str,
-    db: DatabaseService = Depends(get_db_service),
-) -> List[DiscoveryDTO]:
-    """Get all discoveries from a task."""
-
-@router.post("/discoveries/{discovery_id}/spawn-task")
-async def spawn_task_from_discovery(
-    discovery_id: str,
-    request: SpawnTaskFromDiscoveryRequest,
-    db: DatabaseService = Depends(get_db_service),
-    queue: TaskQueueService = Depends(get_task_queue),
-) -> TaskDTO:
-    """Spawn a new task from a discovery."""
-```
+**Existing Discovery Service** (`omoi_os/services/discovery.py`):
+- ✅ `record_discovery()` - Record discovery with type and description
+- ✅ `record_discovery_and_branch()` - Record discovery and spawn task automatically
+- ✅ `get_discoveries_by_task()` - Get all discoveries for a task
+- ✅ `get_discoveries_by_type()` - Get discoveries by type (bug, optimization, etc.)
+- ✅ `get_workflow_graph()` - Build workflow graph showing all discoveries and branches
+- ✅ `mark_discovery_resolved()` - Mark discovery as resolved
 
 ### 11.5.7 Agent Workflow: Start & Let Discover
 
@@ -4228,9 +3191,11 @@ async def spawn_task_from_discovery(
 2. Agent Working
    │
    ├─→ Agent executes task instructions
-   ├─→ Guardian monitors alignment (every 60s)
-   ├─→ Alignment score calculated and tracked
-   ├─→ Progress summaries emitted (every 30s)
+   ├─→ Agent emits heartbeat (every 30s per REQ-ALM-002)
+   ├─→ Monitoring Loop runs Guardian Phase (every 60s per REQ-MON-LOOP-001)
+   ├─→ Guardian calculates alignment_score (0-1) per REQ-MON-GRD-002
+   ├─→ Guardian generates trajectory_summary and detects needs_steering
+   ├─→ Conductor Phase computes coherence_score and detects duplicates
    │
    ├─→ Agent Discovery (if enabled)
    │   │
@@ -4241,10 +3206,14 @@ async def spawn_task_from_discovery(
    │
    └─→ Agent Completion
        │
-       ├─→ Task marked as completed
-       ├─→ Validation system validates work
-       ├─→ Alignment trajectory saved for analysis
-       └─→ Agent remains accessible for replay
+       ├─→ Agent publishes completion signal with commit SHA (if applicable)
+       ├─→ Task transitions to under_review (REQ-VAL-SM-001)
+       ├─→ IF validation_enabled=true → Validator spawns (REQ-VAL-LC-001)
+       ├─→ Validation state machine executes (REQ-VAL-SM-001)
+       ├─→ IF validation_passed → done, ELSE → needs_work → in_progress (loop)
+       ├─→ Guardian trajectory analysis saved to database
+       ├─→ Memory System stores validation outcomes (REQ-VAL-MEM-001)
+       └─→ Agent remains accessible for replay even after termination
            │
            ▼
 3. Monitoring & Management
@@ -4422,236 +3391,41 @@ GitHub Event (PR Merged)
 
 ## 14. WebSocket Event Types
 
-### 14.1 Board Events
-
-```typescript
-// Ticket events
-TICKET_CREATED → { ticket_id, title, phase_id, status }
-TICKET_UPDATED → { ticket_id, changes: { phase_id?, status? } }
-TICKET_BLOCKED → { ticket_id, blocked_reason }
-TICKET_UNBLOCKED → { ticket_id }
-
-// Board events
-BOARD_WIP_VIOLATION → { column_id, current_count, wip_limit }
-BOARD_TICKET_MOVED → { ticket_id, from_column, to_column }
-```
-
-### 14.2 Graph Events
-
-```typescript
-// Task events
-TASK_CREATED → { task_id, ticket_id, dependencies }
-TASK_ASSIGNED → { task_id, agent_id }
-TASK_COMPLETED → { task_id, result }
-TASK_FAILED → { task_id, error_message }
-TASK_DEPENDENCY_ADDED → { task_id, depends_on_task_id }
-```
-
-### 14.3 Agent Events
-
-```typescript
-AGENT_REGISTERED → { agent_id, agent_type, phase_id }
-AGENT_STATUS_CHANGED → { agent_id, old_status, new_status }
-AGENT_HEARTBEAT → { agent_id, health_metrics }
-```
-
-### 14.4 GitHub Events
-
-```typescript
-GITHUB_ISSUE_CREATED → { issue_number, repo, title }
-GITHUB_PR_OPENED → { pr_number, repo, linked_task_id }
-GITHUB_PR_MERGED → { pr_number, commit_sha, linked_task_id }
-COMMIT_PUSHED → { commit_sha, message, author, files_changed, insertions, deletions }
-COMMIT_LINKED → { commit_sha, ticket_id, agent_id }
-COMMIT_COMMENTED → { commit_sha, comment, ticket_id }
-```
-
-### 14.5 Commit Events
-
-```typescript
-COMMIT_LINKED → { commit_sha, ticket_id, agent_id, files_changed, insertions, deletions }
-COMMIT_DIFF_VIEWED → { commit_sha, viewer_id }  // Analytics
-COMMIT_UNLINKED → { commit_sha, ticket_id }
-```
+See [API Specifications - WebSocket Events](./project_management_dashboard_api.md#11-websocket-events) for complete event type specifications including:
+- Board Events (TICKET_CREATED, TICKET_UPDATED, etc.)
+- Graph Events (TASK_CREATED, TASK_ASSIGNED, etc.)
+- Agent Events (AGENT_REGISTERED, AGENT_STATUS_CHANGED, etc.)
+- GitHub Events (GITHUB_ISSUE_CREATED, COMMIT_PUSHED, etc.)
+- Monitoring Events (MONITORING_UPDATE, STEERING_ISSUED, etc.)
+- Validation Events (VALIDATION_STARTED, VALIDATION_REVIEW_SUBMITTED, etc.)
+- Guardian Intervention Events
+- Discovery Events
+- Project Exploration Events
 
 ---
 
 ## 15. Frontend State Management
 
-### 15.1 Zustand Store Example
-
-```typescript
-// stores/boardStore.ts
-import create from 'zustand';
-
-interface BoardState {
-  columns: Column[];
-  tickets: Map<string, Ticket>;
-  
-  // Actions
-  updateTicket: (ticketId: string, updates: Partial<Ticket>) => void;
-  moveTicket: (ticketId: string, columnId: string) => void;
-  addTicket: (ticket: Ticket) => void;
-}
-
-export const useBoardStore = create<BoardState>((set) => ({
-  columns: [],
-  tickets: new Map(),
-  
-  updateTicket: (ticketId, updates) => set((state) => ({
-    tickets: new Map(state.tickets).set(ticketId, {
-      ...state.tickets.get(ticketId)!,
-      ...updates,
-    }),
-  })),
-  
-  moveTicket: (ticketId, columnId) => {
-    // Optimistic update
-    set((state) => ({
-      tickets: new Map(state.tickets).set(ticketId, {
-        ...state.tickets.get(ticketId)!,
-        phase_id: getPhaseForColumn(columnId),
-      }),
-    }));
-    
-    // API call
-    fetch('/api/v1/board/move', {
-      method: 'POST',
-      body: JSON.stringify({ ticket_id: ticketId, target_column_id: columnId }),
-    });
-  },
-}));
-```
-
-### 15.2 WebSocket Hook
-
-```typescript
-// hooks/useWebSocket.ts
-export function useWebSocket(filters?: EventFilters) {
-  const [ws, setWs] = useState<WebSocket | null>(null);
-  const [connected, setConnected] = useState(false);
-  const listeners = useRef<Map<string, Set<Function>>>(new Map());
-  
-  useEffect(() => {
-    const url = buildWebSocketUrl('/api/v1/ws/events', filters);
-    const socket = new WebSocket(url);
-    
-    socket.onopen = () => setConnected(true);
-    socket.onclose = () => setConnected(false);
-    socket.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const handlers = listeners.current.get(data.event_type) || new Set();
-      handlers.forEach(handler => handler(data));
-    };
-    
-    setWs(socket);
-    return () => socket.close();
-  }, [filters]);
-  
-  const subscribe = (eventTypes: string[], handler: Function) => {
-    eventTypes.forEach(type => {
-      if (!listeners.current.has(type)) {
-        listeners.current.set(type, new Set());
-      }
-      listeners.current.get(type)!.add(handler);
-    });
-    
-    return () => {
-      eventTypes.forEach(type => {
-        listeners.current.get(type)?.delete(handler);
-      });
-    };
-  };
-  
-  return { ws, connected, subscribe };
-}
-```
+See [Implementation Details - Frontend Code Examples](./project_management_dashboard_implementation.md#24-zustand-store-example) for complete Zustand store and WebSocket hook implementations.
 
 ---
 
 ## 16. Security Considerations
 
-### 16.1 WebSocket Authentication
-
-**Options:**
-1. **Query Parameter Token**: `ws://api/v1/ws/events?token=JWT_TOKEN`
-2. **Cookie-based**: Session cookie automatically sent
-3. **Subprotocol**: Custom WebSocket subprotocol with auth
-
-**Recommended:**
-```typescript
-// Frontend: Include JWT in WebSocket URL
-const token = localStorage.getItem('auth_token');
-const ws = new WebSocket(
-  `ws://api/v1/ws/events?token=${token}&event_types=TICKET_UPDATED`
-);
-
-// Backend: Validate token in WebSocket endpoint
-@router.websocket("/ws/events")
-async def websocket_events(
-    websocket: WebSocket,
-    token: Optional[str] = Query(None),
-):
-    # Validate JWT token
-    user = verify_jwt_token(token)
-    if not user:
-        await websocket.close(code=1008, reason="Unauthorized")
-        return
-    
-    # Proceed with connection
-    await ws_manager.connect(websocket, filters)
-```
-
-### 16.2 GitHub Webhook Security
-
-**Webhook Signature Verification:**
-```python
-import hmac
-import hashlib
-
-def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> bool:
-    """Verify GitHub webhook signature."""
-    expected = hmac.new(
-        secret.encode(),
-        payload,
-        hashlib.sha256
-    ).hexdigest()
-    return hmac.compare_digest(f"sha256={expected}", signature)
-```
+See [Implementation Details - Security Implementation](./project_management_dashboard_implementation.md#5-security-implementation) for complete security implementation including:
+- WebSocket Authentication (JWT token validation)
+- GitHub Webhook Security (signature verification)
 
 ---
 
 ## 17. Performance Considerations
 
-### 17.1 WebSocket Scalability
-
-**Connection Management:**
-- Single Redis listener per server instance
-- Connection pooling for multiple clients
-- Filter at connection level (reduce message volume)
-
-**Optimization:**
-```python
-# Only subscribe to events matching client filters
-# Use Redis pattern subscriptions efficiently
-# Batch events if needed (debounce rapid updates)
-```
-
-### 17.2 Graph Rendering
-
-**Large Graph Handling:**
-- Virtual rendering (only render visible nodes)
-- Lazy loading (load sub-graphs on expand)
-- Graph clustering (group related nodes)
-- Incremental updates (only update changed nodes)
-
-### 17.3 Board Performance
-
-**Optimizations:**
-- Pagination for large boards
-- Virtual scrolling for columns
-- Debounced updates (batch rapid changes)
-- Client-side caching with TTL
+See [Implementation Details - Performance Optimization](./project_management_dashboard_implementation.md#6-performance-optimization) for complete performance optimization strategies including:
+- WebSocket Scalability (connection management, filtering)
+- Graph Rendering (virtual rendering, lazy loading, clustering)
+- Board Performance (pagination, virtual scrolling, debouncing)
+- Frontend Performance (code splitting, memoization)
+- Backend Performance (query optimization, caching)
 
 ---
 
@@ -4796,116 +3570,26 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
 
 ### 19.1 Existing Endpoints (Ready to Use)
 
-**Board API** (`omoi_os/api/routes/board.py`):
-- ✅ `GET /api/v1/board/view` - Get complete Kanban board view
-- ✅ `POST /api/v1/board/move` - Move ticket to different column
-- ✅ `GET /api/v1/board/stats` - Get column statistics
-- ✅ `GET /api/v1/board/wip-violations` - Check WIP limit violations
-- ✅ `POST /api/v1/board/auto-transition/{ticket_id}` - Auto-transition ticket
-- ✅ `GET /api/v1/board/column/{phase_id}` - Get column for phase
-
-**Tasks API** (`omoi_os/api/routes/tasks.py`):
-- ✅ `GET /api/v1/tasks/{task_id}` - Get task by ID
-- ✅ `GET /api/v1/tasks` - List tasks (with status, phase_id filters)
-- ✅ `GET /api/v1/tasks/{task_id}/dependencies` - Get task dependencies
-- ✅ `POST /api/v1/tasks/{task_id}/check-circular` - Check for circular dependencies
-- ✅ `POST /api/v1/tasks/{task_id}/cancel` - Cancel a task
-- ✅ `GET /api/v1/tasks/{task_id}/timeout-status` - Get timeout status
-- ✅ `GET /api/v1/tasks/timed-out` - List timed-out tasks
-- ✅ `GET /api/v1/tasks/cancellable` - List cancellable tasks
-- ✅ `POST /api/v1/tasks/cleanup-timed-out` - Cleanup timed-out tasks
-- ✅ `POST /api/v1/tasks/{task_id}/set-timeout` - Set task timeout
-
-**Tickets API** (`omoi_os/api/routes/tickets.py`):
-- ✅ `POST /api/v1/tickets` - Create ticket
-- ✅ `GET /api/v1/tickets/{ticket_id}` - Get ticket by ID
-- ✅ `GET /api/v1/tickets/{ticket_id}/context` - Get ticket context
-- ✅ `POST /api/v1/tickets/{ticket_id}/update-context` - Update ticket context
-- ✅ `POST /api/v1/tickets/{ticket_id}/transition` - Transition ticket status
-- ✅ `POST /api/v1/tickets/{ticket_id}/block` - Block ticket
-- ✅ `POST /api/v1/tickets/{ticket_id}/unblock` - Unblock ticket
-- ✅ `POST /api/v1/tickets/{ticket_id}/regress` - Regress ticket phase
-- ✅ `POST /api/v1/tickets/{ticket_id}/progress` - Auto-progress ticket
-- ✅ `POST /api/v1/tickets/detect-blocking` - Detect blocking tickets
-- ✅ `POST /api/v1/tickets/approve` - Approve ticket
-- ✅ `POST /api/v1/tickets/reject` - Reject ticket
-- ✅ `GET /api/v1/tickets/pending-review-count` - Get pending count
-- ✅ `GET /api/v1/tickets/approval-status` - Get approval status
-
-**Agents API** (`omoi_os/api/routes/agents.py`):
-- ✅ `POST /api/v1/agents/register` - Register agent
-- ✅ `PATCH /api/v1/agents/{agent_id}` - Update agent
-- ✅ `POST /api/v1/agents/{agent_id}/availability` - Toggle availability
-- ✅ `GET /api/v1/agents/search` - Search agents by capabilities
-- ✅ `GET /api/v1/agents/best-fit` - Get best-fit agent
-- ✅ `GET /api/v1/agents/health` - Get all agents health
-- ✅ `GET /api/v1/agents/statistics` - Get agent statistics
-- ✅ `GET /api/v1/agents/{agent_id}/health` - Get agent health
-- ✅ `POST /api/v1/agents/{agent_id}/heartbeat` - Emit heartbeat
-- ✅ `GET /api/v1/agents/stale` - Get stale agents
-- ✅ `POST /api/v1/agents/cleanup-stale` - Cleanup stale agents
-- ✅ `GET /api/v1/agents` - List all agents
-- ✅ `GET /api/v1/agents/{agent_id}` - Get agent by ID
-
-**Graph API** (`omoi_os/api/routes/graph.py`):
-- ✅ `GET /api/v1/graph/dependency-graph/ticket/{ticket_id}` - Get ticket dependency graph
-- ✅ `GET /api/v1/graph/dependency-graph/project/{project_id}` - Get project graph
-- ✅ `GET /api/v1/graph/dependency-graph/task/{task_id}/blocked` - Get blocked tasks
-- ✅ `GET /api/v1/graph/dependency-graph/task/{task_id}/blocking` - Get blocking tasks
-
-**WebSocket API** (`omoi_os/api/routes/events.py`):
-- ✅ `WS /api/v1/ws/events` - Real-time event streaming with filters
-
-**Additional APIs**:
-- ✅ Guardian API (`omoi_os/api/routes/guardian.py`) - Emergency intervention
-- ✅ Alerts API (`omoi_os/api/routes/alerts.py`) - Alert management
-- ✅ Memory API (`omoi_os/api/routes/memory.py`) - Pattern storage & search
-- ✅ Quality API (`omoi_os/api/routes/quality.py`) - Quality metrics
-- ✅ Costs API (`omoi_os/api/routes/costs.py`) - Cost tracking
-- ✅ Validation API (`omoi_os/api/routes/validation.py`) - Validation reviews
-- ✅ Collaboration API (`omoi_os/api/routes/collaboration.py`) - Agent collaboration threads
+See [Existing Codebase Mapping](#existing-codebase-mapping) above for complete list of implemented endpoints.
 
 ### 19.2 New Endpoints Needed
 
-**Graph:** ✅ All endpoints implemented (see section 19.1 above)
-
-**Commits:**
-- `GET /api/v1/commits/{commit_sha}` - Get commit details
-- `GET /api/v1/commits/{commit_sha}/diff` - Get commit diff
-- `GET /api/v1/tickets/{ticket_id}/commits` - Get ticket commits
-- `POST /api/v1/tickets/{ticket_id}/commits/link` - Link commit to ticket
-- `GET /api/v1/agents/{agent_id}/commits` - Get agent commits
-
-**Projects:**
-- `GET /api/v1/projects`
-- `POST /api/v1/projects`
-- `GET /api/v1/projects/{id}`
-- `POST /api/v1/projects/{id}/spawn-agent`
-- `POST /api/v1/projects/{id}/create-ticket`
-
-**GitHub:**
-- `POST /api/v1/github/repositories/connect`
-- `GET /api/v1/github/repositories`
-- `POST /api/v1/webhooks/github`
-- `GET /api/v1/github/repositories/{id}/issues`
-- `POST /api/v1/github/repositories/{id}/create-issue`
-
-**Audit:**
-- `GET /api/v1/audit/tickets/{ticket_id}` - Ticket audit trail
-- `GET /api/v1/audit/agents/{agent_id}` - Agent audit trail
-- `GET /api/v1/audit/projects/{project_id}` - Project audit trail
-
-**Statistics:**
-- `GET /api/v1/statistics/projects/{project_id}/overview` - Project stats
-- `GET /api/v1/statistics/tickets` - Ticket statistics
-- `GET /api/v1/statistics/agents` - Agent statistics
-- `GET /api/v1/statistics/commits` - Commit statistics
-
-**Search:**
-- `GET /api/v1/search` - Global search
-- `GET /api/v1/search/tickets` - Search tickets
-- `GET /api/v1/search/commits` - Search commits
-- `GET /api/v1/search/agents` - Search agents
+See [API Specifications](./project_management_dashboard_api.md) for complete specifications of all new endpoints needed:
+- [Commits API](./project_management_dashboard_api.md#3-commits-api)
+- [Projects API](./project_management_dashboard_api.md#8-projects-api)
+- [GitHub Integration API](./project_management_dashboard_api.md#4-github-integration-api)
+- [Audit API](./project_management_dashboard_api.md#5-audit-api)
+- [Statistics API](./project_management_dashboard_api.md#6-statistics-api)
+- [Search API](./project_management_dashboard_api.md#7-search-api)
+- [Project Exploration API](./project_management_dashboard_api.md#9-project-exploration-api)
+- [Discovery API](./project_management_dashboard_api.md#10-discovery-api)
+- [Comments API](./project_management_dashboard_api.md#12-comments-api)
+- [Notifications API](./project_management_dashboard_api.md#13-notifications-api)
+- [User Management API](./project_management_dashboard_api.md#14-user-management-api)
+- [Time Tracking API](./project_management_dashboard_api.md#15-time-tracking-api)
+- [Cost Tracking API](./project_management_dashboard_api.md#16-cost-tracking-api)
+- [Export/Import API](./project_management_dashboard_api.md#17-exportimport-api)
+- [File Attachments API](./project_management_dashboard_api.md#18-file-attachments-api)
 
 ---
 
@@ -4999,12 +3683,7 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
 
 ### 22.1 Comment System
 
-**Existing Backend**: `TicketComment` model exists with support for:
-- Agent-authored comments
-- Comment types (general, review, question, etc.)
-- Mentions (@agent_id)
-- Attachments (file paths)
-- Edit tracking
+**Existing Backend**: `TicketComment` model exists with support for agent-authored comments, mentions, and attachments.
 
 **Frontend Components Needed:**
 - `CommentThread.tsx` - Threaded comment display
@@ -5013,31 +3692,8 @@ def verify_webhook_signature(payload: bytes, signature: str, secret: str) -> boo
 - `AttachmentUploader.tsx` - File attachment UI
 
 **API Endpoints:**
-```python
-# omoi_os/api/routes/comments.py
 
-@router.get("/tickets/{ticket_id}/comments")
-async def get_ticket_comments(ticket_id: str) -> List[CommentDTO]:
-    """Get all comments for a ticket."""
-
-@router.post("/tickets/{ticket_id}/comments")
-async def add_comment(ticket_id: str, request: CreateCommentRequest) -> CommentDTO:
-    """Add comment to ticket."""
-
-@router.put("/comments/{comment_id}")
-async def edit_comment(comment_id: str, request: EditCommentRequest) -> CommentDTO:
-    """Edit existing comment."""
-
-@router.delete("/comments/{comment_id}")
-async def delete_comment(comment_id: str):
-    """Delete comment."""
-```
-
-**Real-Time Updates:**
-- `COMMENT_ADDED` WebSocket event
-- `COMMENT_EDITED` WebSocket event
-- `COMMENT_DELETED` WebSocket event
-- Live typing indicators (optional)
+See [API Specifications - Comments API](./project_management_dashboard_api.md#12-comments-api) for complete endpoint specifications.
 
 ### 22.2 Collaboration Threads
 
@@ -5075,22 +3731,8 @@ async def delete_comment(comment_id: str):
 - `NotificationSettings.tsx` - User notification preferences
 
 **API Endpoints:**
-```python
-@router.get("/notifications")
-async def get_notifications(
-    unread_only: bool = False,
-    limit: int = 50
-) -> List[NotificationDTO]:
-    """Get user notifications."""
 
-@router.post("/notifications/{notification_id}/read")
-async def mark_read(notification_id: str):
-    """Mark notification as read."""
-
-@router.post("/notifications/read-all")
-async def mark_all_read():
-    """Mark all notifications as read."""
-```
+See [API Specifications - Notifications API](./project_management_dashboard_api.md#13-notifications-api) for complete endpoint specifications.
 
 ### 23.2 Alert Rules Configuration UI
 
@@ -5116,19 +3758,8 @@ async def mark_all_read():
 - OAuth integration (GitHub, Google)
 
 **API Endpoints:**
-```python
-@router.post("/auth/login")
-async def login(credentials: LoginRequest) -> AuthResponse:
-    """User login."""
 
-@router.post("/auth/logout")
-async def logout():
-    """User logout."""
-
-@router.get("/auth/me")
-async def get_current_user() -> UserDTO:
-    """Get current authenticated user."""
-```
+See [API Specifications - User Management API](./project_management_dashboard_api.md#14-user-management-api) for complete endpoint specifications.
 
 ### 24.2 Authorization & Permissions
 
@@ -5168,15 +3799,8 @@ async def get_current_user() -> UserDTO:
 - `TimeReport.tsx` - Time analytics report
 
 **API Endpoints:**
-```python
-@router.get("/tickets/{ticket_id}/time")
-async def get_ticket_time(ticket_id: str) -> TimeTrackingDTO:
-    """Get time tracking data for ticket."""
 
-@router.get("/agents/{agent_id}/time")
-async def get_agent_time(agent_id: str) -> TimeTrackingDTO:
-    """Get time tracking data for agent."""
-```
+See [API Specifications - Time Tracking API](./project_management_dashboard_api.md#15-time-tracking-api) for complete endpoint specifications.
 
 ### 25.2 Performance Analytics
 
@@ -5209,19 +3833,8 @@ async def get_agent_time(agent_id: str) -> TimeTrackingDTO:
 - Agent cost efficiency metrics
 
 **API Endpoints:**
-```python
-@router.get("/costs/projects/{project_id}")
-async def get_project_costs(project_id: str) -> CostSummaryDTO:
-    """Get cost summary for project."""
 
-@router.get("/costs/agents/{agent_id}")
-async def get_agent_costs(agent_id: str) -> CostSummaryDTO:
-    """Get cost summary for agent."""
-
-@router.get("/costs/forecast")
-async def get_cost_forecast() -> CostForecastDTO:
-    """Get cost forecast based on queue depth."""
-```
+See [API Specifications - Cost Tracking API](./project_management_dashboard_api.md#16-cost-tracking-api) for complete endpoint specifications.
 
 ---
 
@@ -5242,22 +3855,8 @@ async def get_cost_forecast() -> CostForecastDTO:
 - Scheduled exports
 
 **API Endpoints:**
-```python
-@router.get("/export/tickets")
-async def export_tickets(
-    project_id: str,
-    format: str = "csv",
-    filters: Optional[Dict] = None
-) -> StreamingResponse:
-    """Export tickets."""
 
-@router.get("/export/audit-trail")
-async def export_audit_trail(
-    ticket_id: str,
-    format: str = "json"
-) -> StreamingResponse:
-    """Export audit trail."""
-```
+See [API Specifications - Export/Import API](./project_management_dashboard_api.md#17-exportimport-api) for complete endpoint specifications.
 
 ### 27.2 Data Import
 
@@ -5288,22 +3887,8 @@ async def export_audit_trail(
 - `AttachmentList.tsx` - List of attachments
 
 **API Endpoints:**
-```python
-@router.post("/tickets/{ticket_id}/attachments")
-async def upload_attachment(
-    ticket_id: str,
-    file: UploadFile
-) -> AttachmentDTO:
-    """Upload file attachment."""
 
-@router.get("/attachments/{attachment_id}")
-async def download_attachment(attachment_id: str):
-    """Download attachment."""
-
-@router.delete("/attachments/{attachment_id}")
-async def delete_attachment(attachment_id: str):
-    """Delete attachment."""
-```
+See [API Specifications - File Attachments API](./project_management_dashboard_api.md#18-file-attachments-api) for complete endpoint specifications.
 
 ---
 
@@ -5465,77 +4050,17 @@ async def slack_webhook(request: SlackWebhookRequest):
 
 ### 35.1 Transaction Safety
 
-**Current Issue**: Foreign key violation when creating tasks before ticket commit (see terminal error)
-
-**Solution:**
-- Ensure ticket is committed before task creation
-- Use database transactions properly
-- Add retry logic for transient failures
-- Implement proper rollback on errors
-
-**Code Pattern:**
-```python
-# In create_ticket endpoint
-with db.get_session() as session:
-    ticket = Ticket(...)
-    session.add(ticket)
-    session.flush()  # Get ticket.id
-    session.commit()  # Commit ticket first
-    
-    # Now create tasks in separate transaction
-    if ApprovalStatus.can_proceed(ticket.approval_status):
-        with db.get_session() as task_session:
-            queue.enqueue_task(
-                ticket_id=ticket.id,  # Ticket now exists
-                session=task_session,
-                ...
-            )
-            task_session.commit()
-```
+See [Implementation Details - Transaction Management](./project_management_dashboard_implementation.md#7-transaction-management) for complete transaction safety patterns and code examples.
 
 ### 35.2 Error Handling UI
 
-**Error Display:**
-- User-friendly error messages
-- Error recovery suggestions
-- Retry buttons
-- Error logging and reporting
-
-**UI Components:**
-- `ErrorBoundary.tsx` - React error boundary
-- `ErrorMessage.tsx` - Error display component
-- `ErrorToast.tsx` - Toast notifications for errors
+See [Implementation Details - Error Handling](./project_management_dashboard_implementation.md#8-error-handling) for error handling UI components and backend error response formats.
 
 ---
 
 ## 36. Performance Optimization
 
-### 36.1 Frontend Performance
-
-**Optimizations:**
-- Code splitting
-- Lazy loading
-- Virtual scrolling for large lists
-- Memoization
-- Debounced search
-- Optimistic updates
-
-### 36.2 Backend Performance
-
-**Optimizations:**
-- Database query optimization
-- Caching (Redis)
-- Pagination
-- GraphQL for flexible queries (optional)
-- CDN for static assets
-
-### 36.3 WebSocket Performance
-
-**Optimizations:**
-- Event batching
-- Connection pooling
-- Message compression
-- Filter at connection level
+See [Implementation Details - Performance Optimization](./project_management_dashboard_implementation.md#6-performance-optimization) for complete performance optimization strategies including frontend, backend, and WebSocket optimizations.
 
 ---
 
