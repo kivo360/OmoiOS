@@ -315,6 +315,29 @@ docs-open:
      command -v xdg-open >/dev/null && xdg-open docs/README.md || \
      echo "Open docs/README.md in your editor"
 
+# Organize documentation with AI (dry-run)
+[group('docs')]
+docs-organize:
+    {{python}} scripts/organize_docs.py --export reorganization_plan.md
+    @echo ""
+    @echo "📋 Review the plan: reorganization_plan.md"
+    @echo "Then run: just docs-organize-apply"
+
+# Organize documentation with AI (batch, detailed report)
+[group('docs')]
+docs-organize-batch:
+    {{python}} scripts/organize_docs_batch.py --detailed --export reorganization_plan.md
+
+# Apply AI-suggested organization
+[group('docs')]
+docs-organize-apply:
+    {{python}} scripts/organize_docs_batch.py --apply --detailed
+
+# Organize specific pattern
+[group('docs')]
+docs-organize-pattern pattern:
+    {{python}} scripts/organize_docs.py --pattern "{{pattern}}"
+
 # ============================================================================
 # Configuration
 # ============================================================================
@@ -630,13 +653,18 @@ groups:
     @echo "  database   - Database operations"
     @echo "  docker     - Docker operations"
     @echo "  services   - Running services"
-    @echo "  docs       - Documentation"
+    @echo "  docs       - Documentation (includes AI organization)"
     @echo "  config     - Configuration"
     @echo "  git        - Git operations"
     @echo "  clean      - Cleaning artifacts"
     @echo "  validate   - Validation commands"
     @echo "  ci         - CI/CD simulation"
     @echo "  advanced   - Advanced operations"
+    @echo ""
+    @echo "AI-Powered Features:"
+    @echo "  just docs-organize        - AI-organize docs (dry-run)"
+    @echo "  just docs-organize-batch  - Batch AI organization"
+    @echo "  just docs-organize-apply  - Apply AI suggestions"
     @echo ""
     @echo "Use 'just --list' to see all commands"
 
