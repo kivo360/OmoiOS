@@ -201,24 +201,289 @@ heartbeat_manager = HeartbeatManager(agent_id, health_service)
 heartbeat_manager.start()
 ```
 
+---
+
+## Documentation Standards (ENFORCED)
+
+### Before Creating ANY Documentation
+
+1. **Check if it exists**:
+   ```bash
+   grep -r "topic" docs/ --include="*.md"
+   ```
+
+2. **Choose correct category**:
+   - Requirements (what) → `docs/requirements/{category}/`
+   - Design (how) → `docs/design/{category}/`
+   - ADR (why) → `docs/architecture/`
+   - Status → `docs/implementation/`
+
+3. **Follow naming convention**:
+   - ✅ `memory_system.md` (snake_case)
+   - ❌ `MemorySystem.md` (CamelCase)
+   - ❌ `memory-system.md` (hyphens)
+
+4. **Include metadata**:
+   ```markdown
+   # Document Title
+   
+   **Created**: 2025-11-20
+   **Status**: Draft | Review | Approved
+   **Purpose**: One-sentence description
+   ```
+
+5. **Validate before commit**:
+   ```bash
+   just validate-docs
+   ```
+
+### Document Organization Rules
+
+```
+✅ DO:
+- Categorize by purpose (requirements/, design/, architecture/)
+- Use snake_case filenames
+- Include metadata header
+- Link to related docs
+- Keep docs DRY (Don't Repeat Yourself)
+
+❌ DON'T:
+- Create docs in root without categorization
+- Use CamelCase, hyphens, or spaces in filenames
+- Duplicate information across documents
+- Leave docs without status or purpose
+- Create orphaned docs without cross-references
+```
+
+### See Also
+- `docs/DOCUMENTATION_STANDARDS.md` - Complete documentation guide
+- `scripts/validate_docs.py` - Documentation validation tool
+
 ## Testing Strategy
 
-### Test Organization
-- **test_01_database.py**: Model validation, CRUD operations, migrations
-- **test_02_task_queue.py**: Task queue service logic and priority handling
-- **test_03_event_bus.py**: Event publishing and subscription patterns
-- **test_04_agent_executor.py**: OpenHands integration (mocked)
-- **test_05_e2e_minimal.py**: End-to-end workflow verification
-- **test_*.py**: Feature-specific tests (dependencies, retries, health, timeout)
+### Test Organization (ENFORCED)
 
-### Test Database
-Tests use fakeredis by default to avoid Redis dependencies. Set `REDIS_URL_TEST` to use real Redis for integration tests.
+Tests are organized by type in a hierarchical structure:
 
-### Phase 1 Feature Tests
-- `test_task_dependencies.py`: Task dependency resolution and circular detection
-- `test_retry_logic.py`: Exponential backoff and error classification (23 tests)
-- `test_agent_health.py`: Heartbeat management and health monitoring (14 tests)
-- `test_task_timeout.py`: Timeout detection and cancellation functionality
+```
+tests/
+├── unit/           # Fast, isolated tests (< 1s each)
+├── integration/    # Multi-component tests (< 10s each)
+├── e2e/           # Full workflow tests (< 60s each)
+├── performance/    # Load and benchmark tests
+├── fixtures/       # Shared test fixtures
+└── helpers/        # Test utilities and builders
+```
+
+### Testing Commands (Use Justfile)
+
+```bash
+# Quick feedback (only affected tests)
+just test
+
+# Full test suite
+just test-all
+
+# Category-specific
+just test-unit         # Unit tests only
+just test-integration  # Integration tests
+just test-e2e          # End-to-end tests
+
+# With coverage
+just test-coverage     # HTML coverage report
+```
+
+### Test File Naming Convention (ENFORCED)
+
+```python
+# ✅ CORRECT
+tests/unit/services/test_task_queue_service.py
+tests/integration/workflows/test_ace_workflow_integration.py
+tests/e2e/test_full_ticket_lifecycle.py
+
+# ❌ WRONG
+tests/test_01_database.py           # No numbered prefixes
+tests/TaskQueueTest.py              # No CamelCase
+tests/test_tqs.py                   # No abbreviations
+tests/unit/test_task_queue.py       # Missing component suffix
+```
+
+### Test Structure Requirements
+
+```python
+"""Test {feature} {component}.
+
+Tests Requirements: REQ-{PREFIX}-001, REQ-{PREFIX}-002
+"""
+
+import pytest
+
+
+@pytest.fixture
+def feature_instance():
+    """Create test instance."""
+    return Feature()
+
+
+class Test{Feature}:
+    """Test suite for {feature}."""
+    
+    @pytest.mark.unit
+    def test_{scenario}_success(self, feature_instance):
+        """Test {scenario} succeeds when {condition}."""
+        # Arrange - Act - Assert pattern
+```
+
+### Pytest-Testmon (Smart Test Execution)
+
+The project uses pytest-testmon to run only tests affected by code changes:
+
+```bash
+# Development: Only run affected tests (95% faster!)
+just test              # ~10-30 seconds
+
+# CI/Full suite: Run all tests
+just test-all          # ~5-10 minutes
+```
+
+**How it works**: Testmon tracks which code each test depends on. When you change a file, it only runs tests that touch that code.
+
+### Test Configuration (YAML-First)
+
+Test settings come from `config/test.yaml` (NOT .env):
+
+```yaml
+# config/test.yaml
+monitoring:
+  guardian_interval_seconds: 1  # Fast for tests
+  
+worker:
+  concurrency: 1  # Single worker for predictability
+  
+features:
+  enable_mcp_tools: false  # Disable external tools
+```
+
+Only secrets/URLs in `.env.test`:
+```bash
+DATABASE_URL_TEST=postgresql://...
+LLM_API_KEY=test-key-mock
+OMOIOS_ENV=test
+```
+
+---
+
+## Configuration Management (ENFORCED)
+
+### YAML for Settings, .env for Secrets
+
+**Rule**: Application settings go in YAML, secrets go in .env files.
+
+#### ✅ YAML Files (Version Controlled)
+
+```yaml
+# config/base.yaml
+task_queue:
+  age_ceiling: 3600      # Business setting
+  w_p: 0.45             # Algorithm weight
+
+monitoring:
+  guardian_interval_seconds: 60
+  auto_steering_enabled: false
+
+auth:
+  jwt_algorithm: HS256  # Algorithm choice (not secret)
+  access_token_expire_minutes: 15
+```
+
+#### ✅ .env Files (Gitignored - Secrets Only)
+
+```bash
+# .env (NEVER commit to git)
+DATABASE_URL=postgresql://user:password@host/db
+LLM_API_KEY=sk-ant-...
+AUTH_JWT_SECRET_KEY=super-secret-key
+GITHUB_TOKEN=ghp_...
+```
+
+### Configuration Pattern (OmoiBaseSettings)
+
+Every configuration section MUST use this pattern:
+
+```python
+from omoi_os.config import OmoiBaseSettings
+from pydantic_settings import SettingsConfigDict
+from functools import lru_cache
+
+
+class FeatureSettings(OmoiBaseSettings):
+    """Feature configuration from YAML."""
+    
+    yaml_section = "feature"  # Section in config/*.yaml
+    model_config = SettingsConfigDict(
+        env_prefix="FEATURE_",  # Environment variable prefix
+        extra="ignore"
+    )
+    
+    # Settings (loaded from YAML, can be overridden by env vars)
+    setting_name: int = 60
+    another_setting: str = "default"
+    
+    # Secrets (MUST come from environment variables)
+    api_key: Optional[str] = None  # From FEATURE_API_KEY env var
+
+
+@lru_cache(maxsize=1)
+def load_feature_settings() -> FeatureSettings:
+    """Load feature settings (cached)."""
+    return FeatureSettings()
+```
+
+### Configuration Checklist (Before Adding Settings)
+
+- [ ] Is this a secret/password/token? → Use .env ONLY
+- [ ] Is this a business setting? → Use YAML
+- [ ] Does a Settings class exist? → Use it
+- [ ] Need new Settings class? → Extend OmoiBaseSettings
+- [ ] Add to config/base.yaml with default value
+- [ ] Add to config/test.yaml with test value (if different)
+- [ ] Register in CONFIG_REGISTRY (if exists)
+- [ ] Document in config/README.md
+- [ ] NEVER hardcode values in code
+
+### ❌ Configuration Anti-Patterns
+
+```python
+# ❌ WRONG: Hardcoded value
+def process_task():
+    timeout = 60  # Never hardcode!
+    
+
+# ❌ WRONG: Secret in YAML
+# config/base.yaml
+llm:
+  api_key: sk-ant-...  # NEVER put secrets in YAML!
+
+
+# ❌ WRONG: Setting in .env
+# .env
+TASK_QUEUE_AGE_CEILING=3600  # Settings belong in YAML!
+
+
+# ❌ WRONG: Custom env loading
+def get_env_files():  # Don't create custom loaders
+    return [".env"]
+
+
+# ✅ CORRECT: Use Settings class
+from omoi_os.config import load_feature_settings
+
+def process_task():
+    settings = load_feature_settings()
+    timeout = settings.timeout_seconds  # From YAML
+```
+
+---
 
 ## Migration Strategy
 
