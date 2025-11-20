@@ -22,6 +22,7 @@ try:
     import instructor
     from openai import AsyncOpenAI
     from pydantic import BaseModel, Field, model_validator
+    from instructor.cache import DiskCache
 except ImportError:
     print("❌ Missing dependencies. Install with:")
     print("   uv add instructor openai pydantic")
@@ -131,13 +132,13 @@ STATUS_NORMALIZATION_MAP = {
 def normalize_status(raw_status: Optional[str]) -> str:
     """
     Normalize any status string to allowed literal.
-    
+
     Args:
         raw_status: Raw status from LLM or document
-        
+
     Returns:
         Normalized status from ALLOWED_STATUSES
-        
+
     Examples:
         normalize_status("Completed") → "Implemented"
         normalize_status("WIP") → "Draft"
@@ -255,9 +256,11 @@ class DocumentOrganizer:
         )
 
         self.dry_run = dry_run
+        cache = DiskCache(directory=".instructor_cache")
         self.client = instructor.from_openai(
             AsyncOpenAI(api_key=self.api_key, base_url=self.base_url),
             mode=instructor.Mode.FIREWORKS_TOOLS,
+            cache=cache,
         )
         self.docs_dir = Path("docs")
 
@@ -301,10 +304,21 @@ Follow these standards:
 Categories:
 - workflows, services, frontend, monitoring, memory, agents, auth, integration, testing, configuration
 
-Naming:
+Naming Rules (IMPORTANT):
 - snake_case only (except SUMMARY files can be UPPERCASE)
 - Descriptive, not cryptic
 - No version numbers (use git history)
+- CONCISE: Do NOT add redundant suffixes like _requirements, _design, _guide
+  - The directory structure already indicates the type
+  - ✅ GOOD: docs/requirements/workflows/task_queue.md
+  - ❌ BAD: docs/requirements/workflows/task_queue_requirements.md (redundant!)
+  - ✅ GOOD: docs/design/services/memory_system.md
+  - ❌ BAD: docs/design/services/memory_system_design.md (redundant!)
+- ONLY add suffixes when they add meaningful context:
+  - ✅ migration_guide.md (clarifies it's a guide)
+  - ✅ auth_system_complete.md (clarifies completion status)
+  - ✅ phase5_handoff.md (clarifies handoff context)
+  - ❌ documentation_standards.md → just standards.md or doc_standards.md
 """
 
             analysis = await self.client.chat.completions.create(
