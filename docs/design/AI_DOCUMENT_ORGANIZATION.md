@@ -39,13 +39,18 @@ echo "OPENAI_API_KEY=sk-your-key-here" >> .env
 
 ## Usage
 
-### Basic Usage (Dry Run)
+### Basic Usage (Batch Processing - Fast!)
 
 ```bash
-# Analyze all documents (no changes)
-python scripts/organize_docs.py
+# Analyze all documents with parallel processing (default: 5 concurrent)
+just docs-organize
+
+# Use more workers for faster processing
+just docs-organize 10
 
 # Output shows:
+# - Configuration (model, concurrency)
+# - Progress bar for parallel analysis
 # - Current location
 # - Suggested location
 # - Document type and category
