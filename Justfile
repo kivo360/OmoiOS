@@ -315,28 +315,28 @@ docs-open:
      command -v xdg-open >/dev/null && xdg-open docs/README.md || \
      echo "Open docs/README.md in your editor"
 
-# Organize documentation with AI (dry-run)
+# Organize documentation with AI (batch processing, dry-run)
 [group('docs')]
-docs-organize:
-    {{python}} scripts/organize_docs.py --export reorganization_plan.md
+docs-organize concurrent="5":
+    {{python}} scripts/organize_docs_batch.py --concurrent {{concurrent}} --detailed --export reorganization_plan.md
     @echo ""
     @echo "📋 Review the plan: reorganization_plan.md"
     @echo "Then run: just docs-organize-apply"
-
-# Organize documentation with AI (batch, detailed report)
-[group('docs')]
-docs-organize-batch:
-    {{python}} scripts/organize_docs_batch.py --detailed --export reorganization_plan.md
 
 # Apply AI-suggested organization
 [group('docs')]
 docs-organize-apply:
     {{python}} scripts/organize_docs_batch.py --apply --detailed
 
-# Organize specific pattern
+# Organize specific pattern (batch)
 [group('docs')]
-docs-organize-pattern pattern:
-    {{python}} scripts/organize_docs.py --pattern "{{pattern}}"
+docs-organize-pattern pattern concurrent="5":
+    {{python}} scripts/organize_docs_batch.py --pattern "{{pattern}}" --concurrent {{concurrent}} --detailed
+
+# Organize single file (non-batch for quick test)
+[group('docs')]
+docs-organize-single file:
+    {{python}} scripts/organize_docs.py --pattern "{{file}}"
 
 # ============================================================================
 # Configuration
@@ -663,9 +663,10 @@ groups:
     @echo "  advanced   - Advanced operations"
     @echo ""
     @echo "AI-Powered Features:"
-    @echo "  just docs-organize        - AI-organize docs (dry-run)"
-    @echo "  just docs-organize-batch  - Batch AI organization"
-    @echo "  just docs-organize-apply  - Apply AI suggestions"
+    @echo "  just docs-organize              - AI-organize docs (batch, parallel)"
+    @echo "  just docs-organize 10           - Use 10 concurrent workers"
+    @echo "  just docs-organize-apply        - Apply AI suggestions"
+    @echo "  just docs-organize-pattern PATTERN - Organize specific files"
     @echo ""
     @echo "Use 'just --list' to see all commands"
 
