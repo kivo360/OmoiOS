@@ -21,7 +21,7 @@ from datetime import date
 try:
     import instructor
     from openai import AsyncOpenAI
-    from pydantic import BaseModel, Field
+    from pydantic import BaseModel, Field, model_validator
 except ImportError:
     print("❌ Missing dependencies. Install with:")
     print("   uv add instructor openai pydantic")
@@ -40,8 +40,124 @@ class Colors:
     NC = "\033[0m"
 
 
+# ============================================================================
+# Status Normalization (Complete, Exhaustive Map)
+# ============================================================================
+
+# Allowed status literals
+ALLOWED_STATUSES = {
+    "Draft",
+    "Review",
+    "Approved",
+    "Active",
+    "Implemented",
+    "Archived",
+}
+
+# Complete status normalization map
+# Handles LLM variations, human input, and legacy statuses
+STATUS_NORMALIZATION_MAP = {
+    # --- DRAFT equivalents ---
+    "Draft": "Draft",
+    "draft": "Draft",
+    "DRAFT": "Draft",
+    "Planning": "Draft",
+    "planning": "Draft",
+    "Ready to Start": "Draft",
+    "Ready to Plan": "Draft",
+    "Ready for Planning": "Draft",
+    "In Progress": "Draft",
+    "Work in Progress": "Draft",
+    "WIP": "Draft",
+    "Todo": "Draft",
+    "To Do": "Draft",
+    None: "Draft",  # missing = default
+    # --- REVIEW equivalents ---
+    "Review": "Review",
+    "review": "Review",
+    "REVIEW": "Review",
+    "Under Review": "Review",
+    "Needs Review": "Review",
+    "Pending Review": "Review",
+    "Peer Review": "Review",
+    "In Review": "Review",
+    # --- APPROVED equivalents ---
+    "Approved": "Approved",
+    "approved": "Approved",
+    "APPROVED": "Approved",
+    "Standard": "Approved",  # from DOCUMENTATION_STANDARDS
+    "Accepted": "Approved",
+    "Validated": "Approved",
+    "Finalized": "Approved",
+    # --- ACTIVE equivalents ---
+    "Active": "Active",
+    "active": "Active",
+    "ACTIVE": "Active",
+    "Current": "Active",
+    "Ongoing": "Active",
+    "READY": "Active",
+    "Ready": "Active",
+    "Live": "Active",
+    "In Use": "Active",
+    "Operational": "Active",
+    # --- IMPLEMENTED equivalents ---
+    "Implemented": "Implemented",
+    "implemented": "Implemented",
+    "IMPLEMENTED": "Implemented",
+    "Complete": "Implemented",
+    "Completed": "Implemented",  # critical for logs
+    "DONE": "Implemented",
+    "Done": "Implemented",
+    "done": "Implemented",
+    "Finished": "Implemented",
+    "Delivered": "Implemented",
+    "Shipped": "Implemented",
+    "Production-Ready": "Implemented",
+    "Deployed": "Implemented",
+    "Implementation Plan": "Implemented",
+    # --- ARCHIVED equivalents ---
+    "Archived": "Archived",
+    "archived": "Archived",
+    "ARCHIVED": "Archived",
+    "Deprecated": "Archived",
+    "Obsolete": "Archived",
+    "Retired": "Archived",
+    "Superseded": "Archived",
+    "Historical": "Archived",
+    "Old": "Archived",
+}
+
+
+def normalize_status(raw_status: Optional[str]) -> str:
+    """
+    Normalize any status string to allowed literal.
+    
+    Args:
+        raw_status: Raw status from LLM or document
+        
+    Returns:
+        Normalized status from ALLOWED_STATUSES
+        
+    Examples:
+        normalize_status("Completed") → "Implemented"
+        normalize_status("WIP") → "Draft"
+        normalize_status(None) → "Draft"
+    """
+    if raw_status is None:
+        return "Draft"
+
+    cleaned = raw_status.strip()
+    normalized = STATUS_NORMALIZATION_MAP.get(cleaned, cleaned)
+
+    # If still not in allowed set, default to Draft
+    if normalized not in ALLOWED_STATUSES:
+        return "Draft"
+
+    return normalized
+
+
 class DocumentAnalysis(BaseModel):
-    """AI analysis of a document."""
+    """AI analysis of a document with automatic status normalization."""
 
     document_type: Literal[
         "requirements",
@@ -94,6 +210,14 @@ class DocumentAnalysis(BaseModel):
         description="Brief explanation of the categorization decision"
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_status_field(cls, data):
+        """Normalize status before validation to handle LLM variations."""
+        if isinstance(data, dict) and "status" in data:
+            data["status"] = normalize_status(data["status"])
+        return data
+
 
 class DocumentOrganizer:
     """AI-powered document organizer using instructor + OpenAI."""
@@ -115,9 +239,7 @@ class DocumentOrganizer:
         """
         # Try Fireworks first, then OpenAI
         self.api_key = (
-            api_key
-            or os.getenv("FIREWORKS_API_KEY")
-            or os.getenv("OPENAI_API_KEY")
+            api_key or os.getenv("FIREWORKS_API_KEY") or os.getenv("OPENAI_API_KEY")
         )
         if not self.api_key:
             raise ValueError(
@@ -134,7 +256,8 @@ class DocumentOrganizer:
 
         self.dry_run = dry_run
         self.client = instructor.from_openai(
-            AsyncOpenAI(api_key=self.api_key, base_url=self.base_url)
+            AsyncOpenAI(api_key=self.api_key, base_url=self.base_url),
+            mode=instructor.Mode.FIREWORKS_TOOLS,
         )
         self.docs_dir = Path("docs")
 
@@ -195,7 +318,7 @@ Naming:
                     {"role": "user", "content": prompt},
                 ],
                 temperature=0.3,
-                max_tokens=2000,
+                max_tokens=4000,
             )
 
             return analysis

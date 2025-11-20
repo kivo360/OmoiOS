@@ -14,14 +14,20 @@ from datetime import date
 try:
     import instructor
     from openai import AsyncOpenAI
-    from pydantic import BaseModel, Field
-    from tqdm.asyncio import tqdm
+    from pydantic import BaseModel, Field, model_validator
+    from tqdm.asyncio import tqdm as tqdm_gather
 except ImportError:
     print("❌ Missing dependencies. Install with:")
     print("   uv add instructor openai pydantic tqdm")
     sys.exit(1)
 
-from organize_docs import DocumentAnalysis, DocumentOrganizer, Colors
+from organize_docs import (
+    DocumentAnalysis,
+    DocumentOrganizer,
+    Colors,
+    normalize_status,
+    STATUS_NORMALIZATION_MAP,
+)
 
 
 class BatchDocumentOrganizer(DocumentOrganizer):
@@ -48,11 +54,19 @@ class BatchDocumentOrganizer(DocumentOrganizer):
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
     
-    async def analyze_document_with_semaphore(self, file_path: Path) -> tuple[Path, DocumentAnalysis]:
-        """Analyze document with concurrency control."""
+    async def analyze_document_with_semaphore(
+        self, file_path: Path
+    ) -> tuple[Path, Optional[DocumentAnalysis]]:
+        """Analyze document with concurrency control and error handling."""
         async with self.semaphore:
-            analysis = await self.analyze_document(file_path)
-            return (file_path, analysis)
+            try:
+                analysis = await self.analyze_document(file_path)
+                return (file_path, analysis)
+            except Exception as e:
+                print(
+                    f"{Colors.RED}❌ Error analyzing {file_path.name}: {e}{Colors.NC}"
+                )
+                return (file_path, None)
     
     async def organize_all_batch(
         self,
@@ -60,9 +74,9 @@ class BatchDocumentOrganizer(DocumentOrganizer):
         skip_dirs: List[str] = None,
         show_progress: bool = True
     ) -> Dict[str, any]:
-        """Organize all documents in batch with progress bar."""
+        """Organize all documents in batch with fully parallel processing."""
         skip_dirs = skip_dirs or ["archive", "external", ".git"]
-        
+
         # Find all files
         files = []
         for file_path in self.docs_dir.rglob(pattern):
@@ -71,25 +85,41 @@ class BatchDocumentOrganizer(DocumentOrganizer):
             if file_path.name == "README.md":
                 continue
             files.append(file_path)
-        
+
         print(f"{Colors.BLUE}🔍 Found {len(files)} documents to analyze{Colors.NC}")
-        print(f"{Colors.BLUE}🚀 Using {self.max_concurrent} concurrent workers{Colors.NC}\n")
-        
-        # Analyze all documents concurrently with progress bar
+        print(f"{Colors.BLUE}🚀 Processing {self.max_concurrent} documents in parallel{Colors.NC}\n")
+
+        # Create all tasks for fully parallel execution
+        tasks = [self.analyze_document_with_semaphore(f) for f in files]
+
+        # Execute all tasks in parallel with progress bar
         if show_progress:
-            tasks = [self.analyze_document_with_semaphore(f) for f in files]
-            results = await tqdm.gather(*tasks, desc="Analyzing documents")
-        else:
-            results = await asyncio.gather(
-                *[self.analyze_document_with_semaphore(f) for f in files]
+            # Use tqdm.asyncio.tqdm.gather for progress tracking
+            results = await tqdm_gather(
+                *tasks,
+                desc="Analyzing documents",
+                total=len(files),
+                unit="doc",
             )
+        else:
+            # Pure asyncio.gather for maximum speed
+            results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        # Process results
+        # Process results (handle exceptions from gather)
         changes = []
-        for file_path, analysis in results:
+        errors = []
+        
+        for result in results:
+            # Check if result is an exception
+            if isinstance(result, Exception):
+                errors.append(result)
+                continue
+            
+            file_path, analysis = result
+            
             if analysis:
                 new_path = self.calculate_new_path(analysis, file_path)
-                
+
                 change = {
                     "file": file_path,
                     "analysis": analysis,
@@ -100,23 +130,35 @@ class BatchDocumentOrganizer(DocumentOrganizer):
                     "should_archive": analysis.should_archive,
                     "actions": [],
                 }
-                
+
                 # Build action list
                 if change["should_archive"]:
                     archive_path = self.docs_dir / "archive" / file_path.name
                     change["new_path"] = archive_path
-                    change["actions"].append(f"Archive to {archive_path.relative_to(self.docs_dir)}")
-                
+                    change["actions"].append(
+                        f"Archive to {archive_path.relative_to(self.docs_dir)}"
+                    )
+
                 if change["needs_move"] and not change["should_archive"]:
-                    change["actions"].append(f"Move to {new_path.relative_to(self.docs_dir)}")
-                
+                    change["actions"].append(
+                        f"Move to {new_path.relative_to(self.docs_dir)}"
+                    )
+
                 if change["needs_metadata"]:
-                    change["actions"].append(f"Add metadata: {', '.join(analysis.missing_metadata)}")
-                
+                    change["actions"].append(
+                        f"Add metadata: {', '.join(analysis.missing_metadata)}"
+                    )
+
                 if not change["actions"]:
                     change["actions"].append("No changes needed")
-                
+
                 changes.append(change)
+        
+        # Report errors if any
+        if errors:
+            print(f"\n{Colors.YELLOW}⚠️  {len(errors)} documents failed to analyze{Colors.NC}")
+            for error in errors[:5]:  # Show first 5
+                print(f"  {error}")
         
         self.changes = changes
         return self.generate_summary()
@@ -234,12 +276,19 @@ async def main():
         dry_run=not args.apply,
         max_concurrent=args.concurrent,
     )
-    
+
+    # Print configuration
+    print(f"{Colors.CYAN}🔧 Configuration:{Colors.NC}")
+    print(f"  Model: {organizer.model}")
+    print(f"  Base URL: {organizer.base_url}")
+    print(f"  Concurrency: {args.concurrent}")
+    print(f"  Mode: {'APPLY' if args.apply else 'DRY-RUN'}")
+    print()
+
     try:
-        # Run batch organization
+        # Run batch organization with full parallelization
         await organizer.organize_all_batch(
-            pattern=args.pattern,
-            show_progress=True
+            pattern=args.pattern, show_progress=True
         )
         
         # Print reports
