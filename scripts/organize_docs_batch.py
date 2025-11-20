@@ -248,8 +248,8 @@ async def main():
     parser.add_argument(
         "--concurrent",
         type=int,
-        default=15,
-        help="Maximum concurrent API calls (default: 15)",
+        default=50,
+        help="Maximum concurrent API calls (default: 50, max ~100 for Fireworks AI)",
     )
 
     parser.add_argument(

@@ -317,7 +317,7 @@ docs-open:
 
 # Organize documentation with AI (batch processing, dry-run)
 [group('docs')]
-docs-organize concurrent="25":
+docs-organize concurrent="50":
     {{python}} scripts/organize_docs_batch.py --concurrent {{concurrent}} --detailed --export reorganization_plan.md
     @echo ""
     @echo "📋 Review the plan: reorganization_plan.md"
@@ -325,8 +325,8 @@ docs-organize concurrent="25":
 
 # Apply AI-suggested organization
 [group('docs')]
-docs-organize-apply:
-    {{python}} scripts/organize_docs_batch.py --apply --detailed
+docs-organize-apply concurrent="50":
+    {{python}} scripts/organize_docs_batch.py --apply --detailed --concurrent {{concurrent}}
 
 # Organize specific pattern (batch)
 [group('docs')]
