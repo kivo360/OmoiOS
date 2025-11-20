@@ -28,11 +28,11 @@ EOF
 ### 3. Run Organization
 
 ```bash
-# Dry-run with parallel batch processing (default: 5 concurrent)
+# Dry-run with parallel batch processing (default: 50 concurrent)
 just docs-organize
 
-# Use more concurrent workers for faster processing
-just docs-organize 10
+# Use maximum concurrent workers for fastest processing
+just docs-organize 100
 
 # Apply changes
 just docs-organize-apply
@@ -86,9 +86,10 @@ docs/
 
 ### Basic (Now Uses Batch Processing!)
 ```bash
-just docs-organize               # Analyze all docs (5 concurrent workers)
-just docs-organize 10            # Use 10 concurrent workers (faster!)
-just docs-organize-apply         # Apply AI suggestions
+just docs-organize               # Analyze all docs (50 concurrent workers)
+just docs-organize 100           # Use 100 concurrent workers (max speed!)
+just docs-organize-apply         # Apply AI suggestions (50 concurrent)
+just docs-organize-apply 100     # Apply with 100 workers
 ```
 
 ### Advanced
@@ -96,14 +97,14 @@ just docs-organize-apply         # Apply AI suggestions
 # Specific pattern (batch)
 just docs-organize-pattern "PHASE*.md"
 
-# Specific pattern with more workers
-just docs-organize-pattern "PHASE*.md" 10
+# Specific pattern with max workers
+just docs-organize-pattern "PHASE*.md" 100
 
 # Single file (non-batch, for testing)
 just docs-organize-single "AUTH_SYSTEM.md"
 
 # Direct script usage
-python scripts/organize_docs_batch.py --concurrent 10 --detailed
+python scripts/organize_docs_batch.py --concurrent 100 --detailed
 python scripts/organize_docs.py --help
 ```
 

@@ -259,11 +259,18 @@ python scripts/organize_docs.py --model gpt-4-turbo --base-url https://api.opena
 ### Concurrency Settings
 
 ```python
-# Batch organizer (faster)
+# Batch organizer with high concurrency (Fireworks AI can handle it!)
 organizer = BatchDocumentOrganizer(
-    max_concurrent=10,  # More concurrent = faster, but costs more
+    max_concurrent=50,  # Default: 50 concurrent requests
+    # Can scale up to 100 for Fireworks AI (100 RPS limit)
 )
 ```
+
+**Fireworks AI Rate Limits**:
+- **100 requests per second** supported
+- **Default: 50 concurrent** (conservative, safe)
+- **Max: 100 concurrent** for maximum speed
+- **No significant cost difference** (usage-based pricing)
 
 ### Cost Estimation
 

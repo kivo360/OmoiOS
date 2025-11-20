@@ -39,7 +39,7 @@ class BatchDocumentOrganizer(DocumentOrganizer):
         base_url: str = None,
         model: str = None,
         dry_run: bool = True,
-        max_concurrent: int = 5,
+        max_concurrent: int = 50,
     ):
         """Initialize batch organizer.
 
@@ -48,7 +48,7 @@ class BatchDocumentOrganizer(DocumentOrganizer):
             base_url: Base URL for API
             model: Model to use
             dry_run: If True, only show changes
-            max_concurrent: Maximum concurrent API calls
+            max_concurrent: Maximum concurrent API calls (default: 50)
         """
         super().__init__(api_key, base_url, model, dry_run)
         self.max_concurrent = max_concurrent
