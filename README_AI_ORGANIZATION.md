@@ -12,11 +12,17 @@ uv add instructor openai pydantic tqdm
 ### 2. Set API Key
 
 ```bash
-# Option A: Environment variable
+# Option A: Fireworks AI (recommended - 100x cheaper!)
+export FIREWORKS_API_KEY=your-fireworks-key-here
+
+# Option B: OpenAI
 export OPENAI_API_KEY=sk-your-key-here
 
-# Option B: Add to .env
-echo "OPENAI_API_KEY=sk-your-key-here" >> .env
+# Option C: Add to .env
+cat >> .env << 'EOF'
+FIREWORKS_API_KEY=your-fireworks-key-here
+FIREWORKS_MODEL=accounts/fireworks/models/gpt-oss-120b
+EOF
 ```
 
 ### 3. Run Organization
@@ -98,8 +104,13 @@ python scripts/organize_docs_batch.py --concurrent 10 --detailed
 
 ## Cost
 
-**Per document**: ~$0.003 (GPT-4-Turbo) or ~$0.02 (GPT-4)
-**For 100 docs**: ~$0.30 (GPT-4-Turbo) or ~$2.00 (GPT-4)
+| Provider | Cost/Doc | 100 Docs |
+|----------|----------|----------|
+| **Fireworks AI** (default) | ~$0.0002 | ~$0.02 |
+| OpenAI GPT-3.5 | ~$0.003 | ~$0.30 |
+| OpenAI GPT-4 | ~$0.02 | ~$2.00 |
+
+**Using Fireworks AI by default** - 100x cheaper than OpenAI!
 
 ---
 

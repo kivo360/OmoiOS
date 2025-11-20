@@ -222,15 +222,34 @@ Standards:
 
 ### Model Selection
 
-Edit `scripts/organize_docs.py` to change model:
+The script defaults to Fireworks AI for cost-effectiveness:
 
-```python
-analysis = await self.client.chat.completions.create(
-    model="gpt-4o",  # or "gpt-4-turbo", "gpt-3.5-turbo"
-    response_model=DocumentAnalysis,
-    temperature=0.3,  # Low temperature for consistent categorization
-)
+```bash
+# Default (Fireworks AI)
+FIREWORKS_API_KEY=your-key
+FIREWORKS_MODEL=accounts/fireworks/models/gpt-oss-120b
+
+# Or use OpenAI
+OPENAI_API_KEY=sk-your-key
+# Script will use gpt-4o by default if FIREWORKS not set
+
+# Or override via command line
+python scripts/organize_docs.py --model gpt-4-turbo --base-url https://api.openai.com/v1
 ```
+
+**Supported Providers**:
+- **Fireworks AI** (default) - Most cost-effective
+  - Model: `accounts/fireworks/models/gpt-oss-120b`
+  - Base URL: `https://api.fireworks.ai/inference/v1`
+  - Cost: ~$0.0002/doc (very cheap!)
+
+- **OpenAI**
+  - Model: `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo`
+  - Base URL: `https://api.openai.com/v1`
+  - Cost: ~$0.003-0.02/doc
+
+- **Any OpenAI-compatible API**
+  - Set `--base-url` and `--model` flags
 
 ### Concurrency Settings
 
@@ -243,14 +262,16 @@ organizer = BatchDocumentOrganizer(
 
 ### Cost Estimation
 
-**Per document**:
-- Tokens: ~1,500 input + 500 output = 2,000 total
-- Cost (GPT-4): ~$0.02 per document
-- Cost (GPT-4-Turbo): ~$0.003 per document
+**Per document** (~2,000 tokens total):
 
-**For 100 documents**:
-- GPT-4: ~$2.00
-- GPT-4-Turbo: ~$0.30
+| Provider | Model | Cost/Doc | 100 Docs |
+|----------|-------|----------|----------|
+| **Fireworks AI** (default) | gpt-oss-120b | ~$0.0002 | ~$0.02 |
+| OpenAI | GPT-3.5-Turbo | ~$0.003 | ~$0.30 |
+| OpenAI | GPT-4-Turbo | ~$0.01 | ~$1.00 |
+| OpenAI | GPT-4 | ~$0.02 | ~$2.00 |
+
+**Recommendation**: Use Fireworks AI (default) - 100x cheaper than OpenAI!
 
 ---
 

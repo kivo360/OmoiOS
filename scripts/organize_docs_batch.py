@@ -26,21 +26,25 @@ from organize_docs import DocumentAnalysis, DocumentOrganizer, Colors
 
 class BatchDocumentOrganizer(DocumentOrganizer):
     """Batch organizer with progress tracking and concurrent processing."""
-    
+
     def __init__(
         self,
         api_key: str = None,
+        base_url: str = None,
+        model: str = None,
         dry_run: bool = True,
-        max_concurrent: int = 5
+        max_concurrent: int = 5,
     ):
         """Initialize batch organizer.
-        
+
         Args:
-            api_key: OpenAI API key
+            api_key: API key (Fireworks or OpenAI)
+            base_url: Base URL for API
+            model: Model to use
             dry_run: If True, only show changes
             max_concurrent: Maximum concurrent API calls
         """
-        super().__init__(api_key, dry_run)
+        super().__init__(api_key, base_url, model, dry_run)
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
     
@@ -201,17 +205,34 @@ async def main():
     )
     
     parser.add_argument(
-        "--detailed",
-        action="store_true",
-        help="Show detailed report with all changes"
+        "--detailed", action="store_true", help="Show detailed report with all changes"
     )
-    
+
+    parser.add_argument(
+        "--api-key",
+        help="API key (or use FIREWORKS_API_KEY/OPENAI_API_KEY env var)",
+    )
+
+    parser.add_argument(
+        "--base-url",
+        help="API base URL (default: Fireworks AI)",
+    )
+
+    parser.add_argument(
+        "--model",
+        default="accounts/fireworks/models/gpt-oss-120b",
+        help="Model to use (default: Fireworks gpt-oss-120b)",
+    )
+
     args = parser.parse_args()
-    
+
     # Create batch organizer
     organizer = BatchDocumentOrganizer(
+        api_key=args.api_key,
+        base_url=args.base_url,
+        model=args.model,
         dry_run=not args.apply,
-        max_concurrent=args.concurrent
+        max_concurrent=args.concurrent,
     )
     
     try:
