@@ -524,7 +524,10 @@ create-test category feature:
     
     mkdir -p tests/{{category}}
     
-    cat > tests/{{category}}/test_{{feature}}.py << 'EOF'
+    # Capitalize feature name for class (bash string manipulation)
+    feature_class=$(echo "{{feature}}" | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' | tr -d '_')
+    
+    cat > tests/{{category}}/test_{{feature}}.py << EOF
     """Test {{feature}}.
     
     Tests cover:
@@ -535,7 +538,7 @@ create-test category feature:
     import pytest
     
     
-    class Test{{feature | capitalize}}:
+    class Test${feature_class}:
         """Test suite for {{feature}}."""
         
         @pytest.mark.{{category}}
@@ -558,8 +561,11 @@ create-doc doc_type category feature:
     mkdir -p docs/{{doc_type}}/{{category}}
     filepath="docs/{{doc_type}}/{{category}}/{{feature}}.md"
     
-    cat > $filepath << 'EOF'
-    # {{feature | titlecase}}
+    # Capitalize feature name for title (bash string manipulation)
+    feature_title=$(echo "{{feature}}" | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
+    
+    cat > "$filepath" << EOF
+    # ${feature_title}
     
     **Created**: $(date +%Y-%m-%d)
     **Status**: Draft
@@ -577,11 +583,6 @@ create-doc doc_type category feature:
     EOF
     
     echo "✅ Created $filepath"
-
-# Run smoke test
-[group('advanced')]
-smoke:
-    {{python}} scripts/smoke_test.py
 
 # Interactive Python shell with OmoiOS context
 [group('advanced')]
