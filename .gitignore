@@ -1,4 +1,74 @@
+# External dependencies
 external/
+
+# Python
 **/__pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Environment variables (NEVER commit secrets)
+.env
+.env.local
+.env.*.local
+.env.test
+.env.staging
+.env.production
+
+# DO commit these:
+# .env.example
+# .env.test.example
+# config/*.yaml
+
+# Testing
+.testmondata
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.tox/
+.nox/
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Alembic
+alembic.ini.local
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+.temp/
+tmp/
+
+# Workspaces (test and runtime)
+workspaces/
+test_workspaces/
+.conversations/
+
+# MCP
+.mcp/
 

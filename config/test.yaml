@@ -1,0 +1,119 @@
+# config/test.yaml
+# Test environment configuration
+# Overrides base.yaml with fast intervals and disabled features for testing
+
+# All URLs and secrets come from .env.test (DATABASE_URL_TEST, REDIS_URL_TEST, etc.)
+# This file contains ONLY application settings, not secrets
+
+llm:
+  model: openhands/claude-sonnet-4-5-20250929
+  timeout_seconds: 30  # Short timeout for tests
+  max_retries: 1
+
+database:
+  pool_size: 5
+  max_overflow: 10
+  echo: false  # Disable SQL logging in tests
+
+redis:
+  connection_timeout: 5
+  max_connections: 10
+
+task_queue:
+  age_ceiling: 60  # Shorter for tests (vs 3600 in base)
+  sla_urgency_window: 10  # Fast SLA for tests
+  starvation_limit: 120
+  blocker_ceiling: 5
+  w_p: 0.45
+  w_a: 0.2
+  w_d: 0.15
+  w_b: 0.15
+  w_r: 0.05
+  sla_boost_multiplier: 1.25
+  starvation_floor_score: 0.6
+
+approval:
+  ticket_human_review: false
+  approval_timeout_seconds: 5  # Quick timeout for tests
+  on_reject: delete
+  require_evidence: false
+
+auth:
+  jwt_algorithm: HS256
+  access_token_expire_minutes: 5  # Short for tests
+  refresh_token_expire_days: 1
+  min_password_length: 6  # Less strict for tests
+  require_uppercase: false
+  require_lowercase: false
+  require_digit: false
+  require_special_char: false
+  max_login_attempts: 3
+  login_attempt_window_minutes: 5
+  session_expire_days: 1
+
+workspace:
+  root: ./test_workspaces
+  worker_dir: /tmp/omoi_os_test_workspaces
+  max_size_mb: 100
+  cleanup_after_hours: 1
+
+monitoring:
+  guardian_interval_seconds: 1  # Fast for tests
+  conductor_interval_seconds: 2
+  health_check_interval_seconds: 1
+  auto_steering_enabled: false  # Disable in tests
+  max_concurrent_analyses: 2
+  stale_threshold_seconds: 5  # Quick stale detection
+
+worker:
+  concurrency: 1  # Single worker for predictable tests
+  heartbeat_interval_seconds: 1
+  max_task_timeout_seconds: 60
+
+integrations:
+  enable_mcp_tools: false  # Disable external tools in tests
+  enable_github_sync: false
+  enable_webhooks: false
+
+embedding:
+  provider: local  # Always use local in tests
+  model_name: intfloat/multilingual-e5-large
+  chunk_size: 500  # Smaller chunks for faster tests
+  chunk_overlap: 50
+  batch_size: 16
+
+observability:
+  enable_tracing: false  # Disable in tests
+  log_level: WARNING  # Reduce noise in test output
+
+features:
+  enable_discoveries: true
+  enable_validation: true
+  enable_guardian: false  # Disable in most tests (too slow)
+  enable_memory: true
+  enable_collaboration: true
+  enable_budget_tracking: false
+
+phases:
+  enable_gates: true
+  strict_transitions: false  # More lenient in tests
+  require_artifacts: false
+
+validation:
+  timeout_seconds: 30
+  max_retries: 1
+  require_human_review: false
+
+cost_tracking:
+  enable_tracking: false  # Disable in tests
+  enable_alerts: false
+
+# Test-specific settings
+testing:
+  strict_mode: true
+  fail_fast: false
+  use_fakeredis: true
+  cleanup_after_test: true
+  mock_llm_calls: true
+  mock_external_apis: true
+
