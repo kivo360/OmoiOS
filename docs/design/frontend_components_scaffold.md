@@ -10,34 +10,99 @@
 
 ### `src/components/shared/StatusBadge.tsx`
 
-Displays ticket/task status with appropriate coloring.
+Displays ticket/task status with appropriate coloring, animations, and theme support.
 
 ```tsx
+"use client"
+
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useMemo } from "react"
+import { motion } from "framer-motion"
 
 type StatusType = "backlog" | "todo" | "in_progress" | "done" | "canceled"
 
 interface StatusBadgeProps {
   status: string
   className?: string
+  showIcon?: boolean
+  animated?: boolean
 }
 
-const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  backlog: { label: "Backlog", variant: "outline" },
-  todo: { label: "To Do", variant: "secondary" },
-  in_progress: { label: "In Progress", variant: "default" },
-  done: { label: "Done", variant: "secondary" },
-  canceled: { label: "Canceled", variant: "destructive" },
-}
+const STATUS_CONFIG = {
+  backlog: { 
+    label: "Backlog", 
+    variant: "outline" as const,
+    color: "text-slate-600 dark:text-slate-400",
+    bg: "bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700",
+    icon: "○"
+  },
+  todo: { 
+    label: "To Do", 
+    variant: "secondary" as const,
+    color: "text-blue-600 dark:text-blue-400",
+    bg: "bg-blue-100 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700",
+    icon: "◐"
+  },
+  in_progress: { 
+    label: "In Progress", 
+    variant: "default" as const,
+    color: "text-amber-600 dark:text-amber-400",
+    bg: "bg-amber-100 dark:bg-amber-900/30 border-amber-300 dark:border-amber-700",
+    icon: "◑"
+  },
+  done: { 
+    label: "Done", 
+    variant: "secondary" as const,
+    color: "text-green-600 dark:text-green-400",
+    bg: "bg-green-100 dark:bg-green-900/30 border-green-300 dark:border-green-700",
+    icon: "●"
+  },
+  canceled: { 
+    label: "Canceled", 
+    variant: "destructive" as const,
+    color: "text-red-600 dark:text-red-400",
+    bg: "bg-red-100 dark:bg-red-900/30 border-red-300 dark:border-red-700",
+    icon: "✕"
+  },
+} as const
 
-export function StatusBadge({ status, className }: StatusBadgeProps) {
-  const config = statusMap[status.toLowerCase()] || { label: status, variant: "outline" }
+export function StatusBadge({ status, className, showIcon = false, animated = false }: StatusBadgeProps) {
+  const config = useMemo(() => {
+    const normalizedStatus = status.toLowerCase()
+    return STATUS_CONFIG[normalizedStatus as StatusType] || {
+      label: status,
+      variant: "outline" as const,
+      color: "text-muted-foreground",
+      bg: "bg-muted border-border",
+      icon: "•"
+    }
+  }, [status])
+  
+  const BadgeComponent = animated ? motion.div : "div"
   
   return (
-    <Badge variant={config.variant} className={cn("capitalize", className)}>
+    <BadgeComponent
+      {...(animated && {
+        whileHover: { scale: 1.05 },
+        whileTap: { scale: 0.95 },
+      })}
+    >
+      <Badge 
+        variant={config.variant} 
+        className={cn(
+          "capitalize font-medium transition-all duration-200",
+          config.color,
+          config.bg,
+          "border shadow-sm",
+          "hover:shadow-md",
+          className
+        )}
+      >
+        {showIcon && <span className="mr-1.5">{config.icon}</span>}
       {config.label}
     </Badge>
+    </BadgeComponent>
   )
 }
 ```
@@ -73,7 +138,7 @@ export function PriorityIcon({ priority, className }: PriorityIconProps) {
 
 ### `src/components/shared/NotificationCenter.tsx`
 
-Notification dropdown.
+Real-time notification dropdown with WebSocket updates and dynamic state management.
 
 ```tsx
 "use client"
@@ -90,45 +155,142 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
+import { useNotifications } from "@/hooks/useNotifications"
+import { useWebSocketSubscription } from "@/hooks/useWebSocket"
+import { formatDistanceToNow } from "date-fns"
+import { motion, AnimatePresence } from "framer-motion"
+import { cn } from "@/lib/utils"
 
 export function NotificationCenter() {
-  // Mock notifications
-  const notifications = [
-    { id: 1, title: "Task Failed", description: "Agent X failed task Y", time: "2m ago", unread: true },
-    { id: 2, title: "Project Approved", description: "Project Z is ready", time: "1h ago", unread: false },
-  ]
+  const { 
+    data: notifications = [], 
+    markAsRead, 
+    markAllAsRead,
+    isLoading 
+  } = useNotifications()
+  
+  // Subscribe to real-time notification updates
+  useWebSocketSubscription({
+    eventType: "notification.new",
+    onMessage: (data) => {
+      // React Query will automatically refetch via WebSocket handler
+    },
+  })
+
   const unreadCount = notifications.filter(n => n.unread).length
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="relative hover:bg-accent/50 transition-all duration-200"
+        >
           <Bell className="h-5 w-5" />
+          <AnimatePresence>
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-600" />
-          )}
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0 }}
+                className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-gradient-to-br from-red-500 to-red-600 flex items-center justify-center shadow-lg"
+              >
+                <span className="text-[10px] font-bold text-white">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              </motion.span>
+            )}
+          </AnimatePresence>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-80" align="end">
-        <DropdownMenuLabel className="flex justify-between">
-          Notifications
-          {unreadCount > 0 && <Badge variant="secondary">{unreadCount} new</Badge>}
+      
+      <DropdownMenuContent 
+        className={cn(
+          "w-80 sm:w-96 shadow-xl border-border/50 backdrop-blur-sm",
+          "bg-background/95 supports-[backdrop-filter]:bg-background/80"
+        )} 
+        align="end"
+        sideOffset={8}
+      >
+        <DropdownMenuLabel className="flex justify-between items-center py-3 px-4 border-b">
+          <span className="font-semibold text-base">Notifications</span>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <>
+                <Badge 
+                  variant="secondary" 
+                  className="bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                >
+                  {unreadCount} new
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={markAllAsRead}
+                  className="h-7 text-xs hover:bg-primary/10"
+                >
+                  Mark all read
+                </Button>
+              </>
+            )}
+          </div>
         </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        <ScrollArea className="h-[300px]">
-          {notifications.map((notification) => (
-            <DropdownMenuItem key={notification.id} className="flex flex-col items-start p-3 cursor-pointer">
-              <div className="flex w-full justify-between items-start mb-1">
-                <span className={`font-medium ${notification.unread ? "text-foreground" : "text-muted-foreground"}`}>
+        
+        <ScrollArea className="h-[400px]">
+          <AnimatePresence mode="popLayout">
+            {notifications.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-col items-center justify-center py-12 text-muted-foreground"
+              >
+                <Bell className="h-12 w-12 mb-3 opacity-20" />
+                <p className="text-sm">No notifications</p>
+              </motion.div>
+            ) : (
+              notifications.map((notification, index) => (
+                <motion.div
+                  key={notification.id}
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <DropdownMenuItem 
+                    className={cn(
+                      "flex flex-col items-start p-4 cursor-pointer transition-all duration-200",
+                      "hover:bg-accent/50 focus:bg-accent/50",
+                      "border-b border-border/30 last:border-0",
+                      notification.unread && "bg-primary/5 hover:bg-primary/10"
+                    )}
+                    onClick={() => markAsRead(notification.id)}
+                  >
+                    <div className="flex w-full justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        {notification.unread && (
+                          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+                        )}
+                        <span className={cn(
+                          "font-medium text-sm",
+                          notification.unread ? "text-foreground" : "text-muted-foreground"
+                        )}>
                   {notification.title}
                 </span>
-                <span className="text-xs text-muted-foreground">{notification.time}</span>
               </div>
-              <p className="text-xs text-muted-foreground line-clamp-2">
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                        {formatDistanceToNow(new Date(notification.time), { addSuffix: true })}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 w-full">
                 {notification.description}
               </p>
             </DropdownMenuItem>
-          ))}
+                </motion.div>
+              ))
+            )}
+          </AnimatePresence>
         </ScrollArea>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -336,7 +498,7 @@ export function TicketCard({ ticket }: TicketCardProps) {
 
 ### `src/components/kanban/BoardColumn.tsx`
 
-Droppable column container.
+Droppable column container with Zustand state management, animations, and responsive design.
 
 ```tsx
 "use client"
@@ -348,54 +510,142 @@ import { Button } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { TicketCard } from "./TicketCard"
 import { cn } from "@/lib/utils"
+import { motion, AnimatePresence } from "framer-motion"
+import { useKanbanStore } from "@/stores/kanbanStore"
 
 interface BoardColumnProps {
   id: string
   title: string
   tickets: any[] 
   onAddTicket?: () => void
+  color?: "backlog" | "todo" | "in_progress" | "done"
 }
 
-export function BoardColumn({ id, title, tickets, onAddTicket }: BoardColumnProps) {
-  const { setNodeRef, isOver } = useDroppable({
-    id: id,
-  })
+const COLUMN_COLORS = {
+  backlog: "from-slate-500/10 to-slate-600/10 border-slate-500/30 hover:border-slate-500/50",
+  todo: "from-blue-500/10 to-blue-600/10 border-blue-500/30 hover:border-blue-500/50",
+  in_progress: "from-amber-500/10 to-amber-600/10 border-amber-500/30 hover:border-amber-500/50",
+  done: "from-green-500/10 to-green-600/10 border-green-500/30 hover:border-green-500/50",
+}
+
+export function BoardColumn({ id, title, tickets, onAddTicket, color }: BoardColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  const hoveredColumn = useKanbanStore((state) => state.hoveredColumn)
+
+  const columnColorClass = color ? COLUMN_COLORS[color] : "from-muted/50 to-muted border-border hover:border-border"
 
   return (
-    <div className="flex flex-col h-full w-80 min-w-[20rem] bg-muted/50 rounded-lg border p-2">
-      <div className="flex items-center justify-between p-2 mb-2">
-        <h3 className="font-semibold text-sm flex items-center gap-2">
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      className={cn(
+        "flex flex-col h-full",
+        // Responsive widths
+        "w-full sm:w-80 md:w-[22rem] lg:w-80 xl:w-96",
+        "min-w-[18rem] sm:min-w-[20rem]",
+        // Modern styling with gradient
+        "bg-gradient-to-br rounded-xl border-2 p-3 sm:p-4",
+        "shadow-sm hover:shadow-lg transition-all duration-300",
+        columnColorClass,
+        hoveredColumn === id && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background"
+      )}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-2 sm:p-3 mb-3 rounded-lg bg-background/40 backdrop-blur-sm">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <h3 className="font-semibold text-sm sm:text-base tracking-tight">
           {title}
-          <Badge variant="secondary" className="text-xs px-2 py-0 h-5">
+          </h3>
+          <Badge 
+            variant="secondary" 
+            className={cn(
+              "text-xs px-2.5 py-0.5 h-5 min-w-[2.5rem] justify-center tabular-nums",
+              "bg-background/80 backdrop-blur-sm shadow-sm",
+              "transition-all duration-200 hover:scale-110"
+            )}
+          >
             {tickets.length}
           </Badge>
-        </h3>
-        <Button variant="ghost" size="icon" className="h-6 w-6" onClick={onAddTicket}>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className={cn(
+            "h-7 w-7 sm:h-8 sm:w-8 rounded-full",
+            "hover:bg-primary/10 hover:text-primary hover:scale-110",
+            "transition-all duration-200 shadow-sm"
+          )}
+          onClick={onAddTicket}
+          aria-label={`Add ticket to ${title}`}
+        >
           <Plus className="h-4 w-4" />
         </Button>
       </div>
       
+      {/* Drop Zone */}
       <div 
         ref={setNodeRef} 
         className={cn(
-          "flex-1 rounded-md transition-colors",
-          isOver && "bg-accent/50"
+          "flex-1 rounded-lg transition-all duration-200",
+          "min-h-[10rem]",
+          isOver && "bg-primary/10 ring-2 ring-primary/50 ring-offset-2 ring-offset-background scale-[1.02]"
         )}
       >
-        <ScrollArea className="h-[calc(100vh-12rem)]">
-          <div className="flex flex-col gap-3 p-1">
+        <ScrollArea className="h-[calc(100vh-16rem)] sm:h-[calc(100vh-14rem)]">
+          <motion.div 
+            className="flex flex-col gap-3 p-1 sm:p-2"
+            layout
+          >
+            <AnimatePresence mode="popLayout">
             {tickets.map((ticket) => (
-              <TicketCard key={ticket.id} ticket={ticket} />
-            ))}
+                <motion.div
+                  key={ticket.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8, x: -100 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <TicketCard ticket={ticket} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            
             {tickets.length === 0 && (
-              <div className="h-24 flex items-center justify-center border-2 border-dashed rounded-md border-muted-foreground/25">
-                <span className="text-xs text-muted-foreground">No tickets</span>
-              </div>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className={cn(
+                  "h-32 sm:h-40 flex items-center justify-center",
+                  "border-2 border-dashed rounded-lg",
+                  "border-muted-foreground/20 bg-background/30",
+                  "backdrop-blur-sm transition-all duration-200",
+                  isOver && "border-primary/50 bg-primary/5"
+                )}
+              >
+                <div className="text-center space-y-2">
+                  <p className="text-xs sm:text-sm text-muted-foreground font-medium">
+                    {isOver ? "Drop here" : "No tickets"}
+                  </p>
+                  {!isOver && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={onAddTicket}
+                      className="text-xs hover:bg-primary/10"
+                    >
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add ticket
+                    </Button>
             )}
           </div>
+              </motion.div>
+            )}
+          </motion.div>
         </ScrollArea>
       </div>
-    </div>
+    </motion.div>
   )
 }
 ```
@@ -406,70 +656,178 @@ export function BoardColumn({ id, title, tickets, onAddTicket }: BoardColumnProp
 
 ### `src/components/project/ProjectCard.tsx`
 
-Card view for project list.
+Dynamic project card with React Query integration, loading states, and enhanced Tailwind styling.
 
 ```tsx
+"use client"
+
+import { useProject } from "@/hooks/useProjects"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Button } from "@/components/ui/button"
-import { ArrowRight, Users } from "lucide-react"
-
-interface Project {
-  id: string
-  name: string
-  description: string
-  status: "active" | "archived" | "paused"
-  progress: number
-  ticketCount: number
-  agentCount: number
-}
+import { Skeleton } from "@/components/ui/skeleton"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowRight, Users, AlertCircle, RefreshCw, FolderKanban } from "lucide-react"
+import { motion } from "framer-motion"
+import { cn } from "@/lib/utils"
 
 interface ProjectCardProps {
-  project: Project
+  projectId: string
 }
 
-export function ProjectCard({ project }: ProjectCardProps) {
+export function ProjectCard({ projectId }: ProjectCardProps) {
+  const { data: project, isLoading, isError, refetch } = useProject(projectId)
+
+  if (isLoading) {
   return (
     <Card className="hover:shadow-md transition-shadow">
-      <CardHeader className="pb-3">
+        <CardHeader className="pb-3 space-y-3">
         <div className="flex justify-between items-start">
-          <CardTitle className="text-lg font-bold">{project.name}</CardTitle>
-          <Badge variant={project.status === "active" ? "default" : "secondary"}>
+            <Skeleton className="h-6 w-3/4" />
+            <Skeleton className="h-5 w-16" />
+          </div>
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+        </CardHeader>
+        <CardContent className="pb-3 space-y-4">
+          <Skeleton className="h-2 w-full" />
+          <div className="flex gap-4">
+            <Skeleton className="h-8 w-20" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+        </CardContent>
+        <CardFooter>
+          <Skeleton className="h-10 w-full" />
+        </CardFooter>
+      </Card>
+    )
+  }
+
+  if (isError) {
+    return (
+      <Card className="border-destructive/50 shadow-md">
+        <CardContent className="pt-6">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between">
+              <span>Failed to load project</span>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refetch()}
+                className="ml-2 hover:bg-destructive/10"
+              >
+                <RefreshCw className="h-3 w-3 mr-2" />
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!project) return null
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3 }}
+      whileHover={{ y: -4 }}
+      className="h-full"
+    >
+      <Card className={cn(
+        "group h-full flex flex-col",
+        "hover:shadow-xl hover:shadow-primary/5 transition-all duration-300",
+        "border-border/40 hover:border-primary/50",
+        "bg-gradient-to-br from-background to-muted/20"
+      )}>
+        <CardHeader className="pb-3 space-y-3">
+          <div className="flex justify-between items-start gap-2">
+            <div className="flex items-start gap-2">
+              <div className="mt-0.5 p-2 rounded-lg bg-primary/10 text-primary">
+                <FolderKanban className="h-4 w-4" />
+              </div>
+              <CardTitle className="text-lg font-bold group-hover:text-primary transition-colors leading-tight">
+                {project.name}
+              </CardTitle>
+            </div>
+            <Badge 
+              variant={project.status === "active" ? "default" : "secondary"}
+              className={cn(
+                "transition-all shrink-0",
+                project.status === "active" && "bg-green-500 hover:bg-green-600 shadow-sm"
+              )}
+            >
             {project.status}
           </Badge>
         </div>
-        <CardDescription className="line-clamp-2 h-10">
+          <CardDescription className="line-clamp-2 min-h-[2.5rem] text-muted-foreground/80">
           {project.description}
         </CardDescription>
       </CardHeader>
-      <CardContent className="pb-3">
+        
+        <CardContent className="pb-3 space-y-4 flex-1">
         <div className="space-y-2">
-          <div className="flex justify-between text-xs text-muted-foreground">
+            <div className="flex justify-between text-xs text-muted-foreground font-medium">
             <span>Progress</span>
-            <span>{Math.round(project.progress * 100)}%</span>
+              <span className="font-semibold text-foreground tabular-nums">
+                {Math.round(project.progress * 100)}%
+              </span>
           </div>
-          <Progress value={project.progress * 100} className="h-2" />
+            <div className="relative">
+              <Progress 
+                value={project.progress * 100} 
+                className="h-2 transition-all duration-500"
+              />
+              <div className="absolute inset-0 rounded-full bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
         </div>
-        <div className="mt-4 flex gap-4 text-sm text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <span className="font-semibold text-foreground">{project.ticketCount}</span> Tickets
+          </div>
+          
+          <div className="flex gap-3 text-sm">
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg",
+              "bg-primary/5 hover:bg-primary/10",
+              "transition-colors group/stat cursor-default"
+            )}>
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-primary/10 group-hover/stat:bg-primary/20 transition-colors">
+                <span className="font-bold text-primary text-xs tabular-nums">{project.ticketCount}</span>
+              </div>
+              <span className="text-xs font-medium text-muted-foreground">Tickets</span>
+            </div>
+            <div className={cn(
+              "flex items-center gap-2 px-3 py-2 rounded-lg",
+              "bg-blue-500/5 hover:bg-blue-500/10",
+              "transition-colors group/stat cursor-default"
+            )}>
+              <div className="flex items-center justify-center w-7 h-7 rounded-full bg-blue-500/10 group-hover/stat:bg-blue-500/20 transition-colors">
+                <Users className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
           </div>
           <div className="flex items-center gap-1">
-            <Users className="h-3 w-3" />
-            <span className="font-semibold text-foreground">{project.agentCount}</span> Agents
+                <span className="text-xs font-bold text-foreground tabular-nums">{project.agentCount}</span>
+                <span className="text-xs font-medium text-muted-foreground">Agents</span>
+              </div>
           </div>
         </div>
       </CardContent>
-      <CardFooter>
-        <Button asChild className="w-full" variant="outline">
-          <Link href={`/projects/${project.id}/board`}>
-            Open Project <ArrowRight className="ml-2 h-4 w-4" />
+        
+        <CardFooter className="pt-3">
+          <Button 
+            asChild 
+            className="w-full group/button shadow-sm" 
+            variant="outline"
+          >
+            <Link href={`/projects/${project.id}/board`} className="flex items-center justify-center">
+              <span>Open Project</span>
+              <ArrowRight className="ml-2 h-4 w-4 transition-transform group-hover/button:translate-x-1" />
           </Link>
         </Button>
       </CardFooter>
     </Card>
+    </motion.div>
   )
 }
 ```
@@ -1568,72 +1926,234 @@ export function CostChart({ projectId }: { projectId?: string }) {
 
 ### `src/components/search/SearchBar.tsx`
 
-Global search bar with autocomplete.
+Global search bar with Zustand state, search history, and real-time results.
 
 ```tsx
 "use client"
 
-import { useState } from "react"
+import { useEffect, useId } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Search, FileText, User, GitCommit } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Search, FileText, User, GitCommit, X, Clock, TrendingUp } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useSearchStore } from "@/stores/searchStore"
+import { useSearchResults } from "@/hooks/useSearch"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { useKeyboardShortcut } from "@/hooks/useKeyboardShortcut"
+import { cn } from "@/lib/utils"
+import { motion, AnimatePresence } from "framer-motion"
 
 export function SearchBar() {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState("")
+  const searchId = useId()
   const router = useRouter()
+  const [open, setOpen] = useState(false)
+  
+  const { query, searchHistory, setQuery, addToHistory, removeFromHistory } = useSearchStore()
+  const debouncedQuery = useDebouncedValue(query, 300)
 
-  // Mock search results - would come from API
-  const results = [
-    { type: "ticket", id: "T-123", title: "Implement authentication", icon: FileText },
-    { type: "agent", id: "agent-1", title: "worker-9a781fc3", icon: User },
-    { type: "commit", id: "abc123", title: "Add OAuth2 provider", icon: GitCommit },
-  ]
+  const { data: results = [], isLoading } = useSearchResults(debouncedQuery, {
+    enabled: debouncedQuery.length > 0
+  })
+  
+  // Keyboard shortcut: Cmd+K or Ctrl+K
+  useKeyboardShortcut(['meta', 'k'], () => setOpen(true))
+  useKeyboardShortcut(['ctrl', 'k'], () => setOpen(true))
 
   const handleSelect = (item: any) => {
-    if (item.type === "ticket") {
-      router.push(`/board/${item.id}`)
-    } else if (item.type === "agent") {
-      router.push(`/agents/${item.id}`)
-    } else if (item.type === "commit") {
-      router.push(`/commits/${item.id}`)
+    const routes = {
+      ticket: `/board/${item.id}`,
+      agent: `/agents/${item.id}`,
+      commit: `/commits/${item.id}`,
+      file: `/files/${item.id}`,
     }
+    
+    addToHistory(query)
+    router.push(routes[item.type as keyof typeof routes])
     setOpen(false)
+    setQuery("")
+  }
+  
+  const handleHistorySelect = (historyQuery: string) => {
+    setQuery(historyQuery)
+  }
+
+  const clearSearch = () => {
+    setQuery("")
+  }
+
+  const iconMap = {
+    ticket: FileText,
+    agent: User,
+    commit: GitCommit,
+    file: FileText,
   }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <div className="relative w-full max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <motion.div 
+          className="relative w-full max-w-md group"
+          whileFocus={{ scale: 1.02 }}
+        >
+          <label htmlFor={searchId} className="sr-only">
+            Search tickets, agents, commits
+          </label>
+          <Search className={cn(
+            "absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4",
+            "text-muted-foreground group-focus-within:text-primary",
+            "transition-colors duration-200"
+          )} />
           <Input
-            placeholder="Search tickets, agents, commits..."
+            id={searchId}
+            placeholder="Search... (⌘K)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onFocus={() => setOpen(true)}
-            className="pl-10"
+            className={cn(
+              "pl-10 pr-10",
+              "focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary",
+              "transition-all duration-200 shadow-sm",
+              "hover:shadow-md"
+            )}
+            aria-autocomplete="list"
+            aria-controls={`${searchId}-listbox`}
+            aria-expanded={open}
           />
-        </div>
+          {query && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7",
+                "hover:bg-muted rounded-full transition-all",
+                "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+              )}
+              onClick={clearSearch}
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </motion.div>
       </PopoverTrigger>
-      <PopoverContent className="w-[400px] p-0" align="start">
-        <Command>
-          <CommandInput placeholder="Search..." value={query} onValueChange={setQuery} />
-          <CommandList>
-            <CommandEmpty>No results found.</CommandEmpty>
-            <CommandGroup heading="Results">
-              {results.map((item) => {
-                const Icon = item.icon
+      
+      <PopoverContent 
+        className={cn(
+          "w-[var(--radix-popover-trigger-width)] p-0",
+          "border-border/50 shadow-xl backdrop-blur-sm",
+          "bg-background/95 supports-[backdrop-filter]:bg-background/80"
+        )} 
+        align="start"
+        sideOffset={8}
+      >
+        <Command shouldFilter={false}>
+          <CommandInput 
+            placeholder="Search..." 
+            value={query} 
+            onValueChange={setQuery}
+            className="border-none focus:ring-0"
+          />
+          <CommandList id={`${searchId}-listbox`} role="listbox">
+            {isLoading ? (
+              <div className="p-4 text-sm text-center text-muted-foreground flex items-center justify-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent" />
+                Searching...
+              </div>
+            ) : (
+              <>
+                {!query && searchHistory.length > 0 && (
+                  <CommandGroup heading="Recent Searches" className="p-2">
+                    <AnimatePresence mode="popLayout">
+                      {searchHistory.slice(0, 5).map((historyItem, index) => (
+                        <motion.div
+                          key={historyItem}
+                          initial={{ opacity: 0, x: -10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 10 }}
+                          transition={{ delay: index * 0.05 }}
+                        >
+                          <CommandItem
+                            onSelect={() => handleHistorySelect(historyItem)}
+                            className="flex items-center justify-between group/history"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span className="text-sm">{historyItem}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 opacity-0 group-hover/history:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                removeFromHistory(historyItem)
+                              }}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </CommandItem>
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </CommandGroup>
+                )}
+                
+                <CommandEmpty className="p-4 text-sm text-center text-muted-foreground">
+                  {query ? 'No results found' : 'Start typing to search'}
+                </CommandEmpty>
+                
+                {results.length > 0 && (
+                  <CommandGroup heading={`Results (${results.length})`} className="p-2">
+                    <AnimatePresence mode="popLayout">
+                      {results.map((item, index) => {
+                        const Icon = iconMap[item.type as keyof typeof iconMap] || FileText
+                        
                 return (
-                  <CommandItem key={item.id} onSelect={() => handleSelect(item)}>
-                    <Icon className="mr-2 h-4 w-4" />
-                    <span>{item.title}</span>
+                          <motion.div
+                            key={item.id}
+                            initial={{ opacity: 0, y: -10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            transition={{ delay: index * 0.05 }}
+                          >
+                            <CommandItem 
+                              onSelect={() => handleSelect(item)}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2.5 rounded-md",
+                                "cursor-pointer transition-all",
+                                "hover:bg-accent/50 focus:bg-accent/50",
+                                "aria-selected:bg-accent"
+                              )}
+                              role="option"
+                            >
+                              <div className="flex-shrink-0 p-2 rounded-lg bg-primary/10">
+                                <Icon className="h-4 w-4 text-primary" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-sm font-medium truncate block">
+                                  {item.title}
+                                </span>
+                                {item.description && (
+                                  <span className="text-xs text-muted-foreground truncate block">
+                                    {item.description}
+                                  </span>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="text-xs flex-shrink-0">
+                                {item.type}
+                              </Badge>
                   </CommandItem>
+                          </motion.div>
                 )
               })}
+                    </AnimatePresence>
             </CommandGroup>
+                )}
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>
@@ -4361,6 +4881,494 @@ xterm.loadAddon(attachAddon)
 
 ---
 
-This completes the code highlighting and terminal streaming components documentation with comprehensive Xterm.js addon support.
-<｜tool▁calls▁begin｜><｜tool▁call▁begin｜>
-read_file
+## 38. Zustand Store Integration
+
+### `stores/uiStore.ts`
+
+Global UI state with persistence and SSR support.
+
+```typescript
+import { create } from 'zustand'
+import { devtools, persist, createJSONStorage } from 'zustand/middleware'
+
+interface UIStore {
+  // Theme
+  theme: 'light' | 'dark' | 'system'
+  setTheme: (theme: 'light' | 'dark' | 'system') => void
+  
+  // Sidebar
+  sidebarCollapsed: boolean
+  toggleSidebar: () => void
+  
+  // Terminal
+  terminalOpen: boolean
+  terminalHeight: number
+  setTerminalOpen: (open: boolean) => void
+  setTerminalHeight: (height: number) => void
+  
+  // Modals
+  activeModal: string | null
+  modalData: any
+  openModal: (modalId: string, data?: any) => void
+  closeModal: () => void
+  
+  // Toasts
+  toasts: Array<{
+    id: string
+    type: 'success' | 'error' | 'warning' | 'info'
+    message: string
+  }>
+  addToast: (toast: Omit<UIStore['toasts'][0], 'id'>) => void
+  removeToast: (id: string) => void
+}
+
+export const useUIStore = create<UIStore>()(
+  devtools(
+    persist(
+      (set, get) => ({
+        theme: 'system',
+        setTheme: (theme) => set({ theme }),
+        
+        sidebarCollapsed: false,
+        toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+        
+        terminalOpen: false,
+        terminalHeight: 400,
+        setTerminalOpen: (open) => set({ terminalOpen: open }),
+        setTerminalHeight: (height) => set({ terminalHeight: height }),
+        
+        activeModal: null,
+        modalData: null,
+        openModal: (modalId, data) => set({ activeModal: modalId, modalData: data }),
+        closeModal: () => set({ activeModal: null, modalData: null }),
+        
+        toasts: [],
+        addToast: (toast) => {
+          const id = `toast-${Date.now()}-${Math.random()}`
+          set((state) => ({
+            toasts: [...state.toasts, { ...toast, id }]
+          }))
+          setTimeout(() => get().removeToast(id), 5000)
+        },
+        removeToast: (id) => set((state) => ({
+          toasts: state.toasts.filter((t) => t.id !== id)
+        })),
+      }),
+      {
+        name: 'ui-store',
+        storage: createJSONStorage(() => localStorage),
+        partialize: (state) => ({
+          theme: state.theme,
+          sidebarCollapsed: state.sidebarCollapsed,
+          terminalHeight: state.terminalHeight,
+        }),
+      }
+    ),
+    { name: 'UIStore' }
+  )
+)
+```
+
+### `stores/kanbanStore.ts`
+
+Kanban board state with WebSocket sync and React Query bridge.
+
+```typescript
+import { create } from 'zustand'
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware'
+import { immer } from 'zustand/middleware/immer'
+
+interface Ticket {
+  id: string
+  title: string
+  status: string
+  priority: string
+}
+
+interface Column {
+  id: string
+  title: string
+  tickets: string[]
+}
+
+interface KanbanStore {
+  columns: Column[]
+  tickets: Record<string, Ticket>
+  selectedTickets: Set<string>
+  draggedTicket: string | null
+  hoveredColumn: string | null
+  
+  setColumns: (columns: Column[]) => void
+  setTickets: (tickets: Record<string, Ticket>) => void
+  moveTicket: (ticketId: string, fromColumn: string, toColumn: string, index?: number) => void
+  selectTicket: (ticketId: string) => void
+  clearSelection: () => void
+  setDraggedTicket: (ticketId: string | null) => void
+  setHoveredColumn: (columnId: string | null) => void
+}
+
+export const useKanbanStore = create<KanbanStore>()(
+  devtools(
+    subscribeWithSelector(
+      immer((set) => ({
+        columns: [],
+        tickets: {},
+        selectedTickets: new Set(),
+        draggedTicket: null,
+        hoveredColumn: null,
+        
+        setColumns: (columns) => set({ columns }),
+        setTickets: (tickets) => set({ tickets }),
+        
+        moveTicket: (ticketId, fromColumn, toColumn, index) =>
+          set((state) => {
+            const fromCol = state.columns.find((c) => c.id === fromColumn)
+            if (fromCol) {
+              fromCol.tickets = fromCol.tickets.filter((id) => id !== ticketId)
+            }
+            
+            const toCol = state.columns.find((c) => c.id === toColumn)
+            if (toCol) {
+              toCol.tickets.splice(index ?? toCol.tickets.length, 0, ticketId)
+            }
+            
+            if (state.tickets[ticketId]) {
+              state.tickets[ticketId].status = toColumn
+            }
+          }),
+        
+        selectTicket: (ticketId) =>
+          set((state) => {
+            state.selectedTickets.add(ticketId)
+          }),
+        
+        clearSelection: () => set({ selectedTickets: new Set() }),
+        setDraggedTicket: (ticketId) => set({ draggedTicket: ticketId }),
+        setHoveredColumn: (columnId) => set({ hoveredColumn: columnId }),
+      }))
+    ),
+    { name: 'KanbanStore' }
+  )
+)
+```
+
+### `stores/searchStore.ts`
+
+Search state with history persistence.
+
+```typescript
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+interface SearchStore {
+  query: string
+  searchHistory: string[]
+  selectedTypes: string[]
+  
+  setQuery: (query: string) => void
+  addToHistory: (query: string) => void
+  clearHistory: () => void
+  setSelectedTypes: (types: string[]) => void
+}
+
+export const useSearchStore = create<SearchStore>()(
+  persist(
+    (set, get) => ({
+      query: '',
+      searchHistory: [],
+      selectedTypes: [],
+      
+      setQuery: (query) => set({ query }),
+      
+      addToHistory: (query) => {
+        if (!query.trim()) return
+        set((state) => ({
+          searchHistory: [query, ...state.searchHistory.filter((q) => q !== query)].slice(0, 50)
+        }))
+      },
+      
+      clearHistory: () => set({ searchHistory: [] }),
+      setSelectedTypes: (types) => set({ selectedTypes: types }),
+    }),
+    {
+      name: 'search-store',
+      partialize: (state) => ({
+        searchHistory: state.searchHistory,
+      }),
+    }
+  )
+)
+```
+
+---
+
+## 39. Custom Middleware Implementations
+
+### `middleware/websocket-sync.ts`
+
+WebSocket synchronization middleware for real-time state updates.
+
+```typescript
+import { StateCreator, StoreMutatorIdentifier } from 'zustand'
+import { produce } from 'immer'
+
+type WebSocketSync = <
+  T,
+  Mps extends [StoreMutatorIdentifier, unknown][] = [],
+  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+>(
+  config: StateCreator<T, Mps, Mcs>,
+  options: WebSocketSyncOptions<T>
+) => StateCreator<T, Mps, Mcs>
+
+interface WebSocketSyncOptions<T> {
+  getWebSocket: () => WebSocket | null
+  eventTypes: string[]
+  onMessage: (message: any, currentState: T) => Partial<T> | ((state: T) => T)
+  syncToServer?: boolean
+  shouldSync?: (prevState: T, nextState: T) => boolean
+  serialize?: (state: T) => any
+}
+
+export const websocketSync: WebSocketSync = (config, options) => (set, get, api) => {
+  let unsubscribe: (() => void) | null = null
+  
+  const setupWebSocketListener = () => {
+    const ws = options.getWebSocket()
+    if (!ws) return
+    
+    const handleMessage = (event: MessageEvent) => {
+      try {
+        const data = JSON.parse(event.data)
+        
+        if (options.eventTypes.includes(data.type || data.event_type)) {
+          const update = options.onMessage(data, get())
+          
+          if (typeof update === 'function') {
+            set(produce(update))
+          } else {
+            set(update as any)
+          }
+        }
+      } catch (error) {
+        console.error('WebSocket message parsing error:', error)
+      }
+    }
+    
+    ws.addEventListener('message', handleMessage)
+    
+    unsubscribe = () => {
+      ws.removeEventListener('message', handleMessage)
+    }
+  }
+  
+  const enhancedSet: typeof set = (partial, replace) => {
+    const prevState = get()
+    set(partial, replace)
+    const nextState = get()
+    
+    if (options.syncToServer) {
+      const shouldSync = options.shouldSync?.(prevState, nextState) ?? true
+      
+      if (shouldSync) {
+        const ws = options.getWebSocket()
+        const payload = options.serialize?.(nextState) ?? nextState
+        
+        if (ws?.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'STATE_UPDATE',
+            payload,
+          }))
+        }
+      }
+    }
+  }
+  
+  if (typeof window !== 'undefined') {
+    setupWebSocketListener()
+  }
+  
+  ;(api as any).destroy = () => {
+    unsubscribe?.()
+  }
+  
+  return config(enhancedSet, get, api)
+}
+```
+
+### `middleware/react-query-bridge.ts`
+
+React Query integration middleware for automatic cache invalidation.
+
+```typescript
+import { QueryClient, QueryKey } from '@tanstack/react-query'
+import { StateCreator, StoreMutatorIdentifier } from 'zustand'
+
+type ReactQueryBridge = <
+  T,
+  Mps extends [StoreMutatorIdentifier, unknown][] = [],
+  Mcs extends [StoreMutatorIdentifier, unknown][] = []
+>(
+  config: StateCreator<T, Mps, Mcs>,
+  options: ReactQueryBridgeOptions<T>
+) => StateCreator<T, Mps, Mcs>
+
+interface ReactQueryBridgeOptions<T> {
+  queryClient: QueryClient
+  
+  invalidationRules: Array<{
+    shouldInvalidate: (prevState: T, nextState: T) => boolean
+    queryKeys: QueryKey[] | ((state: T) => QueryKey[])
+    optimisticUpdate?: (state: T) => Array<{
+      queryKey: QueryKey
+      updater: (old: any) => any
+    }>
+  }>
+  
+  syncRules?: Array<{
+    queryKey: QueryKey
+    toState: (data: any) => Partial<T>
+    shouldSync?: (data: any) => boolean
+  }>
+}
+
+export const reactQueryBridge: ReactQueryBridge = (config, options) => (set, get, api) => {
+  const { queryClient, invalidationRules, syncRules } = options
+  
+  const enhancedSet: typeof set = (partial, replace) => {
+    const prevState = get()
+    set(partial, replace)
+    const nextState = get()
+    
+    invalidationRules.forEach((rule) => {
+      if (rule.shouldInvalidate(prevState, nextState)) {
+        const keys = typeof rule.queryKeys === 'function' 
+          ? rule.queryKeys(nextState) 
+          : rule.queryKeys
+        
+        if (rule.optimisticUpdate) {
+          const updates = rule.optimisticUpdate(nextState)
+          updates.forEach(({ queryKey, updater }) => {
+            queryClient.setQueryData(queryKey, updater)
+          })
+        }
+        
+        keys.forEach((key) => {
+          queryClient.invalidateQueries({ queryKey: key })
+        })
+      }
+    })
+  }
+  
+  if (typeof window !== 'undefined' && syncRules) {
+    syncRules.forEach(({ queryKey, toState, shouldSync }) => {
+      const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
+        if (event?.query?.queryKey !== queryKey) return
+        
+        const data = queryClient.getQueryData(queryKey)
+        
+        if (data && (!shouldSync || shouldSync(data))) {
+          const stateUpdate = toState(data)
+          set(stateUpdate as any)
+        }
+      })
+      
+      ;(api as any)._unsubscribers = (api as any)._unsubscribers || []
+      ;(api as any)._unsubscribers.push(unsubscribe)
+    })
+  }
+  
+  return config(enhancedSet, get, api)
+}
+```
+
+---
+
+## 40. Enhanced Tailwind CSS Utilities
+
+### Tailwind Config Extensions
+
+Add to `tailwind.config.js`:
+
+```javascript
+module.exports = {
+  theme: {
+    extend: {
+      spacing: {
+        '18': '4.5rem',
+        '88': '22rem',
+        '112': '28rem',
+      },
+      animation: {
+        'shimmer': 'shimmer 2s linear infinite',
+        'fade-in': 'fadeIn 0.3s ease-in-out',
+        'slide-in': 'slideIn 0.3s ease-out',
+        'bounce-subtle': 'bounceSubtle 1s ease-in-out infinite',
+      },
+      keyframes: {
+        shimmer: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideIn: {
+          '0%': { transform: 'translateY(-10px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        bounceSubtle: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-5px)' },
+        },
+      },
+      boxShadow: {
+        'glow': '0 0 20px rgba(59, 130, 246, 0.3)',
+        'glow-lg': '0 0 40px rgba(59, 130, 246, 0.4)',
+      },
+    },
+  },
+}
+```
+
+### Custom CSS Classes
+
+Add to `globals.css`:
+
+```css
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+  
+  .glass-panel {
+    @apply bg-background/80 backdrop-blur-md border border-border/50;
+  }
+  
+  .gradient-border {
+    @apply relative before:absolute before:inset-0 before:rounded-lg before:p-[1px] before:bg-gradient-to-br before:from-primary before:to-primary/50 before:-z-10;
+  }
+}
+```
+
+---
+
+This completes the code highlighting and terminal streaming components documentation with comprehensive Xterm.js addon support, Zustand state management integration, custom middleware implementations, and enhanced Tailwind CSS utilities.

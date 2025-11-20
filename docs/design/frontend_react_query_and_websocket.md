@@ -273,14 +273,24 @@ export function useWebSocketEvents() {
 
 ## 5. Agent State Management
 
-### 5.1 Zustand Store for Agent UI State
+### 5.1 Zustand Store for Agent UI State with Full Middleware Stack
 
-Client-side state for agent selection, filters, and UI preferences.
+Client-side state for agent selection, filters, and UI preferences with WebSocket sync and React Query bridge.
 
 ```typescript
 // stores/agentStore.ts
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware'
+import { immer } from 'zustand/middleware/immer'
+import { websocketSync } from '@/middleware/websocket-sync'
+import { reactQueryBridge } from '@/middleware/react-query-bridge'
+import { agentKeys } from '@/lib/query-keys'
+
+interface AgentHealth {
+  lastHeartbeat: string
+  isStale: boolean
+  currentTaskId?: string
+}
 
 interface AgentStore {
   // Selection
@@ -289,9 +299,9 @@ interface AgentStore {
   toggleAgentSelection: (id: string) => void
   
   // Filters
-  agentTypeFilter: string[] // ['worker', 'validator', 'guardian']
-  phaseFilter: string[] // ['PHASE_INITIAL', 'PHASE_IMPLEMENTATION', ...]
-  statusFilter: string[] // ['idle', 'working', 'stale']
+  agentTypeFilter: string[]
+  phaseFilter: string[]
+  statusFilter: string[]
   setAgentTypeFilter: (types: string[]) => void
   setPhaseFilter: (phases: string[]) => void
   setStatusFilter: (statuses: string[]) => void
@@ -305,26 +315,38 @@ interface AgentStore {
   setShowInterventions: (show: boolean) => void
   
   // Real-time state
-  agentHealthMap: Record<string, {
-    lastHeartbeat: string
-    isStale: boolean
-    currentTaskId?: string
-  }>
+  agentHealthMap: Record<string, AgentHealth>
   updateAgentHealth: (agentId: string, health: AgentHealth) => void
+  
+  // Computed
+  getFilteredAgentIds: () => string[]
+}
+
+// WebSocket instance (set by provider)
+let wsInstance: WebSocket | null = null
+export const setAgentWebSocket = (ws: WebSocket | null) => {
+  wsInstance = ws
 }
 
 export const useAgentStore = create<AgentStore>()(
   devtools(
-    (set) => ({
+    persist(
+      websocketSync(
+        reactQueryBridge(
+          subscribeWithSelector(
+            immer((set, get) => ({
       // Selection
       selectedAgentIds: [],
       setSelectedAgentIds: (ids) => set({ selectedAgentIds: ids }),
       toggleAgentSelection: (id) =>
-        set((state) => ({
-          selectedAgentIds: state.selectedAgentIds.includes(id)
-            ? state.selectedAgentIds.filter((aid) => aid !== id)
-            : [...state.selectedAgentIds, id],
-        })),
+                set((state) => {
+                  const index = state.selectedAgentIds.indexOf(id)
+                  if (index > -1) {
+                    state.selectedAgentIds.splice(index, 1)
+                  } else {
+                    state.selectedAgentIds.push(id)
+                  }
+                }),
       
       // Filters
       agentTypeFilter: [],
@@ -345,16 +367,80 @@ export const useAgentStore = create<AgentStore>()(
       // Real-time state
       agentHealthMap: {},
       updateAgentHealth: (agentId, health) =>
-        set((state) => ({
-          agentHealthMap: {
-            ...state.agentHealthMap,
-            [agentId]: health,
+                set((state) => {
+                  state.agentHealthMap[agentId] = health
+                }),
+              
+              // Computed
+              getFilteredAgentIds: () => {
+                const state = get()
+                // Filter logic based on active filters
+                return Object.keys(state.agentHealthMap)
+              },
+            }))
+          ),
+          {
+            queryClient: queryClient, // Injected by provider
+            invalidationRules: [
+              {
+                shouldInvalidate: (prev, next) => 
+                  prev.agentTypeFilter !== next.agentTypeFilter ||
+                  prev.phaseFilter !== next.phaseFilter ||
+                  prev.statusFilter !== next.statusFilter,
+                queryKeys: [agentKeys.lists()],
+              },
+            ],
+          }
+        ),
+        {
+          getWebSocket: () => wsInstance,
+          eventTypes: ['AGENT_HEARTBEAT', 'AGENT_STALE', 'AGENT_STATUS_CHANGED'],
+          onMessage: (message, state) => {
+            const { type, payload } = message
+            
+            switch (type) {
+              case 'AGENT_HEARTBEAT':
+                return (draft) => {
+                  draft.updateAgentHealth(payload.agent_id, {
+                    lastHeartbeat: payload.timestamp,
+                    isStale: false,
+                    currentTaskId: payload.current_task_id,
+                  })
+                }
+              
+              case 'AGENT_STALE':
+                return (draft) => {
+                  if (draft.agentHealthMap[payload.agent_id]) {
+                    draft.agentHealthMap[payload.agent_id].isStale = true
+                  }
+                }
+              
+              default:
+                return {}
+            }
           },
-        })),
-    }),
+        }
+      ),
+      {
+        name: 'agent-store',
+        partialize: (state) => ({
+          viewMode: state.viewMode,
+          showTrajectory: state.showTrajectory,
+          showInterventions: state.showInterventions,
+        }),
+      }
+    ),
     { name: 'AgentStore' }
   )
 )
+
+// Selectors for optimized subscriptions
+export const selectSelectedAgents = (state: AgentStore) => state.selectedAgentIds
+export const selectAgentFilters = (state: AgentStore) => ({
+  type: state.agentTypeFilter,
+  phase: state.phaseFilter,
+  status: state.statusFilter,
+})
 ```
 
 ### 5.2 Agent Query Keys
@@ -2408,5 +2494,763 @@ export function useTerminalAttach(
 
 ---
 
-This completes the comprehensive system-wide reusable hooks documentation covering UI state, forms, navigation, permissions, optimistic updates, pagination, search/filters, storage, WebSocket, keyboard shortcuts, clipboard, file upload, export/import, theme, real-time subscriptions, cache management, terminal streaming with Xterm.js, and code highlighting.
+## 10. Advanced Zustand Middleware
+
+### 10.1 WebSocket Sync Middleware
+
+Synchronizes Zustand state with WebSocket events.
+
+```typescript
+// middleware/websocket-sync.ts
+import { StateCreator, StoreMutatorIdentifier } from 'zustand'
+
+type WebSocketSync = <T>(
+  config: StateCreator<T>,
+  options: {
+    getWebSocket: () => WebSocket | null
+    eventTypes: string[]
+    onMessage: (message: any, state: T) => Partial<T> | ((state: T) => T)
+    syncToServer?: boolean
+  }
+) => StateCreator<T>
+
+export const websocketSync: WebSocketSync = (config, options) => (set, get, api) => {
+  const setupListener = () => {
+    const ws = options.getWebSocket()
+    if (!ws) return
+    
+    const handleMessage = (event: MessageEvent) => {
+      const data = JSON.parse(event.data)
+      
+      if (options.eventTypes.includes(data.type || data.event_type)) {
+        const update = options.onMessage(data, get())
+        
+        if (typeof update === 'function') {
+          set(update as any)
+        } else {
+          set(update as any)
+        }
+      }
+    }
+    
+    ws.addEventListener('message', handleMessage)
+    return () => ws.removeEventListener('message', handleMessage)
+  }
+  
+  if (typeof window !== 'undefined') {
+    setupListener()
+  }
+  
+  return config(set, get, api)
+}
+```
+
+### 10.2 React Query Bridge Middleware
+
+Bidirectional sync between Zustand and React Query.
+
+```typescript
+// middleware/react-query-bridge.ts
+import { QueryClient, QueryKey } from '@tanstack/react-query'
+import { StateCreator } from 'zustand'
+
+type ReactQueryBridge = <T>(
+  config: StateCreator<T>,
+  options: {
+    queryClient: QueryClient
+    invalidationRules: Array<{
+      shouldInvalidate: (prev: T, next: T) => boolean
+      queryKeys: QueryKey[] | ((state: T) => QueryKey[])
+      optimisticUpdate?: (state: T) => Array<{
+        queryKey: QueryKey
+        updater: (old: any) => any
+      }>
+    }>
+    syncRules?: Array<{
+      queryKey: QueryKey
+      toState: (data: any) => Partial<T>
+      shouldSync?: (data: any) => boolean
+    }>
+  }
+) => StateCreator<T>
+
+export const reactQueryBridge: ReactQueryBridge = (config, options) => (set, get, api) => {
+  const enhancedSet: typeof set = (partial, replace) => {
+    const prevState = get()
+    set(partial, replace)
+    const nextState = get()
+    
+    options.invalidationRules.forEach((rule) => {
+      if (rule.shouldInvalidate(prevState, nextState)) {
+        const keys = typeof rule.queryKeys === 'function' 
+          ? rule.queryKeys(nextState) 
+          : rule.queryKeys
+        
+        if (rule.optimisticUpdate) {
+          const updates = rule.optimisticUpdate(nextState)
+          updates.forEach(({ queryKey, updater }) => {
+            options.queryClient.setQueryData(queryKey, updater)
+          })
+        }
+        
+        keys.forEach((key) => {
+          options.queryClient.invalidateQueries({ queryKey: key })
+        })
+      }
+    })
+  }
+  
+  return config(enhancedSet, get, api)
+}
+```
+
+### 10.3 SSR-Safe Store Creation
+
+```typescript
+// lib/create-ssr-store.ts
+import { create, StateCreator } from 'zustand'
+import { persist, PersistOptions } from 'zustand/middleware'
+
+export function createSSRStore<T>(
+  storeCreator: StateCreator<T>,
+  persistOptions?: Partial<PersistOptions<T>>
+) {
+  if (typeof window === 'undefined') {
+    return create<T>()(storeCreator)
+  }
+  
+  return create<T>()(
+    persist(storeCreator, {
+      name: persistOptions?.name || 'store',
+      skipHydration: true,
+      ...persistOptions,
+    })
+  )
+}
+
+// Hook for hydration
+export function useHydrateStore(useStore: any) {
+  const [hydrated, setHydrated] = useState(false)
+  
+  useEffect(() => {
+    const unsubHydrate = useStore.persist.onFinishHydration(() => {
+      setHydrated(true)
+    })
+    
+    useStore.persist.rehydrate()
+    return unsubHydrate
+  }, [])
+  
+  return hydrated
+}
+```
+
+### 10.4 Complete Integration Example
+
+Full Kanban store with all middleware.
+
+```typescript
+// stores/kanbanStore.ts
+import { create } from 'zustand'
+import { devtools, persist, subscribeWithSelector } from 'zustand/middleware'
+import { immer } from 'zustand/middleware/immer'
+import { websocketSync } from '@/middleware/websocket-sync'
+import { reactQueryBridge } from '@/middleware/react-query-bridge'
+import { temporal } from 'zundo'
+import { compressedStorage } from '@/lib/storage'
+import { boardKeys } from '@/lib/query-keys'
+
+let wsInstance: WebSocket | null = null
+export const setKanbanWebSocket = (ws: WebSocket | null) => {
+  wsInstance = ws
+}
+
+export const useKanbanStore = create<KanbanState>()(
+  devtools(
+    persist(
+      websocketSync(
+        reactQueryBridge(
+          temporal(
+            subscribeWithSelector(
+              immer((set, get) => ({
+                // ... state implementation
+              }))
+            ),
+            { limit: 20, enabled: process.env.NODE_ENV === 'development' }
+          ),
+          {
+            queryClient: queryClient,
+            invalidationRules: [
+              {
+                shouldInvalidate: (prev, next) => prev.tickets !== next.tickets,
+                queryKeys: (state) => [boardKeys.detail(state.projectId!)],
+                optimisticUpdate: (state) => [{
+                  queryKey: boardKeys.detail(state.projectId!),
+                  updater: (old: any) => ({
+                    ...old,
+                    tickets: Object.values(state.tickets),
+                  }),
+                }],
+              },
+            ],
+          }
+        ),
+        {
+          getWebSocket: () => wsInstance,
+          eventTypes: ['TICKET_MOVED', 'TICKET_UPDATED'],
+          onMessage: (message, state) => {
+            // Transform WebSocket message to state update
+            return (draft) => {
+              // Immer draft mutations
+            }
+          },
+        }
+      ),
+      {
+        name: 'kanban-store',
+        storage: compressedStorage,
+      }
+    ),
+    { name: 'KanbanStore' }
+  )
+)
+
+// Time-travel actions (from zundo)
+const { undo, redo, clear } = useKanbanStore.temporal.getState()
+```
+
+### 10.5 Cross-Tab Synchronization
+
+Using `zustand-pub` for multi-tab sync.
+
+```typescript
+// stores/uiStore.ts
+import { pub } from 'zustand-pub'
+
+export const useUIStore = create<UIState>()(
+  pub(
+    devtools(
+      persist(
+        (set) => ({
+          // ... state
+        }),
+        { name: 'ui-store' }
+      ),
+      { name: 'UIStore' }
+    ),
+    {
+      name: 'ui-channel', // Broadcast channel name
+    }
+  )
+)
+
+// Changes in one tab automatically sync to others
+```
+
+### 10.6 Store Provider with Hydration
+
+```typescript
+// providers/StoreProvider.tsx
+"use client"
+
+import { useEffect, useRef } from 'react'
+import { useKanbanStore, setKanbanWebSocket } from '@/stores/kanbanStore'
+import { useAgentStore, setAgentWebSocket } from '@/stores/agentStore'
+import { useUIStore } from '@/stores/uiStore'
+import { useWebSocket } from '@/hooks/useWebSocket'
+
+export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const { socket } = useWebSocket()
+  const hasHydrated = useRef(false)
+  
+  // Setup WebSocket connections
+  useEffect(() => {
+    if (socket) {
+      setKanbanWebSocket(socket)
+      setAgentWebSocket(socket)
+    }
+    
+    return () => {
+      setKanbanWebSocket(null)
+      setAgentWebSocket(null)
+    }
+  }, [socket])
+  
+  // Manual hydration for SSR
+  useEffect(() => {
+    if (!hasHydrated.current) {
+      useKanbanStore.persist.rehydrate()
+      useAgentStore.persist.rehydrate()
+      useUIStore.persist.rehydrate()
+      hasHydrated.current = true
+    }
+  }, [])
+  
+  return <>{children}</>
+}
+```
+
+---
+
+## 11. Advanced Zustand Middleware Reference
+
+### 11.1 Compressed Storage
+
+Storage adapter with LZ-string compression for large state objects.
+
+```typescript
+// lib/storage.ts
+import { StateStorage } from 'zustand/middleware'
+import { compress, decompress } from 'lz-string'
+
+export const compressedStorage: StateStorage = {
+  getItem: (name) => {
+    const str = localStorage.getItem(name)
+    if (!str) return null
+    
+    try {
+      return decompress(str) || str
+    } catch {
+      return str
+    }
+  },
+  
+  setItem: (name, value) => {
+    try {
+      const compressed = compress(value)
+      localStorage.setItem(name, compressed)
+    } catch (error) {
+      console.error('Compression error:', error)
+      localStorage.setItem(name, value)
+    }
+  },
+  
+  removeItem: (name) => localStorage.removeItem(name),
+}
+
+// Robust storage with fallback
+export const robustStorage: StateStorage = {
+  getItem: (name) => {
+    try {
+      return localStorage.getItem(name) || sessionStorage.getItem(name)
+    } catch {
+      return null
+    }
+  },
+  
+  setItem: (name, value) => {
+    try {
+      localStorage.setItem(name, value)
+    } catch {
+      try {
+        sessionStorage.setItem(name, value)
+      } catch {
+        // Storage unavailable
+      }
+    }
+  },
+  
+  removeItem: (name) => {
+    try {
+      localStorage.removeItem(name)
+      sessionStorage.removeItem(name)
+    } catch {}
+  },
+}
+```
+
+### 11.2 Time-Travel Debugging Middleware
+
+```typescript
+// middleware/time-travel.ts
+import { StateCreator } from 'zustand'
+
+export const timeTravel = <T>(
+  config: StateCreator<T>,
+  options: { maxHistory?: number; enabled?: boolean } = {}
+) => (set: any, get: any, api: any) => {
+  const { maxHistory = 50, enabled = process.env.NODE_ENV === 'development' } = options
+  
+  if (!enabled) {
+    return config(set, get, api)
+  }
+  
+  let history: T[] = []
+  let historyIndex = -1
+  
+  const enhancedSet = (partial: any, replace?: boolean) => {
+    if (historyIndex === history.length - 1) {
+      history.push(get())
+      if (history.length > maxHistory) {
+        history.shift()
+      } else {
+        historyIndex++
+      }
+    } else {
+      history = history.slice(0, historyIndex + 1)
+      history.push(get())
+      historyIndex = history.length - 1
+    }
+    
+    set(partial, replace)
+  }
+  
+  return {
+    ...config(enhancedSet, get, api),
+    undo: () => {
+      if (historyIndex > 0) {
+        historyIndex--
+        set(history[historyIndex], true)
+      }
+    },
+    redo: () => {
+      if (historyIndex < history.length - 1) {
+        historyIndex++
+        set(history[historyIndex], true)
+      }
+    },
+  }
+}
+```
+
+### 11.3 Recommended Package Installations
+
+```bash
+# Core Zustand packages
+npm install zustand immer
+
+# Middleware extensions
+npm install zundo  # Advanced undo/redo
+npm install zustand-pub  # Cross-tab sync
+
+# Utilities
+npm install lz-string  # State compression
+npm install zustand-querystring  # URL state sync (optional)
+
+# React Query integration
+npm install @tanstack/react-query @tanstack/react-query-devtools
+
+# WebSocket client
+npm install use-websocket  # Alternative to custom hook
+
+# Animations
+npm install framer-motion
+
+# Terminal
+npm install xterm xterm-addon-fit xterm-addon-web-links xterm-addon-search xterm-addon-unicode11 xterm-addon-serialize
+
+# Code highlighting
+npm install react-syntax-highlighter @types/react-syntax-highlighter
+
+# Utilities
+npm install date-fns
+```
+
+### 11.4 Store Architecture Summary
+
+**Store Hierarchy**:
+```
+Root Providers
+├── ThemeProvider (next-themes)
+├── QueryProvider (React Query)
+├── WebSocketProvider (Custom)
+└── StoreProvider (Zustand hydration)
+    ├── useUIStore (Global UI state)
+    ├── useKanbanStore (Board state + WebSocket + RQ bridge)
+    ├── useAgentStore (Agent state + WebSocket + RQ bridge)
+    ├── useSearchStore (Search + history)
+    ├── useTerminalStore (Multi-session terminals)
+    └── useMonitoringStore (System metrics)
+```
+
+**Middleware Features**:
+- ✅ SSR compatibility with manual hydration
+- ✅ WebSocket real-time synchronization
+- ✅ React Query automatic invalidation
+- ✅ Persistent state with compression
+- ✅ Time-travel debugging (dev only)
+- ✅ Cross-tab synchronization (optional)
+- ✅ Optimistic updates
+- ✅ Type-safe selectors
+- ✅ Redux DevTools integration
+
+---
+
+## 12. Practical Integration Examples
+
+### 12.1 Complete Kanban Board Integration
+
+Example showing Zustand + React Query + WebSocket working together:
+
+```typescript
+// components/kanban/KanbanBoard.tsx
+"use client"
+
+import { useEffect } from "react"
+import { DndContext, DragEndEvent, DragStartEvent } from "@dnd-kit/core"
+import { useKanbanStore } from "@/stores/kanbanStore"
+import { useBoard } from "@/hooks/useBoard"
+import { useMoveTicket } from "@/hooks/useBoard"
+import { useUIStore } from "@/stores/uiStore"
+import { shallow } from "zustand/shallow"
+
+export function KanbanBoard({ projectId }: { projectId: string }) {
+  const { data: boardData } = useBoard(projectId)
+  const moveTicketMutation = useMoveTicket()
+  const { addToast } = useUIStore()
+  
+  // Optimized Zustand selectors
+  const {
+    columns,
+    tickets,
+    draggedTicket,
+    setColumns,
+    setTickets,
+    setDraggedTicket,
+    moveTicket,
+  } = useKanbanStore(
+    (state) => ({
+      columns: state.columns,
+      tickets: state.tickets,
+      draggedTicket: state.draggedTicket,
+      setColumns: state.setColumns,
+      setTickets: state.setTickets,
+      setDraggedTicket: state.setDraggedTicket,
+      moveTicket: state.moveTicket,
+    }),
+    shallow
+  )
+
+  // Sync React Query data → Zustand store
+  useEffect(() => {
+    if (boardData) {
+      setColumns(boardData.columns)
+      setTickets(
+        boardData.tickets.reduce((acc, ticket) => {
+          acc[ticket.id] = ticket
+          return acc
+        }, {})
+      )
+    }
+  }, [boardData, setColumns, setTickets])
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggedTicket(event.active.id as string)
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    
+    if (over && active.id !== over.id) {
+      const ticketId = active.id as string
+      const ticket = tickets[ticketId]
+      const newColumnId = over.id as string
+      
+      // 1. Optimistic update in Zustand (instant UI feedback)
+      moveTicket(ticketId, ticket.status, newColumnId)
+      
+      // 2. React Query mutation (persist to server)
+      // 3. React Query Bridge middleware will auto-invalidate cache
+      // 4. WebSocket sync middleware will handle real-time updates from other clients
+      moveTicketMutation.mutate(
+        { ticketId, columnId: newColumnId, projectId },
+        {
+          onSuccess: () => {
+            addToast({ type: 'success', message: 'Ticket moved' })
+          },
+          onError: () => {
+            addToast({ type: 'error', message: 'Failed to move ticket' })
+            // React Query will rollback optimistic update
+          },
+        }
+      )
+    }
+    
+    setDraggedTicket(null)
+  }
+
+  return (
+    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      {/* Board columns */}
+    </DndContext>
+  )
+}
+```
+
+### 12.2 Real-Time Agent Health Monitoring
+
+```typescript
+// components/agents/AgentHealthMonitor.tsx
+"use client"
+
+import { useEffect } from "react"
+import { useAgentStore } from "@/stores/agentStore"
+import { useAgents } from "@/hooks/useAgents"
+import { useWebSocketSubscription } from "@/hooks/useWebSocket"
+import { Badge } from "@/components/ui/badge"
+import { motion } from "framer-motion"
+
+export function AgentHealthMonitor() {
+  const { data: agents } = useAgents()
+  const { agentHealthMap, updateAgentHealth } = useAgentStore()
+  
+  // WebSocket updates health map via middleware
+  // No manual subscription needed - middleware handles it!
+  
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+      {agents?.map((agent) => {
+        const health = agentHealthMap[agent.id]
+        
+        return (
+          <motion.div
+            key={agent.id}
+            layout
+            className="p-4 border rounded-lg"
+          >
+            <div className="flex items-center justify-between">
+              <span className="font-medium">{agent.name}</span>
+              <Badge variant={health?.isStale ? "destructive" : "default"}>
+                {health?.isStale ? "Stale" : "Active"}
+              </Badge>
+            </div>
+            {health?.lastHeartbeat && (
+              <span className="text-xs text-muted-foreground">
+                Last heartbeat: {formatDistanceToNow(new Date(health.lastHeartbeat))}
+              </span>
+            )}
+          </motion.div>
+        )
+      })}
+    </div>
+  )
+}
+```
+
+### 12.3 Search with History and Type Filters
+
+```typescript
+// components/search/AdvancedSearch.tsx
+"use client"
+
+import { useSearchStore } from "@/stores/searchStore"
+import { useSearchResults } from "@/hooks/useSearch"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import { Command, CommandInput, CommandList, CommandGroup, CommandItem } from "@/components/ui/command"
+import { Badge } from "@/components/ui/badge"
+
+export function AdvancedSearch() {
+  const {
+    query,
+    searchHistory,
+    selectedTypes,
+    setQuery,
+    addToHistory,
+    setSelectedTypes,
+    getFilteredResults,
+  } = useSearchStore()
+  
+  const debouncedQuery = useDebouncedValue(query, 300)
+  const { data: results } = useSearchResults(debouncedQuery)
+  
+  // Store automatically persists searchHistory to localStorage
+  // WebSocket sync middleware keeps results updated in real-time
+  
+  const handleSearch = (searchQuery: string) => {
+    setQuery(searchQuery)
+    if (searchQuery.trim()) {
+      addToHistory(searchQuery) // Auto-persisted
+    }
+  }
+  
+  const toggleType = (type: string) => {
+    setSelectedTypes(
+      selectedTypes.includes(type)
+        ? selectedTypes.filter((t) => t !== type)
+        : [...selectedTypes, type]
+    )
+  }
+  
+  const filteredResults = getFilteredResults()
+  
+  return (
+    <Command>
+      <CommandInput value={query} onValueChange={handleSearch} />
+      
+      {/* Type filters */}
+      <div className="flex gap-2 p-2">
+        {['ticket', 'agent', 'commit'].map((type) => (
+          <Badge
+            key={type}
+            variant={selectedTypes.includes(type) ? "default" : "outline"}
+            onClick={() => toggleType(type)}
+            className="cursor-pointer"
+          >
+            {type}
+          </Badge>
+        ))}
+      </div>
+      
+      <CommandList>
+        {!query && searchHistory.length > 0 && (
+          <CommandGroup heading="Recent">
+            {searchHistory.slice(0, 5).map((item) => (
+              <CommandItem key={item} onSelect={() => handleSearch(item)}>
+                {item}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        
+        {filteredResults.map((result) => (
+          <CommandItem key={result.id}>{result.title}</CommandItem>
+        ))}
+      </CommandList>
+    </Command>
+  )
+}
+```
+
+### 12.4 Undo/Redo Implementation with Zundo
+
+```typescript
+// components/kanban/KanbanToolbar.tsx
+import { useKanbanStore } from "@/stores/kanbanStore"
+import { Button } from "@/components/ui/button"
+import { Undo, Redo } from "lucide-react"
+
+export function KanbanToolbar() {
+  const { undo, redo, futureStates, pastStates } = useKanbanStore.temporal.getState()
+  
+  const canUndo = pastStates.length > 0
+  const canRedo = futureStates.length > 0
+  
+  return (
+    <div className="flex gap-2">
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={undo}
+        disabled={!canUndo}
+        title={`Undo (${pastStates.length} available)`}
+      >
+        <Undo className="h-4 w-4" />
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={redo}
+        disabled={!canRedo}
+        title={`Redo (${futureStates.length} available)`}
+      >
+        <Redo className="h-4 w-4" />
+      </Button>
+    </div>
+  )
+}
+```
+
+---
+
+This completes the comprehensive system-wide reusable hooks documentation covering UI state, forms, navigation, permissions, optimistic updates, pagination, search/filters, storage, WebSocket, keyboard shortcuts, clipboard, file upload, export/import, theme, real-time subscriptions, cache management, terminal streaming with Xterm.js, code highlighting, advanced Zustand middleware integration, complete provider architecture, and practical integration examples.
 

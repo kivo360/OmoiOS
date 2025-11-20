@@ -9,10 +9,24 @@
 - **Framework**: Next.js 15 (App Router)
 - **UI Library**: ShadCN UI (Radix UI + Tailwind CSS)
 - **Styling**: Tailwind CSS
-- **State Management**: Zustand (global), React Query (server state)
+- **State Management**: 
+  - **Zustand** (client state) with middleware:
+    - `zustand/middleware/persist` - Persistent state
+    - `zustand/middleware/devtools` - Redux DevTools integration
+    - `zustand/middleware/immer` - Immutable state updates
+    - `zustand/middleware/subscribeWithSelector` - Selective subscriptions
+    - Custom `websocketSync` middleware - Real-time synchronization
+    - Custom `reactQueryBridge` middleware - React Query integration
+    - `zundo` - Advanced undo/redo with time-travel
+    - `zustand-pub` - Cross-tab synchronization (optional)
+  - **React Query** (server state) with WebSocket integration
+- **Animations**: Framer Motion
 - **Icons**: Lucide React
 - **Graphs**: React Flow
 - **Drag & Drop**: dnd-kit (accessible drag and drop)
+- **Terminal**: Xterm.js with addons (fit, web-links, search, unicode11, serialize)
+- **Code Highlighting**: react-syntax-highlighter with Prism
+- **Date Utilities**: date-fns
 
 ## 2. ShadCN Component Mapping
 
@@ -223,13 +237,111 @@ We will use **React Query (TanStack Query)** for all client-side data fetching, 
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-tooltip": "^1.0.7",
     "@tanstack/react-query": "^5.0.0",
+    "@tanstack/react-query-devtools": "^5.0.0",
     "@dnd-kit/core": "^6.1.0",
     "@dnd-kit/sortable": "^8.0.0",
+    "@dnd-kit/utilities": "^3.2.0",
     "reactflow": "^11.10.0",
-    "zustand": "^4.4.0",
+    "zustand": "^4.5.0",
+    "immer": "^10.0.3",
+    "zundo": "^2.0.0",
+    "zustand-pub": "^1.0.0",
+    "lz-string": "^1.5.0",
     "date-fns": "^2.30.0",
-    "recharts": "^2.9.0"
+    "recharts": "^2.9.0",
+    "framer-motion": "^11.0.0",
+    "react-syntax-highlighter": "^15.5.0",
+    "@types/react-syntax-highlighter": "^15.5.11",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "xterm-addon-web-links": "^0.9.0",
+    "xterm-addon-search": "^0.13.0",
+    "xterm-addon-unicode11": "^0.6.0",
+    "xterm-addon-serialize": "^0.11.0",
+    "xterm-addon-image": "^0.6.0",
+    "xterm-addon-ligatures": "^0.7.0",
+    "next-themes": "^0.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.0"
   }
 }
 ```
+
+## 7. Zustand Middleware Architecture
+
+### 7.1 Middleware Stack
+
+The application uses a layered middleware approach for Zustand stores:
+
+```typescript
+// Middleware order (outermost to innermost):
+devtools(           // 1. Redux DevTools integration
+  persist(          // 2. localStorage/sessionStorage persistence
+    websocketSync(  // 3. Real-time WebSocket synchronization
+      reactQueryBridge(  // 4. React Query cache integration
+        timeTravel(      // 5. Time-travel debugging (dev only)
+          subscribeWithSelector(  // 6. Performance optimization
+            immer(               // 7. Immutable updates (innermost)
+              (set, get) => ({ /* store implementation */ })
+            )
+          )
+        )
+      )
+    )
+  )
+)
+```
+
+### 7.2 Available Custom Middleware
+
+#### `websocketSync` Middleware
+Synchronizes Zustand state with WebSocket events in real-time:
+- Listens to specific WebSocket event types
+- Transforms incoming messages to state updates
+- Optionally syncs local state changes back to server
+- Supports both object merge and immer-style updates
+
+#### `reactQueryBridge` Middleware
+Bidirectional sync between Zustand and React Query:
+- Triggers React Query invalidations on state changes
+- Syncs React Query cache data to Zustand store
+- Supports optimistic updates
+- Configurable invalidation rules
+
+#### `timeTravel` Middleware (Development)
+Undo/redo support with state history:
+- Maintains state history (configurable max)
+- Provides `undo()`, `redo()`, `reset()` actions
+- Only enabled in development mode
+- Can navigate to specific historical state
+
+#### Advanced Persistence Options
+- `compressedStorage` - LZ-string compression for large state
+- `encryptedStorage` - Client-side encryption (requires key)
+- `robustStorage` - Multi-fallback (localStorage → sessionStorage → memory)
+
+### 7.3 Store Architecture
+
+**Core Stores**:
+- `uiStore` - Global UI state (theme, sidebar, modals, toasts)
+- `kanbanStore` - Kanban board state with drag-and-drop
+- `agentStore` - Agent selection, filters, health monitoring
+- `searchStore` - Search state with history persistence
+- `terminalStore` - Multi-session terminal management
+- `monitoringStore` - System-wide metrics and coherence
+
+**Store Features**:
+- Type-safe throughout with TypeScript
+- SSR-compatible with manual hydration
+- Selective subscriptions for performance
+- Cross-tab synchronization (optional)
+- Automatic React Query integration
+- Real-time WebSocket updates
 

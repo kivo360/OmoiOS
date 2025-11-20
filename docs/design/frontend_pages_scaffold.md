@@ -694,13 +694,18 @@ export default function OAuthCallbackPage() {
 
 ### `app/(dashboard)/layout.tsx`
 
-Root layout for the authenticated dashboard area with auth protection.
+Root layout with providers for React Query, Zustand, and WebSocket.
 
 ```tsx
 import { AppSidebar } from "@/components/layout/AppSidebar"
 import { TopHeader } from "@/components/layout/TopHeader" 
 import { AuthGuard } from "@/components/auth/AuthGuard"
 import { Toaster } from "@/components/ui/toaster"
+import { StoreProvider } from "@/providers/StoreProvider"
+import { QueryProvider } from "@/providers/QueryProvider"
+import { WebSocketProvider } from "@/providers/WebSocketProvider"
+import { ThemeProvider } from "@/providers/ThemeProvider"
+import { ToastProvider } from "@/components/ui/ToastProvider"
 
 export default function DashboardLayout({
   children,
@@ -708,23 +713,33 @@ export default function DashboardLayout({
   children: React.ReactNode
 }) {
   return (
-    <AuthGuard>
-      <div className="flex min-h-screen bg-muted/10">
-        {/* Sidebar */}
-        <AppSidebar className="hidden md:block fixed inset-y-0 z-50" />
-        
-        <div className="flex flex-col flex-1 md:pl-64 transition-all duration-300">
-          {/* Top Header */}
-          <TopHeader />
-          
-          {/* Main Content */}
-          <main className="flex-1 p-6 overflow-y-auto">
-            {children}
-          </main>
-        </div>
-        <Toaster />
-      </div>
-    </AuthGuard>
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <QueryProvider>
+        <WebSocketProvider>
+          <StoreProvider>
+            <AuthGuard>
+              <div className="flex min-h-screen bg-gradient-to-br from-background via-muted/5 to-background">
+                {/* Sidebar */}
+                <AppSidebar className="hidden md:block fixed inset-y-0 z-50" />
+                
+                <div className="flex flex-col flex-1 md:pl-64 transition-all duration-300">
+                  {/* Top Header */}
+                  <TopHeader />
+                  
+                  {/* Main Content */}
+                  <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                    {children}
+                  </main>
+                </div>
+                
+                <ToastProvider />
+                <Toaster />
+              </div>
+            </AuthGuard>
+          </StoreProvider>
+        </WebSocketProvider>
+      </QueryProvider>
+    </ThemeProvider>
   )
 }
 ```
@@ -1015,69 +1030,170 @@ export default function ProjectOverviewPage({ params }: { params: { projectId: s
 
 ### `app/(dashboard)/projects/[projectId]/board/page.tsx`
 
-Kanban board.
+Kanban board with Zustand state management and React Query integration.
 
 ```tsx
 "use client"
 
-import { DndContext, DragOverlay, closestCorners } from "@dnd-kit/core"
-import { useState } from "react"
+import { useEffect } from "react"
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, closestCorners } from "@dnd-kit/core"
 import { BoardColumn } from "@/components/kanban/BoardColumn"
+import { TicketCard } from "@/components/kanban/TicketCard"
 import { Button } from "@/components/ui/button"
-import { Filter } from "lucide-react"
+import { useKanbanStore } from "@/stores/kanbanStore"
+import { useBoard } from "@/hooks/useBoard"
+import { useMoveTicket } from "@/hooks/useBoard"
+import { useUIStore } from "@/stores/uiStore"
+import { Filter, Plus, Settings2 } from "lucide-react"
 import { createPortal } from "react-dom"
-
-// Mock data
-const initialData = {
-  columns: [
-    { id: "backlog", title: "Backlog", tickets: [{ id: "T-1", title: "Setup Repo", description: "Init git", priority: "high", status: "backlog" }] },
-    { id: "todo", title: "To Do", tickets: [] },
-    { id: "in_progress", title: "In Progress", tickets: [{ id: "T-2", title: "Dev Auth", description: "Implement OAuth", priority: "critical", status: "in_progress" }] },
-    { id: "done", title: "Done", tickets: [] },
-  ]
-}
+import { shallow } from "zustand/shallow"
+import { motion } from "framer-motion"
 
 export default function BoardPage({ params }: { params: { projectId: string } }) {
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [columns, setColumns] = useState(initialData.columns)
+  const { data: boardData, isLoading } = useBoard(params.projectId)
+  const moveTicketMutation = useMoveTicket()
+  const { addToast } = useUIStore()
+  
+  // Zustand store with optimized selectors
+  const {
+    columns,
+    tickets,
+    draggedTicket,
+    setColumns,
+    setTickets,
+    setDraggedTicket,
+    setHoveredColumn,
+    moveTicket,
+    setProjectId,
+  } = useKanbanStore(
+    (state) => ({
+      columns: state.columns,
+      tickets: state.tickets,
+      draggedTicket: state.draggedTicket,
+      setColumns: state.setColumns,
+      setTickets: state.setTickets,
+      setDraggedTicket: state.setDraggedTicket,
+      setHoveredColumn: state.setHoveredColumn,
+      moveTicket: state.moveTicket,
+      setProjectId: state.setProjectId,
+    }),
+    shallow
+  )
 
-  function handleDragStart(event: any) {
-    setActiveId(event.active.id)
+  // Sync server data to Zustand
+  useEffect(() => {
+    if (boardData) {
+      setColumns(boardData.columns)
+      setTickets(
+        boardData.tickets.reduce((acc, ticket) => {
+          acc[ticket.id] = ticket
+          return acc
+        }, {} as Record<string, any>)
+      )
+      setProjectId(params.projectId)
+    }
+  }, [boardData, params.projectId, setColumns, setTickets, setProjectId])
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setDraggedTicket(event.active.id as string)
   }
 
-  function handleDragEnd(event: any) {
-    setActiveId(null)
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+    
+    if (over && active.id !== over.id) {
+      const ticketId = active.id as string
+      const ticket = tickets[ticketId]
+      const newColumnId = over.id as string
+      
+      // Optimistic update in Zustand
+      moveTicket(ticketId, ticket.status, newColumnId)
+      
+      // Persist to server with React Query
+      moveTicketMutation.mutate(
+        {
+          ticketId,
+          columnId: newColumnId,
+          projectId: params.projectId,
+        },
+        {
+          onSuccess: () => {
+            addToast({ type: 'success', message: 'Ticket moved successfully' })
+          },
+          onError: (error) => {
+            addToast({ type: 'error', message: 'Failed to move ticket' })
+            // Zustand will rollback via React Query bridge
+          },
+        }
+      )
+    }
+    
+    setDraggedTicket(null)
+    setHoveredColumn(null)
+  }
+
+  const handleDragOver = (event: any) => {
+    if (event.over) {
+      setHoveredColumn(event.over.id as string)
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      </div>
+    )
   }
 
   return (
-    <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+    <DndContext 
+      onDragStart={handleDragStart} 
+      onDragEnd={handleDragEnd}
+      onDragOver={handleDragOver}
+      collisionDetection={closestCorners}
+    >
       <div className="flex flex-col h-full gap-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
           <h2 className="text-lg font-semibold">Kanban Board</h2>
-          <div className="flex gap-2">
-             <Button variant="outline" size="sm">
-               <Filter className="mr-2 h-4 w-4" /> Filter
-             </Button>
-             <Button size="sm">Add Ticket</Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button variant="outline" size="sm" className="shadow-sm">
+              <Filter className="mr-2 h-4 w-4" /> Filter
+            </Button>
+            <Button variant="outline" size="sm" className="shadow-sm">
+              <Settings2 className="mr-2 h-4 w-4" /> View
+            </Button>
+            <Button size="sm" className="shadow-sm">
+              <Plus className="mr-2 h-4 w-4" /> Add Ticket
+            </Button>
           </div>
         </div>
         
-        <div className="flex h-full gap-4 overflow-x-auto pb-4">
-          {columns.map((col) => (
-            <BoardColumn 
-              key={col.id} 
-              id={col.id} 
-              title={col.title} 
-              tickets={col.tickets} 
-            />
+        <div className="flex h-full gap-4 overflow-x-auto pb-4 px-1">
+          {columns.map((col, index) => (
+            <motion.div
+              key={col.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: index * 0.1 }}
+            >
+              <BoardColumn 
+                id={col.id} 
+                title={col.title} 
+                tickets={col.tickets.map((id) => tickets[id]).filter(Boolean)}
+                color={col.id as any}
+              />
+            </motion.div>
           ))}
         </div>
       </div>
 
       {typeof document !== 'undefined' && createPortal(
         <DragOverlay>
-          {activeId ? (
-             <div className="p-4 bg-background border rounded shadow-lg opacity-80 rotate-2 cursor-grabbing">Dragging...</div>
+          {draggedTicket && tickets[draggedTicket] ? (
+            <div className="rotate-3 scale-105 opacity-90">
+              <TicketCard ticket={tickets[draggedTicket]} isDragging />
+            </div>
           ) : null}
         </DragOverlay>,
         document.body
@@ -1661,4 +1777,197 @@ export default function TemplatesPage() {
 
 ---
 
-This completes all missing pages for the scaffold documentation.
+## 24. Provider Setup
+
+### `providers/QueryProvider.tsx`
+
+React Query provider with configuration.
+
+```tsx
+"use client"
+
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
+import { useState } from "react"
+
+export function QueryProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 60 * 1000, // 1 minute
+            refetchOnWindowFocus: false,
+            retry: 1,
+          },
+        },
+      })
+  )
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      {children}
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  )
+}
+```
+
+### `providers/WebSocketProvider.tsx`
+
+WebSocket connection provider.
+
+```tsx
+"use client"
+
+import { createContext, useContext, useEffect, useRef, useState } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import { useWebSocketEvents } from "@/hooks/useWebSocketEvents"
+
+interface WebSocketContextValue {
+  socket: WebSocket | null
+  isConnected: boolean
+  send: (type: string, payload: any) => void
+}
+
+const WebSocketContext = createContext<WebSocketContextValue>({
+  socket: null,
+  isConnected: false,
+  send: () => {},
+})
+
+export function WebSocketProvider({ children }: { children: React.ReactNode }) {
+  const [socket, setSocket] = useState<WebSocket | null>(null)
+  const [isConnected, setIsConnected] = useState(false)
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout>()
+  
+  useEffect(() => {
+    const connect = () => {
+      const ws = new WebSocket(process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000/api/v1/ws/events')
+      
+      ws.onopen = () => {
+        setIsConnected(true)
+        console.log('WebSocket connected')
+      }
+      
+      ws.onclose = () => {
+        setIsConnected(false)
+        console.log('WebSocket disconnected, reconnecting...')
+        reconnectTimeoutRef.current = setTimeout(connect, 3000)
+      }
+      
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error)
+      }
+      
+      setSocket(ws)
+    }
+    
+    connect()
+    
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      socket?.close()
+    }
+  }, [])
+  
+  // Setup event handlers
+  useWebSocketEvents()
+  
+  const send = (type: string, payload: any) => {
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type, payload }))
+    }
+  }
+
+  return (
+    <WebSocketContext.Provider value={{ socket, isConnected, send }}>
+      {children}
+    </WebSocketContext.Provider>
+  )
+}
+
+export const useWebSocket = () => useContext(WebSocketContext)
+```
+
+### `providers/StoreProvider.tsx`
+
+Zustand store hydration provider.
+
+```tsx
+"use client"
+
+import { useEffect, useRef } from 'react'
+import { useKanbanStore, setKanbanWebSocket } from '@/stores/kanbanStore'
+import { useAgentStore, setAgentWebSocket } from '@/stores/agentStore'
+import { useUIStore } from '@/stores/uiStore'
+import { useWebSocket } from './WebSocketProvider'
+
+export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const { socket } = useWebSocket()
+  const hasHydrated = useRef(false)
+  
+  // Setup WebSocket connections for stores
+  useEffect(() => {
+    if (socket) {
+      setKanbanWebSocket(socket)
+      setAgentWebSocket(socket)
+    }
+    
+    return () => {
+      setKanbanWebSocket(null)
+      setAgentWebSocket(null)
+    }
+  }, [socket])
+  
+  // Manual hydration for SSR compatibility
+  useEffect(() => {
+    if (!hasHydrated.current) {
+      useKanbanStore.persist?.rehydrate()
+      useAgentStore.persist?.rehydrate()
+      useUIStore.persist?.rehydrate()
+      hasHydrated.current = true
+    }
+  }, [])
+  
+  return <>{children}</>
+}
+```
+
+### `app/layout.tsx`
+
+Root layout with all providers.
+
+```tsx
+import type { Metadata } from "next"
+import { Inter } from "next/font/google"
+import "./globals.css"
+import "xterm/css/xterm.css"
+
+const inter = Inter({ subsets: ["latin"] })
+
+export const metadata: Metadata = {
+  title: "OmoiOS Dashboard",
+  description: "Multi-agent orchestration system dashboard",
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        {children}
+      </body>
+    </html>
+  )
+}
+```
+
+---
+
+This completes all pages for the scaffold documentation with comprehensive provider setup, Zustand integration, and React Query + WebSocket coordination.
