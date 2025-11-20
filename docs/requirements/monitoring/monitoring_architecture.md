@@ -1,5 +1,13 @@
 # Monitoring Architecture Requirements
 
+**Created**: 2025-11-20
+**Status**: Draft
+**Purpose**: Defines normative requirements for the monitoring stack, including loop cadence, Guardian and Conductor behavior, data contracts, APIs, events, configuration, SLOs, and reference models.
+**Related**: ../multi_agent_orchestration.md, ./fault_tolerance.md, ../workflows/validation_system.md, ../workflows/diagnosis_agent.md
+
+---
+
+
 ## Document Overview
 
 Normative requirements for the monitoring stack: loop cadence, Guardian and Conductor behaviors, data contracts, APIs, events, configuration (with generic vector search and PGVector as a preferred implementation), SLOs, and Pydantic reference models.

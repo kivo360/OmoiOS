@@ -1,5 +1,13 @@
 # Agent Memory System Requirements
 
+**Created**: 2025-11-20
+**Status**: Draft
+**Purpose**: Defines normative requirements for the server-based Agent Memory System, including taxonomy, data model, hybrid search, ACE workflow, APIs, and constraints.
+**Related**: docs/requirements/multi_agent_orchestration.md
+
+---
+
+
 ## Document Overview
 
 This document defines normative requirements for the server-based Agent Memory System. It specifies memory taxonomy, data models, hybrid search behavior, ACE workflow responsibilities, APIs, and non-functional constraints. The implementation is expected to use PostgreSQL with pgvector for semantic search, but all search requirements MUST be expressed in terms of a generic vector search capability.

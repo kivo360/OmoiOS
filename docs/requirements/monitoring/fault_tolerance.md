@@ -1,5 +1,13 @@
 # Monitoring & Fault Tolerance Requirements
 
+**Created**: 2025-11-20
+**Status**: Draft
+**Purpose**: Define heartbeat detection, automatic restart, anomaly detection, escalation, and quarantine protocols for resilient multi‑agent operations.
+**Related**: ../multi_agent_orchestration.md, ../agents/lifecycle_management.md, ../workflows/task_queue_management.md, ../integration/mcp_servers.md
+
+---
+
+
 ## Document Overview
 
 This document details heartbeat detection, automatic restart, anomaly detection, escalation, and quarantine protocols for resilient multi-agent operations.

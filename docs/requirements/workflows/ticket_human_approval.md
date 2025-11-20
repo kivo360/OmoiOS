@@ -1,5 +1,13 @@
 # Ticket Human Approval Requirements
 
+**Created**: 2025-11-20
+**Status**: Draft
+**Purpose**: Define the human-in-the-loop approval gate for ticket creation/activation, including lifecycle, data model, API, events, and guardrails.
+**Related**: ../multi_agent_orchestration.md, ./ticket_workflow.md, ./task_queue_management.md, ./validation_system.md, ../monitoring/fault_tolerance.md
+
+---
+
+
 ## Document Overview
 
 This document defines the human-in-the-loop approval gate for ticket creation/activation. When enabled, agent-initiated ticket creation is placed in a pending review state until explicitly approved or rejected by a human. The gate prevents unnecessary workspace/branch/sandbox spin-up before approval.
