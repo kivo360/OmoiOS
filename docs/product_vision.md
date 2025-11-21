@@ -320,9 +320,10 @@ The adaptive monitoring loop addresses the "agent SOFAR" problem—where systems
 - `omoi_os/services/trajectory_context.py` - Builds accumulated understanding from conversation history, extracts persistent constraints, standing instructions, and journey tracking
 - `omoi_os/services/conductor.py` - System-wide coherence analysis and duplicate detection
 - `omoi_os/services/discovery.py` - Task discovery and workflow branching
-- `omoi_os/services/memory.py` - Semantic memory for pattern storage and retrieval
+- `omoi_os/services/memory.py` - Semantic memory for pattern storage and retrieval with hybrid search (semantic + keyword using RRF), automatic pattern extraction, memory type taxonomy (error_fix, discovery, decision, learning, warning, codebase_knowledge), and similarity search. **Enhancement opportunities**: Agent-accessible MCP tools (save_memory, find_memory), pre-loaded context at agent spawn, deduplication system, and enhanced metadata (tags, related_files, agent_id).
 - `omoi_os/services/agent_output_collector.py` - Collects agent outputs for trajectory analysis
 - `omoi_os/services/conversation_intervention.py` - Sends steering interventions to OpenHands conversations
+- `omoi_os/services/embedding.py` - Embedding generation using OpenAI text-embedding-3-small (1536-dim) or local multilingual-e5-large (padded to 1536-dim)
 
 ### Next Steps for Implementation
 
@@ -360,6 +361,41 @@ These enhancements will make OmoiOS's Guardian system even more effective at kee
    - Categorize idle detection as a distinct steering type
 
 **Benefits**: These enhancements will make Guardian interventions more specific, actionable, and effective at preventing common agent drift patterns, improving the self-healing capabilities of the system.
+
+#### Phase 0.5: Memory System Enhancement Opportunities
+
+These enhancements will enable true collective intelligence where agents learn from each other in real-time, aligning with Hephaestus Memory System best practices:
+
+1. **Agent-Accessible MCP Tools**
+   - Create `save_memory` MCP tool for agents to save discoveries during execution
+   - Create `find_memory` MCP tool for agents to search memories semantically during execution
+   - Enable agents to learn from each other's discoveries in real-time
+   - Example: Agent encounters error → searches memory → finds solution → saves fix for future agents
+
+2. **Pre-loaded Context at Agent Spawn**
+   - Enhance agent spawn to pre-load top 20 most relevant memories based on task description
+   - Embed memories in agent's initial system prompt
+   - Cover 80% of agent needs upfront, reducing need for dynamic searches
+   - Improve agent performance by starting with relevant context
+
+3. **Deduplication System**
+   - Add similarity threshold check (0.95) before storing new memories
+   - Prevent redundant knowledge storage
+   - Reduce storage costs and maintain uniqueness of insights
+   - Store duplicates as metadata-only records
+
+4. **Enhanced Metadata & Tags**
+   - Add `tags` field (array of searchable tags) to TaskMemory model
+   - Add `related_files` field (array of file paths) to TaskMemory model
+   - Add `agent_id` field to track which agent created the memory
+   - Improve searchability and context tracking
+
+5. **Dual Storage Architecture (Optional)**
+   - Consider separating metadata (PostgreSQL) from embeddings (dedicated vector DB)
+   - Improve scalability for large memory sets
+   - Note: Current PostgreSQL approach works well, this is optional optimization
+
+**Benefits**: These enhancements will enable agents to share knowledge in real-time, reduce redundant work, and improve overall system intelligence through collective learning.
 
 #### Phase 1: Pattern Storage and Retrieval
 1. **Enhance MonitoringLoop** to store successful/failed patterns in MemoryService
