@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from omoi_os.api.dependencies import get_db_session, get_current_user, get_auth_service
