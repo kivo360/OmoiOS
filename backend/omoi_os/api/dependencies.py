@@ -2,9 +2,13 @@
 
 from typing import TYPE_CHECKING, Optional
 from fastapi import Depends
+from fastapi.security import HTTPBearer
 
 if TYPE_CHECKING:
     from fastapi.security import HTTPAuthorizationCredentials
+
+# Security scheme
+security = HTTPBearer()
 
 if TYPE_CHECKING:
     from omoi_os.services.agent_health import AgentHealthService
