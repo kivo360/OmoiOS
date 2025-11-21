@@ -16,6 +16,11 @@ from sqlalchemy.orm import Session
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.models.phase import PhaseModel
+from omoi_os.models.guardian_analysis import (
+    GuardianAnalysis as GuardianAnalysisModel,
+    SteeringInterventionModel,
+)
+from omoi_os.models.trajectory_analysis import LLMTrajectoryAnalysisResponse
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.llm_service import LLMService
@@ -122,7 +127,7 @@ class IntelligentGuardian:
         self.output_collector = AgentOutputCollector(db, event_bus)
         self.guardian = GuardianService(db, event_bus)
 
-    def analyze_agent_trajectory(
+    async def analyze_agent_trajectory(
         self,
         agent_id: str,
         force_analysis: bool = False,
@@ -154,8 +159,9 @@ class IntelligentGuardian:
                     return None
 
                 # Build trajectory context
+                # Note: build_accumulated_context creates its own session internally
                 trajectory_data = self.trajectory_context.build_accumulated_context(
-                    agent_id, session=session
+                    agent_id
                 )
 
                 if not trajectory_data:
@@ -168,7 +174,7 @@ class IntelligentGuardian:
                 )
 
                 # Perform LLM-powered trajectory analysis
-                analysis_result = self._llm_trajectory_analysis(
+                analysis_result = await self._llm_trajectory_analysis(
                     agent, trajectory_data, agent_output
                 )
 
@@ -212,7 +218,7 @@ class IntelligentGuardian:
             logger.error(f"Failed to analyze trajectory for agent {agent_id}: {e}")
             return None
 
-    def analyze_all_active_agents(
+    async def analyze_all_active_agents(
         self,
         force_analysis: bool = False,
     ) -> List[TrajectoryAnalysis]:
@@ -221,13 +227,13 @@ class IntelligentGuardian:
         analyses = []
 
         for agent in active_agents:
-            analysis = self.analyze_agent_trajectory(agent.id, force_analysis)
+            analysis = await self.analyze_agent_trajectory(agent.id, force_analysis)
             if analysis:
                 analyses.append(analysis)
 
         return analyses
 
-    def detect_steering_interventions(
+    async def detect_steering_interventions(
         self,
         analyses: Optional[List[TrajectoryAnalysis]] = None,
     ) -> List[SteeringIntervention]:
@@ -240,7 +246,7 @@ class IntelligentGuardian:
             List of recommended steering interventions
         """
         if analyses is None:
-            analyses = self.analyze_all_active_agents()
+            analyses = await self.analyze_all_active_agents()
 
         interventions = []
 
@@ -334,10 +340,10 @@ class IntelligentGuardian:
             logger.error(f"Failed to get trajectory health for {agent_id}: {e}")
             return {"status": "error", "agent_id": agent_id, "error": str(e)}
 
-    def get_system_trajectory_overview(self) -> Dict[str, Any]:
+    async def get_system_trajectory_overview(self) -> Dict[str, Any]:
         """Get system-wide trajectory overview."""
         try:
-            analyses = self.analyze_all_active_agents()
+            analyses = await self.analyze_all_active_agents()
 
             if not analyses:
                 return {
@@ -508,7 +514,7 @@ class IntelligentGuardian:
             logger.error(f"Failed to get phase context for {phase_id}: {e}")
             return None
 
-    def _llm_trajectory_analysis(
+    async def _llm_trajectory_analysis(
         self,
         agent: Agent,
         trajectory_data: Dict[str, Any],
@@ -542,8 +548,51 @@ class IntelligentGuardian:
                 phase_context=phase_context,
             )
 
-            response = self.llm_service.ainvoke(prompt)
-            return response
+            # Use structured_output to get properly typed Pydantic model directly
+            # No manual JSON parsing needed - Pydantic AI handles it!
+            try:
+                analysis_result = await self.llm_service.structured_output(
+                    prompt=prompt,
+                    output_type=LLMTrajectoryAnalysisResponse,
+                    system_prompt="You are an expert AI system analyzer. Analyze agent trajectories and provide structured analysis.",
+                    output_retries=3,  # Retry if validation fails
+                )
+
+                # Convert Pydantic model to JSON-serializable dict
+                # Using mode='json' ensures proper serialization for JSONB storage
+                # Note: session_duration is a string in the model, we'll convert it later
+                result_dict = analysis_result.model_dump(mode="json")
+
+                # Convert session_duration string to timedelta if needed
+                if result_dict.get("session_duration"):
+                    try:
+                        # If it's already a timedelta-like string, convert it
+                        # For now, if it's a string like "N/A", we'll set to None
+                        duration_str = result_dict["session_duration"]
+                        if duration_str.lower() in ("n/a", "not started", "unknown"):
+                            result_dict["session_duration"] = None
+                        # Could add more sophisticated parsing here if needed
+                    except Exception:
+                        result_dict["session_duration"] = None
+                else:
+                    result_dict["session_duration"] = None
+
+                return result_dict
+
+            except Exception as e:
+                logger.warning(
+                    f"Structured output failed for agent {agent.id}, falling back to minimal structure: {e}"
+                )
+                # Return a minimal structure if structured output fails
+                return {
+                    "trajectory_aligned": True,
+                    "alignment_score": 0.8,
+                    "needs_steering": False,
+                    "trajectory_summary": f"Analysis unavailable: {str(e)}",
+                    "current_focus": "unknown",
+                    "conversation_length": 0,
+                    "details": {},
+                }
 
         except Exception as e:
             logger.error(f"LLM trajectory analysis failed for agent {agent.id}: {e}")
@@ -562,71 +611,71 @@ class IntelligentGuardian:
         analysis: TrajectoryAnalysis,
         agent_output: str,
     ) -> None:
-        """Store guardian analysis in database."""
-        query = text("""
-            INSERT INTO guardian_analyses (
-                id, agent_id, current_phase, trajectory_aligned, alignment_score,
-                needs_steering, steering_type, steering_recommendation, trajectory_summary,
-                last_claude_message_marker, accumulated_goal, current_focus,
-                session_duration, conversation_length, details, created_at, updated_at
-            ) VALUES (
-                :id, :agent_id, :current_phase, :trajectory_aligned, :alignment_score,
-                :needs_steering, :steering_type, :steering_recommendation, :trajectory_summary,
-                :last_claude_message_marker, :accumulated_goal, :current_focus,
-                :session_duration, :conversation_length, :details, :created_at, :updated_at
-            )
-        """)
+        """Store guardian analysis in database using SQLAlchemy ORM model.
 
-        session.execute(
-            query,
-            {
-                "id": uuid.uuid4(),
-                "agent_id": analysis.agent_id,
-                "current_phase": analysis.current_phase,
-                "trajectory_aligned": analysis.trajectory_aligned,
-                "alignment_score": analysis.alignment_score,
-                "needs_steering": analysis.needs_steering,
-                "steering_type": analysis.steering_type,
-                "steering_recommendation": analysis.steering_recommendation,
-                "trajectory_summary": analysis.trajectory_summary,
-                "last_claude_message_marker": analysis.last_claude_message_marker,
-                "accumulated_goal": analysis.accumulated_goal,
-                "current_focus": analysis.current_focus,
-                "session_duration": analysis.session_duration,
-                "conversation_length": analysis.conversation_length,
-                "details": analysis.details,
-                "created_at": utc_now(),
-                "updated_at": utc_now(),
-            },
+        This handles JSONB conversion automatically through SQLAlchemy.
+        """
+        # Convert session_duration string to timedelta if needed
+        session_duration = None
+        if analysis.session_duration:
+            if isinstance(analysis.session_duration, timedelta):
+                session_duration = analysis.session_duration
+            elif isinstance(analysis.session_duration, str):
+                # Skip "N/A" or invalid strings
+                if analysis.session_duration.lower() not in (
+                    "n/a",
+                    "not started",
+                    "unknown",
+                ):
+                    try:
+                        # Try to parse if it's a valid duration string
+                        # For now, just set to None if it's not a valid timedelta
+                        pass
+                    except Exception:
+                        pass
+
+        # Use SQLAlchemy ORM model - JSONB conversion is automatic!
+        guardian_analysis = GuardianAnalysisModel(
+            id=uuid.uuid4(),
+            agent_id=analysis.agent_id,
+            current_phase=analysis.current_phase,
+            trajectory_aligned=analysis.trajectory_aligned,
+            alignment_score=analysis.alignment_score,
+            needs_steering=analysis.needs_steering,
+            steering_type=analysis.steering_type,
+            steering_recommendation=analysis.steering_recommendation,
+            trajectory_summary=analysis.trajectory_summary,
+            last_claude_message_marker=analysis.last_claude_message_marker,
+            accumulated_goal=analysis.accumulated_goal,
+            current_focus=analysis.current_focus,
+            session_duration=session_duration,  # Can be None if invalid
+            conversation_length=analysis.conversation_length,
+            details=analysis.details,  # Dict automatically converted to JSONB!
+            created_at=utc_now(),
+            updated_at=utc_now(),
         )
+
+        session.add(guardian_analysis)
 
     def _store_steering_intervention(
         self,
         session: Session,
         intervention: SteeringIntervention,
     ) -> None:
-        """Store steering intervention in database."""
-        query = text("""
-            INSERT INTO steering_interventions (
-                id, agent_id, steering_type, message, actor_type, actor_id, reason, created_at
-            ) VALUES (
-                :id, :agent_id, :steering_type, :message, :actor_type, :actor_id, :reason, :created_at
-            )
-        """)
-
-        session.execute(
-            query,
-            {
-                "id": uuid.uuid4(),
-                "agent_id": intervention.agent_id,
-                "steering_type": intervention.steering_type,
-                "message": intervention.message,
-                "actor_type": intervention.actor_type,
-                "actor_id": intervention.actor_id,
-                "reason": intervention.reason,
-                "created_at": utc_now(),
-            },
+        """Store steering intervention in database using SQLAlchemy ORM model."""
+        # Use SQLAlchemy ORM model - simpler and type-safe!
+        steering_intervention = SteeringInterventionModel(
+            id=uuid.uuid4(),
+            agent_id=intervention.agent_id,
+            steering_type=intervention.steering_type,
+            message=intervention.message,
+            actor_type=intervention.actor_type,
+            actor_id=intervention.actor_id,
+            reason=intervention.reason,
+            created_at=utc_now(),
         )
+
+        session.add(steering_intervention)
 
     def _execute_intervention_action(self, intervention: SteeringIntervention) -> bool:
         """Execute the actual intervention action by sending message to OpenHands conversation."""

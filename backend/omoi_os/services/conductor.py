@@ -7,16 +7,18 @@ Replaces the original tmux-based agent communication with database-driven analys
 
 import logging
 import uuid
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Tuple
+from datetime import timedelta
+from typing import Dict, List, Optional, Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.guardian_analysis import (
+    ConductorAnalysisModel,
+    DetectedDuplicateModel,
+)
 from omoi_os.models.trajectory_analysis import (
-    ConductorAnalysis as ConductorAnalysisModel,
-    DetectedDuplicate as DetectedDuplicateModel,
     SystemCoherenceResponse,
     SystemHealthResponse,
 )
@@ -92,7 +94,7 @@ class ConductorService:
         self.db = db
         self.llm_service = llm_service or LLMService()
 
-    def analyze_system_coherence(
+    async def analyze_system_coherence(
         self,
         cycle_id: Optional[uuid.UUID] = None,
     ) -> ConductorAnalysis:
@@ -136,10 +138,12 @@ class ConductorService:
                 )
 
                 # Detect duplicate work
-                duplicates = self._detect_duplicates(session, guardian_analyses)
+                duplicates = await self._detect_duplicates(session, guardian_analyses)
 
                 # Identify termination and coordination opportunities
-                termination_count = self._identify_termination_candidates(guardian_analyses)
+                termination_count = self._identify_termination_candidates(
+                    guardian_analyses
+                )
                 coordination_count = self._identify_coordination_opportunities(
                     session, guardian_analyses
                 )
@@ -217,7 +221,10 @@ class ConductorService:
 
     def _get_active_agents(self, session: Session) -> List[Agent]:
         """Get list of active agents."""
-        active_statuses = ["working", "pending", "assigned", "idle"]
+        # Use proper AgentStatus enum values
+        from omoi_os.models.agent_status import AgentStatus
+
+        active_statuses = [AgentStatus.IDLE.value, AgentStatus.RUNNING.value]
         return (
             session.query(Agent)
             .filter(Agent.status.in_(active_statuses))
@@ -276,11 +283,13 @@ class ConductorService:
 
         # Penalty for trajectory misalignment
         trajectory_aligned_count = sum(
-            1 for analysis in guardian_analyses if analysis.get("trajectory_aligned", True)
+            1
+            for analysis in guardian_analyses
+            if analysis.get("trajectory_aligned", True)
         )
         trajectory_penalty = (
-            len(active_agents) - trajectory_aligned_count
-        ) / len(active_agents) * 0.2
+            (len(active_agents) - trajectory_aligned_count) / len(active_agents) * 0.2
+        )
 
         # Penalty for agents needing steering
         steering_needed_count = sum(
@@ -337,13 +346,13 @@ class ConductorService:
 
         mean_count = sum(counts) / len(counts)
         variance = sum((c - mean_count) ** 2 for c in counts) / len(counts)
-        max_variance = mean_count ** 2 if mean_count > 0 else 1.0
+        max_variance = mean_count**2 if mean_count > 0 else 1.0
 
         # Convert to 0-1 scale (higher is better)
         balance_score = 1.0 - (variance / max_variance) if max_variance > 0 else 1.0
         return max(0.0, balance_score)
 
-    def _detect_duplicates(
+    async def _detect_duplicates(
         self, session: Session, guardian_analyses: List[Dict[str, Any]]
     ) -> List[DuplicateDetection]:
         """Detect duplicate work across agents using LLM analysis."""
@@ -355,13 +364,15 @@ class ConductorService:
         # Compare each pair of agents
         for i, analysis1 in enumerate(guardian_analyses):
             for j, analysis2 in enumerate(guardian_analyses[i + 1 :], i + 1):
-                duplicate = self._analyze_pair_for_duplicates(analysis1, analysis2)
+                duplicate = await self._analyze_pair_for_duplicates(
+                    analysis1, analysis2
+                )
                 if duplicate and duplicate.similarity_score > 0.7:
                     duplicates.append(duplicate)
 
         return duplicates
 
-    def _analyze_pair_for_duplicates(
+    async def _analyze_pair_for_duplicates(
         self, analysis1: Dict[str, Any], analysis2: Dict[str, Any]
     ) -> Optional[DuplicateDetection]:
         """Analyze a pair of agents for potential duplicate work."""
@@ -380,7 +391,7 @@ class ConductorService:
                 return None
 
             # Use LLM to analyze for duplicates
-            duplicate_analysis = self._llm_duplicate_analysis(
+            duplicate_analysis = await self._llm_duplicate_analysis(
                 focus1, summary1, focus2, summary2, phase1
             )
 
@@ -399,7 +410,7 @@ class ConductorService:
 
         return None
 
-    def _llm_duplicate_analysis(
+    async def _llm_duplicate_analysis(
         self,
         focus1: str,
         summary1: str,
@@ -430,7 +441,7 @@ class ConductorService:
             - resources (object): Key resources they might be conflicting over
             """
 
-            response = self.llm_service.ainvoke(prompt)
+            response = await self.llm_service.complete(prompt)
             return response
 
         except Exception as e:
@@ -500,8 +511,12 @@ class ConductorService:
 
         # Low coherence recommendations
         if coherence_score < 0.5:
-            recommendations.append("System coherence is critically low - requires immediate attention")
-            recommendations.append("Consider reducing concurrent agents or improving task coordination")
+            recommendations.append(
+                "System coherence is critically low - requires immediate attention"
+            )
+            recommendations.append(
+                "Consider reducing concurrent agents or improving task coordination"
+            )
 
         # Duplicate work recommendations
         if duplicates:
@@ -529,7 +544,9 @@ class ConductorService:
 
         # High coherence recommendations
         if coherence_score > 0.8:
-            recommendations.append("System coherence is excellent - current patterns are working well")
+            recommendations.append(
+                "System coherence is excellent - current patterns are working well"
+            )
 
         return recommendations
 
@@ -565,36 +582,28 @@ class ConductorService:
         coordination_count: int,
         details: Dict[str, Any],
     ) -> uuid.UUID:
-        """Store conductor analysis in database."""
+        """Store conductor analysis in database using SQLAlchemy ORM model.
+
+        This handles JSONB conversion automatically through SQLAlchemy.
+        """
         analysis_id = uuid.uuid4()
 
-        query = text("""
-            INSERT INTO conductor_analyses (
-                id, cycle_id, coherence_score, system_status, num_agents,
-                duplicate_count, termination_count, coordination_count, details, created_at, updated_at
-            ) VALUES (
-                :id, :cycle_id, :coherence_score, :system_status, :num_agents,
-                :duplicate_count, :termination_count, :coordination_count, :details, :created_at, :updated_at
-            )
-        """)
-
-        session.execute(
-            query,
-            {
-                "id": analysis_id,
-                "cycle_id": cycle_id,
-                "coherence_score": coherence_score,
-                "system_status": system_status,
-                "num_agents": num_agents,
-                "duplicate_count": duplicate_count,
-                "termination_count": termination_count,
-                "coordination_count": coordination_count,
-                "details": details,
-                "created_at": utc_now(),
-                "updated_at": utc_now(),
-            },
+        # Use SQLAlchemy ORM model - JSONB conversion is automatic!
+        conductor_analysis = ConductorAnalysisModel(
+            id=analysis_id,
+            cycle_id=cycle_id,
+            coherence_score=coherence_score,
+            system_status=system_status,
+            num_agents=num_agents,
+            duplicate_count=duplicate_count,
+            termination_count=termination_count,
+            coordination_count=coordination_count,
+            details=details,  # Dict automatically converted to JSONB!
+            created_at=utc_now(),
+            updated_at=utc_now(),
         )
 
+        session.add(conductor_analysis)
         return analysis_id
 
     def _store_duplicate(
@@ -607,32 +616,23 @@ class ConductorService:
         work_description: str,
         resources: Dict[str, Any],
     ) -> None:
-        """Store detected duplicate in database."""
-        duplicate_id = uuid.uuid4()
+        """Store detected duplicate in database using SQLAlchemy ORM model.
 
-        query = text("""
-            INSERT INTO detected_duplicates (
-                id, conductor_analysis_id, agent1_id, agent2_id, similarity_score,
-                work_description, resources, created_at
-            ) VALUES (
-                :id, :conductor_analysis_id, :agent1_id, :agent2_id, :similarity_score,
-                :work_description, :resources, :created_at
-            )
-        """)
-
-        session.execute(
-            query,
-            {
-                "id": duplicate_id,
-                "conductor_analysis_id": conductor_analysis_id,
-                "agent1_id": agent1_id,
-                "agent2_id": agent2_id,
-                "similarity_score": similarity_score,
-                "work_description": work_description,
-                "resources": resources,
-                "created_at": utc_now(),
-            },
+        This handles JSONB conversion automatically through SQLAlchemy.
+        """
+        # Use SQLAlchemy ORM model - JSONB conversion is automatic!
+        duplicate = DetectedDuplicateModel(
+            id=uuid.uuid4(),
+            conductor_analysis_id=conductor_analysis_id,
+            agent1_id=agent1_id,
+            agent2_id=agent2_id,
+            similarity_score=similarity_score,
+            work_description=work_description,
+            resources=resources,  # Dict automatically converted to JSONB!
+            created_at=utc_now(),
         )
+
+        session.add(duplicate)
 
     def get_system_health_summary(self) -> Dict[str, Any]:
         """Get a comprehensive system health summary."""
@@ -645,7 +645,8 @@ class ConductorService:
                     LIMIT 1
                 """)
                 result = session.execute(query)
-                recent_analysis = dict(result.fetchone()._mapping) if result.fetchone() else None
+                row = result.fetchone()
+                recent_analysis = dict(row._mapping) if row else None
 
                 # Get active agent count
                 active_count = len(self._get_active_agents(session))
@@ -656,8 +657,11 @@ class ConductorService:
                     FROM detected_duplicates
                     WHERE created_at > :cutoff
                 """)
-                result = session.execute(query, {"cutoff": utc_now() - timedelta(hours=1)})
-                recent_duplicates = result.fetchone().count
+                result = session.execute(
+                    query, {"cutoff": utc_now() - timedelta(hours=1)}
+                )
+                row = result.fetchone()
+                recent_duplicates = row.count if row else 0
 
                 # Get average coherence over last hour
                 query = text("""
@@ -665,16 +669,25 @@ class ConductorService:
                     FROM conductor_analyses
                     WHERE created_at > :cutoff
                 """)
-                result = session.execute(query, {"cutoff": utc_now() - timedelta(hours=1)})
-                avg_coherence = result.fetchone().avg_score or 0.0
+                result = session.execute(
+                    query, {"cutoff": utc_now() - timedelta(hours=1)}
+                )
+                row = result.fetchone()
+                avg_coherence = row.avg_score if row and row.avg_score else 0.0
 
                 return {
-                    "current_status": recent_analysis.get("system_status") if recent_analysis else "unknown",
-                    "current_coherence": recent_analysis.get("coherence_score") if recent_analysis else 0.0,
+                    "current_status": recent_analysis.get("system_status")
+                    if recent_analysis
+                    else "unknown",
+                    "current_coherence": recent_analysis.get("coherence_score")
+                    if recent_analysis
+                    else 0.0,
                     "average_coherence_1h": avg_coherence,
                     "active_agents": active_count,
                     "recent_duplicates": recent_duplicates,
-                    "last_analysis": recent_analysis.get("created_at") if recent_analysis else None,
+                    "last_analysis": recent_analysis.get("created_at")
+                    if recent_analysis
+                    else None,
                 }
 
         except Exception as e:
@@ -682,12 +695,12 @@ class ConductorService:
             return {"error": str(e), "status": "error"}
 
     # Pydantic model response methods
-    def analyze_system_coherence_response(
+    async def analyze_system_coherence_response(
         self,
         cycle_id: Optional[uuid.UUID] = None,
     ) -> SystemCoherenceResponse:
         """Analyze system coherence and return Pydantic response model."""
-        analysis = self.analyze_system_coherence(cycle_id)
+        analysis = await self.analyze_system_coherence(cycle_id)
 
         return SystemCoherenceResponse(
             coherence_score=analysis.coherence_score,

@@ -10,10 +10,11 @@ This class implements the core concept from trajectory thinking:
 import logging
 import re
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from typing import Dict, Any, List, Optional, Tuple
 
 from omoi_os.models.agent import Agent
+from omoi_os.utils.datetime import utc_now
 from omoi_os.models.agent_log import AgentLog
 from omoi_os.models.task import Task
 from omoi_os.models.trajectory_analysis import (
@@ -73,7 +74,7 @@ class TrajectoryContext:
         # Check cache first
         if agent_id in self.context_cache:
             cached = self.context_cache[agent_id]
-            if cached["timestamp"] > datetime.utcnow() - self.cache_ttl:
+            if cached["timestamp"] > utc_now() - self.cache_ttl:
                 return cached["context"]
 
         with self.db.get_session() as session:
@@ -89,8 +90,12 @@ class TrajectoryContext:
             # Get agent and task for initial context
             agent = session.query(Agent).filter_by(id=agent_id).first()
             task = None
-            if agent and agent.current_task_id:
-                task = session.query(Task).filter_by(id=agent.current_task_id).first()
+            if agent:
+                # Get current running task assigned to this agent
+                task = session.query(Task).filter_by(
+                    assigned_agent_id=str(agent.id),
+                    status="running"
+                ).first()
 
             # Build conversation history
             conversation = self._build_conversation_history(logs, include_full_history)
@@ -117,7 +122,7 @@ class TrajectoryContext:
                 # Meta information
                 "conversation_length": len(conversation),
                 "session_duration": self._calculate_session_duration(logs),
-                "last_activity": logs[-1].created_at if logs else datetime.utcnow(),
+                "last_activity": logs[-1].created_at if logs else utc_now(),
                 "agent_id": agent_id,
                 "agent_type": agent.agent_type if agent else "unknown",
                 "agent_status": agent.status if agent else "unknown",
@@ -142,7 +147,7 @@ class TrajectoryContext:
                         description=constraint.get("description", ""),
                         source=constraint.get("source", "conversation"),
                         strength=constraint.get("strength", 1.0),
-                        created_at=datetime.utcnow(),  # Would need actual timestamp from constraint
+                        created_at=utc_now(),  # Would need actual timestamp from constraint
                     )
                     for constraint in context.get("constraints", [])
                 ],
@@ -159,7 +164,7 @@ class TrajectoryContext:
                     for log in logs[-20:]  # Last 20 events as conversation events
                 ],
                 task_completion_rate=self._calculate_completion_rate(context, task),
-                last_updated=datetime.utcnow(),
+                last_updated=utc_now(),
             )
 
             trajectory_context = TrajectoryContextModel(
@@ -175,7 +180,7 @@ class TrajectoryContext:
             # Cache the context (still store dict for cache)
             self.context_cache[agent_id] = {
                 "context": context,
-                "timestamp": datetime.utcnow(),
+                "timestamp": utc_now(),
             }
 
             return trajectory_context.model_dump()
@@ -546,7 +551,7 @@ class TrajectoryContext:
             "discovered_blockers": [],
             "conversation_length": 0,
             "session_duration": timedelta(0),
-            "last_activity": datetime.utcnow(),
+            "last_activity": utc_now(),
             "agent_id": None,
             "agent_type": "unknown",
             "agent_status": "unknown",

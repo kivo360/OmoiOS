@@ -138,9 +138,11 @@ async def get_dashboard_summary(
             m.value for k, m in metrics.items()
             if "tasks_completed" in k
         )
+        # Sum all agents_active_* metrics since they're already filtered for active statuses (IDLE/RUNNING)
+        # The status is in labels, but we've already filtered for active statuses when creating metrics
         active_agents = sum(
             m.value for k, m in metrics.items()
-            if "agents_active" in k and "idle" in k
+            if "agents_active" in k
         )
         
         # Get counts from metrics

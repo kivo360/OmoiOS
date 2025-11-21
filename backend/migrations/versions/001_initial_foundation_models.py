@@ -23,17 +23,23 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     # Fix alembic_version table column length to support long revision IDs
     # Alembic creates this table automatically, but with VARCHAR(32) which is too short
-    conn = op.get_bind()
-    inspector = inspect(conn)
-    if "alembic_version" in inspector.get_table_names():
-        # Check current column type and alter if needed
-        columns = {col["name"]: col for col in inspector.get_columns("alembic_version")}
-        if "version_num" in columns:
-            current_type = str(columns["version_num"]["type"])
-            if "32" in current_type or "VARCHAR(32)" in current_type.upper():
-                op.alter_column("alembic_version", "version_num", type_=sa.String(255))
+    # This is done after Alembic creates the table, so we need to handle it carefully
+    try:
+        conn = op.get_bind()
+        inspector = inspect(conn)
+        if "alembic_version" in inspector.get_table_names():
+            # Check current column type and alter if needed
+            columns = {col["name"]: col for col in inspector.get_columns("alembic_version")}
+            if "version_num" in columns:
+                current_type = str(columns["version_num"]["type"])
+                if "32" in current_type or "VARCHAR(32)" in current_type.upper():
+                    op.alter_column("alembic_version", "version_num", type_=sa.String(255))
+    except Exception as e:
+        # If inspection fails, continue with migration - alembic_version will be handled later
+        print(f"Note: Could not alter alembic_version column: {e}")
 
     # Create tickets table
+    print("DEBUG: About to create tickets table...")
     op.create_table(
         "tickets",
         sa.Column("id", sa.String(), nullable=False),
@@ -49,6 +55,17 @@ def upgrade() -> None:
     op.create_index(op.f("ix_tickets_phase_id"), "tickets", ["phase_id"], unique=False)
     op.create_index(op.f("ix_tickets_priority"), "tickets", ["priority"], unique=False)
     op.create_index(op.f("ix_tickets_status"), "tickets", ["status"], unique=False)
+    
+    # Verify table was created
+    try:
+        conn = op.get_bind()
+        inspector = inspect(conn)
+        if "tickets" in inspector.get_table_names():
+            print("DEBUG: tickets table created successfully")
+        else:
+            print("DEBUG: ERROR - tickets table NOT found after creation!")
+    except Exception as e:
+        print(f"DEBUG: Could not verify tickets table: {e}")
 
     # Create tasks table
     op.create_table(

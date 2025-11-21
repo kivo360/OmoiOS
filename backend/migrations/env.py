@@ -53,7 +53,7 @@ def run_migrations_online() -> None:
     )
     print(connectable.url)
     print(config.get_section(config.config_ini_section))
-    with connectable.connect() as connection:
+    with connectable.begin() as connection:
         # Reflect auth schema into metadata
         from sqlalchemy import inspect, Table
 
@@ -79,8 +79,7 @@ def run_migrations_online() -> None:
             include_object=include_object,
         )
 
-        with context.begin_transaction():
-            context.run_migrations()
+        context.run_migrations()
 
 
 def run_migrations_offline() -> None:

@@ -1,8 +1,8 @@
 llm:
   model: openhands/claude-sonnet-4-5-20250929
-  api_key: change-me
+  api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
   base_url: null
-  fireworks_api_key: null
+  fireworks_api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
 
 database:
   url: postgresql+psycopg://postgres:postgres@localhost:15432/app_db

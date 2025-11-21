@@ -522,7 +522,7 @@ class AgentRegistryService:
             public_key = private_key.public_key()
             
             # Serialize public key
-            public_key_pem = public_key.serialize(
+            public_key_pem = public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
             ).decode('utf-8')

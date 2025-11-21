@@ -144,10 +144,13 @@ class HeartbeatManager:
         # Collect health metrics
         health_metrics = self._collect_health_metrics()
 
+        # Get current timestamp once to ensure consistency
+        now = utc_now()
+
         # Create message payload (without checksum)
         payload = {
             "agent_id": self.agent_id,
-            "timestamp": utc_now().isoformat(),
+            "timestamp": now.isoformat(),
             "sequence_number": self._sequence_number,
             "status": status,
             "current_task_id": task_id,
@@ -157,10 +160,10 @@ class HeartbeatManager:
         # Calculate checksum
         checksum = self.heartbeat_protocol_service._calculate_checksum(payload)
 
-        # Create heartbeat message
+        # Create heartbeat message with the same timestamp used for checksum
         return HeartbeatMessage(
             agent_id=self.agent_id,
-            timestamp=utc_now(),
+            timestamp=now,
             sequence_number=self._sequence_number,
             status=status,
             current_task_id=task_id,

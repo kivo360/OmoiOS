@@ -1,6 +1,6 @@
 llm:
-  api_key: local-dev-llm-key
-  fireworks_api_key: local-fireworks-key
+  api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
+  fireworks_api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
 
 supabase:
   url: https://example.supabase.co
