@@ -40,7 +40,6 @@ from omoi_os.models.ticket import Ticket
 from omoi_os.models.ticket_status import TicketStatus
 from omoi_os.models.validation_review import ValidationReview
 from omoi_os.models.workflow_result import WorkflowResult
-from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.models.mcp_server import (
     MCPServer,
     MCPTool,
@@ -48,6 +47,11 @@ from omoi_os.models.mcp_server import (
     MCPToken,
     CircuitBreakerState,
     MCPInvocation,
+)
+from omoi_os.models.workspace import (
+    AgentWorkspace,
+    WorkspaceCommit,
+    MergeConflictResolution,
 )
 
 __all__ = [
@@ -108,4 +112,7 @@ __all__ = [
     "User",
     "ValidationReview",
     "WorkflowResult",
+    "AgentWorkspace",
+    "WorkspaceCommit",
+    "MergeConflictResolution",
 ]
