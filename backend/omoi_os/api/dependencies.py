@@ -1,7 +1,8 @@
 """FastAPI dependencies for OmoiOS API."""
 
 from typing import TYPE_CHECKING, Optional
-from fastapi import Depends
+from uuid import UUID
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Security scheme
