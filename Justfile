@@ -331,7 +331,7 @@ docs-organize-apply concurrent="50":
 # Organize specific pattern (batch)
 [group('docs')]
 docs-organize-pattern pattern concurrent="25":
-    {{python}} scripts/organize_docs_batch.py --pattern "{{pattern}}" --concurrent {{concurrent}} --detailed
+{{python}} scripts/organize_docs_batch.py --pattern "{{pattern}}" --concurrent {{concurrent}} --detailed
 
 # Organize single file (non-batch for quick test)
 [group('docs')]
