@@ -67,8 +67,9 @@ class ConversationInterventionService:
                 workspace=workspace_dir,
             )
 
-            # Format intervention message with Guardian prefix
-            intervention_message = f"[GUARDIAN INTERVENTION] {message}"
+            # Format intervention message with Guardian prefix (Recommendation 4)
+            # Truncate agent ID to 8 characters for readability
+            intervention_message = f"[GUARDIAN INTERVENTION]: {message}"
 
             # Send intervention message (works even if agent is running)
             conversation.send_message(intervention_message)

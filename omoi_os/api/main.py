@@ -531,6 +531,7 @@ async def lifespan(app: FastAPI):
         event_bus=event_bus,
         task_queue=queue,
         discovery_service=discovery_service,
+        collaboration_service=collaboration_service,
     )
 
     # Validation system services

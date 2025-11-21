@@ -256,6 +256,14 @@ class CollaborationService:
                         },
                     )
                 )
+            
+            # Deliver message to recipient if specified (Recommendation 4)
+            if to_agent_id:
+                self._deliver_message_to_agents(
+                    message,
+                    [to_agent_id],
+                    is_broadcast=False,
+                )
 
             return message
 
@@ -305,6 +313,375 @@ class CollaborationService:
             message.read_at = utc_now()
             session.commit()
             return True
+
+    def get_agent_messages(
+        self,
+        agent_id: str,
+        limit: int = 50,
+        unread_only: bool = False,
+    ) -> List[AgentMessage]:
+        """
+        Get all messages for an agent (sent to or from this agent).
+        
+        Args:
+            agent_id: Agent ID
+            limit: Maximum messages to return
+            unread_only: Only return unread messages
+            
+        Returns:
+            List of AgentMessage objects
+        """
+        with self.db.get_session() as session:
+            query = session.query(AgentMessage).filter(
+                (AgentMessage.from_agent_id == agent_id) |
+                (AgentMessage.to_agent_id == agent_id)
+            ).order_by(AgentMessage.created_at.desc())
+            
+            if unread_only:
+                query = query.filter(AgentMessage.read_at.is_(None))
+            
+            messages = query.limit(limit).all()
+            
+            for message in messages:
+                session.expunge(message)
+            
+            return messages
+
+    def get_or_create_thread(
+        self,
+        participants: List[str],
+        ticket_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+        thread_type: str = "consultation",
+    ) -> CollaborationThread:
+        """
+        Get existing thread or create new one for given participants.
+        
+        Args:
+            participants: List of agent IDs (must be exactly 2 for direct messages)
+            ticket_id: Optional ticket ID for context
+            task_id: Optional task ID for context
+            thread_type: Type of thread (consultation, handoff, review)
+            
+        Returns:
+            CollaborationThread (existing or newly created)
+        """
+        with self.db.get_session() as session:
+            # Try to find existing active thread with same participants
+            existing_threads = session.query(CollaborationThread).filter(
+                CollaborationThread.status == "active",
+                CollaborationThread.thread_type == thread_type,
+            ).all()
+            
+            # Check if any thread has exact same participants
+            for thread in existing_threads:
+                if set(thread.participants or []) == set(participants):
+                    if ticket_id is None or thread.ticket_id == ticket_id:
+                        if task_id is None or thread.task_id == task_id:
+                            session.expunge(thread)
+                            return thread
+            
+            # Create new thread
+            thread = CollaborationThread(
+                thread_type=thread_type,
+                participants=participants,
+                ticket_id=ticket_id,
+                task_id=task_id,
+                status="active",
+            )
+            session.add(thread)
+            session.commit()
+            session.refresh(thread)
+            session.expunge(thread)
+            
+            if self.event_bus:
+                self.event_bus.publish(
+                    SystemEvent(
+                        event_type="agent.collab.started",
+                        entity_type="thread",
+                        entity_id=thread.id,
+                        payload={
+                            "thread_id": thread.id,
+                            "thread_type": thread_type,
+                            "participants": participants,
+                            "ticket_id": ticket_id,
+                            "task_id": task_id,
+                        },
+                    )
+                )
+            
+            return thread
+
+    def broadcast_message(
+        self,
+        from_agent_id: str,
+        message: str,
+        message_type: str = "info",
+        ticket_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> dict:
+        """
+        Broadcast a message to all active agents (simplified API - Recommendation 3).
+        
+        This method automatically:
+        1. Gets all active agents
+        2. Creates a broadcast thread
+        3. Sends message to all agents
+        4. Optionally saves to memory if message_type indicates discovery/warning
+        
+        Args:
+            from_agent_id: Sending agent ID
+            message: Message content
+            message_type: Type of message (info, question, warning, discovery)
+            ticket_id: Optional ticket ID for context
+            task_id: Optional task ID for context
+            
+        Returns:
+            Dictionary with success status and recipient count
+        """
+        from omoi_os.models.agent import Agent
+        
+        with self.db.get_session() as session:
+            # Get all active agents (excluding sender)
+            active_statuses = ["working", "pending", "assigned", "idle"]
+            active_agents = (
+                session.query(Agent)
+                .filter(
+                    Agent.status.in_(active_statuses),
+                    Agent.id != from_agent_id,
+                )
+                .all()
+            )
+            
+            if not active_agents:
+                return {
+                    "success": True,
+                    "recipient_count": 0,
+                    "message": "No active agents to broadcast to",
+                }
+            
+            recipient_ids = [agent.id for agent in active_agents]
+            
+            # Create broadcast thread with all participants
+            thread = self.create_thread(
+                thread_type="consultation",
+                participants=[from_agent_id] + recipient_ids,
+                ticket_id=ticket_id,
+                task_id=task_id,
+                thread_metadata={"broadcast": True, "message_type": message_type},
+            )
+            
+            # Send message to all recipients (to_agent_id=None means broadcast in thread)
+            message_obj = self.send_message(
+                thread_id=thread.id,
+                from_agent_id=from_agent_id,
+                to_agent_id=None,  # None = broadcast
+                message_type=message_type,
+                content=message,
+                message_metadata={
+                    "broadcast": True,
+                    "recipient_count": len(recipient_ids),
+                },
+            )
+            
+            # Deliver messages to agent conversations with prefixes (Recommendation 4)
+            # This delivers messages to OpenHands conversations so agents see them immediately
+            self._deliver_message_to_agents(
+                message_obj,
+                recipient_ids,
+                is_broadcast=True,
+            )
+            
+            # Auto-save to memory if discovery or warning (Recommendation 5)
+            if message_type in ("discovery", "warning") and message:
+                try:
+                    from omoi_os.api.main import memory_service
+                    if memory_service:
+                        # Determine memory type based on message_type
+                        memory_type_map = {
+                            "discovery": "discovery",
+                            "warning": "warning",
+                        }
+                        memory_type = memory_type_map.get(message_type, "discovery")
+                        
+                        # Save to memory (async, non-blocking)
+                        import asyncio
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                # If loop is running, schedule as task
+                                asyncio.create_task(
+                                    self._save_message_to_memory(
+                                        memory_service,
+                                        message,
+                                        memory_type,
+                                        from_agent_id,
+                                        ticket_id,
+                                        task_id,
+                                    )
+                                )
+                            else:
+                                # If no loop, run in executor
+                                loop.run_until_complete(
+                                    self._save_message_to_memory(
+                                        memory_service,
+                                        message,
+                                        memory_type,
+                                        from_agent_id,
+                                        ticket_id,
+                                        task_id,
+                                    )
+                                )
+                        except RuntimeError:
+                            # No event loop, skip memory save (non-critical)
+                            pass
+                except Exception:
+                    # Memory save failure is non-critical
+                    pass
+            
+            return {
+                "success": True,
+                "recipient_count": len(recipient_ids),
+                "message_id": message_obj.id,
+                "thread_id": thread.id,
+                "message": f"Message broadcast to {len(recipient_ids)} agent(s)",
+            }
+
+    async def _save_message_to_memory(
+        self,
+        memory_service,
+        content: str,
+        memory_type: str,
+        agent_id: str,
+        ticket_id: Optional[str],
+        task_id: Optional[str],
+    ) -> None:
+        """Helper to save message to memory system (async)."""
+        try:
+            # Create a temporary task_id if we have task_id, otherwise use a placeholder
+            # Memory service requires a task_id, so we'll use task_id if available
+            if task_id:
+                # Store execution summary in memory
+                with self.db.get_session() as session:
+                    memory_service.store_execution(
+                        session=session,
+                        task_id=task_id,
+                        execution_summary=content,
+                        success=True,
+                        memory_type=memory_type,
+                    )
+                    session.commit()
+        except Exception:
+            # Non-critical failure
+            pass
+
+    def _deliver_message_to_agents(
+        self,
+        message: AgentMessage,
+        recipient_ids: List[str],
+        is_broadcast: bool = False,
+    ) -> None:
+        """
+        Deliver message to agent OpenHands conversations with prefixes (Recommendation 4).
+        
+        This method finds each recipient agent's active conversation and delivers
+        the message via OpenHands conversation.send_message() API, similar to
+        Guardian interventions but with agent message prefixes.
+        
+        Args:
+            message: AgentMessage to deliver
+            recipient_ids: List of agent IDs to deliver to
+            is_broadcast: Whether this is a broadcast message
+        """
+        from omoi_os.models.task import Task
+        from omoi_os.models.agent import Agent
+        
+        try:
+            with self.db.get_session() as session:
+                # Format message with prefix
+                sender_id_short = message.from_agent_id[:8] if len(message.from_agent_id) > 8 else message.from_agent_id
+                
+                if is_broadcast:
+                    formatted_message = f"[AGENT {sender_id_short} BROADCAST]: {message.content}"
+                elif message.to_agent_id:
+                    recipient_id_short = message.to_agent_id[:8] if len(message.to_agent_id) > 8 else message.to_agent_id
+                    formatted_message = f"[AGENT {sender_id_short} TO AGENT {recipient_id_short}]: {message.content}"
+                else:
+                    formatted_message = f"[AGENT {sender_id_short}]: {message.content}"
+                
+                # Deliver to each recipient
+                for recipient_id in recipient_ids:
+                    try:
+                        # Find agent's active task with conversation info
+                        active_task = (
+                            session.query(Task)
+                            .filter(
+                                Task.assigned_agent_id == recipient_id,
+                                Task.status == "running",
+                                Task.conversation_id.isnot(None),
+                                Task.persistence_dir.isnot(None),
+                            )
+                            .first()
+                        )
+                        
+                        if active_task and active_task.conversation_id and active_task.persistence_dir:
+                            # Deliver via OpenHands Conversation API directly (similar to Guardian but for agent messages)
+                            try:
+                                from openhands.sdk import Conversation, Agent as OpenHandsAgent
+                                from openhands.tools.preset.default import get_default_agent
+                                from openhands.sdk import LLM
+                                from omoi_os.config import load_llm_settings
+                                
+                                # Get workspace directory from agent or task
+                                workspace_dir = active_task.result.get("workspace_dir") if active_task.result else None
+                                if not workspace_dir:
+                                    # Try to get from agent
+                                    agent_model = session.query(Agent).filter_by(id=recipient_id).first()
+                                    if agent_model and hasattr(agent_model, 'workspace_dir'):
+                                        workspace_dir = agent_model.workspace_dir
+                                
+                                if workspace_dir:
+                                    # Create LLM and agent for conversation resumption
+                                    llm_settings = load_llm_settings()
+                                    if llm_settings.api_key:
+                                        llm = LLM(
+                                            model=llm_settings.model,
+                                            api_key=llm_settings.api_key,
+                                        )
+                                        agent_instance: OpenHandsAgent = get_default_agent(llm=llm, cli_mode=True)
+                                        
+                                        # Resume conversation
+                                        conversation = Conversation(
+                                            conversation_id=active_task.conversation_id,
+                                            persistence_dir=active_task.persistence_dir,
+                                            agent=agent_instance,
+                                            workspace=workspace_dir,
+                                        )
+                                        
+                                        # Send message (already formatted with prefix)
+                                        conversation.send_message(formatted_message)
+                                        
+                                        # Trigger processing if idle (non-blocking)
+                                        from openhands.sdk.conversation.state import AgentExecutionStatus
+                                        if conversation.state.agent_status == AgentExecutionStatus.IDLE:
+                                            import threading
+                                            thread = threading.Thread(target=conversation.run, daemon=True)
+                                            thread.start()
+                            except Exception as delivery_error:
+                                # Non-critical - message is still stored in database
+                                import logging
+                                logger = logging.getLogger(__name__)
+                                logger.warning(f"Failed to deliver message via OpenHands API: {delivery_error}")
+                    except Exception as e:
+                        # Non-critical failure - message is still stored in database
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"Failed to deliver message to agent {recipient_id[:8]}: {e}")
+        except Exception as e:
+            # Non-critical failure
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to deliver messages to agents: {e}")
 
     # ---------------------------------------------------------------------
     # Handoff Protocol
