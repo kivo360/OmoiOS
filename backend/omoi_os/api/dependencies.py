@@ -2,10 +2,10 @@
 
 from typing import TYPE_CHECKING, Optional
 from fastapi import Depends
-from fastapi.security import HTTPBearer
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 if TYPE_CHECKING:
-    from fastapi.security import HTTPAuthorizationCredentials
+    pass
 
 # Security scheme
 security = HTTPBearer()
