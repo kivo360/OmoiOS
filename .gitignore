@@ -37,6 +37,11 @@ coverage.xml
 .tox/
 .nox/
 
+# Cache directories
+.deepeval/
+.instructor-cache/
+.ruff-cache/
+
 # Virtual environments
 venv/
 env/
@@ -67,6 +72,7 @@ tmp/
 # Workspaces (test and runtime)
 workspaces/
 test_workspaces/
+examples/workspaces/
 .conversations/
 
 # MCP

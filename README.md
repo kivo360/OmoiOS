@@ -1,16 +1,40 @@
-# OmoiOS - Multi-Agent Orchestration System
+# OmoiOS - Autonomous Engineering Execution Platform
 
-A multi-agent orchestration system built on top of the OpenHands Software Agent SDK.
+**OmoiOS is an autonomous engineering execution dashboard that turns feature requests into real shipped code.** Engineering teams connect a GitHub repository, describe what they want built, and OmoiOS automatically plans the work using a spec-driven approach, discovers tasks as it progresses, builds features, tests them, and creates PRs—all while teams monitor progress in real time.
+
+## Product Vision
+
+OmoiOS enables engineering teams to scale development without scaling headcount. Users describe what they want built in natural language, and the system autonomously:
+
+1. **Analyzes** the codebase to understand context
+2. **Plans** using a spec-driven workflow (Requirements → Design → Tasks → Execution)
+3. **Discovers** new tasks as it works (dependencies, optimizations, missing components)
+4. **Executes** autonomously with multiple AI agents working in parallel
+5. **Verifies** work with property-based testing and integration tests
+6. **Monitors** agent behavior to ensure they're helping reach desired goals
+7. **Adapts** monitoring strategies by learning from successful and failed workflows
+8. **Presents** results for approval at strategic phase gates
+
+**Key Value Proposition**: The AI handles nuances, corrects itself, verifies work, and discovers new tasks autonomously. Agents discover, verify, and monitor each other to ensure alignment with goals—without requiring explicit instructions for every scenario. The adaptive monitoring loop learns how things work and adapts strategies automatically. Users only need to monitor at strategic points (phase gates, PR reviews), not micromanage every step.
+
+For complete product vision, see [docs/product_vision.md](docs/product_vision.md).
 
 ## Overview
 
-OmoiOS provides a framework for orchestrating multiple AI agents to work together on complex software development tasks. It includes:
+OmoiOS is a spec-driven, multi-agent orchestration system built on top of the OpenHands Software Agent SDK. It provides:
 
-- **Task Queue Management**: Priority-based task assignment and tracking
-- **Event Bus**: System-wide event publishing and subscription via Redis
-- **Agent Registry**: Registration and lifecycle management of worker agents
-- **OpenHands Integration**: Wrapper around OpenHands SDK for agent execution
+### Core Capabilities
+- **Spec-Driven Workflow**: Requirements → Design → Tasks → Execution with structured artifacts
+- **Task Queue Management**: Priority-based task assignment and tracking with dependency resolution
+- **Event Bus**: System-wide event publishing and subscription via Redis for real-time updates
+- **Agent Registry**: Registration and lifecycle management of worker agents with health monitoring
+- **Agent Discovery**: Agents discover new requirements, dependencies, optimizations, and issues as they work
+- **Agent Verification**: Agents verify each other's work through property-based testing and spec compliance
+- **Mutual Agent Monitoring**: Guardian agents monitor trajectories, Conductor ensures system-wide coherence, agents monitor each other
+- **Adaptive Monitoring Loop**: Continuous monitoring that learns patterns and adapts strategies without explicit programming
+- **OpenHands Integration**: Wrapper around OpenHands SDK for agent execution in isolated workspaces
 - **REST API**: FastAPI-based API for ticket and task management
+- **Web Dashboard**: Real-time monitoring dashboard with Kanban board, dependency graphs, and spec workspace
 
 ## Prerequisites
 

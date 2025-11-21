@@ -2,9 +2,11 @@
 
 **Created**: 2025-01-30  
 **Status**: Design Document  
-**Purpose**: Comprehensive design for Kanban board, dependency graphs, GitHub integration, and project management UI
+**Purpose**: Comprehensive design for Kanban board, dependency graphs, GitHub integration, spec workspace, and project management UI
 
-**Note**: All data is stored on the server in PostgreSQL. There are no external files like PRD.md, requirements.md, design.md, or tasks.md - everything is managed through the API and stored in the database.
+**Note**: OmoiOS follows a spec-driven workflow model (Requirements → Design → Tasks → Execution). All specs are stored in OmoiOS database/storage, not as repo files. Users can export specs to markdown/YAML for version control if desired. The dashboard provides a multi-tab spec workspace (Requirements | Design | Tasks | Execution) with structured blocks (Notion-style) for spec content.
+
+**Related Vision**: See [Product Vision](../product_vision.md) for complete product concept and value proposition.
 
 **Related Documents:**
 - [API Specifications](./project_management_dashboard_api.md) - Complete API endpoint specifications
@@ -15,8 +17,11 @@
 ## Executive Summary
 
 This document designs a real-time project management dashboard that integrates:
-- **Kanban Board**: Visual workflow management with real-time updates, ticket cards with commit indicators
-- **Dependency Graph**: Interactive visualization of task/ticket relationships with blocking indicators
+- **Spec Workspace**: Multi-tab workspace (Requirements | Design | Tasks | Execution) with spec switcher, structured blocks (Notion-style) for requirements/design/tasks
+- **Kanban Board**: Visual workflow management with real-time updates, ticket cards with commit indicators, organized by phase (INITIAL → IMPLEMENTATION → INTEGRATION → REFACTORING)
+- **Dependency Graph**: Interactive visualization of task/ticket relationships with blocking indicators, animated as dependencies resolve
+- **Activity Timeline/Feed**: Chronological feed showing when specs/tasks/tickets are created, discovery events, phase transitions, agent interventions, approvals
+- **Command Palette**: Linear-style command palette (Cmd+K) for quick navigation across specs, tasks, workflows, and logs
 - **GitHub Integration**: Repository management, webhook handling, PR/task sync, commit tracking
 - **Commit Diff Viewer**: View code changes linked to tickets, see exactly what each agent modified
 - **Audit Trails**: Complete history of all changes, commits, and agent actions
@@ -25,6 +30,8 @@ This document designs a real-time project management dashboard that integrates:
 - **Search & Filtering**: Advanced search across tickets, commits, agents, and code changes
 - **Real-Time Updates**: WebSocket-powered live synchronization across all views
 - **Guardian Intervention System**: Real-time agent steering and trajectory monitoring with live intervention delivery
+
+**Visual Design**: Linear/Arc aesthetic with Notion-style structured blocks for specs. Clean, minimal, white-space-heavy with collapsible sidebar for spec navigation.
 
 ### Agent-Driven Workflow Architecture
 

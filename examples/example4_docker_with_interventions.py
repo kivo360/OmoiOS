@@ -59,8 +59,11 @@ class InterventionRecord:
     message: str
     structured_data: Optional[Dict[str, Any]] = None
     acknowledged: bool = False
+    acknowledgment_timestamp: Optional[datetime] = None
     acknowledgment_message: Optional[str] = None
     effectiveness_score: Optional[float] = None
+    retry_count: int = 0
+    last_error: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -153,9 +156,11 @@ class InterventionHandler:
         prefix: str = "[INTERVENTION]",
         intervention_type: InterventionType = InterventionType.CUSTOM,
         structured_data: Optional[Dict[str, Any]] = None,
+        max_retries: int = 3,
+        retry_delay: float = 2.0,
     ) -> InterventionResult:
         """
-        Send intervention message to running conversation.
+        Send intervention message to running conversation with retry logic.
 
         This works even while the conversation is actively running - OpenHands
         will queue the message and process it asynchronously.
@@ -165,89 +170,141 @@ class InterventionHandler:
             prefix: Optional prefix for the message (default: "[INTERVENTION]")
             intervention_type: Type of intervention (default: CUSTOM)
             structured_data: Optional structured data for the intervention
+            max_retries: Maximum number of retry attempts if sending fails (default: 3)
+            retry_delay: Delay between retries in seconds (default: 2.0)
 
         Returns:
             InterventionResult with success status and intervention ID
         """
         intervention_id = str(uuid.uuid4())
         timestamp = datetime.utcnow()
+        last_error = None
 
-        try:
-            # Format message based on intervention type
-            if intervention_type == InterventionType.PRIORITIZE:
-                formatted_message = f"{prefix} PRIORITY: {message}"
-            elif intervention_type == InterventionType.STOP:
-                formatted_message = f"{prefix} STOP: {message}"
-            elif intervention_type == InterventionType.REFOCUS:
-                formatted_message = f"{prefix} REFOCUS: {message}"
-            else:
-                formatted_message = f"{prefix} {message}"
-
-            logger.info(
-                f"Sending intervention [{intervention_type.value}]: {formatted_message}"
-            )
-            self.conversation.send_message(formatted_message)
-
-            # Record intervention in history
-            record = InterventionRecord(
-                intervention_id=intervention_id,
-                timestamp=timestamp,
-                type=intervention_type,
-                message=message,
-                structured_data=structured_data,
-            )
-            self.intervention_history.append(record)
-
-            # Check if we need to trigger processing
-            # Note: RemoteState may not have agent_status, so we handle gracefully
+        # Retry logic for sending interventions
+        for attempt in range(max_retries):
             try:
-                state = self.conversation.state
-                if hasattr(state, "agent_status"):
-                    status = state.agent_status
-                    status_str = (
-                        status.value if hasattr(status, "value") else str(status)
+                # Format message based on intervention type
+                if intervention_type == InterventionType.PRIORITIZE:
+                    formatted_message = f"{prefix} PRIORITY: {message}"
+                elif intervention_type == InterventionType.STOP:
+                    formatted_message = f"{prefix} STOP: {message}"
+                elif intervention_type == InterventionType.REFOCUS:
+                    formatted_message = f"{prefix} REFOCUS: {message}"
+                else:
+                    formatted_message = f"{prefix} {message}"
+
+                logger.info(
+                    f"Sending intervention [{intervention_type.value}]: {formatted_message}"
+                )
+                self.conversation.send_message(formatted_message)
+
+                # Record intervention in history (only on first attempt)
+                if attempt == 0:
+                    record = InterventionRecord(
+                        intervention_id=intervention_id,
+                        timestamp=timestamp,
+                        type=intervention_type,
+                        message=message,
+                        structured_data=structured_data,
+                        retry_count=attempt,
+                    )
+                    self.intervention_history.append(record)
+                else:
+                    # Update retry count for existing record
+                    record = next(
+                        (
+                            r
+                            for r in self.intervention_history
+                            if r.intervention_id == intervention_id
+                        ),
+                        None,
+                    )
+                    if record:
+                        record.retry_count = attempt
+                        record.last_error = str(last_error) if last_error else None
+
+                # Check if we need to trigger processing
+                # Note: RemoteState may not have agent_status, so we handle gracefully
+                try:
+                    state = self.conversation.state
+                    if hasattr(state, "agent_status"):
+                        status = state.agent_status
+                        status_str = (
+                            status.value if hasattr(status, "value") else str(status)
+                        )
+
+                        if status_str.lower() == "idle":
+                            thread = threading.Thread(
+                                target=self.conversation.run, daemon=True
+                            )
+                            thread.start()
+                            logger.info(
+                                "Started conversation processing after intervention"
+                            )
+                        else:
+                            logger.info(
+                                f"Intervention queued (agent status: {status_str}). "
+                                "Message will be processed asynchronously."
+                            )
+                    else:
+                        # RemoteState doesn't expose agent_status directly
+                        # Message will be queued and processed automatically
+                        logger.info(
+                            "Intervention sent. Message will be processed asynchronously."
+                        )
+                except Exception as e:
+                    logger.info(
+                        f"Intervention sent (could not check status: {e}). "
+                        "Message will be processed asynchronously."
                     )
 
-                    if status_str.lower() == "idle":
-                        thread = threading.Thread(
-                            target=self.conversation.run, daemon=True
-                        )
-                        thread.start()
-                        logger.info(
-                            "Started conversation processing after intervention"
-                        )
-                    else:
-                        logger.info(
-                            f"Intervention queued (agent status: {status_str}). "
-                            "Message will be processed asynchronously."
-                        )
-                else:
-                    # RemoteState doesn't expose agent_status directly
-                    # Message will be queued and processed automatically
-                    logger.info(
-                        "Intervention sent. Message will be processed asynchronously."
-                    )
+                # Success - return immediately
+                return InterventionResult(
+                    success=True,
+                    intervention_id=intervention_id,
+                    message=message,
+                    timestamp=timestamp,
+                )
             except Exception as e:
-                logger.info(
-                    f"Intervention sent (could not check status: {e}). "
-                    "Message will be processed asynchronously."
+                last_error = e
+                error_msg = str(e)
+                logger.warning(
+                    f"Failed to send intervention (attempt {attempt + 1}/{max_retries}): {error_msg}"
                 )
 
-            return InterventionResult(
-                success=True,
-                intervention_id=intervention_id,
-                message=message,
-                timestamp=timestamp,
-            )
-        except Exception as e:
-            logger.error(f"Failed to send intervention: {e}", exc_info=True)
-            return InterventionResult(
-                success=False,
-                intervention_id=intervention_id,
-                message=message,
-                timestamp=timestamp,
-                error=str(e),
-            )
+                # If this is the last attempt, record the failure
+                if attempt == max_retries - 1:
+                    # Update record with final error
+                    record = next(
+                        (
+                            r
+                            for r in self.intervention_history
+                            if r.intervention_id == intervention_id
+                        ),
+                        None,
+                    )
+                    if record:
+                        record.last_error = error_msg
+
+                    return InterventionResult(
+                        success=False,
+                        intervention_id=intervention_id,
+                        message=message,
+                        timestamp=timestamp,
+                        error=error_msg,
+                    )
+
+                # Wait before retrying (exponential backoff)
+                time.sleep(retry_delay * (2**attempt))
+
+        # Should not reach here, but just in case
+        return InterventionResult(
+            success=False,
+            intervention_id=intervention_id,
+            message=message,
+            timestamp=timestamp,
+            error="Max retries exceeded",
+        )
 
     def send_structured_intervention(
         self,
@@ -300,6 +357,69 @@ class InterventionHandler:
         """Get history of all interventions sent."""
         return self.intervention_history.copy()
 
+    def get_pending_interventions(self) -> List[InterventionRecord]:
+        """Get list of interventions that haven't been acknowledged yet."""
+        return [r for r in self.intervention_history if not r.acknowledged]
+
+    def calculate_intervention_effectiveness(
+        self, intervention_id: str, desired_outcome: Optional[str] = None
+    ) -> Optional[float]:
+        """
+        Calculate effectiveness score for an intervention.
+
+        Args:
+            intervention_id: ID of the intervention to evaluate
+            desired_outcome: Optional description of desired outcome
+
+        Returns:
+            Effectiveness score (0.0-1.0) or None if cannot be calculated
+        """
+        record = next(
+            (
+                r
+                for r in self.intervention_history
+                if r.intervention_id == intervention_id
+            ),
+            None,
+        )
+        if not record:
+            return None
+
+        score = 0.0
+
+        # Base score for acknowledgment (50%)
+        if record.acknowledged:
+            score += 0.5
+
+        # Check if intervention led to desired behavior changes
+        # This is a simple heuristic - can be enhanced with LLM analysis
+        if record.acknowledgment_message:
+            # Check if acknowledgment shows understanding
+            ack_lower = record.acknowledgment_message.lower()
+            understanding_keywords = [
+                "understood",
+                "will",
+                "focusing",
+                "prioritizing",
+                "switching",
+            ]
+            if any(keyword in ack_lower for keyword in understanding_keywords):
+                score += 0.3
+
+        # Time-based effectiveness (faster acknowledgment = better)
+        if record.acknowledged and record.acknowledgment_timestamp:
+            time_to_ack = (
+                record.acknowledgment_timestamp - record.timestamp
+            ).total_seconds()
+            # Acknowledgment within 30 seconds is considered good
+            if time_to_ack < 30:
+                score += 0.2
+            elif time_to_ack < 60:
+                score += 0.1
+
+        record.effectiveness_score = min(score, 1.0)
+        return record.effectiveness_score
+
     def start_event_monitoring(self):
         """Start monitoring conversation events in background."""
         if self._event_monitoring:
@@ -311,6 +431,7 @@ class InterventionHandler:
         def monitor_events():
             """Background thread to monitor conversation events."""
             last_event_count = 0
+            last_message_count = 0
             while self._event_monitoring:
                 try:
                     state = self.conversation.state
@@ -321,11 +442,47 @@ class InterventionHandler:
                             # New events detected
                             new_events = state.events[last_event_count:]
                             for event in new_events:
+                                event_type_name = type(event).__name__
                                 event_data = ConversationEvent(
-                                    event_type=type(event).__name__,
+                                    event_type=event_type_name,
                                     timestamp=datetime.utcnow(),
-                                    data={"event": str(event)},
+                                    data={"event": str(event), "raw_event": event},
                                 )
+
+                                # Try to extract message content for acknowledgment detection
+                                if hasattr(event, "message") or hasattr(
+                                    event, "content"
+                                ):
+                                    try:
+                                        # Check if this is a message event that might acknowledge an intervention
+                                        message_content = None
+                                        if hasattr(event, "message"):
+                                            msg = event.message
+                                            if hasattr(msg, "content"):
+                                                if isinstance(msg.content, list):
+                                                    message_content = " ".join(
+                                                        str(c)
+                                                        for c in msg.content
+                                                        if hasattr(c, "text")
+                                                    )
+                                                else:
+                                                    message_content = str(msg.content)
+                                        elif hasattr(event, "content"):
+                                            message_content = str(event.content)
+
+                                        if message_content:
+                                            event_data.data["message_content"] = (
+                                                message_content
+                                            )
+                                            # Check for intervention acknowledgments
+                                            self._check_intervention_acknowledgment(
+                                                message_content, event_data
+                                            )
+                                    except Exception as e:
+                                        logger.debug(
+                                            f"Could not extract message content: {e}"
+                                        )
+
                                 self.event_queue.append(event_data)
                                 # Notify listeners
                                 for listener in self.event_listeners:
@@ -334,6 +491,25 @@ class InterventionHandler:
                                     except Exception as e:
                                         logger.error(f"Event listener error: {e}")
                             last_event_count = current_count
+
+                    # Also check messages for acknowledgments
+                    if hasattr(state, "messages") and state.messages:
+                        current_msg_count = len(state.messages)
+                        if current_msg_count > last_message_count:
+                            new_messages = state.messages[last_message_count:]
+                            for msg in new_messages:
+                                if hasattr(msg, "role") and hasattr(msg, "content"):
+                                    role = getattr(msg, "role", None)
+                                    if (
+                                        role == "assistant"
+                                    ):  # Only check assistant messages
+                                        content = getattr(msg, "content", "")
+                                        if content:
+                                            self._check_intervention_acknowledgment(
+                                                str(content), None
+                                            )
+                            last_message_count = current_msg_count
+
                 except Exception as e:
                     logger.error(f"Error monitoring events: {e}")
 
@@ -342,6 +518,59 @@ class InterventionHandler:
         self._event_thread = threading.Thread(target=monitor_events, daemon=True)
         self._event_thread.start()
         logger.info("Started event monitoring")
+
+    def _check_intervention_acknowledgment(
+        self, message_content: str, event: Optional[ConversationEvent]
+    ):
+        """Check if a message acknowledges any pending interventions."""
+        message_lower = message_content.lower()
+
+        # Look for acknowledgment patterns
+        acknowledgment_keywords = [
+            "understood",
+            "got it",
+            "will do",
+            "noted",
+            "acknowledged",
+            "i'll",
+            "i will",
+            "focusing on",
+            "prioritizing",
+            "switching to",
+        ]
+
+        # Check each pending intervention
+        for record in self.intervention_history:
+            if not record.acknowledged:
+                # Check if message mentions intervention keywords or content
+                intervention_mentioned = any(
+                    keyword in message_lower for keyword in acknowledgment_keywords
+                )
+
+                # Check if message references the intervention topic
+                intervention_topic_mentioned = False
+                if record.message:
+                    # Extract key words from intervention message
+                    intervention_words = [
+                        word.lower()
+                        for word in record.message.split()
+                        if len(word) > 4  # Only meaningful words
+                    ]
+                    if any(word in message_lower for word in intervention_words[:3]):
+                        intervention_topic_mentioned = True
+
+                if intervention_mentioned or intervention_topic_mentioned:
+                    record.acknowledged = True
+                    record.acknowledgment_timestamp = datetime.utcnow()
+                    record.acknowledgment_message = message_content[
+                        :200
+                    ]  # First 200 chars
+                    if event:
+                        event.intervention_id = record.intervention_id
+                    logger.info(
+                        f"Intervention {record.intervention_id} acknowledged: "
+                        f"{message_content[:100]}"
+                    )
 
     def stop_event_monitoring(self):
         """Stop monitoring conversation events."""
@@ -1016,13 +1245,21 @@ async def interactive_intervention_example():
         handler.send_intervention("Make sure the endpoint returns proper JSON")
         status = handler.get_status()  # Check current status
     """
-    ticket_id = "T-456"
-    title = "Add /health endpoint"
+    ticket_id = "T-789"
+    title = "Implement comprehensive API with authentication and testing"
     description = (
-        "Add /health endpoint returning JSON {{status, version}} to the repository's "
-        "application (if it has a web server). If the repo doesn't have a server yet, "
-        "create a simple Flask or FastAPI app with the /health endpoint. Use port 8020 "
-        "(or any port other than 8000) to avoid conflicts with the OpenHands agent server."
+        "Create a complete REST API with the following requirements:\n"
+        "1. Add user authentication endpoints (/auth/login, /auth/register)\n"
+        "2. Implement JWT token generation and validation\n"
+        "3. Create a user management system with CRUD operations\n"
+        "4. Add comprehensive unit tests for all endpoints\n"
+        "5. Add integration tests\n"
+        "6. Create API documentation (OpenAPI/Swagger)\n"
+        "7. Add request validation and error handling\n"
+        "8. Implement rate limiting\n"
+        "\n"
+        "This is a complex task that should take significant time. Work methodically "
+        "and test each component as you build it. Use port 8999 or any port other than 8000."
     )
 
     repo_url = os.getenv(
@@ -1060,6 +1297,10 @@ async def interactive_intervention_example():
     )
     print("  handler.get_status()  # Check status")
     print("  handler.get_intervention_history()  # View all interventions")
+    print("  handler.get_pending_interventions()  # Get unacknowledged interventions")
+    print(
+        "  handler.calculate_intervention_effectiveness(id)  # Get effectiveness score"
+    )
     print("  handler.start_event_monitoring()  # Start event streaming")
     print("  async for event in handler.stream_events(): ...  # Stream events")
     print("\nExample interventions:")
@@ -1084,44 +1325,99 @@ async def interactive_intervention_example():
     # Example: Send some interventions after a delay
     async def send_delayed_interventions():
         """Example of sending interventions after some time."""
-        await asyncio.sleep(10)  # Wait 10 seconds
-        print("\n[Example] Sending structured intervention: PRIORITIZE tests")
-        result = handler.send_structured_intervention(
-            InterventionType.PRIORITIZE,
-            "Please make sure tests pass",
-            target="test_coverage",
-            urgency="high",
-        )
-        print(f"  Intervention ID: {result.intervention_id}")
-        print(f"  Success: {result.success}")
+        import sys
 
-        await asyncio.sleep(20)  # Wait another 20 seconds
-        print("\n[Example] Sending intervention: 'Focus on clean code structure'")
-        handler.send_intervention("Focus on clean code structure")
+        print(
+            "\n🔔 Intervention sender task started - will send interventions in 2s and 10s",
+            flush=True,
+        )
+        sys.stdout.flush()
+        # Send first intervention after a short delay
+        await asyncio.sleep(2)  # Wait 2 seconds to let conversation start
+        import sys
+
+        print("\n" + "=" * 70, flush=True)
+        print("[Example] Sending structured intervention: PRIORITIZE tests", flush=True)
+        print("=" * 70, flush=True)
+        sys.stdout.flush()
+        try:
+            result = handler.send_structured_intervention(
+                InterventionType.PRIORITIZE,
+                "Please make sure tests pass",
+                target="test_coverage",
+                urgency="high",
+            )
+            print(f"  ✅ Intervention sent! ID: {result.intervention_id}")
+            print(f"  Success: {result.success}")
+            if not result.success:
+                print(
+                    f"  ❌ Error: {result.error if hasattr(result, 'error') else 'Unknown error'}"
+                )
+            else:
+                print("  📝 Message: 'Please make sure tests pass'")
+                print(f"  📊 Type: {InterventionType.PRIORITIZE.value}")
+        except Exception as e:
+            print(f"  ❌ Exception sending intervention: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+        await asyncio.sleep(8)  # Wait another 8 seconds
+        print("\n" + "=" * 70)
+        print("[Example] Sending intervention: 'Focus on clean code structure'")
+        print("=" * 70)
+        try:
+            result = handler.send_intervention("Focus on clean code structure")
+            print(f"  ✅ Intervention sent! ID: {result.intervention_id}")
+            print(f"  Success: {result.success}")
+            if not result.success:
+                print(
+                    f"  ❌ Error: {result.error if hasattr(result, 'error') else 'Unknown error'}"
+                )
+            else:
+                print("  📝 Message: 'Focus on clean code structure'")
+        except Exception as e:
+            print(f"  ❌ Exception sending intervention: {e}")
+            import traceback
+
+            traceback.print_exc()
 
     # Start intervention task
     intervention_task = asyncio.create_task(send_delayed_interventions())
 
-    # Monitor conversation
-    max_wait_time = 300
+    # Monitor conversation with progress updates
+    max_wait_time = 120  # Reduced to 2 minutes for faster testing
     start_time = time.time()
-    check_interval = 5
+    check_interval = 3  # Check more frequently
+
+    print("\n📊 Monitoring conversation progress...")
+    print("   (Press Ctrl+C to stop early and see current state)\n")
 
     while True:
         status = handler.get_status()
         execution_status = status["execution_status"]
         agent_status = status["agent_status"]
 
+        # Show pending interventions count
+        pending = handler.get_pending_interventions()
+        pending_count = len(pending)
+
         elapsed = int(time.time() - start_time)
-        print(
-            f"[{elapsed:3d}s] Execution: {execution_status:12s} | Agent: {agent_status:12s}"
+        status_line = (
+            f"[{elapsed:3d}s] Execution: {execution_status:12s} | "
+            f"Agent: {agent_status:12s} | "
+            f"Interventions: {len(handler.intervention_history)} sent, {pending_count} pending"
         )
+        print(status_line)
 
         if execution_status in ["finished", "failed", "cancelled"]:
             break
 
         if time.time() - start_time > max_wait_time:
-            logger.warning("Conversation timeout reached")
+            logger.warning(
+                f"Conversation timeout after {max_wait_time}s - stopping early"
+            )
+            print("\n⏱️  Timeout reached. Stopping early to show current state...")
             break
 
         await asyncio.sleep(check_interval)
@@ -1162,7 +1458,7 @@ async def interactive_intervention_example():
     # Stop event monitoring
     handler.stop_event_monitoring()
 
-    # Show intervention history
+    # Show intervention history with effectiveness scores
     print("\n" + "=" * 70)
     print("INTERVENTION HISTORY")
     print("=" * 70)
@@ -1174,8 +1470,30 @@ async def interactive_intervention_example():
             if record.structured_data:
                 print(f"  Data: {record.structured_data}")
             print(f"  Acknowledged: {record.acknowledged}")
+            if record.acknowledged:
+                print(f"  Acknowledged at: {record.acknowledgment_timestamp}")
+                if record.acknowledgment_message:
+                    print(f"  Response: {record.acknowledgment_message[:100]}...")
+                # Calculate and show effectiveness
+                effectiveness = handler.calculate_intervention_effectiveness(
+                    record.intervention_id
+                )
+                if effectiveness is not None:
+                    print(f"  Effectiveness Score: {effectiveness:.2f}/1.0")
+            if record.retry_count > 0:
+                print(f"  Retries: {record.retry_count}")
+            if record.last_error:
+                print(f"  Last Error: {record.last_error[:100]}")
     else:
         print("No interventions were sent.")
+
+    # Show pending interventions
+    pending = handler.get_pending_interventions()
+    if pending:
+        print(f"\n⚠️  {len(pending)} intervention(s) still pending acknowledgment")
+    else:
+        print("\n✅ All interventions have been acknowledged!")
+
     print("=" * 70)
 
 

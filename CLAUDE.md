@@ -90,7 +90,56 @@ uv run python scripts/smoke_test.py
 
 ## Architecture Overview
 
-OmoiOS is a multi-agent orchestration system built on top of the OpenHands Software Agent SDK with the following key architectural components:
+OmoiOS is a spec-driven, multi-agent orchestration system built on top of the OpenHands Software Agent SDK. It combines autonomous agent execution with a structured spec-driven workflow (Requirements → Design → Tasks → Execution) to enable engineering teams to scale development without scaling headcount.
+
+For complete product vision, see [docs/product_vision.md](docs/product_vision.md).
+
+### Spec-Driven Workflow Model
+
+OmoiOS follows a structured spec-driven approach inspired by Hephaestus best practices:
+
+1. **Requirements Phase**: Structured requirements (EARS-style format with WHEN/THE SYSTEM SHALL patterns) capturing user stories and acceptance criteria
+2. **Design Phase**: Architecture diagrams, sequence diagrams, data models, error handling, and implementation considerations
+3. **Planning Phase**: Discrete, trackable tasks with dependencies and clear outcomes
+4. **Execution Phase**: Code generation, self-correction, property-based validation, integration tests, PR generation
+
+Each workflow/spec is stored in OmoiOS (database/storage), not as repo files. Users can export specs to markdown/YAML for version control if desired.
+
+See [Hephaestus-Inspired Workflow Enhancements](docs/implementation/workflows/hephaestus_workflow_enhancements.md) for detailed implementation.
+
+### Front-End Architecture
+
+**Technology Stack:**
+- **Framework**: Next.js 15+ (React 18+) with App Router
+- **UI Library**: ShadCN UI (Radix UI + Tailwind CSS)
+- **State Management**: Zustand (client state) + React Query (server state) with WebSocket integration
+- **Graph Visualization**: React Flow
+- **Visual Style**: Linear/Arc aesthetic with Notion-style structured blocks for specs
+
+**Core Dashboard Components:**
+
+1. **Kanban Board**: Visual workflow management with tickets/tasks organized by phase (INITIAL → IMPLEMENTATION → INTEGRATION → REFACTORING), real-time updates, drag-and-drop prioritization
+
+2. **Dependency Graph**: Interactive visualization of task/ticket relationships with blocking indicators, animated as dependencies resolve
+
+3. **Spec Workspace**: Multi-tab workspace (Requirements | Design | Tasks | Execution) with spec switcher to switch between specs within each tab. Structured blocks (Notion-style) for requirements/design content
+
+4. **Activity Timeline/Feed**: Chronological feed showing when specs/tasks/tickets are created, discovery events, phase transitions, agent interventions, approvals. Filterable by event type
+
+5. **Command Palette**: Linear-style command palette (Cmd+K) for quick navigation across specs, tasks, workflows, and logs
+
+6. **Agent Status Monitoring**: Live agent status (active, idle, stuck, failed), heartbeat indicators, Guardian intervention alerts
+
+7. **Git Activity Integration**: Real-time commit feed, PR status and diff viewer, branch visualization, merge approval interface
+
+**Real-Time Updates:**
+- WebSocket-powered live synchronization across all views
+- Hybrid UI approach: Clean, smooth Figma/Linear-style interface with detailed activity timeline always available (collapsible)
+- Drill-down transparency: Users can inspect agent nuances on demand without overwhelming the default view
+
+See [Front-End Design](docs/design/frontend/project_management_dashboard.md) for complete UI/UX specifications.
+
+### Backend Services Architecture
 
 ### Core Services Architecture
 - **DatabaseService**: PostgreSQL connection management with SQLAlchemy ORM, provides session context managers for safe database operations
@@ -116,6 +165,44 @@ OmoiOS is a multi-agent orchestration system built on top of the OpenHands Softw
 - **Error Handling**: Exponential backoff retries (1s, 2s, 4s, 8s + jitter) with smart error classification
 - **Health Monitoring**: 30-second heartbeats, automatic stale detection, comprehensive health statistics
 - **Timeout Management**: Configurable task timeouts, background monitoring (10s intervals), API-based cancellation
+
+### Adaptive Monitoring and Agent Autonomy
+
+**Core Principle**: Agents discover, verify, and monitor each other to ensure they're helping reach desired goals—without requiring explicit instructions for every scenario.
+
+#### Agent Discovery
+- **Discovery Agents**: Agents discover new requirements, dependencies, optimizations, and issues as they work
+- **Autonomous Task Discovery**: System expands feature specs as it learns context from the codebase
+- **Pattern Learning**: Monitoring loop learns patterns from successful and failed workflows
+- **Workflow Branching**: Agents discover when to branch workflows (bugs, optimizations, missing components)
+
+#### Agent Verification
+- **Verification Agents**: Agents verify each other's work through property-based testing and validation
+- **Spec Compliance**: Agents validate implementation against requirements and design specifications
+- **Quality Gates**: Automated quality control with validator agents that verify task completion
+- **Self-Correction**: Agents correct themselves when verification fails, without human intervention
+
+#### Mutual Agent Monitoring
+- **Guardian Agents**: Monitor individual agent health and provide interventions when agents drift from goals
+- **Conductor Service**: System-wide coordination and duplicate detection across all agents
+- **Trajectory Analysis**: Real-time behavior monitoring with LLM-powered insights to ensure agents stay aligned with desired outcomes
+- **Agent-to-Agent Oversight**: Agents monitor each other to ensure they're working together, not against each other
+
+#### Adaptive Monitoring Loop
+- **Continuous Learning**: Monitoring loop discovers how things work and adapts without explicit programming
+- **Pattern Discovery**: Learns from successful workflows to identify what works, from failed workflows to identify what doesn't
+- **Autonomous Adaptation**: Adjusts monitoring strategies, intervention thresholds, and agent coordination based on discovered patterns
+- **No Explicit Instructions**: Instead of programming every scenario, the system discovers effective patterns and adapts
+- **Memory Integration**: Uses semantic memory (RAG) to learn from past agent experiences and apply similar patterns
+
+**Implementation**:
+- `MonitoringLoop` service orchestrates Guardian trajectory analysis and Conductor system coherence analysis
+- `IntelligentGuardian` provides LLM-powered trajectory analysis with alignment scoring
+- `ConductorService` computes system-wide coherence scores and detects duplicate work
+- `MemoryService` stores discovered patterns for future reference
+- `DiscoveryService` tracks workflow branching and task discoveries
+
+See [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md) and [Intelligent Monitoring Enhancements](docs/implementation/monitoring/intelligent_monitoring_enhancements.md) for detailed implementation.
 
 ### Database Schema Design
 - **PostgreSQL 18+** with vector extensions for future AI-powered features
