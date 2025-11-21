@@ -173,25 +173,41 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 ```
 1. System automatically assigns tasks to available agents
    ↓
-2. Agents pick up tasks from queue (priority-based)
+2. System pre-loads relevant memories (collective intelligence):
+   - Searches memory system for top 20 most relevant memories
+   - Based on task description similarity
+   - Covers 80% of agent needs upfront
+   - Includes: error fixes, discoveries, decisions, codebase knowledge
    ↓
-3. Agents execute in isolated workspaces:
+3. Agent spawns with enriched context:
+   - Task description
+   - Pre-loaded memories embedded in system prompt
+   - Phase instructions and constraints
+   - Related requirements and design docs
+   ↓
+4. Agents pick up tasks from queue (priority-based)
+   ↓
+5. Agents execute in isolated workspaces:
    - Clone repository
+   - Use pre-loaded memories to avoid common pitfalls
    - Analyze requirements
    - Write code
    - Run tests
    - Self-correct on failures
+   - Search memories dynamically when encountering errors (find_memory)
+   - Save discoveries for other agents (save_memory)
    ↓
-4. Real-time updates via WebSocket:
+6. Real-time updates via WebSocket:
    - Task status changes
    - Agent heartbeats
    - Code commits
    - Test results
+   - Memory operations (MEMORY_SAVED, MEMORY_SEARCHED)
    ↓
-5. Dashboard updates in real-time:
+7. Dashboard updates in real-time:
    - Kanban board: Tickets move through phases
    - Dependency graph: Tasks complete, dependencies resolve
-   - Activity timeline: Shows all agent actions
+   - Activity timeline: Shows all agent actions (including memory operations)
 ```
 
 #### 3.2 Monitoring Views
@@ -231,6 +247,7 @@ Chronological feed showing:
 - Discovery events (why workflows branch)
 - Phase transitions
 - Agent interventions (Guardian steering)
+- Memory operations (agents saving/finding memories)
 - Approvals/rejections
 - Code commits
 - Test results
@@ -240,6 +257,7 @@ Features:
 - Search timeline
 - Link to related tickets/tasks
 - Show agent reasoning summaries
+- Show memory activity (collective learning)
 ```
 
 **Agent Status Monitoring:**
@@ -257,26 +275,43 @@ Live agent dashboard:
 ```
 Agent working on Task A discovers bug:
    ↓
-1. Agent calls DiscoveryService.record_discovery_and_branch()
+1. Agent encounters error or identifies issue
    ↓
-2. System creates:
+2. Agent searches memory: find_memory("database connection timeout")
+   - May find similar past issues
+   - Learns from previous solutions
+   ↓
+3. Agent calls DiscoveryService.record_discovery_and_branch()
+   ↓
+4. System creates:
    - TaskDiscovery record (type: "bug")
    - New Task B: "Fix bug"
    - Links Task B as child of Task A
    ↓
-3. WebSocket events:
+5. Agent saves discovery to memory: save_memory()
+   - Content: "Found database connection timeout in payment service"
+   - Memory type: discovery
+   - Tags: ["database", "payment", "timeout"]
+   ↓
+6. WebSocket events:
    - DISCOVERY_MADE
    - TASK_CREATED
+   - MEMORY_SAVED
    ↓
-4. Dashboard updates:
+7. Dashboard updates:
    - Dependency graph shows new branch
-   - Activity timeline shows discovery event
+   - Activity timeline shows discovery event and memory save
    - Kanban board shows new task
    ↓
-5. Workflow branches:
+8. Workflow branches:
    Original path continues
    New branch handles bug fix
    Both paths execute in parallel
+   ↓
+9. Future agents benefit:
+   - Pre-loaded memories include this discovery
+   - Similar issues detected faster
+   - Solutions propagate automatically
 ```
 
 **Discovery Types:**
@@ -288,7 +323,90 @@ Agent working on Task A discovers bug:
 - Technical debt
 - Integration issue
 
-#### 3.4 Guardian Interventions
+**Memory-Enhanced Discovery:**
+- Agents check memory before creating duplicate discoveries
+- Past solutions inform new discovery handling
+- Discoveries saved for future reference
+- Collective intelligence improves over time
+
+#### 3.4 Collective Intelligence & Memory System
+
+**How Agents Learn from Each Other:**
+
+```
+Agent A encounters PostgreSQL timeout error:
+   ↓
+1. Agent A calls find_memory("PostgreSQL timeout"):
+   - Searches semantic memory using hybrid search (semantic + keyword)
+   - Finds relevant memories from past agents
+   ↓
+2. System returns top 5 matching memories:
+   - Memory 1: "Fixed PostgreSQL timeout by increasing pool_size to 20" (score: 0.89)
+   - Memory 2: "Connection timeout solution: set pool_timeout=30" (score: 0.82)
+   - Memory 3: "PostgreSQL connection pooling best practices" (score: 0.75)
+   ↓
+3. Agent A applies solution from Memory 1
+   ↓
+4. Agent A fixes the issue successfully
+   ↓
+5. Agent A calls save_memory():
+   - Content: "Fixed PostgreSQL timeout by increasing pool_size to 20 and setting pool_timeout=30"
+   - Memory type: error_fix
+   - Tags: ["postgresql", "timeout", "connection-pool"]
+   - Related files: ["config/database.py"]
+   ↓
+6. Memory stored in system:
+   - Semantic embedding generated
+   - Available for future agents to find
+   - WebSocket: MEMORY_SAVED → Dashboard shows memory activity
+   ↓
+7. Agent B (working on different task) encounters similar issue:
+   - Pre-loaded memories already include Agent A's solution
+   - Agent B applies fix immediately without searching
+   - Problem solved faster thanks to collective intelligence
+```
+
+**Memory Operations Flow:**
+
+**Pre-loaded Context (80% Coverage):**
+- Happens automatically at agent spawn
+- Top 20 most relevant memories embedded in agent's initial prompt
+- Covers common scenarios, patterns, and solutions
+- Reduces need for dynamic searches during execution
+
+**Dynamic Search (20% Coverage):**
+- Agent calls `find_memory(query)` when encountering:
+  - Errors not in pre-loaded context
+  - Need for implementation details
+  - Finding related work or patterns
+- Uses hybrid search (semantic + keyword with RRF)
+- Returns top matching memories with similarity scores
+
+**Memory Saving:**
+- Agent calls `save_memory()` after:
+  - Fixing errors (memory_type: error_fix)
+  - Making discoveries (memory_type: discovery)
+  - Making decisions (memory_type: decision)
+  - Learning patterns (memory_type: learning)
+  - Finding gotchas (memory_type: warning)
+  - Understanding codebase (memory_type: codebase_knowledge)
+
+**Memory Types:**
+- `error_fix`: Solutions to errors (e.g., "Fixed ModuleNotFoundError by adding src/ to PYTHONPATH")
+- `discovery`: Important findings (e.g., "Authentication uses JWT with 24h expiry")
+- `decision`: Key decisions & rationale (e.g., "Chose Redis over Memcached for pub/sub support")
+- `learning`: Lessons learned (e.g., "Always validate input before SQL queries")
+- `warning`: Gotchas to avoid (e.g., "Don't use os.fork() with SQLite connections")
+- `codebase_knowledge`: Code structure insights (e.g., "API routes are defined in src/api/routes/")
+
+**Benefits:**
+- Agents avoid repeating mistakes
+- Solutions propagate across workflows
+- Faster problem resolution
+- Consistent patterns across codebase
+- Knowledge accumulates over time
+
+#### 3.5 Guardian Interventions
 
 ```
 Guardian monitors agent trajectories every 60 seconds:

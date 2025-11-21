@@ -124,15 +124,21 @@ OmoiOS workflows are **interconnected problem-solving graphs**, not linear pipel
 3. System analyzes codebase → Creates workflow → Generates spec
 4. User reviews spec (Requirements → Design → Tasks) → Approves plan
 5. System executes autonomously within phases
+   - Agents spawn with pre-loaded memories (top 20 relevant memories from past agents)
    - Agents work on tasks, discover optimizations/bugs/missing requirements
+   - Agents search memories when encountering errors (find_memory) → Find solutions from past agents
+   - Agents save discoveries and solutions (save_memory) → Share knowledge for future agents
    - Discoveries spawn new tasks in appropriate phases
    - Workflow branches and adapts based on discoveries
    - Tickets thread through phases maintaining context
    - Feedback loops ensure quality (validation → fix → revalidate)
-6. Real-time dashboard shows: agent status, workflow progress, tasks queue, Git activity, discovery events, workflow branching
+   - Guardian monitors trajectories and sends real-time interventions when agents drift
+6. Real-time dashboard shows: agent status, workflow progress, tasks queue, Git activity, discovery events, workflow branching, memory operations (collective learning)
 7. User receives notifications for approval gates (phase transitions, PR reviews)
 8. User approves/rejects → Workflow continues autonomously
 9. Feature completed, verified, and merged
+   - All agent learnings saved to memory system
+   - Future agents benefit from accumulated knowledge
 ```
 
 **Workflow Adaptation Example:**
