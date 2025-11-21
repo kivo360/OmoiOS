@@ -325,10 +325,11 @@ class DiscoveryService:
         reason: str,
         suggested_phase: str = "PHASE_FINAL",
         suggested_priority: str = "HIGH",
-    ) -> Task:
-        """Spawn diagnostic recovery task using Discovery pattern.
+        max_tasks: int = 5,
+    ) -> List[Task]:
+        """Spawn diagnostic recovery tasks using Discovery pattern.
         
-        Creates a diagnostic discovery and spawns a recovery task to help
+        Creates a diagnostic discovery and spawns recovery tasks to help
         stuck workflows progress toward their goal.
         
         Args:
@@ -336,11 +337,12 @@ class DiscoveryService:
             ticket_id: Workflow (ticket) that is stuck.
             diagnostic_run_id: ID of the diagnostic run triggering this.
             reason: Why the diagnostic was triggered.
-            suggested_phase: Phase for recovery task.
-            suggested_priority: Priority for recovery task.
+            suggested_phase: Phase for recovery task(s).
+            suggested_priority: Priority for recovery task(s).
+            max_tasks: Maximum number of recovery tasks to spawn.
             
         Returns:
-            Spawned recovery Task.
+            List of spawned recovery Tasks.
         """
         # Find last completed task to use as source
         last_task = (
@@ -353,7 +355,9 @@ class DiscoveryService:
         if not last_task:
             raise ValueError(f"No tasks found for ticket {ticket_id}")
 
-        # Use existing branching mechanism
+        spawned_tasks = []
+        
+        # Spawn single recovery task (can be extended to spawn multiple based on analysis)
         discovery, spawned_task = self.record_discovery_and_branch(
             session=session,
             source_task_id=last_task.id,
@@ -365,5 +369,11 @@ class DiscoveryService:
             priority_boost=True,
             spawn_metadata={"diagnostic_run_id": diagnostic_run_id},
         )
+        
+        spawned_tasks.append(spawned_task)
+        
+        # Limit to max_tasks
+        if len(spawned_tasks) > max_tasks:
+            spawned_tasks = spawned_tasks[:max_tasks]
 
-        return spawned_task
+        return spawned_tasks

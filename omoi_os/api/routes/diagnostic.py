@@ -164,7 +164,7 @@ def get_diagnostic_runs(
     status_code=200,
     summary="Manually trigger diagnostic for workflow",
 )
-def manual_trigger_diagnostic(
+async def manual_trigger_diagnostic(
     workflow_id: str,
     diagnostic_service: DiagnosticService = Depends(get_diagnostic_service),
 ) -> DiagnosticRunDTO:
@@ -178,10 +178,16 @@ def manual_trigger_diagnostic(
     if not context:
         raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
     
-    # Spawn diagnostic
-    diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
+    # Load diagnostic settings for max_tasks
+    from omoi_os.config import get_app_settings
+    app_settings = get_app_settings()
+    max_tasks = app_settings.diagnostic.max_tasks_per_run
+    
+    # Spawn diagnostic (async)
+    diagnostic_run = await diagnostic_service.spawn_diagnostic_agent(
         workflow_id=workflow_id,
         context=context,
+        max_tasks=max_tasks,
     )
     
     return DiagnosticRunDTO(**serialize_diagnostic_run(diagnostic_run))

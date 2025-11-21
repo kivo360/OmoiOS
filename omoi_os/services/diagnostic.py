@@ -168,19 +168,21 @@ class DiagnosticService:
 
             return stuck
 
-    def spawn_diagnostic_agent(
+    async def spawn_diagnostic_agent(
         self,
         workflow_id: str,
         context: dict,
+        max_tasks: int = 5,
     ) -> DiagnosticRun:
-        """Create diagnostic run and spawn recovery task.
+        """Create diagnostic run, generate hypotheses, and spawn recovery tasks.
         
         Args:
             workflow_id: ID of stuck workflow
             context: Rich diagnostic context
+            max_tasks: Maximum number of recovery tasks to spawn
             
         Returns:
-            Created DiagnosticRun record
+            Created DiagnosticRun record with spawned tasks
         """
         with self.db.get_session() as session:
             # Create diagnostic run record
@@ -194,7 +196,7 @@ class DiagnosticService:
                 workflow_goal=context.get("workflow_goal"),
                 phases_analyzed=context.get("phases_analyzed"),
                 agents_reviewed=context.get("agents_reviewed"),
-                status="created",
+                status="running",
             )
             session.add(diagnostic_run)
             session.commit()
@@ -206,6 +208,83 @@ class DiagnosticService:
             diagnostic_run_id = diagnostic_run.id
             session.expunge(diagnostic_run)
 
+            # Generate hypotheses using LLM analysis
+            try:
+                # Await async hypothesis generation
+                analysis = await self.generate_hypotheses(context)
+                
+                # Extract diagnosis text from analysis
+                diagnosis_parts = []
+                if analysis.root_cause:
+                    diagnosis_parts.append(f"Root Cause: {analysis.root_cause}")
+                if analysis.hypotheses:
+                    diagnosis_parts.append("\nHypotheses:")
+                    for hyp in analysis.hypotheses[:3]:  # Top 3
+                        diagnosis_parts.append(f"  - {hyp.statement} (likelihood: {hyp.likelihood:.2f})")
+                if analysis.recommendations:
+                    diagnosis_parts.append("\nRecommendations:")
+                    for rec in analysis.recommendations[:max_tasks]:
+                        diagnosis_parts.append(f"  - [{rec.priority}] {rec.description}")
+                
+                diagnosis_text = "\n".join(diagnosis_parts) if diagnosis_parts else "No specific diagnosis generated"
+                
+                # Determine suggested phase and priority from recommendations
+                suggested_phase = "PHASE_IMPLEMENTATION"  # Default
+                suggested_priority = "HIGH"  # Default
+                
+                if analysis.recommendations:
+                    # Use first recommendation's priority
+                    suggested_priority = analysis.recommendations[0].priority
+                    # Try to infer phase from recommendation (basic heuristic)
+                    rec_desc = analysis.recommendations[0].description.lower()
+                    if "test" in rec_desc or "validate" in rec_desc:
+                        suggested_phase = "PHASE_TESTING"
+                    elif "requirement" in rec_desc or "clarify" in rec_desc:
+                        suggested_phase = "PHASE_REQUIREMENTS"
+                    elif "implement" in rec_desc or "build" in rec_desc:
+                        suggested_phase = "PHASE_IMPLEMENTATION"
+                
+            except Exception as e:
+                # If hypothesis generation fails, use fallback
+                diagnosis_text = f"Diagnostic triggered: Workflow stuck for {context.get('time_stuck_seconds', 0)} seconds. All tasks completed but no validated result."
+                suggested_phase = "PHASE_IMPLEMENTATION"
+                suggested_priority = "HIGH"
+
+            # Spawn recovery tasks via DiscoveryService
+            try:
+                with self.db.get_session() as session:
+                    spawned_tasks = self.discovery.spawn_diagnostic_recovery(
+                        session=session,
+                        ticket_id=workflow_id,
+                        diagnostic_run_id=diagnostic_run_id,
+                        reason=diagnosis_text[:500],  # Truncate if too long
+                        suggested_phase=suggested_phase,
+                        suggested_priority=suggested_priority,
+                        max_tasks=max_tasks,
+                    )
+                    
+                    # Update diagnostic run with results
+                    diagnostic_run = session.get(DiagnosticRun, diagnostic_run_id)
+                    if diagnostic_run:
+                        task_ids = [str(task.id) for task in spawned_tasks]
+                        diagnostic_run.tasks_created_count = len(task_ids)
+                        diagnostic_run.tasks_created_ids = {"task_ids": task_ids}
+                        diagnostic_run.diagnosis = diagnosis_text
+                        diagnostic_run.status = "completed"
+                        diagnostic_run.completed_at = utc_now()
+                        session.commit()
+                        session.refresh(diagnostic_run)
+                        session.expunge(diagnostic_run)
+            except Exception as e:
+                # If spawning fails, mark as failed
+                with self.db.get_session() as session:
+                    diagnostic_run = session.get(DiagnosticRun, diagnostic_run_id)
+                    if diagnostic_run:
+                        diagnostic_run.status = "failed"
+                        diagnostic_run.diagnosis = f"Failed to spawn recovery tasks: {str(e)}"
+                        session.commit()
+                        session.expunge(diagnostic_run)
+
             # Publish event
             if self.event_bus:
                 self.event_bus.publish(
@@ -216,6 +295,7 @@ class DiagnosticService:
                         payload={
                             "workflow_id": workflow_id,
                             "time_stuck_seconds": context.get("time_stuck_seconds", 0),
+                            "tasks_created": diagnostic_run.tasks_created_count if diagnostic_run else 0,
                         },
                     )
                 )
@@ -326,6 +406,12 @@ class DiagnosticService:
             except Exception:
                 workflow_goal = ticket.description
 
+            # Get Conductor analyses (last max_analyses)
+            conductor_analyses = self._get_conductor_analyses(session, max_analyses)
+
+            # Get submitted WorkflowResults (all submissions, even rejected)
+            submitted_results = self._get_workflow_results(session, workflow_id)
+
             # Build context
             context = {
                 "workflow_id": workflow_id,
@@ -342,6 +428,8 @@ class DiagnosticService:
                     "current_phase": ticket.phase_id,
                     "task_distribution": self._get_task_distribution(session, workflow_id),
                 },
+                "conductor_analyses": conductor_analyses,
+                "submitted_results": submitted_results,
             }
 
             return context
@@ -440,4 +528,71 @@ class DiagnosticService:
         )
 
         return {phase: count for phase, count in phase_counts}
+
+    def _get_conductor_analyses(self, session, max_analyses: int) -> List[dict]:
+        """Get recent Conductor analyses for system context."""
+        from sqlalchemy import text
+
+        try:
+            query = text("""
+                SELECT 
+                    id,
+                    cycle_id,
+                    coherence_score,
+                    system_status,
+                    num_agents,
+                    duplicate_count,
+                    termination_count,
+                    coordination_count,
+                    details,
+                    created_at
+                FROM conductor_analyses
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """)
+            
+            result = session.execute(query, {"limit": max_analyses})
+            analyses = []
+            for row in result.fetchall():
+                analyses.append({
+                    "id": str(row.id),
+                    "cycle_id": str(row.cycle_id),
+                    "coherence_score": float(row.coherence_score),
+                    "system_status": row.system_status,
+                    "num_agents": row.num_agents,
+                    "duplicate_count": row.duplicate_count,
+                    "termination_count": row.termination_count,
+                    "coordination_count": row.coordination_count,
+                    "details": row.details or {},
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                })
+            return analyses
+        except Exception:
+            # Table might not exist or query failed
+            return []
+
+    def _get_workflow_results(self, session, workflow_id: str) -> List[dict]:
+        """Get all WorkflowResult submissions for a workflow (including rejected)."""
+        try:
+            results = (
+                session.query(WorkflowResult)
+                .filter(WorkflowResult.workflow_id == workflow_id)
+                .order_by(desc(WorkflowResult.created_at))
+                .all()
+            )
+            
+            submitted_results = []
+            for result in results:
+                submitted_results.append({
+                    "id": result.id,
+                    "status": result.status,
+                    "validated_at": result.validated_at.isoformat() if result.validated_at else None,
+                    "validation_feedback": result.validation_feedback,
+                    "markdown_file_path": result.markdown_file_path,
+                    "explanation": result.explanation,
+                    "created_at": result.created_at.isoformat() if result.created_at else None,
+                })
+            return submitted_results
+        except Exception:
+            return []
 

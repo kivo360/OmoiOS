@@ -349,6 +349,27 @@ class MonitoringSettings(OmoiBaseSettings):
     max_concurrent_analyses: int = 5
 
 
+class DiagnosticSettings(OmoiBaseSettings):
+    """
+    Diagnostic agent system configuration.
+    
+    Precedence: YAML defaults (config/base.yaml + config/<env>.yaml) < environment variables < init kwargs.
+    """
+
+    yaml_section = "diagnostic"
+    model_config = SettingsConfigDict(
+        env_prefix="DIAGNOSTIC_",
+        extra="ignore",
+    )
+
+    enabled: bool = True
+    cooldown_seconds: int = 60
+    min_stuck_time_seconds: int = 60
+    max_agents_to_analyze: int = 15
+    max_conductor_analyses: int = 5
+    max_tasks_per_run: int = 5
+
+
 class WorkerSettings(OmoiBaseSettings):
     """
     Worker runtime configuration.
@@ -446,6 +467,7 @@ class AppSettings:
         self.auth = AuthSettings()
         self.workspace = WorkspaceSettings()
         self.monitoring = MonitoringSettings()
+        self.diagnostic = DiagnosticSettings()
         self.worker = WorkerSettings()
         self.integrations = IntegrationSettings()
         self.embedding = EmbeddingSettings()

@@ -205,20 +205,29 @@ async def heartbeat_monitoring_loop():
 
 
 async def diagnostic_monitoring_loop():
-    """Check for stuck workflows every 60 seconds and spawn diagnostic agents."""
+    """Check for stuck workflows and spawn diagnostic agents."""
     global db, diagnostic_service, event_bus
 
     if not db or not diagnostic_service or not event_bus:
+        return
+
+    # Load diagnostic settings
+    from omoi_os.config import get_app_settings
+    app_settings = get_app_settings()
+    diagnostic_settings = app_settings.diagnostic
+
+    if not diagnostic_settings.enabled:
+        print("Diagnostic agent system disabled")
         return
 
     print("Diagnostic monitoring loop started")
 
     while True:
         try:
-            # Find stuck workflows
+            # Find stuck workflows using configured values
             stuck_workflows = diagnostic_service.find_stuck_workflows(
-                cooldown_seconds=60,
-                stuck_threshold_seconds=60,
+                cooldown_seconds=diagnostic_settings.cooldown_seconds,
+                stuck_threshold_seconds=diagnostic_settings.min_stuck_time_seconds,
             )
 
             for workflow_info in stuck_workflows:
@@ -228,24 +237,26 @@ async def diagnostic_monitoring_loop():
                 print(f"🚨 WORKFLOW STUCK DETECTED - {time_stuck}s no progress")
                 print(f"🔍 Creating diagnostic agent for workflow {workflow_id}")
 
-                # Build diagnostic context
+                # Build diagnostic context using configured values
                 context = diagnostic_service.build_diagnostic_context(
                     workflow_id=workflow_id,
-                    max_agents=15,
-                    max_analyses=5,
+                    max_agents=diagnostic_settings.max_agents_to_analyze,
+                    max_analyses=diagnostic_settings.max_conductor_analyses,
                 )
 
                 # Update context with trigger info
                 context.update(workflow_info)
 
-                # Spawn diagnostic agent
-                diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
+                # Spawn diagnostic agent with configured max tasks
+                diagnostic_run = await diagnostic_service.spawn_diagnostic_agent(
                     workflow_id=workflow_id,
                     context=context,
+                    max_tasks=diagnostic_settings.max_tasks_per_run,
                 )
 
                 print(
-                    f"✅ Diagnostic run {diagnostic_run.id} created for workflow {workflow_id}"
+                    f"✅ Diagnostic run {diagnostic_run.id} created for workflow {workflow_id} "
+                    f"(spawned {diagnostic_run.tasks_created_count} recovery task(s))"
                 )
 
             # Check every 60 seconds
@@ -416,9 +427,10 @@ async def anomaly_monitoring_loop():
                             )
 
                             # Spawn diagnostic agent focusing on this agent
-                            diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
+                            diagnostic_run = await diagnostic_service.spawn_diagnostic_agent(
                                 workflow_id=workflow_id,
                                 context=context,
+                                max_tasks=5,  # Use default max tasks
                             )
 
                             print(
