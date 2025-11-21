@@ -43,7 +43,7 @@ The AI handles nuances, corrects itself, verifies work, and discovers new tasks 
 1. **Spec-Driven Development**: Structured approach with Requirements → Design → Tasks → Execution
 2. **Autonomous Execution**: AI discovers work, corrects itself, verifies completion
 3. **Strategic Oversight**: Users monitor at approval gates, not micromanage
-4. **Self-Healing System**: Guardian agents monitor agent trajectories every 60 seconds, analyze alignment with goals using accumulated context, detect when agents drift, get stuck, violate constraints, miss mandatory steps, or become idle, and provide targeted steering interventions to keep workflows on track automatically
+4. **Self-Healing System**: Guardian agents monitor agent trajectories every 60 seconds, analyze alignment with goals using accumulated context, detect when agents drift, get stuck, violate constraints, miss mandatory steps, or become idle, and provide targeted steering interventions to keep workflows on track automatically. **Future enhancements**: Explicit constraint persistence validation, mandatory step validation, and specific steering type categorization will make interventions even more effective.
 5. **Real-Time Visibility**: Complete transparency into agent activity and progress
 6. **Adaptive Monitoring**: Monitoring loop learns how things work and adapts without explicit instructions
 7. **Mutual Agent Monitoring**: Agents verify each other's work and ensure alignment with desired goals
@@ -299,7 +299,7 @@ The adaptive monitoring loop addresses the "agent SOFAR" problem—where systems
 - **Customizes quality gates** based on learned success criteria for different types of features
 
 #### 3. Mutual Monitoring Framework
-- **Guardian Agents**: Monitor individual agent trajectories every 60 seconds, analyze alignment with goals using accumulated context from entire conversation history, provide targeted interventions when agents drift, get stuck, violate constraints, miss mandatory steps, or become idle. Guardian builds trajectory summaries over time, tracks persistent constraints throughout the session, validates phase instructions compliance, and sends specific steering messages to keep agents on track.
+- **Guardian Agents**: Monitor individual agent trajectories every 60 seconds, analyze alignment with goals using accumulated context from entire conversation history, provide targeted interventions when agents drift, get stuck, violate constraints, miss mandatory steps, or become idle. Guardian builds trajectory summaries over time, tracks persistent constraints throughout the session (even if mentioned 20 minutes ago), validates phase instructions compliance including mandatory steps, and sends specific steering messages categorized by root cause (stuck, drifting, violating constraints, idle, missed steps) to keep agents on track. **Enhancement opportunities**: Explicit constraint persistence validation with specific violation messages, mandatory step validation from phase instructions, and idle detection when agents finish but don't update status.
 - **Conductor Service**: Performs system-wide coherence analysis, detects duplicate work, ensures agents aren't working against each other
 - **Verification Agents**: Cross-verify agent work, run property-based tests, validate implementation against specs, ensure quality gates
 - **Discovery Agents**: Identify new requirements, dependencies, optimizations, and issues as work progresses, expanding plans dynamically
@@ -325,6 +325,41 @@ The adaptive monitoring loop addresses the "agent SOFAR" problem—where systems
 - `omoi_os/services/conversation_intervention.py` - Sends steering interventions to OpenHands conversations
 
 ### Next Steps for Implementation
+
+#### Phase 0: Guardian Enhancement Opportunities (Immediate Improvements)
+
+These enhancements will make OmoiOS's Guardian system even more effective at keeping agents on track, aligning with Hephaestus Guardian best practices:
+
+1. **Explicit Constraint Persistence Validation**
+   - Enhance Guardian analysis to explicitly validate that constraints persist throughout the entire session
+   - Provide specific violation messages with context: "You're installing 'jsonwebtoken' package, but the constraint from Phase 1 says 'no external auth libraries'. Use Node.js built-in crypto module instead."
+   - Update `guardian_analysis.md.j2` template to check constraint violations as a primary validation point
+
+2. **Explicit Mandatory Step Validation**
+   - Add explicit validation for mandatory steps from phase instructions
+   - Parse phase instructions for `⚠️ MANDATORY:` markers or similar patterns
+   - Detect when agents skip mandatory steps and provide specific guidance: "Phase instructions require: search_tickets() before creating new tickets. You created a ticket without searching."
+
+3. **Specific Steering Type Categorization**
+   - Enhance steering type system to explicitly categorize interventions by root cause:
+     - **Stuck** - Same error appearing 5+ times
+     - **Drifting** - Working on unrelated areas
+     - **Violating Constraints** - Breaking rules from earlier conversation
+     - **Idle** - Agent finished but hasn't updated status
+     - **Missed Steps** - Agent skipped mandatory phase instructions
+   - Provide more specific, actionable intervention messages based on steering type
+
+4. **Enhanced Constraint Violation Detection**
+   - Detect constraint violations with full context (constraint source, when it was set, what action violates it)
+   - Generate Hephaestus-style specific violation messages that include alternatives
+   - Track constraint violations as a primary steering trigger, not just in analysis details
+
+5. **Explicit Idle Detection**
+   - Detect when agents appear to have completed work but haven't called `update_task_status(status='done')`
+   - Provide specific reminders: "You've completed JWT implementation and tests are passing. Please update task status to 'done' with update_task_status tool."
+   - Categorize idle detection as a distinct steering type
+
+**Benefits**: These enhancements will make Guardian interventions more specific, actionable, and effective at preventing common agent drift patterns, improving the self-healing capabilities of the system.
 
 #### Phase 1: Pattern Storage and Retrieval
 1. **Enhance MonitoringLoop** to store successful/failed patterns in MemoryService
