@@ -11,6 +11,8 @@ security = HTTPBearer()
 if TYPE_CHECKING:
     from omoi_os.models.user import User
     from omoi_os.services.agent_health import AgentHealthService
+    from omoi_os.services.auth_service import AuthService
+    from omoi_os.services.authorization_service import AuthorizationService
     from omoi_os.services.agent_registry import AgentRegistryService
     from omoi_os.services.agent_status_manager import AgentStatusManager
     from omoi_os.services.approval import ApprovalService

@@ -1,8 +1,8 @@
 """Authentication API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer
+from sqlalchemy import select
 from typing import List
 
 from omoi_os.api.dependencies import get_db_session, get_current_user, get_auth_service
