@@ -19,8 +19,9 @@ phases:
     done_definitions:
       - "Requirements extracted and documented"
       - "Components identified and listed"
-      - "Phase 2 implementation tasks created"
       - "Ticket moved to 'analyzing' status"
+      - "Phase 2 implementation tasks created with ticket links"
+      - "All spawned tasks include ticket ID in description"
     
     expected_outputs:
       - type: "documentation"
@@ -33,15 +34,24 @@ phases:
     phase_prompt: |
       YOU ARE IN THE REQUIREMENTS ANALYSIS PHASE
       
-      STEP 1: Read the PRD.md carefully
-      STEP 2: Extract functional and non-functional requirements
-      STEP 3: Identify system components (auth, API, frontend, database, etc.)
-      STEP 4: For each component, create a Phase 2 implementation task
-      STEP 5: Document requirements in requirements/ directory
-      STEP 6: Mark task as done
+      STEP 1: Extract ticket ID from task description (format: "TICKET: ticket-xxx" or from task.ticket_id)
+      STEP 2: Read the PRD.md carefully
+      STEP 3: Extract functional and non-functional requirements
+      STEP 4: Identify system components (auth, API, frontend, database, etc.)
+      STEP 5: Move ticket to 'analyzing' status
+        change_ticket_status(ticket_id="ticket-xxx", new_status="analyzing", comment="Requirements analysis in progress")
+      STEP 6: For each component, create a Phase 2 implementation task with ticket link
+        create_task({
+          "ticket_id": "ticket-xxx",
+          "phase_id": "PHASE_IMPLEMENTATION",
+          "description": "Phase 2: Implement [Component] - TICKET: ticket-xxx"
+        })
+      STEP 7: Document requirements in requirements/ directory
+      STEP 8: Mark task as done
       
       IMPORTANT: Do not proceed until all done_definitions are met.
       Create one implementation task per component discovered.
+      Always include ticket ID in task descriptions for context threading.
     
     next_steps_guide:
       - "Phase 2 agents will implement each component in parallel"
@@ -59,10 +69,12 @@ phases:
     is_terminal: false
     
     done_definitions:
+      - "Ticket moved to 'building' status"
       - "Component code files created in src/"
       - "Minimum 3 test cases written"
       - "Tests passing locally"
-      - "Phase 3 validation task created"
+      - "Ticket moved to 'building-done' status"
+      - "Phase 3 validation task created with ticket link"
       - "update_task_status called with status='done'"
     
     expected_outputs:
@@ -77,22 +89,49 @@ phases:
     phase_prompt: |
       YOU ARE A SOFTWARE ENGINEER IN THE IMPLEMENTATION PHASE
       
-      STEP 1: Understand the component requirements from the ticket
-      STEP 2: Design the interface and data structures
-      STEP 3: Implement the core logic
-      STEP 4: Write comprehensive tests (minimum 3 test cases)
-      STEP 5: Run tests and ensure they pass
-      STEP 6: If you discover bugs → record_discovery(type='bug', spawn_fix=true)
-      STEP 7: If you discover optimizations → record_discovery(type='optimization')
-      STEP 8: Create Phase 3 validation task
-      STEP 9: Mark task as done
+      STEP 1: Extract ticket ID from task description (format: "TICKET: ticket-xxx" or from task.ticket_id)
+      STEP 2: Move ticket to 'building' status
+        change_ticket_status(ticket_id="ticket-xxx", new_status="building", comment="Implementation started")
+      STEP 3: Understand the component requirements from the ticket
+      STEP 4: Design the interface and data structures
+      STEP 5: Implement the core logic
+      STEP 6: Write comprehensive tests (minimum 3 test cases)
+      STEP 7: Run tests and ensure they pass
       
-      DISCOVERY TRIGGERS:
-      - Found bug → spawn immediate fix task
-      - Found optimization opportunity → spawn investigation task
-      - Requirements unclear → spawn clarification task (Phase 1)
+      IF you discover bugs:
+        - Use discovery_service.record_discovery_and_branch() to spawn immediate fix task
+        - Continue your implementation work (don't stop)
+        - Fix task will be handled separately
       
-      IMPORTANT: All done_definitions must be met before marking complete.
+      IF you discover optimizations:
+        - Use discovery_service.record_discovery_and_branch() to spawn investigation task
+        - Continue your implementation work
+      
+      IF requirements are unclear or missing:
+        - JUMP BACK to Phase 1 for clarification:
+          discovery_service.record_discovery_and_branch(
+            discovery_type="clarification_needed",
+            spawn_phase_id="PHASE_REQUIREMENTS",  # Phase jumping - bypasses allowed_transitions
+            spawn_description="Clarify [What's unclear] - Needed for [Component] - TICKET: ticket-xxx"
+          )
+        - Mark your task as blocked until clarification received
+        - update_task_status(task_id="current-task-id", status="blocked", error_message="Waiting for requirements clarification")
+      
+      STEP 8: Move ticket to 'building-done' status
+        change_ticket_status(ticket_id="ticket-xxx", new_status="building-done", comment="Implementation complete, ready for validation")
+      STEP 9: Create Phase 3 validation task with ticket link
+        discovery_service.record_discovery_and_branch(
+          discovery_type="new_component",
+          spawn_phase_id="PHASE_TESTING",
+          spawn_description="Phase 3: Validate [Component] - TICKET: ticket-xxx"
+        )
+      STEP 10: Mark task as done
+      
+      IMPORTANT: 
+      - All done_definitions must be met before marking complete
+      - Continue your work after spawning discovery tasks (don't stop)
+      - Always include ticket ID in spawned task descriptions for context threading
+      - Discovery-based spawning can target ANY phase (bypasses allowed_transitions)
     
     next_steps_guide:
       - "Phase 3 agent runs integration tests on your component"
@@ -111,11 +150,13 @@ phases:
     is_terminal: false
     
     done_definitions:
+      - "Ticket moved to 'testing' status"
       - "Integration tests executed"
-      - "All tests passing"
+      - "If tests PASS: Ticket moved to 'done' status"
+      - "If tests FAIL: Phase 2 fix task created (feedback loop)"
       - "Requirements validated"
-      - "If bugs found → fix tasks created"
-      - "If no bugs → deployment task created"
+      - "If bugs found → fix tasks created with ticket links"
+      - "If no bugs → deployment task created (if needed)"
     
     expected_outputs:
       - type: "test"
@@ -128,27 +169,53 @@ phases:
     phase_prompt: |
       YOU ARE A QA ENGINEER IN THE VALIDATION PHASE
       
-      STEP 1: Review the component implementation
-      STEP 2: Run integration tests
-      STEP 3: Validate against requirements
-      STEP 4: If tests PASS:
-          - Create Phase 4 deployment task
-          - Mark component validated
-      STEP 5: If tests FAIL:
-          - record_discovery(type='bug', description='...')
-          - Spawn Phase 2 fix tasks
-          - DO NOT mark as done
-      STEP 6: If you discover optimization opportunities:
-          - record_discovery(type='optimization', description='...')
-          - Optionally spawn investigation tasks
+      STEP 1: Extract ticket ID from task description (format: "TICKET: ticket-xxx" or from task.ticket_id)
+      STEP 2: Move ticket to 'testing' status
+        change_ticket_status(ticket_id="ticket-xxx", new_status="testing", comment="Validation started")
+      STEP 3: Review the component implementation
+      STEP 4: Run integration tests
+      STEP 5: Validate against requirements
+      
+      IF tests PASS:
+        - Move ticket to 'done' status
+          change_ticket_status(ticket_id="ticket-xxx", new_status="done", comment="All tests passing, component validated")
+        - Create Phase 4 deployment task with ticket link (if deployment needed)
+        - Mark validation task as done
+      
+      IF tests FAIL:
+        - Spawn Phase 2 fix task via DiscoveryService (FEEDBACK LOOP):
+          discovery_service.record_discovery_and_branch(
+            discovery_type="bug_found",
+            spawn_phase_id="PHASE_IMPLEMENTATION",  # Loop back to Phase 2
+            spawn_description="Fix bugs in [Component] - [Specific errors] - TICKET: ticket-xxx",
+            priority_boost=True  # Boost priority for fixes
+          )
+        - Keep ticket in 'testing' status (don't move to done)
+        - Mark your validation task as done (validation complete, found issues)
+        - Fix task will spawn new validation task when complete
+        - LOOP: New validation task → If fails → Spawn fix → Re-validate until passing
+      
+      IF you discover optimization opportunities:
+        - Use discovery_service.record_discovery_and_branch() to spawn investigation task
+        - Continue your validation work (don't stop)
+        - Investigation can spawn Phase 1 analysis or Phase 2 implementation tasks
+      
+      IF you discover security issues:
+        - Spawn critical priority fix task immediately
+        - Use discovery_service.record_discovery_and_branch() with priority_boost=True
+        - Continue validation work
       
       DISCOVERY PATTERNS:
-      - Bug discovered → spawn fix task (Phase 2, priority boost)
-      - Performance issue → spawn optimization investigation
-      - Security issue → spawn security fix (critical priority)
-      - Integration issue → spawn integration fix task
+      - Bug discovered → spawn fix task (Phase 2, priority boost) → fix spawns new validation → loop until passing
+      - Performance issue → spawn optimization investigation (can spawn Phase 1 or Phase 2 tasks)
+      - Security issue → spawn security fix (critical priority, Phase 2)
+      - Integration issue → spawn integration fix task (Phase 2)
       
-      IMPORTANT: Do not approve buggy components. Spawn fixes instead.
+      IMPORTANT: 
+      - Do not approve buggy components. Spawn fixes instead.
+      - Feedback loop: validation → fix → re-validate until passing
+      - Continue your validation work after spawning discovery tasks
+      - Always include ticket ID in spawned task descriptions for context threading
     
     next_steps_guide:
       - "If all tests pass → Phase 4 deploys the component"

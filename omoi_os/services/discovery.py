@@ -104,13 +104,19 @@ class DiscoveryService:
         Record discovery and immediately spawn a branch task.
 
         This implements the Hephaestus pattern: discovery → automatic branching.
+        
+        **IMPORTANT**: This method bypasses PhaseModel.allowed_transitions restrictions
+        for discovery-based spawning, enabling Hephaestus-style free-form branching.
+        Normal phase transitions still enforce allowed_transitions, but discoveries can
+        spawn tasks in ANY phase (e.g., Phase 3 validation agent can spawn Phase 1
+        investigation tasks).
 
         Args:
             session: Database session.
             source_task_id: Task that made the discovery.
             discovery_type: Type of discovery.
             description: Discovery description.
-            spawn_phase_id: Phase ID for the spawned task.
+            spawn_phase_id: Phase ID for the spawned task (can be ANY phase - bypasses allowed_transitions).
             spawn_description: Description for the spawned task.
             spawn_priority: Priority for spawned task (defaults to source task priority).
             priority_boost: Whether to boost priority.
