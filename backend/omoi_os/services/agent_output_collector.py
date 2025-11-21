@@ -198,15 +198,21 @@ class AgentOutputCollector:
                     f"Phase: {agent.phase_id or 'None'}",
                 ]
 
-                if agent.current_task_id:
-                    summary_parts.append(f"Current Task: {agent.current_task_id}")
+                # Get current task assigned to this agent
+                from omoi_os.models.task import Task
+                current_task = session.query(Task).filter_by(
+                    assigned_agent_id=str(agent.id),
+                    status="running"
+                ).first()
+                if current_task:
+                    summary_parts.append(f"Current Task: {current_task.id}")
 
                 if agent.last_heartbeat:
                     time_since = (utc_now() - agent.last_heartbeat).total_seconds()
                     summary_parts.append(f"Last Heartbeat: {time_since:.0f}s ago")
 
-                if agent.health_check_failures:
-                    summary_parts.append(f"Health Failures: {agent.health_check_failures}")
+                # Note: Agent model doesn't have health_check_failures attribute
+                # Health status is tracked via health_status field instead
 
                 return " | ".join(summary_parts)
 
@@ -265,11 +271,16 @@ class AgentOutputCollector:
 
         Replaces tmux session enumeration with database-based
         agent status tracking.
+        
+        Active agents are those with IDLE or RUNNING status per AgentStatus enum.
         """
         try:
             with self.db.get_session() as session:
-                # Define active statuses
-                active_statuses = ["working", "pending", "assigned", "idle"]
+                # Define active statuses using AgentStatus enum values
+                # Active = can receive tasks (IDLE or RUNNING)
+                from omoi_os.models.agent_status import AgentStatus
+                
+                active_statuses = [AgentStatus.IDLE.value, AgentStatus.RUNNING.value]
 
                 agents = (
                     session.query(Agent)

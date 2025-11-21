@@ -222,6 +222,86 @@ See [Monitoring Architecture](docs/requirements/monitoring/monitoring_architectu
 
 ## Important Implementation Details
 
+### LLM Service Usage (ENFORCED)
+
+**Rule**: Always prefer `structured_output()` for LLM responses that need structured data. Never manually parse JSON strings from LLM responses.
+
+#### ✅ Preferred: Structured Output with Pydantic Models
+
+When you need structured data from an LLM:
+1. Create a Pydantic model defining the expected output structure
+2. Use `llm_service.structured_output()` with the model
+3. Use `model_dump(mode='json')` if you need JSON-serializable dict (e.g., for JSONB storage)
+
+```python
+from omoi_os.services.llm_service import get_llm_service
+from pydantic import BaseModel, Field
+from typing import Optional
+
+# 1. Define Pydantic model for structured output
+class AnalysisResult(BaseModel):
+    """LLM analysis result structure."""
+    score: float = Field(..., ge=0.0, le=1.0)
+    summary: str
+    needs_action: bool = Field(default=False)
+    details: dict = Field(default_factory=dict)
+
+# 2. Use structured_output for type-safe responses
+llm = get_llm_service()
+result = await llm.structured_output(
+    prompt="Analyze this agent trajectory...",
+    output_type=AnalysisResult,
+    system_prompt="You are an expert analyzer.",
+    output_retries=3,  # Retry if validation fails
+)
+
+# 3. If you need JSON-serializable dict (e.g., for JSONB storage)
+result_dict = result.model_dump(mode='json')  # ✅ Use mode='json'
+```
+
+#### ❌ Anti-Pattern: Manual JSON Parsing
+
+**NEVER** manually parse JSON from LLM responses:
+
+```python
+# ❌ WRONG: Manual JSON parsing
+response = await llm_service.complete(prompt)
+import json
+parsed = json.loads(response.strip().removeprefix("```json").removesuffix("```"))
+```
+
+**Problems with manual parsing:**
+- Requires stripping markdown code blocks
+- Error-prone with malformed JSON
+- No type validation
+- No automatic retry on parse errors
+- Not compatible with JSONB storage
+
+#### When to Use Each Method
+
+| Use Case | Method | Why |
+|----------|--------|-----|
+| Structured data needed | `structured_output()` | Type-safe, validated, handles parsing |
+| Free-form text response | `complete()` | Simple text generation |
+| Need JSONB-compatible dict | `model_dump(mode='json')` | Proper JSON serialization |
+
+#### Example: Trajectory Analysis
+
+```python
+from omoi_os.models.trajectory_analysis import LLMTrajectoryAnalysisResponse
+
+# Use structured output - no manual parsing needed!
+analysis = await llm_service.structured_output(
+    prompt=rendered_template,
+    output_type=LLMTrajectoryAnalysisResponse,
+    system_prompt="You are an expert trajectory analyzer.",
+    output_retries=3,
+)
+
+# Convert to dict for JSONB storage
+result_dict = analysis.model_dump(mode='json')  # JSON-serializable
+```
+
 ### Datetime Handling
 Always use `omoi_os.utils.datetime.utc_now()` for timezone-aware datetime objects. The `whenever` library provides proper UTC handling while maintaining SQLAlchemy compatibility. Never use `datetime.utcnow()` as it creates offset-naive datetimes.
 

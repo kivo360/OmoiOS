@@ -142,14 +142,23 @@ class MonitorService:
                 func.count(Agent.id).label("count")
             ).group_by(Agent.agent_type, Agent.status).all()
 
+            # Aggregate active agents by type (sum across IDLE and RUNNING statuses)
+            from omoi_os.models.agent_status import AgentStatus
+            active_agents_by_type = {}
             for agent_type, status, count in agent_stats:
-                if status in ["idle", "running"]:  # Active agents
-                    metrics[f"agents_active_{agent_type}"] = MetricSample(
-                        metric_name="agents_active",
-                        value=float(count),
-                        labels={"agent_type": agent_type, "status": status},
-                        timestamp=now,
-                    )
+                if status in [AgentStatus.IDLE.value, AgentStatus.RUNNING.value]:  # Active agents
+                    if agent_type not in active_agents_by_type:
+                        active_agents_by_type[agent_type] = 0
+                    active_agents_by_type[agent_type] += count
+            
+            # Create metrics for each agent type (sum of all active statuses)
+            for agent_type, total_count in active_agents_by_type.items():
+                metrics[f"agents_active_{agent_type}"] = MetricSample(
+                    metric_name="agents_active",
+                    value=float(total_count),
+                    labels={"agent_type": agent_type},
+                    timestamp=now,
+                )
 
             # Heartbeat age
             agents = session.query(Agent).filter(

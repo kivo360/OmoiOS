@@ -276,7 +276,7 @@ class MonitoringLoop:
                     emergency_analyses.append(analysis)
 
             # Run immediate conductor analysis
-            conductor_response = self.conductor.analyze_system_coherence_response()
+            conductor_response = await self.conductor.analyze_system_coherence_response()
 
             # Generate emergency interventions if needed
             emergency_interventions = []
@@ -389,11 +389,8 @@ class MonitoringLoop:
     ) -> Optional[Dict[str, Any]]:
         """Analyze agent with concurrency control."""
         async with semaphore:
-            # Run analysis in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            analysis = await loop.run_in_executor(
-                None, self.guardian.analyze_agent_trajectory, agent_id, False
-            )
+            # Analyze agent (now async)
+            analysis = await self.guardian.analyze_agent_trajectory(agent_id, False)
 
             if analysis:
                 return {
@@ -412,11 +409,8 @@ class MonitoringLoop:
     ) -> Dict[str, Any]:
         """Run Conductor system coherence analysis."""
         try:
-            # Run analysis in thread pool to avoid blocking
-            loop = asyncio.get_event_loop()
-            analysis = await loop.run_in_executor(
-                None, self.conductor.analyze_system_coherence, cycle_id
-            )
+            # analyze_system_coherence is now async, so await directly
+            analysis = await self.conductor.analyze_system_coherence(cycle_id)
 
             if analysis:
                 result = {

@@ -7,6 +7,51 @@ from uuid import UUID
 from pydantic import BaseModel, Field, ConfigDict
 
 
+class LLMTrajectoryAnalysisResponse(BaseModel):
+    """Pydantic model for LLM trajectory analysis response.
+    
+    This model is used with structured_output to get properly typed
+    analysis results directly from the LLM, without manual JSON parsing.
+    """
+
+    trajectory_aligned: bool = Field(
+        default=True, description="Whether agent trajectory is aligned with phase goals"
+    )
+    alignment_score: float = Field(
+        default=0.8, ge=0.0, le=1.0, description="Alignment score from 0.0 to 1.0"
+    )
+    needs_steering: bool = Field(
+        default=False, description="Whether agent needs steering intervention"
+    )
+    steering_type: Optional[str] = Field(
+        default=None, description="Type of steering needed (guidance, emergency, etc.)"
+    )
+    steering_recommendation: Optional[str] = Field(
+        default=None, description="Recommended steering action"
+    )
+    trajectory_summary: str = Field(
+        ..., description="Summary of agent's current trajectory and state"
+    )
+    last_claude_message_marker: Optional[str] = Field(
+        default=None, description="Marker for last significant Claude message"
+    )
+    accumulated_goal: Optional[str] = Field(
+        default=None, description="Accumulated goal from conversation context"
+    )
+    current_focus: str = Field(
+        ..., description="Agent's current focus area or task"
+    )
+    session_duration: Optional[str] = Field(
+        default=None, description="Session duration (will be converted to timedelta)"
+    )
+    conversation_length: int = Field(
+        default=0, description="Length of conversation in messages"
+    )
+    details: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional analysis details"
+    )
+
+
 class ConversationEvent(BaseModel):
     """Model for conversation events in trajectory analysis."""
 
