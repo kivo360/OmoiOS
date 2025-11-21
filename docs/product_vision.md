@@ -364,13 +364,19 @@ These enhancements will make OmoiOS's Guardian system even more effective at kee
 
 #### Phase 0.5: Memory System Enhancement Opportunities
 
-These enhancements will enable true collective intelligence where agents learn from each other in real-time, aligning with Hephaestus Memory System best practices:
+These enhancements will enable true collective intelligence where agents learn from each other in real-time:
 
 1. **Agent-Accessible MCP Tools**
    - Create `save_memory` MCP tool for agents to save discoveries during execution
+     - Parameters: `content`, `agent_id`, `memory_type`, optional `tags`, `related_files`
+     - Stores memory using existing `MemoryService.store_execution()`
+     - Enables agents to share knowledge in real-time
    - Create `find_memory` MCP tool for agents to search memories semantically during execution
+     - Parameters: `query`, `limit` (default 5), optional `memory_types` filter
+     - Uses existing `MemoryService.search_similar()` with hybrid search
+     - Returns top matching memories with similarity scores
    - Enable agents to learn from each other's discoveries in real-time
-   - Example: Agent encounters error → searches memory → finds solution → saves fix for future agents
+   - Example: Agent encounters error → calls `find_memory("PostgreSQL timeout")` → finds solution → calls `save_memory()` to share fix for future agents
 
 2. **Pre-loaded Context at Agent Spawn**
    - Enhance agent spawn to pre-load top 20 most relevant memories based on task description

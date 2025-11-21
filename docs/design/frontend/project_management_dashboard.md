@@ -41,13 +41,17 @@ This document designs a real-time project management dashboard that integrates:
 - **Create Tickets**: Agents use MCP tools (`create_ticket`) to create new tickets during execution when they discover new requirements or work items
 - **Create Tasks**: Agents can spawn new tasks via `DiscoveryService` when they find bugs, optimizations, or missing requirements
 - **Link Work Items**: Agents automatically identify and link related tasks/tickets through dependency detection and discovery tracking
-- **Real-Time State Updates**: All agent actions (ticket creation, task spawning, linking) trigger immediate WebSocket events that update the dashboard in real-time
+- **Memory System**: Agents use MCP tools (`save_memory`, `find_memory`) to share knowledge and learn from each other's discoveries in real-time
+  - `save_memory`: Agents save discoveries, solutions, and learnings for other agents to find
+  - `find_memory`: Agents search past memories semantically when encountering errors or needing implementation details
+- **Real-Time State Updates**: All agent actions (ticket creation, task spawning, linking, memory operations) trigger immediate WebSocket events that update the dashboard in real-time
 
 **Workflow Example**:
 1. Agent working on Task A discovers a bug → Creates TaskDiscovery record → Spawns Task B to fix bug
-2. Agent working on Task B needs clarification → Creates Ticket via MCP tool → Links ticket to Task B
-3. Agent identifies missing dependency → Creates Task C → Links Task C as dependency of Task B
-4. Dashboard receives WebSocket events → Updates Kanban board, dependency graph, and statistics in real-time
+2. Agent working on Task B encounters error → Calls `find_memory("PostgreSQL timeout")` → Finds solution from past memory → Applies fix → Calls `save_memory()` to share updated solution
+3. Agent working on Task B needs clarification → Creates Ticket via MCP tool → Links ticket to Task B
+4. Agent identifies missing dependency → Creates Task C → Links Task C as dependency of Task B
+5. Dashboard receives WebSocket events → Updates Kanban board, dependency graph, and statistics in real-time
 
 **Guardian Intervention Delivery**:
 - **Real-Time Monitoring**: Guardian analyzes agent trajectories every 60 seconds, calculating alignment scores and detecting drift
@@ -212,6 +216,18 @@ This document designs a real-time project management dashboard that integrates:
 - Agents use `create_ticket` MCP tool (`omoi_os/ticketing/mcp_tools.py`) to create tickets during execution
 - Use cases: Clarification needed, new requirement discovered, blocking issue found
 - Real-time update: `TICKET_CREATED` WebSocket event → Dashboard updates Kanban board immediately
+
+**1a. Memory System via MCP Tools**:
+- Agents use `save_memory` MCP tool to save discoveries, solutions, and learnings during execution
+  - Parameters: `content`, `agent_id`, `memory_type` (error_fix, discovery, decision, learning, warning, codebase_knowledge), optional `tags`, `related_files`
+  - Stores memory using `MemoryService.store_execution()` with semantic embeddings for search
+  - Enables collective intelligence where agents learn from each other's experiences
+- Agents use `find_memory` MCP tool to search past memories semantically during execution
+  - Parameters: `query` (natural language), `limit` (default 5), optional `memory_types` filter
+  - Uses `MemoryService.search_similar()` with hybrid search (semantic + keyword using RRF)
+  - Returns top matching memories with similarity scores
+  - Use cases: Encountering errors, needing implementation details, finding related work
+- Real-time update: `MEMORY_SAVED` and `MEMORY_SEARCHED` WebSocket events → Dashboard can show memory activity in activity timeline
 
 **2. Task Spawning via DiscoveryService**:
 - Agents call `DiscoveryService.record_discovery_and_branch()` when they discover:
@@ -4464,6 +4480,7 @@ This design provides a complete blueprint for building a real-time project manag
 - ✅ **Guardian Intervention Delivery**: Real-time steering messages sent to active OpenHands conversations via `ConversationInterventionService`
 - ✅ **Conversation Persistence**: All conversations persisted with `conversation_id` and `persistence_dir` stored in `Task` model for intervention delivery
 - ✅ **Agent-Driven Creation**: Agents use MCP tools (`create_ticket`) to create tickets and `DiscoveryService` to spawn tasks during execution
+- ✅ **Memory System**: Agents use MCP tools (`save_memory`, `find_memory`) to share knowledge and learn from each other's discoveries in real-time
 - ✅ **Discovery Tracking**: Complete workflow branching history via `TaskDiscovery` model, tracking WHY workflows branch and WHAT agents discovered
 - ✅ **Real-Time Updates**: WebSocket infrastructure enables live dashboard updates for all agent actions (ticket creation, task spawning, linking, interventions)
 
@@ -4477,6 +4494,8 @@ This design provides a complete blueprint for building a real-time project manag
 **How Agent-Driven Workflow Works**:
 - Agents create tickets via MCP tools when they discover new requirements or need clarification
 - Agents spawn tasks via `DiscoveryService.record_discovery_and_branch()` when they find bugs, optimizations, or missing requirements
+- Agents use `find_memory` MCP tool to search past memories when encountering errors or needing implementation details
+- Agents use `save_memory` MCP tool to share discoveries, solutions, and learnings for other agents to find
 - Agents automatically link tasks through dependency detection and discovery tracking
 - All agent actions trigger WebSocket events → Dashboard updates in real-time
 - Guardian monitors agent trajectories and sends intervention messages directly to active conversations when agents drift or need guidance
