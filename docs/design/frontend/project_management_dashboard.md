@@ -4029,7 +4029,28 @@ See [API Specifications - Notifications API](./project_management_dashboard_api.
 
 ### 24.1 Authentication
 
-**Current State**: No general user authentication system (only agent-scoped MCP permissions)
+**Current State**: ✅ **Full authentication system implemented** (see updated [User Journey](../user_journey.md) and [Page Flow](../page_flow.md))
+
+**Implemented Features**:
+- Email/password registration with verification
+- OAuth login (GitHub/GitLab)
+- Password reset flow
+- API key generation for programmatic access
+- Session management
+- Multi-tenant organizations with RBAC
+- Organization resource limits (max agents, runtime hours)
+
+**UI Pages Required**:
+- `/register` - Email registration form
+- `/login` - Email login form
+- `/login/oauth` - OAuth redirect
+- `/verify-email` - Email verification
+- `/forgot-password` - Password reset request
+- `/reset-password` - Password reset confirmation
+- `/settings/api-keys` - API key management
+- `/organizations` - Organization list and management
+
+**See**: [User Journey - Phase 1: Onboarding & Authentication](../user_journey.md#phase-1-onboarding--first-project-setup) for complete authentication flows.
 
 **Needed:**
 - User login/logout
@@ -4506,6 +4527,21 @@ This design provides a complete blueprint for building a real-time project manag
 - **Pause/Resume**: Conversations support `conversation.pause()` and `conversation.run()` for controlled execution
 - **Multi-Agent Workflows**: Planning agent + execution agent patterns (planning creates plan, execution implements)
 - **Remote Conversations**: Support for `RemoteConversation` via `Workspace(host=...)` for distributed agent execution
+
+**Workspace Isolation System** (✅ Implemented):
+- Each agent gets isolated workspace automatically
+- Git-backed workspaces with branch per agent
+- Workspace inheritance from parent agents
+- Automatic merge conflict resolution
+- Workspace checkpoint commits for validation
+- Workspace retention and cleanup policies
+
+**UI Pages Required**:
+- `/agents/:agentId/workspace` - Workspace detail view
+- `/workspaces` - Workspace list view
+- Workspace tabs: Commits, Merge Conflicts, Settings
+
+**See**: [User Journey - Workspace Management](../user_journey.md#workspace-management) and [Page Flow - Flow 7](../page_flow.md#flow-7-workspace-management--isolation) for complete workspace flows.
 - **Event-Driven Architecture**: Agent's `step()` processes all queued events including newly added messages
 
 The WebSocket infrastructure and Guardian intervention system provide the foundation for real-time, agent-driven project management with live steering and adaptive workflow branching!

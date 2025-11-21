@@ -83,26 +83,51 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 
 ### Phase 1: Onboarding & First Project Setup
 
-#### 1.1 Initial Login & Authentication
+#### 1.1 Initial Registration & Authentication
 ```
 1. User visits OmoiOS dashboard
    ↓
-2. OAuth login (GitHub/GitLab)
+2. Registration Options:
+   Option A: Email/Password Registration
+   Option B: OAuth login (GitHub/GitLab)
    ↓
-3. First-time user sees onboarding tour
+3. Email Verification (if email registration)
+   - User receives verification email
+   - Clicks verification link
+   - Account activated
    ↓
-4. Dashboard shows empty state: "Create your first project"
+4. First-time user sees onboarding tour
+   ↓
+5. Organization Setup (Multi-Tenant)
+   - Create or join organization
+   - Set organization name and slug
+   - Configure resource limits (max agents, runtime hours)
+   - Set billing email (optional)
+   ↓
+6. Dashboard shows empty state: "Create your first project"
 ```
 
 **Key Actions:**
-- Connect GitHub/GitLab account
-- Set up organization/workspace
-- Configure notification preferences
-- **Agent Configuration** (New):
-  - Set number of parallel agents (1-5)
+- **Authentication**:
+  - Email/password registration with verification
+  - OAuth login (GitHub/GitLab)
+  - Password reset flow
+  - API key generation for programmatic access
+  - Session management
+- **Organization Setup**:
+  - Create organization with unique slug
+  - Set resource limits (max concurrent agents, max runtime hours)
+  - Configure organization settings (JSONB)
+  - Invite team members (future)
+- **Agent Configuration**:
+  - Set number of parallel agents (1-5, limited by org limits)
   - Configure agent preferences (capabilities, phase assignments)
   - Set review requirements (auto-approve vs manual approval gates)
   - Configure agent types (Worker, Planner, Validator)
+- **Workspace Configuration**:
+  - Workspace root directory (default: `./workspaces`)
+  - Worker directory path (default: `/tmp/omoi_os_workspaces`)
+  - Workspace type selection (local, docker, kubernetes, remote)
 
 #### 1.2 Project Creation Options
 
@@ -293,21 +318,35 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 ```
 1. System automatically assigns tasks to available agents
    ↓
-2. System pre-loads relevant memories (collective intelligence):
+2. **Workspace Isolation System** creates isolated workspace:
+   - Each agent gets dedicated workspace directory
+   - Git branch created per workspace (e.g., `workspace-agent-123`)
+   - Workspace inherits from parent agent (if specified)
+   - Base branch configured (default: `main`)
+   - Workspace type: local, docker, kubernetes, or remote
+   ↓
+3. System pre-loads relevant memories (collective intelligence):
    - Searches memory system for top 20 most relevant memories
    - Based on task description similarity
    - Covers 80% of agent needs upfront
    - Includes: error fixes, discoveries, decisions, codebase knowledge
    ↓
-3. Agent spawns with enriched context:
+4. Agent spawns with enriched context:
    - Task description
    - Pre-loaded memories embedded in system prompt
    - Phase instructions and constraints
    - Related requirements and design docs
+   - Isolated workspace path (agent never sees Git operations)
    ↓
-4. Agents pick up tasks from queue (priority-based)
+5. Agents pick up tasks from queue (priority-based)
    ↓
-5. Execution Tab shows Progress Dashboard:
+6. **Workspace Operations** (transparent to agent):
+   - Agent works in isolated directory
+   - System commits workspace state for validation checkpoints
+   - Merge conflicts resolved automatically (newest file wins)
+   - Workspace cleanup and retention policies applied
+   ↓
+7. Execution Tab shows Progress Dashboard:
    - Overall progress bar (0-100%)
    - Test coverage percentage
    - Tests passing count (e.g., "45/50 passing")
@@ -395,6 +434,9 @@ Features:
 - **WIP Limit Indicators**: Visual warnings when column exceeds limit
 - **Commit Indicators**: (+X -Y) on ticket cards showing code changes
 - **Phase Badges**: Color-coded phase indicators
+  - Phase badges show current phase (PHASE_REQUIREMENTS, PHASE_IMPLEMENTATION, etc.)
+  - Click badge → Navigate to Phase Overview dashboard
+  - Hover → See phase description and completion criteria
 - **Priority Indicators**: CRITICAL (red), HIGH (orange), MEDIUM (yellow), LOW (gray)
 - **Real-Time Updates**: Live synchronization as agents work
 - **Keyboard Shortcuts**:
@@ -449,6 +491,27 @@ Live agent dashboard:
 - Guardian intervention alerts
 - Agent performance metrics
 - Tasks currently working on
+- **Workspace Information**:
+  - Workspace directory path
+  - Git branch name
+  - Workspace type (local/docker/kubernetes/remote)
+  - Parent agent (if workspace inherited)
+  - Active workspace status
+  - Workspace commits count
+```
+
+**Workspace Management:**
+```
+Workspace Isolation Features:
+- Each agent gets isolated workspace automatically
+- Git-backed workspaces with branch per agent
+- Zero conflicts: Parallel agents work independently
+- Knowledge inheritance: Child workspaces inherit parent state
+- Automatic merge resolution: Deterministic conflict handling
+- Clean experimentation: Each workspace has own branch
+- Workspace retention: Configurable cleanup policies
+- Checkpoint commits: Validation checkpoints tracked
+- Merge conflict logging: All resolutions logged for audit
 ```
 
 #### 3.3 Discovery & Workflow Branching
@@ -780,7 +843,10 @@ Views Agents Overview Page:
 │  │  ┌──────────────────────────────────────────────┐  │  │
 │  │  │ Agent: worker-1                               │  │  │
 │  │  │ Status: 🟢 Active                             │  │  │
-│  │  │ Phase: IMPLEMENTATION                         │  │  │
+│  │  │ Phase: PHASE_IMPLEMENTATION                    │  │  │
+│  │  │ Tasks: 28 total, 22 done, 2 active          │  │  │
+│  │  │ Agents: 2 active                             │  │  │
+│  │  │ Discoveries: 3 new branches spawned         │  │  │
 │  │  │ Current Task: "Implement JWT"                │  │  │
 │  │  │ Alignment: 85%                                │  │  │
 │  │  │ Tasks Completed: 8                            │  │  │
@@ -792,7 +858,9 @@ Views Agents Overview Page:
 │  │  ┌──────────────────────────────────────────────┐  │  │
 │  │  │ Agent: worker-2                               │  │  │
 │  │  │ Status: 🟡 Idle                                │  │  │
-│  │  │ Phase: INTEGRATION                            │  │  │
+│  │  │ Phase: PHASE_TESTING                          │  │  │
+│  │  │ Tasks: 23 total, 22 done, 0 active          │  │  │
+│  │  │ Agents: 0 active                             │  │  │
 │  │  │ Current Task: None                            │  │  │
 │  │  │ Alignment: N/A                                │  │  │
 │  │  │ Tasks Completed: 5                            │  │  │
@@ -820,7 +888,9 @@ Views Agents Overview Page:
 **Agent Card Details:**
 - Agent ID and type
 - Current status (Active, Idle, Stuck, Failed)
-- Phase assignment
+- Phase assignment (agents specialized per phase)
+- Phase-specific metrics (cost, latency, error rate per phase)
+- Phase bottlenecks (queue depth, WIP limits per phase)
 - Current task (if active)
 - Alignment score (if active)
 - Performance metrics (tasks completed, commits, lines changed)
@@ -945,19 +1015,134 @@ Users can:
 
 ---
 
+## Phase System Overview
+
+### Default Phases
+
+OmoiOS comes with **8 default phases** ready to use:
+
+1. **PHASE_BACKLOG** - Initial ticket triage and prioritization
+2. **PHASE_REQUIREMENTS** - Gather and analyze requirements
+3. **PHASE_DESIGN** - Create technical design and architecture
+4. **PHASE_IMPLEMENTATION** - Develop and implement features
+5. **PHASE_TESTING** - Test and validate implementation
+6. **PHASE_DEPLOYMENT** - Deploy to production
+7. **PHASE_DONE** - Ticket completed (terminal)
+8. **PHASE_BLOCKED** - Ticket blocked by external dependencies (terminal)
+
+### Custom Phases
+
+Users can create **custom phases** for specialized workflows:
+
+**Example: Research Workflow**
+- `PHASE_RESEARCH` - Investigate topic and identify approaches
+- `PHASE_EVALUATION` - Evaluate approaches and document findings
+- `PHASE_DOCUMENTATION` - Document research results
+
+**Custom Phase Creation**:
+1. Navigate to Project Settings → Phases Tab
+2. Click "Create Custom Phase"
+3. Define phase properties:
+   - Phase ID (must start with `PHASE_`)
+   - Name and description
+   - Sequence order
+   - Done definitions (completion criteria)
+   - Phase prompt (agent instructions)
+   - Expected outputs (artifact patterns)
+   - Allowed transitions
+4. Save phase (stored in database, reusable across projects)
+
+### Phase Features
+
+**Each Phase Includes**:
+- **Done Definitions**: Concrete, verifiable completion criteria
+  - Example: "Component code files created", "Minimum 3 test cases written"
+- **Phase Prompt**: System instructions for agents
+  - Loaded automatically into agent system messages
+  - Guides agent behavior and decision-making
+- **Expected Outputs**: Required artifacts
+  - Example: `{"type": "file", "pattern": "src/**/*.py", "required": true}`
+- **Allowed Transitions**: Structured phase flow
+  - Controls normal workflow progression
+  - Discovery-based spawning bypasses restrictions
+- **Configuration**: Phase-specific settings
+  - Timeouts, retry limits, WIP limits
+
+### Discovery-Based Branching
+
+**Adaptive Workflows**:
+- Agents can spawn tasks in **ANY phase** via `DiscoveryService`
+- Bypasses `allowed_transitions` restriction
+- Enables Hephaestus-style free-form branching
+
+**Example Flow**:
+```
+Phase 3 agent (testing API) discovers caching optimization
+  ↓
+Spawns Phase 1 investigation task (bypasses restrictions)
+  ↓
+Phase 1 agent investigates caching pattern
+  ↓
+Spawns Phase 2 implementation task
+  ↓
+New feature branch emerges (parallel to original work)
+```
+
+**Discovery Types**:
+- `bug_found` → Spawn Phase 2 fix task
+- `optimization_opportunity` → Spawn Phase 1 investigation → Phase 2 implementation
+- `clarification_needed` → Spawn Phase 1 clarification task
+- `security_issue` → Spawn Phase 1 analysis → Phase 2 fix
+- `new_component` → Spawn Phase 2 implementation task
+
+### Phase Overview Dashboard
+
+**View**: `/projects/:projectId/phases`
+
+**Features**:
+- Phase cards showing:
+  - Task counts (Total, Done, Active)
+  - Active agents per phase
+  - Discovery indicators (new branches spawned)
+  - Phase status (active, completed, idle)
+- "View Tasks" button → See phase-specific tasks
+- "View Discoveries" button → See discovery events
+- Real-time updates via WebSocket
+
+### Phase Metrics
+
+**Statistics Dashboard → Phases Tab**:
+- Phase performance overview (tasks, completion rates)
+- Phase efficiency metrics (average time, success rate)
+- Phase bottlenecks (queue depth, WIP violations)
+- Phase cost breakdown (LLM costs per phase)
+- Discovery activity by phase (discoveries, branches spawned)
+
+---
+
 ## User Personas & Use Cases
 
 ### Engineering Manager
-**Primary Use Case**: Monitor multiple projects, approve phase transitions, review PRs
+**Primary Use Case**: Monitor multiple projects, approve phase transitions, review PRs, manage organizations
 
 **Typical Flow:**
 1. Logs in → Sees dashboard overview
-2. Reviews pending approvals → Approves phase transitions
-3. Monitors agent activity → Sees Guardian interventions
-4. Reviews PRs → Approves merges
-5. Checks statistics → Views project health
+2. Switches organization context (if member of multiple orgs)
+3. Reviews pending approvals → Approves phase transitions
+4. Monitors agent activity → Sees Guardian interventions
+5. Reviews PRs → Approves merges
+6. Checks statistics → Views project health
+7. Manages organization settings → Updates resource limits
+8. Generates API keys → For CI/CD integration
 
 **Time Investment**: 10-15 minutes per day for strategic oversight
+
+**Organization Management:**
+- View organization members and roles
+- Configure resource limits (max agents, runtime hours)
+- Manage organization settings
+- View organization-level statistics
+- Generate organization-scoped API keys
 
 ### Senior IC Engineer
 **Primary Use Case**: Create feature requests, review code changes, provide technical guidance
@@ -972,16 +1157,28 @@ Users can:
 **Time Investment**: 30-60 minutes per feature (mostly review time)
 
 ### CTO/Technical Lead
-**Primary Use Case**: Set up projects, configure workflows, monitor system health
+**Primary Use Case**: Set up projects, configure workflows, monitor system health, manage organizations
 
 **Typical Flow:**
-1. Sets up new project → AI-assisted exploration
-2. Configures approval gates → Sets phase gate requirements
-3. Monitors system health → Views statistics dashboard
-4. Reviews cost tracking → Optimizes agent usage
-5. Configures Guardian rules → Sets intervention thresholds
+1. Creates organization → Sets up multi-tenant workspace
+2. Sets up new project → AI-assisted exploration
+3. Configures approval gates → Sets phase gate requirements
+4. Configures workspace isolation → Sets workspace types and policies
+5. Monitors system health → Views statistics dashboard
+6. Reviews cost tracking → Optimizes agent usage
+7. Configures Guardian rules → Sets intervention thresholds
+8. Manages API keys → For programmatic access
+9. Reviews workspace isolation → Checks agent workspace health
 
 **Time Investment**: Initial setup (1-2 hours), ongoing monitoring (15 min/day)
+
+**Organization Setup:**
+- Create organization with unique slug
+- Set resource limits (max concurrent agents, max runtime hours)
+- Configure organization settings (JSONB)
+- Set billing email
+- Manage organization members (future)
+- Configure RBAC roles and permissions (future)
 
 ---
 
@@ -1266,22 +1463,182 @@ Multiple users review same PR:
 5. PR can be merged
 ```
 
-**Comments & Mentions:**
+**Comments & Collaboration:**
 ```
-User adds comment to ticket:
+Agent/User adds comment to ticket:
    ↓
-1. Types comment with @mention:
-   - "@john please review this approach"
+1. Opens ticket detail → Comments tab
    ↓
-2. System:
-   - Notifies @john via in-app + email
-   - Links comment to ticket
-   - Shows in activity timeline
+2. Types comment in rich text editor:
+   - "@worker-2 please review this approach"
+   - Attaches file if needed
+   - Selects comment type (general, status_change, resolution)
    ↓
-3. @john receives notification:
+3. Posts comment:
+   - Comment saved to database
+   - WebSocket: COMMENT_ADDED event broadcast
+   ↓
+4. Real-time updates:
+   - All users viewing ticket see comment instantly
+   - @worker-2 receives notification (in-app + email)
+   - Comment appears in activity timeline
+   ↓
+5. @worker-2 receives notification:
    - Clicks link → Goes to ticket
    - Sees comment highlighted
-   - Can reply or take action
+   - Can reply inline or take action
+   ↓
+6. Agent replies via MCP tool:
+   - add_ticket_comment() called
+   - WebSocket: COMMENT_ADDED event
+   - User sees agent reply in real-time
+```
+
+**Ticket Search Before Creation:**
+```
+Agent needs to create ticket:
+   ↓
+1. Before creating, searches for existing tickets:
+   - Opens search modal (Cmd+K or Search button)
+   - Types: "authentication JWT login"
+   - Selects hybrid search (70% semantic + 30% keyword)
+   ↓
+2. Reviews search results:
+   - System shows similar tickets
+   - Agent checks if duplicate exists
+   ↓
+3a. If similar ticket found:
+   - References existing ticket instead
+   - Links current task to existing ticket
+   ↓
+3b. If no similar ticket:
+   - Proceeds to create new ticket
+   - Uses create_ticket MCP tool
+   ↓
+4. New ticket appears on board:
+   - WebSocket: TICKET_CREATED event
+   - Board updates in real-time
+   - Ticket visible to all users immediately
+```
+
+**Ticket Creation with Blocking Relationships:**
+```
+Agent creates ticket with dependencies:
+   ↓
+1. Opens Create Ticket modal:
+   - Fills title: "Build Authentication System"
+   - Adds description
+   - Selects ticket type: "component"
+   - Sets priority: "HIGH"
+   ↓
+2. Sets blocking relationships:
+   - Searches for blocking tickets
+   - Selects: "Setup Database Schema" (blocker)
+   - System shows dependency graph preview
+   ↓
+3. Creates ticket:
+   - Ticket created with blocked_by_ticket_ids
+   - Ticket status: "blocked" (overlay)
+   - WebSocket: TICKET_CREATED + TICKET_BLOCKED events
+   ↓
+4. Real-time updates:
+   - Ticket appears on board with blocked indicator
+   - Dependency graph updates automatically
+   - When blocker resolves → Auto-unblock via WebSocket
+```
+
+**Status Transitions with Agent Updates:**
+```
+Agent moves ticket through workflow:
+   ↓
+1. Agent completes implementation:
+   - Calls change_ticket_status() MCP tool
+   - New status: "building-done"
+   - Comment: "Implementation complete. 8 test cases added."
+   ↓
+2. System validates transition:
+   - Checks valid state machine transition
+   - Validates phase gate criteria
+   ↓
+3. Status updated:
+   - Ticket status changed in database
+   - WebSocket: TICKET_UPDATED event broadcast
+   ↓
+4. Real-time board updates:
+   - Ticket moves to new column automatically
+   - All users see movement instantly
+   - Activity timeline shows status change
+   ↓
+5. User manually transitions:
+   - Opens ticket → Clicks "Move Ticket"
+   - Selects new status: "testing"
+   - Adds reason: "Ready for test phase"
+   - Confirms transition
+   ↓
+6. System updates:
+   - Status changed
+   - WebSocket: TICKET_UPDATED event
+   - Board reflects change immediately
+```
+
+**Blocking Management & Auto-Unblocking:**
+```
+Ticket blocked by dependencies:
+   ↓
+1. Ticket "Build Auth" blocked by "Setup DB":
+   - Shows blocked indicator on board
+   - Dependency graph shows blocking relationship
+   ↓
+2. Agent working on blocker:
+   - Completes "Setup DB" ticket
+   - Resolves ticket via resolve_ticket() MCP tool
+   ↓
+3. System detects blocker resolution:
+   - Checks all tickets blocked by resolved ticket
+   - Finds "Build Auth" ticket
+   ↓
+4. Auto-unblocking:
+   - Updates blocked_by_ticket_ids (removes resolved blocker)
+   - Sets is_blocked = false
+   - WebSocket: TICKET_UNBLOCKED event broadcast
+   ↓
+5. Real-time updates:
+   - "Build Auth" ticket unblocked indicator removed
+   - Ticket becomes available for agents
+   - Dependency graph updates (edge turns green)
+   - Activity timeline shows unblock event
+   ↓
+6. Agent picks up unblocked ticket:
+   - Sees ticket available in board
+   - Starts working on it
+   - WebSocket: TASK_ASSIGNED event
+```
+
+**Board Configuration:**
+```
+User configures board structure:
+   ↓
+1. Opens Project Settings → Board tab
+   ↓
+2. Configures columns:
+   - Edits column names, colors
+   - Sets WIP limits per column
+   - Maps columns to phases
+   - Reorders columns (drag-and-drop)
+   ↓
+3. Configures ticket types:
+   - Adds/removes ticket types
+   - Sets default ticket type
+   ↓
+4. Saves configuration:
+   - Board config saved to database
+   - WebSocket: BOARD_CONFIG_UPDATED event
+   ↓
+5. Real-time board updates:
+   - All users see new board structure
+   - Columns reorganized
+   - WIP limits enforced
+   - Ticket types available in creation form
 ```
 
 ### Keyboard Shortcuts & Accessibility
