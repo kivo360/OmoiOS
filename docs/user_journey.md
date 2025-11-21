@@ -12,6 +12,73 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 
 ---
 
+## Dashboard Layout
+
+### Main Dashboard Structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  Header: Logo | Projects | Search | Notifications | Profile  │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────┐  ┌──────────────────────────────────────┐   │
+│  │ Sidebar │  │  Main Content Area                    │   │
+│  │         │  │                                       │   │
+│  │ • Home  │  │  ┌────────────────────────────────┐ │   │
+│  │ • Board │  │  │ Overview Section                │ │   │
+│  │ • Graph │  │  │ • Total Specs: 5                │ │   │
+│  │ • Specs │  │  │ • Active Agents: 3              │ │   │
+│  │ • Stats │  │  │ • Tickets in Progress: 12        │ │   │
+│  │ • Agents│  │  │ • Recent Commits: 8              │ │   │
+│  │ • Cost  │  │  └────────────────────────────────┘ │   │
+│  │ • Audit │  │                                       │   │
+│  │         │  │  ┌────────────────────────────────┐ │   │
+│  │         │  │  │ Active Specs Grid               │ │   │
+│  │         │  │  │                                │ │   │
+│  │         │  │  │ ┌──────────┐  ┌──────────┐   │ │   │
+│  │         │  │  │ │ Spec 1    │  │ Spec 2    │   │ │   │
+│  │         │  │  │ │ Progress: │  │ Progress: │   │ │   │
+│  │         │  │  │ │ ████░░ 60%│  │ ██████ 80%│   │ │   │
+│  │         │  │  │ └──────────┘  └──────────┘   │ │   │
+│  │         │  │  └────────────────────────────────┘ │   │
+│  │         │  │                                       │   │
+│  │         │  │  ┌────────────────────────────────┐ │   │
+│  │         │  │  │ Quick Actions                   │ │   │
+│  │         │  │  │ [+ New Spec] [+ New Project]   │ │   │
+│  │         │  │  └────────────────────────────────┘ │   │
+│  └─────────┘  └──────────────────────────────────────┘   │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Right Sidebar (Collapsible)                        │  │
+│  │  Recent Activity Feed                                │  │
+│  │  • Spec "Auth System" requirements approved          │  │
+│  │  • Agent worker-1 completed task "Setup JWT"        │  │
+│  │  • Discovery: Bug found in login flow               │  │
+│  │  • Guardian intervention sent to worker-2            │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Dashboard Sections:**
+- **Overview Section**: Key metrics (total specs, active agents, tickets in progress, recent commits)
+- **Active Specs Grid**: Cards showing all active specs with progress bars
+- **Quick Actions**: Buttons for common actions (+ New Spec, + New Project)
+- **Recent Activity Sidebar**: Chronological feed of recent events (collapsible)
+
+**Managing Multiple Specs:**
+- Dashboard shows grid view of all active specs
+- Each spec card displays:
+  - Spec name and description
+  - Progress bar (0-100%)
+  - Status badge (Draft, Requirements, Design, Tasks, Executing, Completed)
+  - Last updated timestamp
+  - Quick actions ([View] [Edit] [Export])
+- Filter options: All | Active | Completed | Draft
+- Search bar to find specs by name
+
+---
+
 ## Complete User Journey
 
 ### Phase 1: Onboarding & First Project Setup
@@ -31,6 +98,11 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 - Connect GitHub/GitLab account
 - Set up organization/workspace
 - Configure notification preferences
+- **Agent Configuration** (New):
+  - Set number of parallel agents (1-5)
+  - Configure agent preferences (capabilities, phase assignments)
+  - Set review requirements (auto-approve vs manual approval gates)
+  - Configure agent types (Worker, Planner, Validator)
 
 #### 1.2 Project Creation Options
 
@@ -105,20 +177,33 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
    ↓
 2. Clicks "New Feature" or uses Command Palette (Cmd+K)
    ↓
-3. Types: "Add payment processing with Stripe"
+3. Spec Creation Modal appears with fields:
+   - Spec Title: [________________]
+   - Description (natural language): [Add payment processing with Stripe]
+   - Repository Selection: [Select Repository ▼]
+   - Priority: [Low] [Medium] [High] (default: Medium)
    ↓
-4. System analyzes:
+4. User clicks "Create Spec"
+   ↓
+5. System validates inputs:
+   - Title required
+   - Description minimum length check
+   - Repository must be connected
+   ↓
+6. System analyzes:
    - Current codebase structure
    - Existing dependencies
    - Similar features in codebase
    ↓
-5. System generates spec-driven workflow:
+7. System generates spec-driven workflow:
    - Requirements Phase (EARS-style requirements)
    - Design Phase (architecture, sequence diagrams)
    - Planning Phase (task breakdown with dependencies)
    - Execution Phase (autonomous code generation)
    ↓
-6. Spec appears in Spec Workspace (multi-tab view)
+8. Spec appears in Spec Workspace (multi-tab view)
+   ↓
+9. Toast notification: "Spec created successfully"
 ```
 
 **Method 2: GitHub Issue Integration**
@@ -145,16 +230,51 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
    - Tasks tab: Discrete tasks with dependencies
    - Execution tab: (empty until execution starts)
    ↓
-3. User reviews each section:
-   - Can edit requirements/design/tasks
-   - Can add constraints or clarifications
-   - Can approve/reject sections
+3. User reviews Requirements tab:
+   - Views EARS format examples:
+     ```
+     REQ-001
+     WHEN: User enables 2FA in account settings
+     THE SYSTEM SHALL: Display QR code for authenticator app setup
+     ACCEPTANCE CRITERIA:
+     ✓ QR code generates valid TOTP secret
+     ✓ User can scan with Google Authenticator
+     ✓ Backup codes generated automatically
+     ```
+   - Can edit requirements inline (structured blocks)
+   - Can add new requirements
+   - Can delete or reorder requirements
    ↓
-4. User clicks "Approve Plan" when satisfied
+4. User clicks "Approve Requirements" button
    ↓
-5. System transitions to Execution Phase
+5. Toast notification: "Requirements approved ✓"
    ↓
-6. Tickets move from Backlog → Initial phase in Kanban board
+6. User reviews Design tab:
+   - Views architecture components with names:
+     - Authentication Service
+       ├─ OAuth2 Handler
+       ├─ JWT Generator
+       └─ Token Validator
+   - Views data model examples (JavaScript/Python)
+   - Views sequence diagrams
+   - Can edit design components inline
+   ↓
+7. User clicks "Approve Design" button
+   ↓
+8. Toast notification: "Design approved ✓"
+   ↓
+9. User reviews Tasks tab:
+   - Views discrete tasks with dependencies
+   - Can edit task descriptions
+   - Can adjust dependencies
+   ↓
+10. User clicks "Approve Plan" when satisfied
+    ↓
+11. System transitions to Execution Phase
+    ↓
+12. Toast notification: "Plan approved. Execution starting..."
+    ↓
+13. Tickets move from Backlog → Initial phase in Kanban board
 ```
 
 **Spec Workspace Features:**
@@ -173,39 +293,116 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 ```
 1. System automatically assigns tasks to available agents
    ↓
-2. Agents pick up tasks from queue (priority-based)
+2. System pre-loads relevant memories (collective intelligence):
+   - Searches memory system for top 20 most relevant memories
+   - Based on task description similarity
+   - Covers 80% of agent needs upfront
+   - Includes: error fixes, discoveries, decisions, codebase knowledge
    ↓
-3. Agents execute in isolated workspaces:
+3. Agent spawns with enriched context:
+   - Task description
+   - Pre-loaded memories embedded in system prompt
+   - Phase instructions and constraints
+   - Related requirements and design docs
+   ↓
+4. Agents pick up tasks from queue (priority-based)
+   ↓
+5. Execution Tab shows Progress Dashboard:
+   - Overall progress bar (0-100%)
+   - Test coverage percentage
+   - Tests passing count (e.g., "45/50 passing")
+   - Active agents count
+   - Running tasks section with real-time cards
+   - Pull Requests section with PR cards
+   ↓
+6. Agents execute in isolated workspaces:
    - Clone repository
+   - Use pre-loaded memories to avoid common pitfalls
    - Analyze requirements
    - Write code
    - Run tests
    - Self-correct on failures
+   - Search memories dynamically when encountering errors (find_memory)
+   - Save discoveries for other agents (save_memory)
    ↓
-4. Real-time updates via WebSocket:
-   - Task status changes
-   - Agent heartbeats
-   - Code commits
-   - Test results
+7. Running Tasks Section shows real-time cards:
+   - Task name and description
+   - Current status (in progress, testing, committing)
+   - Assigned agent name
+   - Progress percentage
+   - Time elapsed
+   - [View Live Logs] button
    ↓
-5. Dashboard updates in real-time:
-   - Kanban board: Tickets move through phases
-   - Dependency graph: Tasks complete, dependencies resolve
-   - Activity timeline: Shows all agent actions
+8. Pull Requests Section shows PR cards:
+   - PR title and number
+   - Status (open, review, merged)
+   - Linked task
+   - Files changed (+X -Y)
+   - [Review PR] button opens PR Review Modal
+   ↓
+9. PR Review Modal (when clicking "Review PR"):
+   - Side-by-side diff viewer
+   - File list with change stats
+   - Test results summary
+   - Commit history
+   - Agent attribution
+   - [Approve] [Request Changes] [View Full Diff] buttons
+   ↓
+10. Agent Activity Log shows timestamped events:
+    - "10:23 AM - Agent worker-1 started task 'Implement JWT'"
+    - "10:25 AM - Agent worker-1 committed changes (+450 lines)"
+    - "10:27 AM - Agent worker-1 ran tests (45/50 passing)"
+    - "10:28 AM - Guardian intervention sent: 'Focus on core flow'"
+    ↓
+11. Pause/Resume Control:
+    - [Pause Execution] button pauses all agents
+    - [Resume Execution] button resumes paused agents
+    - Individual task pause/resume available
+    ↓
+12. Real-time updates via WebSocket:
+    - Task status changes
+    - Agent heartbeats
+    - Code commits
+    - Test results
+    - Memory operations (MEMORY_SAVED, MEMORY_SEARCHED)
+    ↓
+13. Dashboard updates in real-time:
+    - Kanban board: Tickets move through phases
+    - Dependency graph: Tasks complete, dependencies resolve
+    - Activity timeline: Shows all agent actions (including memory operations)
+    - Progress dashboard: Metrics update live
 ```
 
 #### 3.2 Monitoring Views
 
 **Kanban Board View:**
 ```
-Columns: INITIAL → IMPLEMENTATION → INTEGRATION → REFACTORING → DONE
+Columns: BACKLOG → INITIAL → IMPLEMENTATION → INTEGRATION → REFACTORING → DONE
 
 Features:
-- Drag-and-drop ticket prioritization
-- WIP limit indicators
-- Commit indicators (+X -Y) on ticket cards
-- Phase badges and priority indicators
-- Real-time updates as agents work
+- **Drag-and-Drop**: Mouse drag or keyboard navigation (arrow keys: h/l to move left/right, j/k to move up/down)
+- **Ticket Details Drawer**: Slides from right when clicking ticket card
+  - Shows full ticket details
+  - Tabs: Details | Tasks | Commits | Graph | Comments | Audit
+  - Can edit ticket inline
+  - Can link/unlink related tickets
+- **View Switcher**: Toggle between Kanban | List | Graph views
+- **Filters**: 
+  - Type filter (bug, feature, optimization)
+  - Phase filter (show only specific phases)
+  - Status filter (active, blocked, completed)
+  - Error filter (show tickets with errors)
+- **WIP Limit Indicators**: Visual warnings when column exceeds limit
+- **Commit Indicators**: (+X -Y) on ticket cards showing code changes
+- **Phase Badges**: Color-coded phase indicators
+- **Priority Indicators**: CRITICAL (red), HIGH (orange), MEDIUM (yellow), LOW (gray)
+- **Real-Time Updates**: Live synchronization as agents work
+- **Keyboard Shortcuts**:
+  - `j/k`: Navigate up/down tickets
+  - `h/l`: Navigate left/right columns
+  - `Enter`: Open selected ticket drawer
+  - `Space`: Toggle ticket selection
+  - `Esc`: Close drawer
 ```
 
 **Dependency Graph View:**
@@ -231,6 +428,7 @@ Chronological feed showing:
 - Discovery events (why workflows branch)
 - Phase transitions
 - Agent interventions (Guardian steering)
+- Memory operations (agents saving/finding memories)
 - Approvals/rejections
 - Code commits
 - Test results
@@ -240,6 +438,7 @@ Features:
 - Search timeline
 - Link to related tickets/tasks
 - Show agent reasoning summaries
+- Show memory activity (collective learning)
 ```
 
 **Agent Status Monitoring:**
@@ -257,26 +456,43 @@ Live agent dashboard:
 ```
 Agent working on Task A discovers bug:
    ↓
-1. Agent calls DiscoveryService.record_discovery_and_branch()
+1. Agent encounters error or identifies issue
    ↓
-2. System creates:
+2. Agent searches memory: find_memory("database connection timeout")
+   - May find similar past issues
+   - Learns from previous solutions
+   ↓
+3. Agent calls DiscoveryService.record_discovery_and_branch()
+   ↓
+4. System creates:
    - TaskDiscovery record (type: "bug")
    - New Task B: "Fix bug"
    - Links Task B as child of Task A
    ↓
-3. WebSocket events:
+5. Agent saves discovery to memory: save_memory()
+   - Content: "Found database connection timeout in payment service"
+   - Memory type: discovery
+   - Tags: ["database", "payment", "timeout"]
+   ↓
+6. WebSocket events:
    - DISCOVERY_MADE
    - TASK_CREATED
+   - MEMORY_SAVED
    ↓
-4. Dashboard updates:
+7. Dashboard updates:
    - Dependency graph shows new branch
-   - Activity timeline shows discovery event
+   - Activity timeline shows discovery event and memory save
    - Kanban board shows new task
    ↓
-5. Workflow branches:
+8. Workflow branches:
    Original path continues
    New branch handles bug fix
    Both paths execute in parallel
+   ↓
+9. Future agents benefit:
+   - Pre-loaded memories include this discovery
+   - Similar issues detected faster
+   - Solutions propagate automatically
 ```
 
 **Discovery Types:**
@@ -288,7 +504,90 @@ Agent working on Task A discovers bug:
 - Technical debt
 - Integration issue
 
-#### 3.4 Guardian Interventions
+**Memory-Enhanced Discovery:**
+- Agents check memory before creating duplicate discoveries
+- Past solutions inform new discovery handling
+- Discoveries saved for future reference
+- Collective intelligence improves over time
+
+#### 3.4 Collective Intelligence & Memory System
+
+**How Agents Learn from Each Other:**
+
+```
+Agent A encounters PostgreSQL timeout error:
+   ↓
+1. Agent A calls find_memory("PostgreSQL timeout"):
+   - Searches semantic memory using hybrid search (semantic + keyword)
+   - Finds relevant memories from past agents
+   ↓
+2. System returns top 5 matching memories:
+   - Memory 1: "Fixed PostgreSQL timeout by increasing pool_size to 20" (score: 0.89)
+   - Memory 2: "Connection timeout solution: set pool_timeout=30" (score: 0.82)
+   - Memory 3: "PostgreSQL connection pooling best practices" (score: 0.75)
+   ↓
+3. Agent A applies solution from Memory 1
+   ↓
+4. Agent A fixes the issue successfully
+   ↓
+5. Agent A calls save_memory():
+   - Content: "Fixed PostgreSQL timeout by increasing pool_size to 20 and setting pool_timeout=30"
+   - Memory type: error_fix
+   - Tags: ["postgresql", "timeout", "connection-pool"]
+   - Related files: ["config/database.py"]
+   ↓
+6. Memory stored in system:
+   - Semantic embedding generated
+   - Available for future agents to find
+   - WebSocket: MEMORY_SAVED → Dashboard shows memory activity
+   ↓
+7. Agent B (working on different task) encounters similar issue:
+   - Pre-loaded memories already include Agent A's solution
+   - Agent B applies fix immediately without searching
+   - Problem solved faster thanks to collective intelligence
+```
+
+**Memory Operations Flow:**
+
+**Pre-loaded Context (80% Coverage):**
+- Happens automatically at agent spawn
+- Top 20 most relevant memories embedded in agent's initial prompt
+- Covers common scenarios, patterns, and solutions
+- Reduces need for dynamic searches during execution
+
+**Dynamic Search (20% Coverage):**
+- Agent calls `find_memory(query)` when encountering:
+  - Errors not in pre-loaded context
+  - Need for implementation details
+  - Finding related work or patterns
+- Uses hybrid search (semantic + keyword with RRF)
+- Returns top matching memories with similarity scores
+
+**Memory Saving:**
+- Agent calls `save_memory()` after:
+  - Fixing errors (memory_type: error_fix)
+  - Making discoveries (memory_type: discovery)
+  - Making decisions (memory_type: decision)
+  - Learning patterns (memory_type: learning)
+  - Finding gotchas (memory_type: warning)
+  - Understanding codebase (memory_type: codebase_knowledge)
+
+**Memory Types:**
+- `error_fix`: Solutions to errors (e.g., "Fixed ModuleNotFoundError by adding src/ to PYTHONPATH")
+- `discovery`: Important findings (e.g., "Authentication uses JWT with 24h expiry")
+- `decision`: Key decisions & rationale (e.g., "Chose Redis over Memcached for pub/sub support")
+- `learning`: Lessons learned (e.g., "Always validate input before SQL queries")
+- `warning`: Gotchas to avoid (e.g., "Don't use os.fork() with SQLite connections")
+- `codebase_knowledge`: Code structure insights (e.g., "API routes are defined in src/api/routes/")
+
+**Benefits:**
+- Agents avoid repeating mistakes
+- Solutions propagate across workflows
+- Faster problem resolution
+- Consistent patterns across codebase
+- Knowledge accumulates over time
+
+#### 3.5 Guardian Interventions
 
 ```
 Guardian monitors agent trajectories every 60 seconds:
@@ -393,6 +692,47 @@ OR
    - Cycle repeats
 ```
 
+#### 4.3 Completion Summary & Export
+
+```
+All tasks completed and PRs merged:
+   ↓
+1. System shows Completion Summary checklist:
+   ✅ All requirements met
+   ✅ All tests passing (50/50)
+   ✅ All PRs merged
+   ✅ Code deployed to staging (if configured)
+   ✅ Documentation updated
+   ↓
+2. User reviews completion summary
+   ↓
+3. User clicks "Mark as Complete"
+   ↓
+4. Spec status changes to "Completed"
+   ↓
+5. Spec moves to "Completed" section in dashboard
+   ↓
+6. User can export spec:
+   - Click "Export Spec" button
+   - Select format: Markdown | YAML | PDF
+   - Download file with complete spec (Requirements + Design + Tasks + Execution history)
+   ↓
+7. Toast notification: "Spec completed and exported ✓"
+```
+
+**Completion Summary Checklist:**
+- All requirements met (verified against EARS requirements)
+- All tests passing (with coverage percentage)
+- All PRs merged (with commit SHAs)
+- Code deployed (if deployment configured)
+- Documentation updated (if documentation tasks exist)
+- All agent learnings saved to memory system
+
+**Export Options:**
+- **Markdown**: Complete spec in markdown format
+- **YAML**: Structured YAML export for version control
+- **PDF**: Formatted PDF report for documentation
+
 ---
 
 ### Phase 5: Ongoing Monitoring & Optimization
@@ -411,7 +751,123 @@ Views analytics:
 - Cost tracking: LLM costs per workflow
 ```
 
-#### 5.2 Search & Filtering
+#### 5.2 Agents Overview Page
+
+```
+User navigates to /agents:
+   ↓
+Views Agents Overview Page:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Agents Overview                              [Spawn Agent] │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Agent Metrics                                       │  │
+│  │                                                      │  │
+│  │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐          │  │
+│  │  │  5   │  │  3   │  │  2   │  │  1   │          │  │
+│  │  │Total │  │Active│  │Idle  │  │Stuck │          │  │
+│  │  └──────┘  └──────┘  └──────┘  └──────┘          │  │
+│  │                                                      │  │
+│  │  Average Alignment: 78%                            │  │
+│  │  Tasks Completed Today: 12                          │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Agent List                                          │  │
+│  │                                                      │  │
+│  │  ┌──────────────────────────────────────────────┐  │  │
+│  │  │ Agent: worker-1                               │  │  │
+│  │  │ Status: 🟢 Active                             │  │  │
+│  │  │ Phase: IMPLEMENTATION                         │  │  │
+│  │  │ Current Task: "Implement JWT"                │  │  │
+│  │  │ Alignment: 85%                                │  │  │
+│  │  │ Tasks Completed: 8                            │  │  │
+│  │  │ Commits: 15                                   │  │  │
+│  │  │ Lines Changed: +2,450 -120                    │  │  │
+│  │  │ [View Details] [Intervene]                    │  │  │
+│  │  └──────────────────────────────────────────────┘  │  │
+│  │                                                      │  │
+│  │  ┌──────────────────────────────────────────────┐  │  │
+│  │  │ Agent: worker-2                               │  │  │
+│  │  │ Status: 🟡 Idle                                │  │  │
+│  │  │ Phase: INTEGRATION                            │  │  │
+│  │  │ Current Task: None                            │  │  │
+│  │  │ Alignment: N/A                                │  │  │
+│  │  │ Tasks Completed: 5                            │  │  │
+│  │  │ Commits: 8                                    │  │  │
+│  │  │ Lines Changed: +890 -45                       │  │  │
+│  │  │ [View Details] [Assign Task]                  │  │  │
+│  │  └──────────────────────────────────────────────┘  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  Filters: [All ▼] [Active] [Idle] [Stuck] [By Phase ▼]     │
+│  Search: [________________] [🔍]                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Agent Metrics:**
+- Total agents count
+- Active agents (currently working)
+- Idle agents (waiting for tasks)
+- Stuck agents (needs intervention)
+- Average alignment score across all agents
+- Tasks completed today
+- Total commits made
+- Total lines changed
+
+**Agent Card Details:**
+- Agent ID and type
+- Current status (Active, Idle, Stuck, Failed)
+- Phase assignment
+- Current task (if active)
+- Alignment score (if active)
+- Performance metrics (tasks completed, commits, lines changed)
+- Quick actions ([View Details] [Intervene] [Assign Task])
+
+#### 5.3 Theme Settings
+
+```
+User navigates to Settings → Appearance:
+   ↓
+Views Theme Settings:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Theme Settings                                            │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Theme Mode:                                               │
+│  ○ Light (default)                                         │
+│  ● Dark                                                    │
+│  ○ System (follows OS preference)                          │
+│                                                              │
+│  Accent Color:                                             │
+│  [Select Color ▼]                                          │
+│  • Blue (default)                                          │
+│  • Green                                                   │
+│  • Purple                                                  │
+│  • Orange                                                  │
+│                                                              │
+│  Font Size:                                                │
+│  [Small] [Medium] [Large]                                  │
+│                                                              │
+│  Reduced Motion:                                           │
+│  ☐ Enable reduced motion animations                        │
+│                                                              │
+│  [Save Changes]                                            │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Theme Options:**
+- **Light Mode**: Default light theme
+- **Dark Mode**: Dark theme for low-light environments
+- **System**: Automatically follows OS theme preference
+- **Accent Color**: Customize primary color scheme
+- **Font Size**: Adjustable text size
+- **Reduced Motion**: Disable animations for accessibility
+
+#### 5.4 Search & Filtering
 
 ```
 User uses Command Palette (Cmd+K) or Search bar:
@@ -431,7 +887,7 @@ Advanced filters:
 - Discovery type
 ```
 
-#### 5.3 Audit Trails
+#### 5.5 Audit Trails
 
 ```
 User views audit trail for ticket:

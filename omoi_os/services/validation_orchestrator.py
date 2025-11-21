@@ -643,20 +643,47 @@ class ValidationOrchestrator:
         DIAG_VALIDATION_FAILURES_THRESHOLD = 2  # From config (REQ-VAL-DIAG-001)
         if consecutive_failures >= DIAG_VALIDATION_FAILURES_THRESHOLD:
             try:
-                # Spawn diagnostic agent for the workflow
-                diagnostic_run = self.diagnostic.spawn_diagnostic_agent(
-                    workflow_id=task.ticket_id,
-                    context={
-                        "trigger": "repeated_validation_failures",
-                        "task_id": task_id,
-                        "consecutive_failures": consecutive_failures,
-                        "last_feedback": task.last_validation_feedback,
-                    },
-                )
-                print(
-                    f"🚨 DIAGNOSIS SPAWNED: {consecutive_failures} consecutive validation failures "
-                    f"for task {task_id} (diagnostic run: {diagnostic_run.id})"
-                )
+                # Spawn diagnostic agent for the workflow (async call in sync context)
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                    # Event loop exists, create task
+                    diagnostic_task = asyncio.create_task(
+                        self.diagnostic.spawn_diagnostic_agent(
+                            workflow_id=task.ticket_id,
+                            context={
+                                "trigger": "repeated_validation_failures",
+                                "task_id": task_id,
+                                "consecutive_failures": consecutive_failures,
+                                "last_feedback": task.last_validation_feedback,
+                            },
+                            max_tasks=5,
+                        )
+                    )
+                    # Don't await in sync context - fire and forget
+                    diagnostic_run = None  # Will be None, but task is running
+                    print(
+                        f"🚨 DIAGNOSIS SPAWNED: {consecutive_failures} consecutive validation failures "
+                        f"for task {task_id} (diagnostic task created)"
+                    )
+                except RuntimeError:
+                    # No event loop, use asyncio.run()
+                    diagnostic_run = asyncio.run(
+                        self.diagnostic.spawn_diagnostic_agent(
+                            workflow_id=task.ticket_id,
+                            context={
+                                "trigger": "repeated_validation_failures",
+                                "task_id": task_id,
+                                "consecutive_failures": consecutive_failures,
+                                "last_feedback": task.last_validation_feedback,
+                            },
+                            max_tasks=5,
+                        )
+                    )
+                    print(
+                        f"🚨 DIAGNOSIS SPAWNED: {consecutive_failures} consecutive validation failures "
+                        f"for task {task_id} (diagnostic run: {diagnostic_run.id})"
+                    )
             except Exception as e:
                 print(f"Warning: Failed to spawn diagnostic agent: {e}")
     
@@ -693,19 +720,46 @@ class ValidationOrchestrator:
                             
                             # Spawn Diagnosis Agent focused on timeout (REQ-VAL-DIAG-002)
                             try:
-                                diagnostic_run = self.diagnostic.spawn_diagnostic_agent(
-                                    workflow_id=task.ticket_id,
-                                    context={
-                                        "trigger": "validation_timeout",
-                                        "task_id": task_id,
-                                        "validator_agent_id": validator_id,
-                                        "timeout_minutes": timeout_minutes,
-                                    },
-                                )
-                                print(
-                                    f"🔍 DIAGNOSIS SPAWNED for validation timeout "
-                                    f"(diagnostic run: {diagnostic_run.id})"
-                                )
+                                import asyncio
+                                try:
+                                    loop = asyncio.get_running_loop()
+                                    # Event loop exists, create task
+                                    diagnostic_task = asyncio.create_task(
+                                        self.diagnostic.spawn_diagnostic_agent(
+                                            workflow_id=task.ticket_id,
+                                            context={
+                                                "trigger": "validation_timeout",
+                                                "task_id": task_id,
+                                                "validator_agent_id": validator_id,
+                                                "timeout_minutes": timeout_minutes,
+                                            },
+                                            max_tasks=5,
+                                        )
+                                    )
+                                    # Don't await in sync context - fire and forget
+                                    diagnostic_run = None
+                                    print(
+                                        f"🔍 DIAGNOSIS SPAWNED for validation timeout "
+                                        f"(diagnostic task created)"
+                                    )
+                                except RuntimeError:
+                                    # No event loop, use asyncio.run()
+                                    diagnostic_run = asyncio.run(
+                                        self.diagnostic.spawn_diagnostic_agent(
+                                            workflow_id=task.ticket_id,
+                                            context={
+                                                "trigger": "validation_timeout",
+                                                "task_id": task_id,
+                                                "validator_agent_id": validator_id,
+                                                "timeout_minutes": timeout_minutes,
+                                            },
+                                            max_tasks=5,
+                                        )
+                                    )
+                                    print(
+                                        f"🔍 DIAGNOSIS SPAWNED for validation timeout "
+                                        f"(diagnostic run: {diagnostic_run.id})"
+                                    )
                             except Exception as e:
                                 print(f"Warning: Failed to spawn diagnostic agent: {e}")
                             

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional
 
@@ -16,6 +17,8 @@ from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.diagnostic_analysis import DiagnosticAnalysis
 from omoi_os.utils.datetime import utc_now
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from omoi_os.services.discovery import DiscoveryService
@@ -168,19 +171,21 @@ class DiagnosticService:
 
             return stuck
 
-    def spawn_diagnostic_agent(
+    async def spawn_diagnostic_agent(
         self,
         workflow_id: str,
         context: dict,
+        max_tasks: int = 5,
     ) -> DiagnosticRun:
-        """Create diagnostic run and spawn recovery task.
+        """Create diagnostic run, generate hypotheses, and spawn recovery tasks.
         
         Args:
             workflow_id: ID of stuck workflow
             context: Rich diagnostic context
+            max_tasks: Maximum number of recovery tasks to spawn
             
         Returns:
-            Created DiagnosticRun record
+            Created DiagnosticRun record with spawned tasks
         """
         with self.db.get_session() as session:
             # Create diagnostic run record
@@ -194,7 +199,7 @@ class DiagnosticService:
                 workflow_goal=context.get("workflow_goal"),
                 phases_analyzed=context.get("phases_analyzed"),
                 agents_reviewed=context.get("agents_reviewed"),
-                status="created",
+                status="running",
             )
             session.add(diagnostic_run)
             session.commit()
@@ -206,6 +211,91 @@ class DiagnosticService:
             diagnostic_run_id = diagnostic_run.id
             session.expunge(diagnostic_run)
 
+            # Generate hypotheses using LLM analysis
+            try:
+                # Await async hypothesis generation
+                analysis = await self.generate_hypotheses(context)
+                
+                # Extract diagnosis text from analysis
+                diagnosis_parts = []
+                if analysis.root_cause:
+                    diagnosis_parts.append(f"Root Cause: {analysis.root_cause}")
+                if analysis.hypotheses:
+                    diagnosis_parts.append("\nHypotheses:")
+                    for hyp in analysis.hypotheses[:3]:  # Top 3
+                        diagnosis_parts.append(f"  - {hyp.statement} (likelihood: {hyp.likelihood:.2f})")
+                if analysis.recommendations:
+                    diagnosis_parts.append("\nRecommendations:")
+                    for rec in analysis.recommendations[:max_tasks]:
+                        diagnosis_parts.append(f"  - [{rec.priority}] {rec.description}")
+                
+                diagnosis_text = "\n".join(diagnosis_parts) if diagnosis_parts else "No specific diagnosis generated"
+                
+                # Determine suggested phase and priority from recommendations
+                suggested_phase = "PHASE_IMPLEMENTATION"  # Default
+                suggested_priority = "HIGH"  # Default
+                
+                if analysis.recommendations:
+                    # Use first recommendation's priority
+                    suggested_priority = analysis.recommendations[0].priority
+                    # Try to infer phase from recommendation (basic heuristic)
+                    rec_desc = analysis.recommendations[0].description.lower()
+                    if "test" in rec_desc or "validate" in rec_desc:
+                        suggested_phase = "PHASE_TESTING"
+                    elif "requirement" in rec_desc or "clarify" in rec_desc:
+                        suggested_phase = "PHASE_REQUIREMENTS"
+                    elif "implement" in rec_desc or "build" in rec_desc:
+                        suggested_phase = "PHASE_IMPLEMENTATION"
+                
+            except Exception as e:
+                # If hypothesis generation fails, use fallback
+                diagnosis_text = f"Diagnostic triggered: Workflow stuck for {context.get('time_stuck_seconds', 0)} seconds. All tasks completed but no validated result."
+                suggested_phase = "PHASE_IMPLEMENTATION"
+                suggested_priority = "HIGH"
+
+            # Spawn recovery tasks via DiscoveryService
+            try:
+                with self.db.get_session() as session:
+                    spawned_tasks = self.discovery.spawn_diagnostic_recovery(
+                        session=session,
+                        ticket_id=workflow_id,
+                        diagnostic_run_id=diagnostic_run_id,
+                        reason=diagnosis_text[:500],  # Truncate if too long
+                        suggested_phase=suggested_phase,
+                        suggested_priority=suggested_priority,
+                        max_tasks=max_tasks,
+                    )
+                    
+                    # Update diagnostic run with results
+                    diagnostic_run = session.get(DiagnosticRun, diagnostic_run_id)
+                    if diagnostic_run:
+                        task_ids = [str(task.id) for task in spawned_tasks]
+                        diagnostic_run.tasks_created_count = len(task_ids)
+                        diagnostic_run.tasks_created_ids = {"task_ids": task_ids}
+                        diagnostic_run.diagnosis = diagnosis_text
+                        diagnostic_run.status = "completed"
+                        diagnostic_run.completed_at = utc_now()
+                        session.commit()
+                        session.refresh(diagnostic_run)
+                        session.expunge(diagnostic_run)
+                    
+                    # Notify active agents about recovery tasks via intervention system
+                    self._notify_agents_of_recovery_tasks(
+                        session=session,
+                        workflow_id=workflow_id,
+                        spawned_tasks=spawned_tasks,
+                        diagnosis_text=diagnosis_text,
+                    )
+            except Exception as e:
+                # If spawning fails, mark as failed
+                with self.db.get_session() as session:
+                    diagnostic_run = session.get(DiagnosticRun, diagnostic_run_id)
+                    if diagnostic_run:
+                        diagnostic_run.status = "failed"
+                        diagnostic_run.diagnosis = f"Failed to spawn recovery tasks: {str(e)}"
+                        session.commit()
+                        session.expunge(diagnostic_run)
+
             # Publish event
             if self.event_bus:
                 self.event_bus.publish(
@@ -216,6 +306,7 @@ class DiagnosticService:
                         payload={
                             "workflow_id": workflow_id,
                             "time_stuck_seconds": context.get("time_stuck_seconds", 0),
+                            "tasks_created": diagnostic_run.tasks_created_count if diagnostic_run else 0,
                         },
                     )
                 )
@@ -326,6 +417,12 @@ class DiagnosticService:
             except Exception:
                 workflow_goal = ticket.description
 
+            # Get Conductor analyses (last max_analyses)
+            conductor_analyses = self._get_conductor_analyses(session, max_analyses)
+
+            # Get submitted WorkflowResults (all submissions, even rejected)
+            submitted_results = self._get_workflow_results(session, workflow_id)
+
             # Build context
             context = {
                 "workflow_id": workflow_id,
@@ -342,6 +439,8 @@ class DiagnosticService:
                     "current_phase": ticket.phase_id,
                     "task_distribution": self._get_task_distribution(session, workflow_id),
                 },
+                "conductor_analyses": conductor_analyses,
+                "submitted_results": submitted_results,
             }
 
             return context
@@ -440,4 +539,182 @@ class DiagnosticService:
         )
 
         return {phase: count for phase, count in phase_counts}
+    
+    def _notify_agents_of_recovery_tasks(
+        self,
+        session,
+        workflow_id: str,
+        spawned_tasks: List[Task],
+        diagnosis_text: str,
+    ) -> None:
+        """Notify active agents working on workflow about recovery tasks via intervention system.
+        
+        Finds all agents with active tasks for this workflow and sends intervention messages
+        explaining why recovery tasks were spawned and how to coordinate.
+        
+        Args:
+            session: Database session
+            workflow_id: Workflow (ticket) ID
+            spawned_tasks: List of recovery tasks that were spawned
+            diagnosis_text: Diagnostic analysis explaining why recovery was needed
+        """
+        try:
+            from omoi_os.models.agent import Agent
+            from omoi_os.services.conversation_intervention import ConversationInterventionService
+            
+            # Find all active tasks for this workflow with assigned agents
+            active_tasks = (
+                session.query(Task)
+                .filter(
+                    Task.ticket_id == workflow_id,
+                    Task.assigned_agent_id.isnot(None),
+                    Task.status.in_(["assigned", "running", "under_review", "validation_in_progress"]),
+                    Task.conversation_id.isnot(None),
+                    Task.persistence_dir.isnot(None),
+                )
+                .all()
+            )
+            
+            if not active_tasks:
+                return  # No active agents to notify
+            
+            # Group tasks by agent
+            agent_tasks = {}
+            for task in active_tasks:
+                agent_id = task.assigned_agent_id
+                if agent_id not in agent_tasks:
+                    agent_tasks[agent_id] = []
+                agent_tasks[agent_id].append(task)
+            
+            # Build intervention message
+            recovery_task_descriptions = [
+                f"- {task.description[:100]}" for task in spawned_tasks[:3]
+            ]
+            if len(spawned_tasks) > 3:
+                recovery_task_descriptions.append(f"- ... and {len(spawned_tasks) - 3} more")
+            
+            # Build intervention message (will be prefixed with [GUARDIAN INTERVENTION] by ConversationInterventionService)
+            intervention_message = (
+                f"DIAGNOSTIC RECOVERY: Workflow was stuck and diagnostic analysis identified issues. "
+                f"{len(spawned_tasks)} recovery task(s) have been created:\n\n"
+                + "\n".join(recovery_task_descriptions) +
+                f"\n\nDiagnosis: {diagnosis_text[:300]}"
+                f"\n\nPlease coordinate with these recovery tasks and adjust your work accordingly. "
+                f"If you're blocked, consider pausing to let recovery tasks proceed first."
+            )
+            
+            # Send intervention to each active agent
+            intervention_service = ConversationInterventionService()
+            notified_count = 0
+            
+            for agent_id, tasks in agent_tasks.items():
+                # Use the first task's conversation info (all tasks for same agent share conversation)
+                task = tasks[0]
+                
+                # Get workspace directory
+                agent = session.get(Agent, agent_id)
+                workspace_dir = None
+                if agent and hasattr(agent, 'workspace_dir'):
+                    workspace_dir = agent.workspace_dir
+                if not workspace_dir:
+                    # Fallback: construct from task
+                    from omoi_os.config import get_app_settings
+                    app_settings = get_app_settings()
+                    workspace_root = app_settings.workspace.root
+                    workspace_dir = f"{workspace_root}/{task.id}"
+                
+                # Send intervention
+                success = intervention_service.send_intervention(
+                    conversation_id=task.conversation_id,
+                    persistence_dir=task.persistence_dir,
+                    workspace_dir=workspace_dir,
+                    message=intervention_message,
+                )
+                
+                if success:
+                    notified_count += 1
+                    logger.info(
+                        f"Notified agent {agent_id[:8]} about {len(spawned_tasks)} recovery tasks "
+                        f"for workflow {workflow_id}"
+                    )
+            
+            if notified_count > 0:
+                logger.info(
+                    f"Sent recovery task notifications to {notified_count} active agent(s) "
+                    f"for workflow {workflow_id}"
+                )
+                
+        except Exception as e:
+            # Don't fail diagnostic if intervention notification fails
+            logger.warning(
+                f"Failed to notify agents about recovery tasks for workflow {workflow_id}: {e}",
+                exc_info=True,
+            )
+
+    def _get_conductor_analyses(self, session, max_analyses: int) -> List[dict]:
+        """Get recent Conductor analyses for system context."""
+        from sqlalchemy import text
+
+        try:
+            query = text("""
+                SELECT 
+                    id,
+                    cycle_id,
+                    coherence_score,
+                    system_status,
+                    num_agents,
+                    duplicate_count,
+                    termination_count,
+                    coordination_count,
+                    details,
+                    created_at
+                FROM conductor_analyses
+                ORDER BY created_at DESC
+                LIMIT :limit
+            """)
+            
+            result = session.execute(query, {"limit": max_analyses})
+            analyses = []
+            for row in result.fetchall():
+                analyses.append({
+                    "id": str(row.id),
+                    "cycle_id": str(row.cycle_id),
+                    "coherence_score": float(row.coherence_score),
+                    "system_status": row.system_status,
+                    "num_agents": row.num_agents,
+                    "duplicate_count": row.duplicate_count,
+                    "termination_count": row.termination_count,
+                    "coordination_count": row.coordination_count,
+                    "details": row.details or {},
+                    "created_at": row.created_at.isoformat() if row.created_at else None,
+                })
+            return analyses
+        except Exception:
+            # Table might not exist or query failed
+            return []
+
+    def _get_workflow_results(self, session, workflow_id: str) -> List[dict]:
+        """Get all WorkflowResult submissions for a workflow (including rejected)."""
+        try:
+            results = (
+                session.query(WorkflowResult)
+                .filter(WorkflowResult.workflow_id == workflow_id)
+                .order_by(desc(WorkflowResult.created_at))
+                .all()
+            )
+            
+            submitted_results = []
+            for result in results:
+                submitted_results.append({
+                    "id": result.id,
+                    "status": result.status,
+                    "validated_at": result.validated_at.isoformat() if result.validated_at else None,
+                    "validation_feedback": result.validation_feedback,
+                    "markdown_file_path": result.markdown_file_path,
+                    "explanation": result.explanation,
+                    "created_at": result.created_at.isoformat() if result.created_at else None,
+                })
+            return submitted_results
+        except Exception:
+            return []
 

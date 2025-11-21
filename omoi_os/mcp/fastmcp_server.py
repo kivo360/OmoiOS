@@ -23,6 +23,7 @@ _db: Optional[DatabaseService] = None
 _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
+_collaboration_service: Optional[Any] = None
 
 
 def initialize_mcp_services(
@@ -30,6 +31,7 @@ def initialize_mcp_services(
     event_bus: EventBusService,
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
+    collaboration_service: Optional[Any] = None,
 ) -> None:
     """Initialize global services for MCP server.
     
@@ -38,12 +40,14 @@ def initialize_mcp_services(
         event_bus: Event bus service
         task_queue: Task queue service
         discovery_service: Discovery service
+        collaboration_service: Optional collaboration service for agent messaging
     """
-    global _db, _event_bus, _task_queue, _discovery_service
+    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
+    _collaboration_service = collaboration_service
 
 
 # Create FastMCP server
@@ -518,6 +522,207 @@ def get_workflow_graph(
             "ticket_id": ticket_id,
             **graph,
         }
+
+
+# ============================================================================
+# Agent Communication Tools (NEW - Recommendation 2)
+# ============================================================================
+
+@mcp.tool()
+def broadcast_message(
+    ctx: Context,
+    sender_agent_id: str = Field(..., description="Your agent ID"),
+    message: str = Field(..., min_length=1, description="Message content to broadcast to all active agents"),
+    message_type: str = Field(default="info", description="Type of message (info, question, warning, discovery)"),
+    ticket_id: Optional[str] = Field(None, description="Optional ticket ID for context"),
+    task_id: Optional[str] = Field(None, description="Optional task ID for context"),
+) -> Dict[str, Any]:
+    """Broadcast a message to all active agents in the system.
+    
+    Use this when you need to share information that affects all agents,
+    ask questions when you don't know who to ask, or announce completion
+    of shared infrastructure.
+    
+    Args:
+        sender_agent_id: Your agent ID (required)
+        message: Message content to broadcast
+        message_type: Type of message (info, question, warning, discovery)
+        ticket_id: Optional ticket ID for context
+        task_id: Optional task ID for context
+        
+    Returns:
+        Dictionary with success status and recipient count
+    """
+    if not _collaboration_service:
+        raise RuntimeError("Collaboration service not initialized")
+    
+    # Use simplified broadcast API
+    result = _collaboration_service.broadcast_message(
+        from_agent_id=sender_agent_id,
+        message=message,
+        message_type=message_type,
+        ticket_id=ticket_id,
+        task_id=task_id,
+    )
+    
+    ctx.info(f"Broadcast message to {result['recipient_count']} agent(s)")
+    return result
+
+
+@mcp.tool()
+def send_message(
+    ctx: Context,
+    sender_agent_id: str = Field(..., description="Your agent ID"),
+    recipient_agent_id: str = Field(..., description="Target agent ID"),
+    message: str = Field(..., min_length=1, description="Message content"),
+    message_type: str = Field(default="info", description="Type of message (info, question, handoff_request, etc.)"),
+    ticket_id: Optional[str] = Field(None, description="Optional ticket ID for context"),
+    task_id: Optional[str] = Field(None, description="Optional task ID for context"),
+) -> Dict[str, Any]:
+    """Send a direct message to a specific agent.
+    
+    Use this for coordinating with an agent on a related task, asking a
+    specific agent for information, or responding to another agent's message.
+    
+    Args:
+        sender_agent_id: Your agent ID (required)
+        recipient_agent_id: Target agent's ID
+        message: Message content
+        message_type: Type of message (info, question, handoff_request, etc.)
+        ticket_id: Optional ticket ID for context
+        task_id: Optional task ID for context
+        
+    Returns:
+        Dictionary with success status and message details
+    """
+    if not _collaboration_service:
+        raise RuntimeError("Collaboration service not initialized")
+    
+    # Create or find thread for these two agents
+    thread = _collaboration_service.get_or_create_thread(
+        participants=[sender_agent_id, recipient_agent_id],
+        ticket_id=ticket_id,
+        task_id=task_id,
+    )
+    
+    # Send message in thread
+    message_obj = _collaboration_service.send_message(
+        thread_id=thread.id,
+        from_agent_id=sender_agent_id,
+        to_agent_id=recipient_agent_id,
+        message_type=message_type,
+        content=message,
+    )
+    
+    ctx.info(f"Sent message to agent {recipient_agent_id[:8]}")
+    return {
+        "success": True,
+        "message_id": message_obj.id,
+        "thread_id": thread.id,
+        "recipient_agent_id": recipient_agent_id,
+    }
+
+
+@mcp.tool()
+def get_messages(
+    ctx: Context,
+    agent_id: str = Field(..., description="Your agent ID"),
+    thread_id: Optional[str] = Field(None, description="Optional thread ID to filter by"),
+    limit: int = Field(default=50, ge=1, le=100, description="Maximum messages to return"),
+    unread_only: bool = Field(default=False, description="Only return unread messages"),
+) -> Dict[str, Any]:
+    """Get messages for an agent, optionally filtered by thread.
+    
+    Args:
+        agent_id: Your agent ID
+        thread_id: Optional thread ID to filter by
+        limit: Maximum messages to return
+        unread_only: Only return unread messages
+        
+    Returns:
+        Dictionary with list of messages
+    """
+    if not _collaboration_service:
+        raise RuntimeError("Collaboration service not initialized")
+    
+    if thread_id:
+        # Get messages from specific thread
+        messages = _collaboration_service.get_thread_messages(
+            thread_id=thread_id,
+            limit=limit,
+            unread_only=unread_only,
+        )
+    else:
+        # Get all messages for this agent
+        messages = _collaboration_service.get_agent_messages(
+            agent_id=agent_id,
+            limit=limit,
+            unread_only=unread_only,
+        )
+    
+    ctx.info(f"Retrieved {len(messages)} message(s)")
+    return {
+        "success": True,
+        "messages": [
+            {
+                "message_id": m.id,
+                "thread_id": m.thread_id,
+                "from_agent_id": m.from_agent_id,
+                "to_agent_id": m.to_agent_id,
+                "message_type": m.message_type,
+                "content": m.content,
+                "read_at": m.read_at.isoformat() if m.read_at else None,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in messages
+        ],
+    }
+
+
+@mcp.tool()
+def request_handoff(
+    ctx: Context,
+    from_agent_id: str = Field(..., description="Your agent ID"),
+    to_agent_id: str = Field(..., description="Target agent ID to hand off to"),
+    task_id: str = Field(..., description="Task ID to hand off"),
+    reason: str = Field(..., min_length=10, description="Reason for handoff"),
+    context: Optional[Dict[str, Any]] = Field(None, description="Optional handoff context"),
+) -> Dict[str, Any]:
+    """Request a task handoff to another agent.
+    
+    Use this when you need to transfer a task to another agent, for example
+    if you're stuck, if the task requires different capabilities, or if you
+    need to focus on higher priority work.
+    
+    Args:
+        from_agent_id: Your agent ID
+        to_agent_id: Target agent ID
+        task_id: Task ID to hand off
+        reason: Reason for handoff (minimum 10 characters)
+        context: Optional handoff context (current progress, blockers, etc.)
+        
+    Returns:
+        Dictionary with handoff thread and message details
+    """
+    if not _collaboration_service:
+        raise RuntimeError("Collaboration service not initialized")
+    
+    thread, message = _collaboration_service.request_handoff(
+        from_agent_id=from_agent_id,
+        to_agent_id=to_agent_id,
+        task_id=task_id,
+        reason=reason,
+        context=context,
+    )
+    
+    ctx.info(f"Requested handoff of task {task_id} to agent {to_agent_id[:8]}")
+    return {
+        "success": True,
+        "thread_id": thread.id,
+        "message_id": message.id,
+        "task_id": task_id,
+        "to_agent_id": to_agent_id,
+    }
 
 
 # Create HTTP app for FastAPI mounting

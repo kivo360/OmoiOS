@@ -59,6 +59,14 @@ monitoring:
   auto_steering_enabled: false
   max_concurrent_analyses: 5
 
+diagnostic:
+  enabled: true
+  cooldown_seconds: 60
+  min_stuck_time_seconds: 60
+  max_agents_to_analyze: 15
+  max_conductor_analyses: 5
+  max_tasks_per_run: 5
+
 worker:
   concurrency: 2
 
