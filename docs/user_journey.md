@@ -616,6 +616,71 @@ Guardian monitors agent trajectories every 60 seconds:
 - Add constraint: Add new requirement
 - Inject tool call: Force specific action
 
+#### 3.6 Diagnostic Recovery Interventions
+
+```
+Workflow becomes stuck (all tasks done, no validated result):
+   ↓
+1. Diagnostic monitoring loop detects stuck workflow (every 60s)
+   ↓
+2. Diagnostic system analyzes workflow:
+   - Reviews all completed tasks
+   - Checks Conductor analyses
+   - Examines submitted results (even rejected ones)
+   - Generates hypotheses using LLM analysis
+   ↓
+3. Diagnostic spawns recovery tasks (1-5 tasks):
+   - Creates tasks via DiscoveryService
+   - Assigns appropriate phases
+   - Sets priority based on diagnosis
+   ↓
+4. System finds active agents working on same workflow
+   ↓
+5. ConversationInterventionService sends intervention to each active agent:
+   "[GUARDIAN INTERVENTION] DIAGNOSTIC RECOVERY: Workflow was stuck and 
+   diagnostic analysis identified issues. 3 recovery task(s) have been created:
+   
+   - Diagnostic recovery: Missing result submission
+   - Diagnostic recovery: Incomplete test coverage
+   - Diagnostic recovery: Validation feedback not addressed
+   
+   Diagnosis: Root Cause: Workflow completed all implementation tasks but 
+   failed to submit validated result. Tests pass but no evidence file created.
+   
+   Please coordinate with these recovery tasks and adjust your work accordingly. 
+   If you're blocked, consider pausing to let recovery tasks proceed first."
+   ↓
+6. Agents receive intervention messages in their conversations (non-blocking)
+   ↓
+7. Agents coordinate with recovery tasks:
+   - Review recovery task descriptions
+   - Adjust current work based on diagnosis
+   - May pause to let recovery tasks proceed
+   - May collaborate with recovery task agents
+   ↓
+8. WebSocket: DIAGNOSTIC_TRIGGERED → Dashboard shows:
+   - Diagnostic run created
+   - Recovery tasks spawned
+   - Active agents notified
+   ↓
+9. Recovery tasks execute and workflow progresses
+```
+
+**Diagnostic Recovery Flow:**
+- **Automatic Detection**: System monitors workflows every 60 seconds
+- **Rich Context**: Diagnostic analyzes tasks, Conductor analyses, and submitted results
+- **LLM-Powered Analysis**: Generates root cause, hypotheses, and recommendations
+- **Recovery Task Spawning**: Creates 1-5 targeted recovery tasks via Discovery pattern
+- **Agent Notification**: All active agents on workflow receive intervention messages
+- **Coordination**: Agents can adjust work based on recovery tasks
+- **Self-Healing**: System automatically recovers from stuck states
+
+**Dashboard Indicators:**
+- Diagnostic run badge on stuck workflows
+- Recovery task list in workflow view
+- Intervention notifications in agent detail views
+- Diagnostic analysis summary (root cause, hypotheses, recommendations)
+
 ---
 
 ### Phase 4: Approval Gates & Phase Transitions
@@ -1077,6 +1142,61 @@ Agent stops responding:
    - Agent marked as failed
    - Task reassigned to new agent
    - Original agent's work preserved
+```
+
+**Workflow Stuck Detection & Recovery:**
+```
+Workflow stuck (all tasks done, no validated result):
+   ↓
+1. Diagnostic monitoring detects stuck workflow:
+   - All tasks finished (no pending/assigned/running)
+   - No validated WorkflowResult exists
+   - Stuck for >= 60 seconds (configurable)
+   - Cooldown period passed (60s since last diagnostic)
+   ↓
+2. Diagnostic system builds comprehensive context:
+   - Recent tasks (last 15 agents)
+   - Conductor analyses (last 5)
+   - Submitted WorkflowResults (even rejected)
+   - Workflow goal and phase distribution
+   ↓
+3. LLM generates diagnostic analysis:
+   - Root cause identification
+   - Hypotheses with likelihood scores
+   - Prioritized recommendations
+   ↓
+4. System spawns recovery tasks (1-5 max):
+   - Uses DiscoveryService.spawn_diagnostic_recovery()
+   - Creates tasks in appropriate phases
+   - Sets priority based on diagnosis
+   - Links to diagnostic run
+   ↓
+5. System finds active agents on workflow:
+   - Queries tasks with status: assigned, running, under_review, validation_in_progress
+   - Filters by workflow (ticket_id)
+   - Groups by agent_id
+   ↓
+6. ConversationInterventionService sends interventions:
+   - One message per active agent
+   - Includes recovery task descriptions
+   - Includes diagnostic analysis summary
+   - Guidance on coordination
+   ↓
+7. Agents receive interventions:
+   - Messages appear in agent conversations
+   - Non-blocking (processed asynchronously)
+   - Agents can adjust work accordingly
+   ↓
+8. Dashboard updates:
+   - Diagnostic run card appears
+   - Recovery tasks shown in task list
+   - Intervention notifications in activity feed
+   - Agent detail views show recovery coordination
+   ↓
+9. Recovery tasks execute:
+   - Picked up by available agents
+   - Workflow progresses toward goal
+   - May trigger additional diagnostics if still stuck
 ```
 
 **Spec Generation Failure:**
