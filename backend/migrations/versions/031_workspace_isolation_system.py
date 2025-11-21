@@ -7,6 +7,7 @@ Create Date: 2025-01-XX 12:00:00.000000
 """
 
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # Import migration utilities
@@ -31,10 +32,21 @@ branch_labels = None
 depends_on = None
 
 
+def _print_database_url() -> None:
+    """Log the database URL this migration is targeting."""
+    try:
+        conn = op.get_bind()
+        engine_url = str(conn.engine.url)
+        print(f"Database URL: {engine_url}")
+    except Exception:
+        pass
+
+
 def upgrade() -> None:
     """Create workspace isolation system tables."""
 
     print("\n🔄 Starting workspace isolation system migration...")
+    _print_database_url()
     print_migration_summary()
 
     # 1. Create agent_workspaces table
@@ -339,6 +351,7 @@ def downgrade() -> None:
     """Rollback workspace isolation system."""
 
     print("\n🔄 Rolling back workspace isolation system migration...")
+    _print_database_url()
 
     # Drop indexes and foreign keys first, then tables
     print("\n🔍 Dropping indexes from merge_conflict_resolutions table...")

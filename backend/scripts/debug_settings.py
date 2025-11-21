@@ -13,6 +13,7 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+
 def debug_env_files():
     """Debug which environment files are being loaded."""
     print("=" * 60)
@@ -36,6 +37,7 @@ def debug_env_files():
 
     print(f"\nEnvironment files found: {len(env_files)}")
     print("Priority order: .env.local > .env > environment variables")
+
 
 def debug_settings_loading():
     """Debug settings loading from different configuration classes."""
@@ -86,19 +88,25 @@ def debug_settings_loading():
 
         # Supabase settings
         supabase_settings = load_supabase_settings()
-        print(f"SUPABASE_URL: {supabase_settings.url[:50]}..." if len(supabase_settings.url) > 50 else f"SUPABASE_URL: {supabase_settings.url}")
+        print(
+            f"SUPABASE_URL: {supabase_settings.url[:50]}..."
+            if len(supabase_settings.url) > 50
+            else f"SUPABASE_URL: {supabase_settings.url}"
+        )
 
     except Exception as e:
         print(f"❌ Error loading main config: {e}")
 
-    # Test validation config
+        # Test validation config
         try:
             from omoi_os.config.validation import ValidationConfig
 
             print("\n📊 Validation Configuration:")
             print("-" * 40)
             validation_config = ValidationConfig()
-            print(f"VALIDATION_ENABLED_BY_DEFAULT: {validation_config.enabled_by_default}")
+            print(
+                f"VALIDATION_ENABLED_BY_DEFAULT: {validation_config.enabled_by_default}"
+            )
             print(f"VALIDATION_MAX_ITERATIONS: {validation_config.max_iterations}")
         except Exception as e:
             print(f"❌ Error loading validation config: {e}")
@@ -117,6 +125,7 @@ def debug_settings_loading():
 
     except Exception as e:
         print(f"❌ Error loading ticketing DB config: {e}")
+
 
 def debug_environment_variables():
     """Debug key environment variables."""
@@ -145,6 +154,7 @@ def debug_environment_variables():
                 print(f"{var}: {value}")
         else:
             print(f"{var}: (not set)")
+
 
 def test_priority_order():
     """Test that .env.local takes priority over .env."""
@@ -182,6 +192,7 @@ def test_priority_order():
     else:
         print(f"❌ {test_var} not set in environment")
 
+
 def main():
     """Run all debugging checks."""
     print("🔍 OMOiOS SETTINGS DEBUG TOOL")
@@ -199,6 +210,7 @@ def main():
     print("📌 Local development should use docker-compose database")
     print("📌 Production should use Supabase database")
     print("=" * 60)
+
 
 if __name__ == "__main__":
     main()

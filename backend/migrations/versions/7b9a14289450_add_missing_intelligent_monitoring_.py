@@ -5,6 +5,7 @@ Revises: 028_add_persistence_dir_to_tasks
 Create Date: 2025-11-19 11:08:59.562968
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -66,49 +67,27 @@ def upgrade() -> None:
             sa.Column("coherence_score", sa.Float(), nullable=False),
             sa.Column("system_status", sa.String(length=32), nullable=False),
             sa.Column("num_agents", sa.Integer(), nullable=False),
-            sa.Column("duplicate_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
-            sa.Column("termination_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
-            sa.Column("coordination_count", sa.Integer(), nullable=False, server_default=sa.text("0")),
-            sa.Column("details", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
             sa.Column(
-                "created_at",
-                sa.DateTime(timezone=True),
-                server_default=sa.text("now()"),
+                "duplicate_count",
+                sa.Integer(),
                 nullable=False,
+                server_default=sa.text("0"),
             ),
             sa.Column(
-                "updated_at",
-                sa.DateTime(timezone=True),
-                server_default=sa.text("now()"),
+                "termination_count",
+                sa.Integer(),
                 nullable=False,
+                server_default=sa.text("0"),
             ),
-            sa.PrimaryKeyConstraint("id"),
-        )
-        inspector = sa.inspect(bind)
-
-    _ensure_index(inspector, "conductor_analyses", "idx_conductor_analyses_created", ["created_at"])
-    _ensure_index(inspector, "conductor_analyses", "idx_conductor_analyses_coherence", ["coherence_score"])
-    _ensure_index(inspector, "conductor_analyses", "idx_conductor_analyses_status", ["system_status"])
-
-    # Guardian trajectory analyses (agent-level monitoring)
-    if not _table_exists(inspector, "guardian_analyses"):
-        op.create_table(
-            "guardian_analyses",
-            sa.Column("id", sa.UUID(), nullable=False),
-            sa.Column("agent_id", sa.String(length=255), nullable=False),
-            sa.Column("current_phase", sa.String(length=64), nullable=True),
-            sa.Column("trajectory_aligned", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-            sa.Column("alignment_score", sa.Float(), nullable=False),
-            sa.Column("needs_steering", sa.Boolean(), nullable=False, server_default=sa.text("false")),
-            sa.Column("steering_type", sa.String(length=64), nullable=True),
-            sa.Column("steering_recommendation", sa.Text(), nullable=True),
-            sa.Column("trajectory_summary", sa.Text(), nullable=False),
-            sa.Column("last_claude_message_marker", sa.Text(), nullable=True),
-            sa.Column("accumulated_goal", sa.Text(), nullable=True),
-            sa.Column("current_focus", sa.String(length=128), nullable=True),
-            sa.Column("session_duration", sa.Interval(), nullable=True),
-            sa.Column("conversation_length", sa.Integer(), nullable=True),
-            sa.Column("details", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column(
+                "coordination_count",
+                sa.Integer(),
+                nullable=False,
+                server_default=sa.text("0"),
+            ),
+            sa.Column(
+                "details", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+            ),
             sa.Column(
                 "created_at",
                 sa.DateTime(timezone=True),
@@ -126,10 +105,89 @@ def upgrade() -> None:
         inspector = sa.inspect(bind)
 
     _ensure_index(
-        inspector, "guardian_analyses", "idx_guardian_analyses_agent_created", ["agent_id", "created_at"]
+        inspector,
+        "conductor_analyses",
+        "idx_conductor_analyses_created",
+        ["created_at"],
     )
-    _ensure_index(inspector, "guardian_analyses", "idx_guardian_analyses_alignment", ["alignment_score"])
-    _ensure_index(inspector, "guardian_analyses", "idx_guardian_analyses_needs_steering", ["needs_steering"])
+    _ensure_index(
+        inspector,
+        "conductor_analyses",
+        "idx_conductor_analyses_coherence",
+        ["coherence_score"],
+    )
+    _ensure_index(
+        inspector,
+        "conductor_analyses",
+        "idx_conductor_analyses_status",
+        ["system_status"],
+    )
+
+    # Guardian trajectory analyses (agent-level monitoring)
+    if not _table_exists(inspector, "guardian_analyses"):
+        op.create_table(
+            "guardian_analyses",
+            sa.Column("id", sa.UUID(), nullable=False),
+            sa.Column("agent_id", sa.String(length=255), nullable=False),
+            sa.Column("current_phase", sa.String(length=64), nullable=True),
+            sa.Column(
+                "trajectory_aligned",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("true"),
+            ),
+            sa.Column("alignment_score", sa.Float(), nullable=False),
+            sa.Column(
+                "needs_steering",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("false"),
+            ),
+            sa.Column("steering_type", sa.String(length=64), nullable=True),
+            sa.Column("steering_recommendation", sa.Text(), nullable=True),
+            sa.Column("trajectory_summary", sa.Text(), nullable=False),
+            sa.Column("last_claude_message_marker", sa.Text(), nullable=True),
+            sa.Column("accumulated_goal", sa.Text(), nullable=True),
+            sa.Column("current_focus", sa.String(length=128), nullable=True),
+            sa.Column("session_duration", sa.Interval(), nullable=True),
+            sa.Column("conversation_length", sa.Integer(), nullable=True),
+            sa.Column(
+                "details", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+            ),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.text("now()"),
+                nullable=False,
+            ),
+            sa.PrimaryKeyConstraint("id"),
+        )
+        inspector = sa.inspect(bind)
+
+    _ensure_index(
+        inspector,
+        "guardian_analyses",
+        "idx_guardian_analyses_agent_created",
+        ["agent_id", "created_at"],
+    )
+    _ensure_index(
+        inspector,
+        "guardian_analyses",
+        "idx_guardian_analyses_alignment",
+        ["alignment_score"],
+    )
+    _ensure_index(
+        inspector,
+        "guardian_analyses",
+        "idx_guardian_analyses_needs_steering",
+        ["needs_steering"],
+    )
 
     # Duplicate detection output referencing conductor analyses
     if not _table_exists(inspector, "detected_duplicates"):
@@ -141,21 +199,40 @@ def upgrade() -> None:
             sa.Column("agent2_id", sa.String(length=255), nullable=False),
             sa.Column("similarity_score", sa.Float(), nullable=False),
             sa.Column("work_description", sa.Text(), nullable=True),
-            sa.Column("resources", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column(
+                "resources", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+            ),
             sa.Column(
                 "created_at",
                 sa.DateTime(timezone=True),
                 server_default=sa.text("now()"),
                 nullable=False,
             ),
-            sa.ForeignKeyConstraint(["conductor_analysis_id"], ["conductor_analyses.id"]),
+            sa.ForeignKeyConstraint(
+                ["conductor_analysis_id"], ["conductor_analyses.id"]
+            ),
             sa.PrimaryKeyConstraint("id"),
         )
         inspector = sa.inspect(bind)
 
-    _ensure_index(inspector, "detected_duplicates", "idx_duplicates_cycle", ["conductor_analysis_id"])
-    _ensure_index(inspector, "detected_duplicates", "idx_duplicates_agents", ["agent1_id", "agent2_id"])
-    _ensure_index(inspector, "detected_duplicates", "idx_duplicates_similarity", ["similarity_score"])
+    _ensure_index(
+        inspector,
+        "detected_duplicates",
+        "idx_duplicates_cycle",
+        ["conductor_analysis_id"],
+    )
+    _ensure_index(
+        inspector,
+        "detected_duplicates",
+        "idx_duplicates_agents",
+        ["agent1_id", "agent2_id"],
+    )
+    _ensure_index(
+        inspector,
+        "detected_duplicates",
+        "idx_duplicates_similarity",
+        ["similarity_score"],
+    )
 
     # Steering interventions audit
     if not _table_exists(inspector, "steering_interventions"):
@@ -178,18 +255,29 @@ def upgrade() -> None:
         )
         inspector = sa.inspect(bind)
 
-    _ensure_index(inspector, "steering_interventions", "idx_steering_agent_created", ["agent_id", "created_at"])
-    _ensure_index(inspector, "steering_interventions", "idx_steering_type", ["steering_type"])
-    _ensure_index(inspector, "steering_interventions", "idx_steering_actor_type", ["actor_type"])
+    _ensure_index(
+        inspector,
+        "steering_interventions",
+        "idx_steering_agent_created",
+        ["agent_id", "created_at"],
+    )
+    _ensure_index(
+        inspector, "steering_interventions", "idx_steering_type", ["steering_type"]
+    )
+    _ensure_index(
+        inspector, "steering_interventions", "idx_steering_actor_type", ["actor_type"]
+    )
 
     # Monitoring vectors for semantic similarity (PGVector)
     if not _table_exists(inspector, "monitoring_vectors"):
+        # Enable pgvector extension if not already enabled
+        bind.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
+        # Create table without vector column first
         op.create_table(
             "monitoring_vectors",
             sa.Column("id", sa.UUID(), nullable=False),
             sa.Column("entity_type", sa.String(length=32), nullable=False),
             sa.Column("entity_id", sa.UUID(), nullable=False),
-            sa.Column("embedding", postgresql.VECTOR(1536), nullable=False),
             sa.Column(
                 "created_at",
                 sa.DateTime(timezone=True),
@@ -198,16 +286,29 @@ def upgrade() -> None:
             ),
             sa.PrimaryKeyConstraint("id"),
         )
+        # Add vector column using raw SQL (pgvector extension type)
+        bind.execute(
+            sa.text(
+                "ALTER TABLE monitoring_vectors ADD COLUMN embedding vector(1536) NOT NULL"
+            )
+        )
         inspector = sa.inspect(bind)
 
-    _ensure_index(inspector, "monitoring_vectors", "idx_monitoring_vectors_entity", ["entity_type", "entity_id"])
     _ensure_index(
         inspector,
         "monitoring_vectors",
-        "idx_monitoring_vectors_embedding",
-        ["embedding"],
-        postgresql_using="gin",
+        "idx_monitoring_vectors_entity",
+        ["entity_type", "entity_id"],
     )
+    # Create vector index using ivfflat (pgvector index type)
+    if _table_exists(inspector, "monitoring_vectors") and not _index_exists(
+        inspector, "monitoring_vectors", "idx_monitoring_vectors_embedding"
+    ):
+        bind.execute(
+            sa.text(
+                "CREATE INDEX idx_monitoring_vectors_embedding ON monitoring_vectors USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)"
+            )
+        )
 
     # Monitoring audit log (compliance trail)
     if not _table_exists(inspector, "monitoring_audit_log"):
@@ -217,9 +318,13 @@ def upgrade() -> None:
             sa.Column("event_type", sa.String(length=64), nullable=False),
             sa.Column("actor_type", sa.String(length=32), nullable=False),
             sa.Column("actor_id", sa.String(length=255), nullable=True),
-            sa.Column("target_agent_ids", postgresql.ARRAY(sa.String()), nullable=False),
+            sa.Column(
+                "target_agent_ids", postgresql.ARRAY(sa.String()), nullable=False
+            ),
             sa.Column("reason", sa.Text(), nullable=False),
-            sa.Column("metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column(
+                "metadata", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+            ),
             sa.Column(
                 "created_at",
                 sa.DateTime(timezone=True),
@@ -230,15 +335,27 @@ def upgrade() -> None:
         )
         inspector = sa.inspect(bind)
 
-    _ensure_index(inspector, "monitoring_audit_log", "idx_monitoring_audit_created", ["created_at"])
-    _ensure_index(inspector, "monitoring_audit_log", "idx_monitoring_audit_event_type", ["event_type"])
+    _ensure_index(
+        inspector,
+        "monitoring_audit_log",
+        "idx_monitoring_audit_created",
+        ["created_at"],
+    )
+    _ensure_index(
+        inspector,
+        "monitoring_audit_log",
+        "idx_monitoring_audit_event_type",
+        ["event_type"],
+    )
 
     # Monitoring metadata on tasks for diagnostics
     if not _column_exists(inspector, "tasks", "monitoring_notes"):
         op.add_column("tasks", sa.Column("monitoring_notes", sa.Text(), nullable=True))
         inspector = sa.inspect(bind)
     if not _column_exists(inspector, "tasks", "discovery_impact"):
-        op.add_column("tasks", sa.Column("discovery_impact", sa.String(length=32), nullable=True))
+        op.add_column(
+            "tasks", sa.Column("discovery_impact", sa.String(length=32), nullable=True)
+        )
         inspector = sa.inspect(bind)
 
 

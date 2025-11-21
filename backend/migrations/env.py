@@ -16,9 +16,9 @@ from omoi_os.models.base import Base  # noqa: E402
 
 # Import all models to register them with Base.metadata
 from omoi_os.models import Agent, Event, Task, Ticket, User  # noqa: E402, F401
-from omoi_os.config import get_app_settings
+from omoi_os.config import load_database_settings
 
-database_url = get_app_settings().database.url
+database_url = load_database_settings().url
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -51,7 +51,8 @@ def run_migrations_online() -> None:
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
-
+    print(connectable.url)
+    print(config.get_section(config.config_ini_section))
     with connectable.connect() as connection:
         # Reflect auth schema into metadata
         from sqlalchemy import inspect, Table

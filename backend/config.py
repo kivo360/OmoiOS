@@ -58,7 +58,7 @@ class DatabaseSettings(BaseSettings):
         extra="ignore",
     )
 
-    url: str = "postgresql://postgres:postgres@localhost:15432/omoi_os"
+    url: str = "postgresql://postgres:postgres@localhost:15432/app_db"
 
 
 class RedisSettings(BaseSettings):
@@ -88,5 +88,3 @@ def load_database_settings() -> DatabaseSettings:
 
 def load_redis_settings() -> RedisSettings:
     return RedisSettings()
-
-

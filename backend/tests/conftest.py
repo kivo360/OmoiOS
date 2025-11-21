@@ -19,7 +19,7 @@ def test_database_url() -> str:
     """Get test database URL from environment or use default."""
     return os.getenv(
         "DATABASE_URL_TEST",
-        "postgresql+psycopg://postgres:postgres@localhost:15432/app_db_test",
+        "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
     )
 
 
@@ -33,12 +33,12 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
     # Extract database name from URL and create it if it doesn't exist
     from urllib.parse import urlparse
     from sqlalchemy import text
-    
+
     parsed = urlparse(test_database_url)
-    db_name = parsed.path.lstrip('/')
-    
+    db_name = parsed.path.lstrip("/")
+
     # Connect to postgres database to create test database
-    admin_url = test_database_url.rsplit('/', 1)[0] + '/postgres'
+    admin_url = test_database_url.rsplit("/", 1)[0] + "/postgres"
     try:
         admin_db = DatabaseService(admin_url)
         with admin_db.get_session() as session:
@@ -53,7 +53,7 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
         # If we can't create the database, try to proceed anyway
         # (database might already exist or we don't have permissions)
         pass
-    
+
     db = DatabaseService(test_database_url)
     db.create_tables()
     try:
@@ -81,9 +81,12 @@ def event_bus_service(redis_url: str) -> EventBusService:
 
 
 @pytest.fixture
-def collaboration_service(db_service: DatabaseService, event_bus_service: EventBusService):
+def collaboration_service(
+    db_service: DatabaseService, event_bus_service: EventBusService
+):
     """Create a collaboration service."""
     from omoi_os.services.collaboration import CollaborationService
+
     return CollaborationService(db_service, event_bus_service)
 
 
@@ -91,6 +94,7 @@ def collaboration_service(db_service: DatabaseService, event_bus_service: EventB
 def lock_service(db_service: DatabaseService):
     """Create a resource lock service."""
     from omoi_os.services.resource_lock import ResourceLockService
+
     return ResourceLockService(db_service)
 
 
@@ -98,6 +102,7 @@ def lock_service(db_service: DatabaseService):
 def monitor_service(db_service: DatabaseService, event_bus_service: EventBusService):
     """Create a monitor service."""
     from omoi_os.services.monitor import MonitorService
+
     return MonitorService(db_service, event_bus_service)
 
 
@@ -165,4 +170,3 @@ def sample_agent(db_service: DatabaseService) -> Agent:
         # Expunge so it can be used outside the session
         session.expunge(agent)
         return agent
-
