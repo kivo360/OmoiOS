@@ -1,7 +1,7 @@
 """Pydantic schemas for authentication."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator

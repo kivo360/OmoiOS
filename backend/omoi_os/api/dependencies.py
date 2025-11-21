@@ -165,18 +165,24 @@ def get_approval_service() -> "ApprovalService":
 def get_llm_service() -> "LLMService":
     """Get LLM service instance for dependency injection."""
     from omoi_os.services.llm_service import get_llm_service
-    
+
     return get_llm_service()
 
 
 def get_restart_orchestrator():
     """Get RestartOrchestrator instance."""
     from omoi_os.services.restart_orchestrator import RestartOrchestrator
-    from omoi_os.api.main import db, registry_service, queue, event_bus, agent_status_manager
-    
+    from omoi_os.api.main import (
+        db,
+        registry_service,
+        queue,
+        event_bus,
+        agent_status_manager,
+    )
+
     if db is None or registry_service is None or queue is None:
         raise RuntimeError("Required services not initialized")
-    
+
     return RestartOrchestrator(
         db=db,
         agent_registry=registry_service,
@@ -190,10 +196,10 @@ def get_guardian_service():
     """Get GuardianService instance."""
     from omoi_os.services.guardian import GuardianService
     from omoi_os.api.main import db, event_bus
-    
+
     if db is None:
         raise RuntimeError("Database service not initialized")
-    
+
     return GuardianService(db=db, event_bus=event_bus)
 
 
@@ -205,7 +211,7 @@ def get_database_service() -> "DatabaseService":
 def get_monitoring_loop():
     """Get MonitoringLoop instance."""
     from omoi_os.api.main import monitoring_loop
-    
+
     if monitoring_loop is None:
         raise RuntimeError("Monitoring loop not initialized")
     return monitoring_loop
@@ -215,14 +221,14 @@ def get_supabase_auth_service():
     """Get Supabase auth service instance."""
     from omoi_os.services.supabase_auth import SupabaseAuthService
     from omoi_os.config import load_supabase_settings
-    
+
     settings = load_supabase_settings()
     return SupabaseAuthService(settings)
 
 
 async def get_current_user(
     credentials: "HTTPAuthorizationCredentials",
-    supabase_auth = None,
+    supabase_auth=None,
     db: "DatabaseService" = None,
 ):
     """
@@ -239,18 +245,16 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
-    from fastapi import Depends, HTTPException, status
-    from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-    
+
     if supabase_auth is None:
         supabase_auth = get_supabase_auth_service()
     if db is None:
         db = get_db_service()
-    
+
     from omoi_os.models.user import User
-    
+
     token = credentials.credentials
-    
+
     # Verify JWT token
     user_info = supabase_auth.verify_jwt_token(token)
     if not user_info:
@@ -259,7 +263,7 @@ async def get_current_user(
             detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Load user from public.users
     with db.get_session() as session:
         user = session.get(User, user_info["id"])
@@ -269,13 +273,13 @@ async def get_current_user(
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         return user
 
 
 async def get_current_user_optional(
     credentials: Optional["HTTPAuthorizationCredentials"] = None,
-    supabase_auth = None,
+    supabase_auth=None,
     db: "DatabaseService" = None,
 ):
     """
@@ -284,7 +288,7 @@ async def get_current_user_optional(
     Useful for endpoints that work with or without authentication.
     """
     from fastapi.security import HTTPBearer
-    
+
     if credentials is None:
         try:
             security = HTTPBearer(auto_error=False)
@@ -292,15 +296,15 @@ async def get_current_user_optional(
             return None
         except Exception:
             return None
-    
+
     if not credentials:
         return None
-    
+
     if supabase_auth is None:
         supabase_auth = get_supabase_auth_service()
     if db is None:
         db = get_db_service()
-    
+
     try:
         return await get_current_user(credentials, supabase_auth, db)
     except Exception:
@@ -318,9 +322,9 @@ def require_role(allowed_roles: list[str]):
         ):
             ...
     """
-    from fastapi import Depends, HTTPException, status
+    from fastapi import Depends
     from omoi_os.models.user import User
-    
+
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in allowed_roles:
             raise HTTPException(
@@ -328,87 +332,87 @@ def require_role(allowed_roles: list[str]):
                 detail=f"Requires one of these roles: {', '.join(allowed_roles)}",
             )
         return current_user
-    
+
     return role_checker
 
 
 # New auth system dependencies
 
+
 async def get_db_session():
     """Get async database session from DatabaseService."""
     from omoi_os.api.main import db
-    
+
     if db is None:
         raise RuntimeError("Database service not initialized")
-    
+
     # Use async context manager from DatabaseService
     async with db.get_async_session() as session:
         yield session
 
 
-def get_auth_service(db_session = Depends(get_db_session)) -> "AuthService":
+def get_auth_service(db_session=Depends(get_db_session)) -> "AuthService":
     """Get authentication service instance."""
     from omoi_os.services.auth_service import AuthService
     from omoi_os.config import settings
-    
+
     return AuthService(
         db=db_session,
         jwt_secret=settings.jwt_secret_key,
         jwt_algorithm=settings.jwt_algorithm,
         access_token_expire_minutes=settings.access_token_expire_minutes,
-        refresh_token_expire_days=settings.refresh_token_expire_days
+        refresh_token_expire_days=settings.refresh_token_expire_days,
     )
 
 
-def get_authorization_service(db_session = Depends(get_db_session)) -> "AuthorizationService":
+def get_authorization_service(
+    db_session=Depends(get_db_session),
+) -> "AuthorizationService":
     """Get authorization service instance."""
     from omoi_os.services.authorization_service import AuthorizationService
-    
+
     return AuthorizationService(db=db_session)
 
 
 async def get_current_user_from_token(
     credentials: HTTPAuthorizationCredentials = Depends(security),
-    db_session = Depends(get_db_session),
-    auth_service: "AuthService" = Depends(get_auth_service)
+    db_session=Depends(get_db_session),
+    auth_service: "AuthService" = Depends(get_auth_service),
 ) -> "User":
     """
     Get current authenticated user from JWT token.
-    
+
     This is the new auth system version (replaces Supabase).
     """
-    from fastapi import HTTPException, status
-    from sqlalchemy import select
-    from omoi_os.models.user import User
-    
+
     token = credentials.credentials
-    
+
     # Try to verify as JWT first
     token_data = auth_service.verify_token(token, token_type="access")
-    
+
     if token_data:
         # Load user
         user = await auth_service.get_user_by_id(token_data.user_id)
         if user:
             return user
-    
+
     # Try to verify as API key
     api_key_result = await auth_service.verify_api_key(token)
     if api_key_result:
         user, api_key = api_key_result
         return user
-    
+
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid authentication credentials",
-        headers={"WWW-Authenticate": "Bearer"}
+        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
 def require_permission(permission: str, organization_id: UUID):
     """
     Dependency factory for permission-based authorization.
-    
+
     Usage:
         @router.get("/projects")
         async def list_projects(
@@ -416,28 +420,27 @@ def require_permission(permission: str, organization_id: UUID):
         ):
             ...
     """
-    from fastapi import Depends, HTTPException, status
+    from fastapi import Depends
     from omoi_os.services.authorization_service import ActorType
-    
+
     async def permission_checker(
         current_user: User = Depends(get_current_user_from_token),
-        auth_service: "AuthorizationService" = Depends(get_authorization_service)
+        auth_service: "AuthorizationService" = Depends(get_authorization_service),
     ):
         allowed, reason, details = await auth_service.is_authorized(
             actor_id=current_user.id,
             actor_type=ActorType.USER,
             action=permission,
-            organization_id=organization_id
+            organization_id=organization_id,
         )
-        
+
         if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Unauthorized: {reason}",
-                headers={"X-Auth-Details": str(details)}
+                headers={"X-Auth-Details": str(details)},
             )
-        
-        return details
-    
-    return permission_checker
 
+        return details
+
+    return permission_checker
