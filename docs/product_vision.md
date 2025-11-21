@@ -43,7 +43,7 @@ The AI handles nuances, corrects itself, verifies work, and discovers new tasks 
 1. **Spec-Driven Development**: Structured approach with Requirements → Design → Tasks → Execution
 2. **Autonomous Execution**: AI discovers work, corrects itself, verifies completion
 3. **Strategic Oversight**: Users monitor at approval gates, not micromanage
-4. **Self-Healing System**: Guardian agents detect and fix stuck workflows automatically
+4. **Self-Healing System**: Guardian agents monitor agent trajectories every 60 seconds, analyze alignment with goals using accumulated context, detect when agents drift, get stuck, violate constraints, miss mandatory steps, or become idle, and provide targeted steering interventions to keep workflows on track automatically
 5. **Real-Time Visibility**: Complete transparency into agent activity and progress
 6. **Adaptive Monitoring**: Monitoring loop learns how things work and adapts without explicit instructions
 7. **Mutual Agent Monitoring**: Agents verify each other's work and ensure alignment with desired goals
@@ -212,7 +212,7 @@ Workflow structure emerged from discovery, not predefined plan
 
 17. **Workflow Intervention Tools**: Pause/resume, "Add constraint", "Fix this path", "Regenerate this task"
 
-18. **Agent Status Monitoring**: Live agent status (active, idle, stuck, failed), heartbeat indicators, Guardian intervention alerts
+18. **Agent Status Monitoring**: Live agent status (active, idle, stuck, failed), heartbeat indicators, Guardian intervention alerts with trajectory analysis showing alignment scores over time, constraint violations, and steering interventions
 
 19. **Git Activity Integration**: Real-time commit feed, PR status and diff viewer, branch visualization, merge approval interface
 
@@ -299,7 +299,7 @@ The adaptive monitoring loop addresses the "agent SOFAR" problem—where systems
 - **Customizes quality gates** based on learned success criteria for different types of features
 
 #### 3. Mutual Monitoring Framework
-- **Guardian Agents**: Monitor individual agent trajectories, analyze alignment with goals, provide interventions when agents drift
+- **Guardian Agents**: Monitor individual agent trajectories every 60 seconds, analyze alignment with goals using accumulated context from entire conversation history, provide targeted interventions when agents drift, get stuck, violate constraints, miss mandatory steps, or become idle. Guardian builds trajectory summaries over time, tracks persistent constraints throughout the session, validates phase instructions compliance, and sends specific steering messages to keep agents on track.
 - **Conductor Service**: Performs system-wide coherence analysis, detects duplicate work, ensures agents aren't working against each other
 - **Verification Agents**: Cross-verify agent work, run property-based tests, validate implementation against specs, ensure quality gates
 - **Discovery Agents**: Identify new requirements, dependencies, optimizations, and issues as work progresses, expanding plans dynamically
@@ -315,12 +315,14 @@ The adaptive monitoring loop addresses the "agent SOFAR" problem—where systems
 ### Key Implementation Files
 
 **Core Services** (Already Exist):
-- `omoi_os/services/monitoring_loop.py` - Orchestrates monitoring cycles, coordinates Guardian and Conductor
-- `omoi_os/services/intelligent_guardian.py` - LLM-powered trajectory analysis with alignment scoring
+- `omoi_os/services/monitoring_loop.py` - Orchestrates monitoring cycles every 60 seconds, coordinates Guardian and Conductor
+- `omoi_os/services/intelligent_guardian.py` - LLM-powered trajectory analysis with alignment scoring (0.0-1.0), accumulated context building from entire conversation history, past summaries timeline, phase context integration, and steering intervention decisions
+- `omoi_os/services/trajectory_context.py` - Builds accumulated understanding from conversation history, extracts persistent constraints, standing instructions, and journey tracking
 - `omoi_os/services/conductor.py` - System-wide coherence analysis and duplicate detection
 - `omoi_os/services/discovery.py` - Task discovery and workflow branching
 - `omoi_os/services/memory.py` - Semantic memory for pattern storage and retrieval
 - `omoi_os/services/agent_output_collector.py` - Collects agent outputs for trajectory analysis
+- `omoi_os/services/conversation_intervention.py` - Sends steering interventions to OpenHands conversations
 
 ### Next Steps for Implementation
 
