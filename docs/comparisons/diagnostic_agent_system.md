@@ -1,22 +1,22 @@
 # Diagnostic Agent System Comparison: Hephaestus vs OmoiOS
 
 **Created**: 2025-01-30  
-**Status**: Analysis Document  
-**Purpose**: Compare Hephaestus Diagnostic Agent System with OmoiOS's existing implementation
+**Status**: Verified Analysis  
+**Purpose**: Compare Hephaestus Diagnostic Agent System with OmoiOS's existing implementation (verified against actual codebase)
 
 ---
 
 ## Executive Summary
 
-OmoiOS has **~85% feature parity** with Hephaestus's Diagnostic Agent System. The core functionality (stuck detection, diagnostic spawning, context gathering) is implemented, but there are **key differences in agent execution model, configuration, and integration patterns**.
+After **verifying against the actual codebase**, OmoiOS has **~75% feature parity** with Hephaestus. The core detection logic exists, but several **integration points are missing** and the **task spawning mechanism is incomplete**.
 
-**Key Finding**: OmoiOS's diagnostic system is **more integrated** with the Discovery Service and uses a **different agent execution model** (DiscoveryService spawns recovery tasks directly vs Hephaestus creating diagnostic agents that create tasks).
+**Key Finding**: OmoiOS's `spawn_diagnostic_agent()` **only creates a DiagnosticRun record** but **doesn't actually spawn recovery tasks**. The DiscoveryService has `spawn_diagnostic_recovery()` but it's **not called** in the diagnostic flow.
 
 ---
 
-## Feature-by-Feature Comparison
+## Feature-by-Feature Comparison (Verified)
 
-### 1. Stuck Workflow Detection ✅ **SIMILAR**
+### 1. Stuck Workflow Detection ✅ **IMPLEMENTED**
 
 | Feature | Hephaestus | OmoiOS | Status |
 |---------|-----------|--------|--------|
@@ -28,151 +28,134 @@ OmoiOS has **~85% feature parity** with Hephaestus's Diagnostic Agent System. Th
 | Stuck time check | ✅ | ✅ | ✅ Same |
 
 **OmoiOS Implementation** (`omoi_os/services/diagnostic.py:57-169`):
-```python
-def find_stuck_workflows(
-    self,
-    cooldown_seconds: int = 60,
-    stuck_threshold_seconds: int = 60,
-) -> List[dict]:
-    # Checks ALL 6 conditions:
-    # 1. Active workflow exists
-    # 2. Tasks exist
-    # 3. All tasks finished (no pending/assigned/running/under_review/validation_in_progress)
-    # 4. No validated WorkflowResult
-    # 5. Cooldown passed
-    # 6. Stuck time met
-```
+- ✅ All 6 conditions checked correctly
+- ✅ Cooldown tracking via `_last_diagnostic` dict
+- ✅ Stuck time calculated from last task completion
 
-**Difference**: OmoiOS checks more task statuses (`under_review`, `validation_in_progress`) than Hephaestus's simpler list (`pending`, `assigned`, `in_progress`).
+**Status**: ✅ **FULLY IMPLEMENTED**
 
 ---
 
-### 2. Context Gathering ⚠️ **PARTIALLY DIFFERENT**
+### 2. Context Gathering ⚠️ **PARTIALLY IMPLEMENTED**
 
-| Context Type | Hephaestus | OmoiOS | Status |
-|--------------|-----------|--------|--------|
-| Workflow goal | ✅ From `result_criteria` | ✅ From config or ticket | ✅ Same |
-| Phase definitions | ✅ All phases | ✅ Current phase only | ⚠️ Partial |
-| Recent agents (15) | ✅ Last 15 agents | ✅ Last 15 tasks | ⚠️ Different model |
-| Conductor analyses | ✅ Last 5 analyses | ❌ Not included | ❌ Missing |
-| Submitted results | ✅ All submissions | ❌ Not included | ❌ Missing |
-| Validation feedback | ✅ Rejection reasons | ❌ Not included | ❌ Missing |
+| Context Type | Hephaestus | OmoiOS | Status | Notes |
+|--------------|-----------|--------|--------|-------|
+| Workflow goal | ✅ From `result_criteria` | ✅ From config or ticket | ✅ Same | |
+| Phase definitions | ✅ All phases | ⚠️ Current phase only | ⚠️ Partial | Only includes `current_phase` |
+| Recent agents (15) | ✅ Last 15 agents | ✅ Last 15 tasks | ✅ Same | Different model but equivalent |
+| Conductor analyses | ✅ Last 5 analyses | ❌ Not included | ❌ Missing | ConductorService exists but not queried |
+| Submitted results | ✅ All submissions | ❌ Not included | ❌ Missing | WorkflowResult model exists but not queried |
+| Validation feedback | ✅ Rejection reasons | ❌ Not included | ❌ Missing | WorkflowResult has `validation_feedback` but not queried |
 
 **OmoiOS Implementation** (`omoi_os/services/diagnostic.py:263-347`):
 ```python
-def build_diagnostic_context(
-    self,
-    workflow_id: str,
-    max_agents: int = 15,
-    max_analyses: int = 5,  # Parameter exists but not used
-) -> dict:
-    # Gathers:
-    # - Workflow goal (from config or ticket)
-    # - Recent tasks (last 15)
-    # - Task distribution by phase
-    # - Task counts (total, done, failed)
-    # ❌ Missing: Conductor analyses, submitted results, validation feedback
+def build_diagnostic_context(...) -> dict:
+    # ✅ Includes: workflow_goal, recent_tasks, task_distribution
+    # ❌ Missing: Conductor analyses (ConductorService exists!)
+    # ❌ Missing: WorkflowResult submissions (WorkflowResult model exists!)
+    # ❌ Missing: Validation feedback (WorkflowResult.validation_feedback exists!)
 ```
 
-**Gap**: OmoiOS doesn't include:
-- Conductor system analyses (system coherence scores, duplicate work detections)
-- Submitted WorkflowResult records (even rejected ones)
-- Validation feedback explaining rejections
+**Gap**: Infrastructure exists but **not integrated**:
+- ✅ `ConductorService` exists (`omoi_os/services/conductor.py`)
+- ✅ `conductor_analyses` table exists (migration `003_intelligent_monitoring_enhancements.py`)
+- ✅ `WorkflowResult` model exists (`omoi_os/models/workflow_result.py`)
+- ✅ `ResultSubmissionService.list_workflow_results()` exists
+- ❌ **Not queried** in `build_diagnostic_context()`
+
+**Status**: ⚠️ **INFRASTRUCTURE EXISTS BUT NOT INTEGRATED**
 
 ---
 
-### 3. Diagnostic Agent Creation ⚠️ **DIFFERENT MODEL**
+### 3. Diagnostic Agent Creation ❌ **INCOMPLETE**
 
-| Aspect | Hephaestus | OmoiOS | Status |
-|--------|-----------|--------|--------|
-| Creates diagnostic task | ✅ Yes | ✅ Yes | ✅ Same |
-| Creates diagnostic agent | ✅ Yes | ❌ No | ⚠️ Different |
-| Agent type | ✅ `'diagnostic'` | ❌ N/A | ⚠️ Different |
-| Phase assignment | ✅ `phase_id=None` | ❌ Uses DiscoveryService | ⚠️ Different |
-| Agent execution | ✅ Agent runs diagnostic | ❌ DiscoveryService spawns tasks | ⚠️ Different |
+| Aspect | Hephaestus | OmoiOS | Status | Notes |
+|--------|-----------|--------|--------|-------|
+| Creates diagnostic task | ✅ Yes | ❌ No | ❌ Missing | Only creates DiagnosticRun record |
+| Creates diagnostic agent | ✅ Yes | ❌ No | ❌ Missing | No agent execution |
+| Agent type | ✅ `'diagnostic'` | ❌ N/A | ❌ Missing | No diagnostic agent type |
+| Phase assignment | ✅ `phase_id=None` | ❌ N/A | ❌ Missing | No task created |
+| Agent execution | ✅ Agent runs diagnostic | ❌ No execution | ❌ Missing | No agent spawned |
+| Recovery task spawning | ✅ Agent creates tasks | ⚠️ DiscoveryService exists | ⚠️ Partial | `spawn_diagnostic_recovery()` exists but **not called** |
 
 **Hephaestus Model**:
 ```
 1. Create DiagnosticRun record
 2. Create diagnostic task
 3. Create diagnostic agent (agent_type='diagnostic')
-4. Agent executes diagnostic process:
-   - Step 1: Understand goal
-   - Step 2: Analyze state
-   - Step 3: Identify gap
-   - Step 4: Create tasks via create_task MCP tool
-5. Agent marks diagnostic task as done
+4. Agent executes diagnostic process (4 steps)
+5. Agent creates 1-5 recovery tasks via create_task MCP tool
+6. Agent marks diagnostic task as done
 ```
 
 **OmoiOS Model** (`omoi_os/services/diagnostic.py:171-223`):
-```
-1. Create DiagnosticRun record
-2. Call DiscoveryService.spawn_diagnostic_recovery()
-3. DiscoveryService creates recovery task directly
-4. No diagnostic agent execution
-5. Recovery task picked up by regular agent
+```python
+def spawn_diagnostic_agent(...) -> DiagnosticRun:
+    # 1. Create DiagnosticRun record ✅
+    # 2. Update cooldown tracking ✅
+    # 3. Publish event ✅
+    # ❌ DOES NOT CREATE TASK
+    # ❌ DOES NOT SPAWN AGENT
+    # ❌ DOES NOT CALL spawn_diagnostic_recovery()
+    return diagnostic_run  # Just returns record, no actual spawning!
 ```
 
-**Key Difference**: 
-- **Hephaestus**: Diagnostic agent is a **specialized agent** that analyzes and creates tasks
-- **OmoiOS**: Diagnostic system **spawns recovery tasks** via DiscoveryService, no specialized agent
+**Critical Gap**: `spawn_diagnostic_agent()` **only creates a record** but doesn't spawn anything!
+
+**DiscoveryService has the method** (`omoi_os/services/discovery.py:320-363`):
+```python
+def spawn_diagnostic_recovery(...) -> Task:
+    # ✅ This method exists and spawns recovery tasks!
+    # ❌ But it's NEVER CALLED in diagnostic flow
+```
+
+**Status**: ❌ **INCOMPLETE - Task spawning not implemented**
 
 ---
 
-### 4. Diagnostic Process ⚠️ **DIFFERENT**
+### 4. Diagnostic Process ❌ **NOT EXECUTED**
 
-| Step | Hephaestus | OmoiOS | Status |
-|------|-----------|--------|--------|
-| Step 1: Understand Goal | ✅ Agent reads `result_criteria` | ✅ Context includes goal | ✅ Same |
-| Step 2: Analyze State | ✅ Agent reviews accomplishments | ✅ Context includes tasks | ✅ Same |
-| Step 3: Identify Gap | ✅ Agent diagnoses gap | ⚠️ LLM generates hypotheses | ⚠️ Different |
-| Step 4: Create Tasks | ✅ Agent uses `create_task` MCP | ✅ DiscoveryService spawns | ⚠️ Different |
-
-**Hephaestus**: Diagnostic agent follows **4-step structured process** with explicit instructions.
-
-**OmoiOS**: Uses **LLM structured output** (`generate_hypotheses()`) to generate hypotheses and recommendations, but **doesn't execute the diagnostic agent** - instead spawns recovery tasks directly.
+| Step | Hephaestus | OmoiOS | Status | Notes |
+|------|-----------|--------|--------|-------|
+| Step 1: Understand Goal | ✅ Agent reads `result_criteria` | ✅ Context includes goal | ✅ Same | |
+| Step 2: Analyze State | ✅ Agent reviews accomplishments | ✅ Context includes tasks | ✅ Same | |
+| Step 3: Identify Gap | ✅ Agent diagnoses gap | ⚠️ `generate_hypotheses()` exists | ⚠️ Not used | Method exists but **not called** |
+| Step 4: Create Tasks | ✅ Agent uses `create_task` MCP | ⚠️ DiscoveryService exists | ⚠️ Not called | `spawn_diagnostic_recovery()` exists but **not called** |
 
 **OmoiOS Implementation** (`omoi_os/services/diagnostic.py:225-261`):
 ```python
-async def generate_hypotheses(
-    self,
-    context: dict,
-) -> DiagnosticAnalysis:
-    # Uses LLM to generate structured hypotheses
-    # Returns DiagnosticAnalysis with:
-    # - root_cause
-    # - hypotheses (ranked by likelihood)
-    # - recommendations (with priority)
-    # - confidence score
-    # ❌ But this is not used in the actual diagnostic flow!
+async def generate_hypotheses(...) -> DiagnosticAnalysis:
+    # ✅ This method exists!
+    # ✅ Uses LLM to generate structured hypotheses
+    # ✅ Returns DiagnosticAnalysis with hypotheses and recommendations
+    # ❌ BUT IT'S NEVER CALLED in diagnostic flow!
 ```
 
-**Gap**: OmoiOS has hypothesis generation but **doesn't use it** in the diagnostic spawning flow.
+**Status**: ❌ **METHODS EXIST BUT NOT USED**
 
 ---
 
-### 5. Configuration ⚠️ **DIFFERENT**
+### 5. Configuration ⚠️ **INFRASTRUCTURE EXISTS BUT NOT USED**
 
-| Config | Hephaestus | OmoiOS | Status |
-|--------|-----------|--------|--------|
-| YAML config | ✅ `hephaestus_config.yaml` | ❌ Hardcoded in code | ❌ Missing |
-| Environment vars | ✅ `DIAGNOSTIC_AGENT_ENABLED` | ❌ Not configurable | ❌ Missing |
-| SDK config | ✅ `HephaestusConfig` | ❌ N/A | ❌ Missing |
-| Cooldown | ✅ Configurable | ✅ Hardcoded (60s) | ⚠️ Partial |
-| Stuck time | ✅ Configurable | ✅ Hardcoded (60s) | ⚠️ Partial |
-| Max agents | ✅ Configurable (15) | ✅ Configurable (15) | ✅ Same |
-| Max analyses | ✅ Configurable (5) | ✅ Parameter exists but unused | ⚠️ Partial |
-| Max tasks | ✅ Configurable (5) | ❌ No limit | ⚠️ Different |
+| Config | Hephaestus | OmoiOS | Status | Notes |
+|--------|-----------|--------|--------|-------|
+| YAML config | ✅ `hephaestus_config.yaml` | ✅ `config/base.yaml` exists | ⚠️ Not used | Config system exists but diagnostic settings not added |
+| Environment vars | ✅ `DIAGNOSTIC_AGENT_ENABLED` | ✅ Env var system exists | ⚠️ Not used | `OmoiBaseSettings` pattern exists |
+| SDK config | ✅ `HephaestusConfig` | ❌ N/A | ❌ Missing | |
+| Cooldown | ✅ Configurable | ⚠️ Hardcoded (60s) | ⚠️ Partial | Passed as parameter but not from config |
+| Stuck time | ✅ Configurable | ⚠️ Hardcoded (60s) | ⚠️ Partial | Passed as parameter but not from config |
+| Max agents | ✅ Configurable (15) | ✅ Configurable (15) | ✅ Same | |
+| Max analyses | ✅ Configurable (5) | ⚠️ Parameter exists but unused | ⚠️ Partial | `max_analyses` parameter exists but not used |
+| Max tasks | ✅ Configurable (5) | ❌ No limit | ❌ Missing | No limit in DiscoveryService |
 
-**OmoiOS Implementation** (`omoi_os/api/main.py:219-222`):
-```python
-stuck_workflows = diagnostic_service.find_stuck_workflows(
-    cooldown_seconds=60,  # Hardcoded
-    stuck_threshold_seconds=60,  # Hardcoded
-)
-```
+**OmoiOS Configuration System** (`omoi_os/config.py`):
+- ✅ Comprehensive YAML + env var system exists
+- ✅ `OmoiBaseSettings` pattern for all settings
+- ✅ `MonitoringSettings` class exists (lines 334-350)
+- ❌ **No `DiagnosticSettings` class**
+- ❌ Diagnostic values hardcoded in `omoi_os/api/main.py:219-222`
 
-**Gap**: OmoiOS has **no configuration system** - all values are hardcoded or passed as parameters.
+**Status**: ⚠️ **CONFIG SYSTEM EXISTS BUT DIAGNOSTIC SETTINGS NOT ADDED**
 
 ---
 
@@ -180,43 +163,13 @@ stuck_workflows = diagnostic_service.find_stuck_workflows(
 
 | Field | Hephaestus | OmoiOS | Status |
 |-------|-----------|--------|--------|
-| `id` | ✅ TEXT PRIMARY KEY | ✅ String UUID | ✅ Same |
-| `workflow_id` | ✅ TEXT FK | ✅ String FK | ✅ Same |
-| `diagnostic_agent_id` | ✅ TEXT FK | ✅ Optional String FK | ✅ Same |
-| `diagnostic_task_id` | ✅ TEXT FK | ✅ Optional String FK | ✅ Same |
-| `triggered_at` | ✅ DATETIME | ✅ DateTime(timezone=True) | ✅ Same |
-| `total_tasks_at_trigger` | ✅ INTEGER | ✅ Integer | ✅ Same |
-| `done_tasks_at_trigger` | ✅ INTEGER | ✅ Integer | ✅ Same |
-| `failed_tasks_at_trigger` | ✅ INTEGER | ✅ Integer | ✅ Same |
-| `time_since_last_task_seconds` | ✅ INTEGER | ✅ Integer | ✅ Same |
-| `tasks_created_count` | ✅ INTEGER | ✅ Integer | ✅ Same |
-| `tasks_created_ids` | ✅ JSON | ✅ JSONB | ✅ Same |
-| `workflow_goal` | ✅ TEXT | ✅ Optional Text | ✅ Same |
-| `phases_analyzed` | ✅ JSON | ✅ Optional JSONB | ✅ Same |
-| `agents_reviewed` | ✅ JSON | ✅ Optional JSONB | ✅ Same |
-| `diagnosis` | ✅ TEXT | ✅ Optional Text | ✅ Same |
-| `completed_at` | ✅ DATETIME | ✅ Optional DateTime | ✅ Same |
-| `status` | ✅ TEXT CHECK | ✅ String(32) | ✅ Same |
+| All fields | ✅ | ✅ | ✅ Nearly identical |
 
-**Status**: ✅ **Nearly identical** - OmoiOS uses JSONB instead of JSON (PostgreSQL-specific enhancement).
+**Status**: ✅ **FULLY IMPLEMENTED** (OmoiOS uses JSONB instead of JSON - PostgreSQL enhancement)
 
 ---
 
-### 7. Agent Type Support ⚠️ **DIFFERENT**
-
-| Aspect | Hephaestus | OmoiOS | Status |
-|--------|-----------|--------|--------|
-| Agent type enum | ✅ Includes `'diagnostic'` | ❌ No diagnostic type | ❌ Missing |
-| Specialized agent | ✅ Yes | ❌ No | ❌ Missing |
-| Agent execution | ✅ Diagnostic agent runs | ❌ DiscoveryService spawns | ⚠️ Different |
-
-**Hephaestus**: Diagnostic agents are **first-class agent types** with specialized execution.
-
-**OmoiOS**: No diagnostic agent type - uses **DiscoveryService** to spawn recovery tasks directly.
-
----
-
-### 8. Monitoring Integration ✅ **SIMILAR**
+### 7. Monitoring Integration ✅ **IMPLEMENTED**
 
 | Aspect | Hephaestus | OmoiOS | Status |
 |--------|-----------|--------|--------|
@@ -225,199 +178,123 @@ stuck_workflows = diagnostic_service.find_stuck_workflows(
 | Background task | ✅ Yes | ✅ Yes | ✅ Same |
 
 **OmoiOS Implementation** (`omoi_os/api/main.py:207-256`):
-```python
-async def diagnostic_monitoring_loop():
-    """Check for stuck workflows every 60 seconds and spawn diagnostic agents."""
-    while True:
-        stuck_workflows = diagnostic_service.find_stuck_workflows(...)
-        for workflow_info in stuck_workflows:
-            diagnostic_run = diagnostic_service.spawn_diagnostic_agent(...)
-        await asyncio.sleep(60)
-```
+- ✅ Background loop runs every 60 seconds
+- ✅ Calls `find_stuck_workflows()`
+- ✅ Calls `spawn_diagnostic_agent()` (but doesn't actually spawn)
 
-**Status**: ✅ **Same pattern** - background monitoring loop checks every 60 seconds.
+**Status**: ✅ **IMPLEMENTED** (but spawning incomplete)
 
 ---
 
-### 9. Integration with Other Systems ⚠️ **DIFFERENT**
+## Critical Gaps (Verified)
 
-| System | Hephaestus | OmoiOS | Status |
-|--------|-----------|--------|--------|
-| Guardian | ✅ Complementary | ✅ Complementary | ✅ Same |
-| Conductor | ✅ Shares analyses | ❌ Not integrated | ❌ Missing |
-| Validation | ✅ Considers feedback | ⚠️ Partial integration | ⚠️ Partial |
-| Phase System | ✅ Phase-aware | ✅ Phase-aware | ✅ Same |
-| Discovery Service | ❌ N/A | ✅ Uses DiscoveryService | ⚠️ Different |
+### 🔴 **Critical Missing**
 
-**OmoiOS**: Uses **DiscoveryService** to spawn recovery tasks, which is more integrated with the discovery/branching system.
+1. **Task Spawning Not Implemented**
+   - ❌ `spawn_diagnostic_agent()` only creates DiagnosticRun record
+   - ❌ Doesn't call `DiscoveryService.spawn_diagnostic_recovery()`
+   - ❌ No recovery tasks actually created
+   - **Impact**: Diagnostics detect stuck workflows but don't fix them
 
-**Hephaestus**: Diagnostic agents are **independent** and use MCP tools directly.
+2. **Hypothesis Generation Not Used**
+   - ❌ `generate_hypotheses()` exists but never called
+   - ❌ No LLM analysis performed
+   - **Impact**: No intelligent diagnosis, just detection
 
----
+### 🟡 **High Priority Missing**
 
-## Key Architectural Differences
+3. **Conductor Integration Missing**
+   - ✅ ConductorService exists
+   - ✅ `conductor_analyses` table exists
+   - ❌ Not queried in `build_diagnostic_context()`
+   - **Impact**: Missing system coherence context
 
-### 1. **Agent Execution Model**
+4. **Result Submission Tracking Missing**
+   - ✅ WorkflowResult model exists
+   - ✅ `ResultSubmissionService.list_workflow_results()` exists
+   - ❌ Not queried in `build_diagnostic_context()`
+   - **Impact**: Can't analyze why results were rejected
 
-**Hephaestus**:
-- Creates **specialized diagnostic agent** (`agent_type='diagnostic'`)
-- Agent executes **4-step diagnostic process**
-- Agent uses **MCP tools** (`create_task`) to create recovery tasks
-- Agent marks diagnostic task as done
+5. **Configuration Not Added**
+   - ✅ Configuration system exists (`omoi_os/config.py`)
+   - ✅ `MonitoringSettings` pattern exists
+   - ❌ No `DiagnosticSettings` class
+   - ❌ Values hardcoded
+   - **Impact**: Not configurable
 
-**OmoiOS**:
-- **No specialized agent** - uses DiscoveryService
-- DiscoveryService **spawns recovery task directly**
-- Recovery task picked up by **regular agent**
-- More integrated with discovery/branching system
+### 🟢 **Medium Priority Missing**
 
-### 2. **Diagnostic Process**
+6. **Max Tasks Limit**
+   - ❌ No limit on recovery tasks
+   - **Impact**: Could create too many tasks
 
-**Hephaestus**:
-- **Structured 4-step process**:
-  1. Understand goal
-  2. Analyze state
-  3. Identify gap
-  4. Create tasks
-- Agent follows explicit instructions
-- Agent creates 1-5 tasks via MCP
-
-**OmoiOS**:
-- **LLM hypothesis generation** (`generate_hypotheses()`)
-- But **not used** in actual flow
-- DiscoveryService spawns recovery task directly
-- No structured diagnostic process execution
-
-### 3. **Context Gathering**
-
-**Hephaestus**:
-- Includes **Conductor analyses** (system coherence, duplicates)
-- Includes **submitted results** (even rejected)
-- Includes **validation feedback**
-
-**OmoiOS**:
-- **Missing** Conductor analyses
-- **Missing** submitted results
-- **Missing** validation feedback
-- Focuses on **task history** only
+7. **All Phase Definitions**
+   - ⚠️ Only includes current phase
+   - **Impact**: Limited phase context
 
 ---
 
-## Missing Features in OmoiOS
+## What Actually Exists (Verified)
 
-### 🔴 Critical Missing
+### ✅ **Fully Implemented**
 
-1. **Conductor Integration**
-   - ❌ No Conductor analyses in context
-   - ❌ No system coherence scores
-   - ❌ No duplicate work detection
+1. **Stuck Detection Logic** - All 6 conditions checked correctly
+2. **Database Schema** - DiagnosticRun model matches Hephaestus
+3. **Monitoring Loop** - Background task runs every 60s
+4. **Cooldown Tracking** - Prevents duplicate diagnostics
+5. **Context Building** - Basic context (tasks, goal, distribution)
 
-2. **Result Submission Tracking**
-   - ❌ No submitted WorkflowResult records in context
-   - ❌ No validation feedback in context
-   - ❌ Can't analyze why results were rejected
+### ✅ **Infrastructure Exists (Not Integrated)**
 
-3. **Configuration System**
-   - ❌ No YAML configuration
-   - ❌ No environment variables
-   - ❌ Hardcoded values
-
-### 🟡 High Priority Missing
-
-4. **Diagnostic Agent Execution**
-   - ❌ No specialized diagnostic agent type
-   - ❌ No 4-step diagnostic process execution
-   - ❌ Hypothesis generation not used
-
-5. **Max Tasks Limit**
-   - ❌ No limit on tasks diagnostic can create
-   - ⚠️ Could create too many tasks
-
-### 🟢 Medium Priority Missing
-
-6. **All Phase Definitions**
-   - ⚠️ Only includes current phase, not all phases
-   - ⚠️ Can't see full workflow structure
-
----
-
-## OmoiOS Advantages
-
-### ✅ **Better Integration**
-
-1. **DiscoveryService Integration**
-   - Uses existing discovery/branching system
-   - Recovery tasks tracked as discoveries
-   - More consistent with workflow branching patterns
-
-2. **Unified Task Model**
-   - Recovery tasks are regular tasks
-   - No special handling needed
-   - Simpler architecture
-
-### ✅ **More Flexible**
-
-1. **No Agent Type Constraint**
-   - Doesn't require new agent type
-   - Uses existing agent infrastructure
-   - Easier to maintain
+1. **ConductorService** - System coherence analysis exists
+2. **WorkflowResult Model** - Result tracking exists
+3. **ResultSubmissionService** - Result querying exists
+4. **Hypothesis Generation** - `generate_hypotheses()` method exists
+5. **Recovery Task Spawning** - `spawn_diagnostic_recovery()` method exists
+6. **Configuration System** - YAML + env var system exists
 
 ---
 
 ## Recommendations
 
-### Option A: Adopt Hephaestus Model (More Complete)
+### Option A: Complete Current Implementation ⭐ **RECOMMENDED**
 
 **Changes Required**:
-1. Add `'diagnostic'` to agent type enum
+1. ✅ **Fix task spawning**: Call `DiscoveryService.spawn_diagnostic_recovery()` in `spawn_diagnostic_agent()`
+2. ✅ **Use hypothesis generation**: Call `generate_hypotheses()` and use results
+3. ✅ **Add Conductor integration**: Query `conductor_analyses` table in `build_diagnostic_context()`
+4. ✅ **Add result tracking**: Query `WorkflowResult` in `build_diagnostic_context()`
+5. ✅ **Add configuration**: Create `DiagnosticSettings` class
+6. ✅ **Add max tasks limit**: Add limit parameter to `spawn_diagnostic_recovery()`
+
+**Pros**: Uses existing infrastructure, minimal changes  
+**Cons**: Still different from Hephaestus agent execution model
+
+### Option B: Adopt Hephaestus Model (More Complete)
+
+**Changes Required**:
+1. Add `'diagnostic'` agent type
 2. Create diagnostic agent execution logic
 3. Implement 4-step diagnostic process
-4. Add Conductor integration to context
-5. Add result submission tracking
-6. Add configuration system
+4. Add all integrations (Conductor, results, config)
+5. Agent uses MCP tools to create tasks
 
-**Pros**: More complete, follows Hephaestus pattern exactly  
+**Pros**: Matches Hephaestus exactly  
 **Cons**: More complex, requires new agent type
-
-### Option B: Enhance Current Model (Hybrid Approach) ⭐ **RECOMMENDED**
-
-**Changes Required**:
-1. ✅ **Add Conductor integration** to `build_diagnostic_context()`
-2. ✅ **Add result submission tracking** to context
-3. ✅ **Use `generate_hypotheses()`** in diagnostic flow
-4. ✅ **Add configuration system** (YAML + env vars)
-5. ✅ **Add max tasks limit** to DiscoveryService spawn
-6. ⚠️ **Keep DiscoveryService model** (simpler, more integrated)
-
-**Pros**: Enhances existing system, maintains integration benefits  
-**Cons**: Still different from Hephaestus model
-
-### Option C: Keep Current Model (Minimal Changes)
-
-**Changes Required**:
-1. Add configuration system only
-2. Document differences
-
-**Pros**: Minimal changes  
-**Cons**: Missing important context (Conductor, results)
 
 ---
 
 ## Conclusion
 
-OmoiOS's diagnostic system is **functionally similar** to Hephaestus but uses a **different architectural model**:
+OmoiOS has **~75% feature parity** with Hephaestus, but the **critical task spawning mechanism is incomplete**. The infrastructure exists (ConductorService, WorkflowResult, hypothesis generation, recovery spawning) but **isn't integrated**.
 
-- **Hephaestus**: Specialized diagnostic agent executes 4-step process
-- **OmoiOS**: DiscoveryService spawns recovery tasks directly
+**Recommendation**: **Option A** - Complete the current implementation by:
+1. Actually calling `spawn_diagnostic_recovery()` 
+2. Using `generate_hypotheses()` for analysis
+3. Integrating Conductor and WorkflowResult queries
+4. Adding configuration
 
-**Recommendation**: **Option B (Hybrid Approach)** - Enhance current model with:
-1. Conductor integration
-2. Result submission tracking
-3. Use hypothesis generation
-4. Add configuration system
-5. Keep DiscoveryService integration (it's better integrated)
-
-This maintains OmoiOS's architectural advantages while adding missing context and configurability.
+This will bring OmoiOS to **~95% feature parity** while maintaining its architectural advantages (DiscoveryService integration).
 
 ---
 
