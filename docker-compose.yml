@@ -1,117 +1,92 @@
+version: '3.8'
+
 services:
   postgres:
-    image: tensorchord/vchord-suite:pg18-latest
-    container_name: omoi_os_postgres
+    image: postgres:16
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: app_db
+      POSTGRES_USER: omoios
+      POSTGRES_PASSWORD: omoios
+      POSTGRES_DB: omoios
     ports:
-      - "15432:5432"  # Non-standard port to avoid conflicts (PostgreSQL default is 5432)
+      - "15432:5432"
     volumes:
-      - pg_data:/var/lib/postgresql  # PostgreSQL 18+ requires mount at /var/lib/postgresql (not /data)
-      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/docker/initdb:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U omoios"]
       interval: 5s
       timeout: 5s
-      retries: 10
-    restart: unless-stopped
+      retries: 5
 
   redis:
     image: redis:7-alpine
-    container_name: omoi_os_redis
     ports:
-      - "16379:6379"  # Non-standard port to avoid conflicts (Redis default is 6379)
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
+      - "16379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 10
-    restart: unless-stopped
+      retries: 5
 
-  api:
+  backend:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.api
-    container_name: omoi_os_api
     ports:
-      - "18000:8000"  # Non-standard port to avoid conflicts
+      - "18000:8000"
     environment:
-      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
+      - DATABASE_URL=postgresql://omoios:omoios@postgres:5432/omoios
       - REDIS_URL=redis://redis:6379
-      - PYTHONUNBUFFERED=1
+      - OMOIOS_ENV=development
+      - LLM_API_KEY=${LLM_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    develop:
-      watch:
-        # Restart on Python source code changes
-        - action: restart
-          path: ./omoi_os/api
-          target: /app/omoi_os/api
-        - action: restart
-          path: ./omoi_os/services
-          target: /app/omoi_os/services
-        - action: restart
-          path: ./omoi_os/models
-          target: /app/omoi_os/models
-        - action: restart
-          path: ./config.py
-          target: /app/config.py
-        # Rebuild on dependency changes
-        - action: rebuild
-          path: ./pyproject.toml
-        - action: rebuild
-          path: ./uv.lock
-    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - /app/.venv  # Prevent overwriting container venv
+    command: uvicorn omoi_os.api.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile.worker
-    container_name: omoi_os_worker
     environment:
-      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
+      - DATABASE_URL=postgresql://omoios:omoios@postgres:5432/omoios
       - REDIS_URL=redis://redis:6379
-      - PYTHONUNBUFFERED=1
-      - WORKSPACE_DIR=/tmp/omoi_workspace
-      - PHASE_ID=PHASE_IMPLEMENTATION
-      - AGENT_ID=${AGENT_ID:-00000000-0000-0000-0000-000000000001}
+      - OMOIOS_ENV=development
+      - LLM_API_KEY=${LLM_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    develop:
-      watch:
-        # Restart on Python source code changes
-        - action: restart
-          path: ./omoi_os/worker.py
-          target: /app/omoi_os/worker.py
-        - action: restart
-          path: ./omoi_os/services
-          target: /app/omoi_os/services
-        - action: restart
-          path: ./omoi_os/models
-          target: /app/omoi_os/models
-        - action: restart
-          path: ./config.py
-          target: /app/config.py
-        # Rebuild on dependency changes
-        - action: rebuild
-          path: ./pyproject.toml
-        - action: rebuild
-          path: ./uv.lock
-    restart: unless-stopped
+      backend:
+        condition: service_started
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+    command: python -m omoi_os.worker
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:18000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:18000/ws
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
 
 volumes:
-  pg_data:
-  redis_data:
-
+  postgres_data:
 
