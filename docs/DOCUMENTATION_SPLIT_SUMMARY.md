@@ -96,3 +96,4 @@ When updating documentation:
 3. Keep files focused on single topics
 4. If a file grows beyond ~600 lines, consider splitting further
 
+
