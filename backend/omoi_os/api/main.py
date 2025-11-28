@@ -213,6 +213,7 @@ async def diagnostic_monitoring_loop():
 
     # Load diagnostic settings
     from omoi_os.config import get_app_settings
+
     app_settings = get_app_settings()
     diagnostic_settings = app_settings.diagnostic
 
@@ -427,10 +428,12 @@ async def anomaly_monitoring_loop():
                             )
 
                             # Spawn diagnostic agent focusing on this agent
-                            diagnostic_run = await diagnostic_service.spawn_diagnostic_agent(
-                                workflow_id=workflow_id,
-                                context=context,
-                                max_tasks=5,  # Use default max tasks
+                            diagnostic_run = (
+                                await diagnostic_service.spawn_diagnostic_agent(
+                                    workflow_id=workflow_id,
+                                    context=context,
+                                    max_tasks=5,  # Use default max tasks
+                                )
                             )
 
                             print(
@@ -488,8 +491,10 @@ async def lifespan(app: FastAPI):
 
     # Initialize services
     db = DatabaseService(connection_string=app_settings.database.url)
-    queue = TaskQueueService(db)
     event_bus = EventBusService(redis_url=app_settings.redis.url)
+    queue = TaskQueueService(
+        db, event_bus=event_bus
+    )  # Pass event_bus for real-time updates
     agent_status_manager = AgentStatusManager(db, event_bus)
     approval_service = ApprovalService(db, event_bus)
     health_service = AgentHealthService(db, agent_status_manager)
@@ -535,9 +540,10 @@ async def lifespan(app: FastAPI):
         monitor=monitor_service,
         event_bus=event_bus,
     )
-    
+
     # Initialize FastMCP server with services
     from omoi_os.mcp.fastmcp_server import initialize_mcp_services, mcp_app
+
     initialize_mcp_services(
         db=db,
         event_bus=event_bus,
@@ -657,15 +663,15 @@ async def lifespan(app: FastAPI):
         await approval_timeout_task
     except asyncio.CancelledError:
         pass
-    
+
     # Shutdown MCP server if it has a lifespan
-    if 'mcp_app' in globals() and mcp_app:
+    if "mcp_app" in globals() and mcp_app:
         try:
             async with mcp_app.lifespan(app):
                 pass
         except Exception:
             pass
-    
+
     event_bus.close()
 
 
@@ -675,9 +681,11 @@ async def combined_lifespan(app: FastAPI):
     """Combined lifespan for FastAPI and FastMCP."""
     # Import here to avoid circular dependencies
     from omoi_os.mcp.fastmcp_server import mcp_app
+
     async with lifespan(app):
         async with mcp_app.lifespan(app):
             yield
+
 
 # Create FastAPI app
 app = FastAPI(
@@ -725,10 +733,13 @@ app.include_router(github.router, prefix="/api/v1/github", tags=["github"])
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
-app.include_router(organizations.router, prefix="/api/v1/organizations", tags=["organizations"])
+app.include_router(
+    organizations.router, prefix="/api/v1/organizations", tags=["organizations"]
+)
 
 # Mount FastMCP server at /mcp
 from omoi_os.mcp.fastmcp_server import mcp_app
+
 app.mount("/mcp", mcp_app)
 
 # Conditionally include monitor router if Phase 4 is available

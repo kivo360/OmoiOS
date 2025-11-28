@@ -399,14 +399,18 @@ class RejectTicketResponse(BaseModel):
 async def approve_ticket(
     request: ApproveTicketRequest,
     approver_id: str = "api_user",  # TODO: Get from auth context
+    db: DatabaseService = Depends(get_db_service),
+    queue: TaskQueueService = Depends(get_task_queue),
     approval_service: ApprovalService = Depends(get_approval_service),
 ):
     """
-    Approve a pending ticket (REQ-THA-*).
+    Approve a pending ticket and create initial task (REQ-THA-*).
 
     Args:
         request: Approve ticket request
         approver_id: ID of the approver (human user)
+        db: Database service
+        queue: Task queue service
         approval_service: Approval service
 
     Returns:
@@ -417,6 +421,22 @@ async def approve_ticket(
     """
     try:
         ticket = approval_service.approve_ticket(request.ticket_id, approver_id)
+
+        # Create initial task now that ticket is approved (REQ-THA-007)
+        # This fixes the gap where manually approved tickets had no tasks created
+        with db.get_session() as session:
+            ticket_obj: Ticket | None = session.get(Ticket, request.ticket_id)
+            if ticket_obj:
+                queue.enqueue_task(
+                    ticket_id=str(ticket_obj.id),
+                    phase_id=ticket_obj.phase_id or "PHASE_REQUIREMENTS",
+                    task_type="analyze_requirements",
+                    description=f"Analyze requirements for: {ticket_obj.title}",
+                    priority=ticket_obj.priority or "MEDIUM",
+                    session=session,
+                )
+                session.commit()
+
         return ApproveTicketResponse(
             ticket_id=str(ticket.id),
             status=ticket.approval_status,

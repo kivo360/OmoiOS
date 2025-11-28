@@ -1,6 +1,7 @@
 """Test script for PydanticAI with Fireworks.ai."""
 
 import asyncio
+import os
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -18,8 +19,8 @@ async def test_fireworks_basic():
     """Test basic Fireworks functionality."""
     print("Testing PydanticAI with Fireworks.ai...")
 
-    # Get API key
-    api_key = "REDACTED_FIREWORKS_API_KEY"
+    # Get API key from environment
+    api_key = os.getenv("FIREWORKS_API_KEY")
     if not api_key:
         print("❌ FIREWORKS_API_KEY not set")
         print("   Set it with: export FIREWORKS_API_KEY=your_key")

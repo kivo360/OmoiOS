@@ -1,6 +1,7 @@
 llm:
-  api_key: REDACTED_FIREWORKS_API_KEY
-  fireworks_api_key: REDACTED_FIREWORKS_API_KEY
+  api_key: REDACTED_LLM_API_KEY
+  fireworks_api_key: null
+  base_url: https://api.z.ai/api/coding/paas/v4
 
 supabase:
   url: https://example.supabase.co
