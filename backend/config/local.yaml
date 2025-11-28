@@ -1,6 +1,7 @@
 llm:
-  api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
-  fireworks_api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
+  api_key: 009332196c644810b859e88f26d28fe3.a9dfM8z1qQDWCpiN
+  fireworks_api_key: null
+  base_url: https://api.z.ai/api/coding/paas/v4
 
 supabase:
   url: https://example.supabase.co

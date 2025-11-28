@@ -1,8 +1,8 @@
 llm:
-  model: openhands/claude-sonnet-4-5-20250929
-  api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
-  base_url: null
-  fireworks_api_key: fw_3ZY1wdeec2bg6eVuGvaoFD9D
+  model: openai/glm-4.6
+  api_key: 009332196c644810b859e88f26d28fe3.a9dfM8z1qQDWCpiN
+  base_url: https://api.z.ai/api/coding/paas/v4
+  fireworks_api_key: ${FIREWORKS_API_KEY}
 
 database:
   url: postgresql+psycopg://postgres:postgres@localhost:15432/app_db

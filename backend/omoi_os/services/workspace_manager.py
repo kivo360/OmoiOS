@@ -2,12 +2,14 @@
 
 Integrates the OOP workspace managers with the application's workspace isolation system.
 Provides Git-backed workspaces with branching, commits, and merges per the documented design.
+
+Also provides OpenHands workspace integration for agent execution.
 """
 
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union, TYPE_CHECKING
 from uuid import uuid4
 
 from omoi_os.config import WorkspaceSettings, load_workspace_settings
@@ -19,11 +21,16 @@ from omoi_os.models.workspace import (
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
-# Import OOP workspace managers from examples
-from examples.workspace_managers import (
+# Import OOP workspace managers from omoi_os.workspace
+from omoi_os.workspace import (
     LocalCommandExecutor,
     LocalWorkspaceManager,
 )
+
+# OpenHands workspace imports (lazy loaded to avoid import errors if not installed)
+if TYPE_CHECKING:
+    from openhands.sdk.workspace import LocalWorkspace
+    from openhands.workspace.docker import DockerWorkspace
 
 logger = None  # Will be initialized on first use
 
@@ -647,3 +654,143 @@ class WorkspaceManagerService:
                 workspace.updated_at = utc_now()
                 session.commit()
                 get_logger().info(f"Deactivated workspace for agent {agent_id}")
+
+
+class OpenHandsWorkspaceFactory:
+    """
+    Factory for creating OpenHands SDK workspaces.
+
+    Supports three modes:
+    - local: Direct filesystem access (LocalWorkspace)
+    - docker: Isolated Docker container (DockerWorkspace)
+    - remote: Connect to existing OpenHands agent server (RemoteWorkspace)
+
+    Example:
+        factory = OpenHandsWorkspaceFactory()
+        workspace = factory.create_for_project("proj-123")
+        with workspace:
+            # Agent operations run in isolated workspace
+            result = workspace.execute_command("ls -la")
+    """
+
+    def __init__(self, settings: Optional[WorkspaceSettings] = None):
+        """Initialize workspace factory."""
+        self.settings = settings or load_workspace_settings()
+        self.base_path = Path(self.settings.root)
+        self.base_path.mkdir(parents=True, exist_ok=True)
+
+    def create_for_project(
+        self,
+        project_id: str,
+        task_id: Optional[str] = None,
+    ) -> "Union[LocalWorkspace, DockerWorkspace]":
+        """
+        Create an OpenHands workspace for a project.
+
+        Args:
+            project_id: Project identifier
+            task_id: Optional task ID for task-specific subdirectory
+
+        Returns:
+            OpenHands workspace instance (LocalWorkspace or DockerWorkspace)
+        """
+        log = get_logger()
+        mode = self.settings.mode
+
+        # Build workspace path: /workspaces/{project_id}/[{task_id}/]
+        workspace_path = self.base_path / project_id
+        if task_id:
+            workspace_path = workspace_path / task_id
+        workspace_path.mkdir(parents=True, exist_ok=True)
+
+        log.info(
+            f"Creating {mode} workspace for project {project_id} at {workspace_path}"
+        )
+
+        if mode == "local":
+            return self._create_local_workspace(workspace_path)
+        elif mode == "docker":
+            return self._create_docker_workspace(workspace_path, project_id)
+        elif mode == "remote":
+            return self._create_remote_workspace(workspace_path)
+        else:
+            log.warning(f"Unknown workspace mode '{mode}', falling back to local")
+            return self._create_local_workspace(workspace_path)
+
+    def _create_local_workspace(self, workspace_path: Path) -> "LocalWorkspace":
+        """Create a LocalWorkspace for direct filesystem access."""
+        from openhands.sdk.workspace import LocalWorkspace
+
+        return LocalWorkspace(working_dir=str(workspace_path))
+
+    def _create_docker_workspace(
+        self, workspace_path: Path, project_id: str
+    ) -> "DockerWorkspace":
+        """Create a DockerWorkspace for isolated container execution."""
+        try:
+            from openhands.workspace.docker import DockerWorkspace
+        except ImportError:
+            get_logger().warning(
+                "openhands-workspace not installed, falling back to LocalWorkspace. "
+                "Install with: uv sync --group dev"
+            )
+            return self._create_local_workspace(workspace_path)
+
+        # Use server_image if provided, else build from base_image
+        if self.settings.docker_server_image:
+            return DockerWorkspace(
+                server_image=self.settings.docker_server_image,
+                mount_dir=str(workspace_path),
+                working_dir="/workspace",
+            )
+        elif self.settings.docker_base_image:
+            return DockerWorkspace(
+                base_image=self.settings.docker_base_image,
+                mount_dir=str(workspace_path),
+                working_dir="/workspace",
+            )
+        else:
+            get_logger().warning(
+                "No docker image configured, falling back to LocalWorkspace. "
+                "Set WORKSPACE_DOCKER_SERVER_IMAGE or WORKSPACE_DOCKER_BASE_IMAGE"
+            )
+            return self._create_local_workspace(workspace_path)
+
+    def _create_remote_workspace(self, workspace_path: Path) -> "LocalWorkspace":
+        """Create a RemoteWorkspace for connecting to an existing agent server."""
+        if not self.settings.remote_host:
+            get_logger().warning(
+                "No remote host configured, falling back to LocalWorkspace. "
+                "Set WORKSPACE_REMOTE_HOST"
+            )
+            return self._create_local_workspace(workspace_path)
+
+        try:
+            from openhands.sdk.workspace import RemoteWorkspace
+
+            return RemoteWorkspace(
+                host=self.settings.remote_host,
+                api_key=self.settings.remote_api_key,
+                working_dir=str(workspace_path),
+            )
+        except ImportError:
+            get_logger().warning(
+                "RemoteWorkspace not available, falling back to LocalWorkspace"
+            )
+            return self._create_local_workspace(workspace_path)
+
+    def get_project_workspace_path(self, project_id: str) -> Path:
+        """Get the filesystem path for a project's workspace."""
+        return self.base_path / project_id
+
+
+# Singleton factory instance
+_workspace_factory: Optional[OpenHandsWorkspaceFactory] = None
+
+
+def get_workspace_factory() -> OpenHandsWorkspaceFactory:
+    """Get or create the global workspace factory."""
+    global _workspace_factory
+    if _workspace_factory is None:
+        _workspace_factory = OpenHandsWorkspaceFactory()
+    return _workspace_factory

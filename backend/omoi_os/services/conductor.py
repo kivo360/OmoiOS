@@ -10,6 +10,7 @@ import uuid
 from datetime import timedelta
 from typing import Dict, List, Optional, Any
 
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -71,6 +72,35 @@ class DuplicateDetection:
         self.work_description = work_description
         self.resources = resources
         self.confidence = confidence
+
+
+class LLMDuplicateAnalysisResponse(BaseModel):
+    """Pydantic model for LLM duplicate work analysis response."""
+
+    is_duplicate: bool = Field(
+        default=False,
+        description="True if the agents are working on essentially the same task",
+    )
+    similarity_score: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="How similar their work is (0-1)",
+    )
+    work_description: str = Field(
+        default="",
+        description="Description of the duplicate work",
+    )
+    confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="How confident the assessment is (0-1)",
+    )
+    resources: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Key resources they might be conflicting over",
+    )
 
 
 class ConductorService:
@@ -395,14 +425,14 @@ class ConductorService:
                 focus1, summary1, focus2, summary2, phase1
             )
 
-            if duplicate_analysis and duplicate_analysis.get("is_duplicate", False):
+            if duplicate_analysis and duplicate_analysis.is_duplicate:
                 return DuplicateDetection(
                     agent1_id=analysis1["agent_id"],
                     agent2_id=analysis2["agent_id"],
-                    similarity_score=duplicate_analysis.get("similarity_score", 0.0),
-                    work_description=duplicate_analysis.get("work_description", ""),
-                    resources=duplicate_analysis.get("resources", {}),
-                    confidence=duplicate_analysis.get("confidence", 0.0),
+                    similarity_score=duplicate_analysis.similarity_score,
+                    work_description=duplicate_analysis.work_description,
+                    resources=duplicate_analysis.resources,
+                    confidence=duplicate_analysis.confidence,
                 )
 
         except Exception as e:
@@ -417,7 +447,7 @@ class ConductorService:
         focus2: str,
         summary2: str,
         phase: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[LLMDuplicateAnalysisResponse]:
         """Use LLM to analyze for duplicate work."""
         try:
             prompt = f"""
@@ -433,15 +463,16 @@ class ConductorService:
             - Current Focus: {focus2}
             - Work Summary: {summary2}
 
-            Return a JSON analysis with:
-            - is_duplicate (boolean): True if working on essentially the same task
-            - similarity_score (0-1): How similar their work is
-            - work_description (string): Description of the duplicate work
-            - confidence (0-1): How confident you are in this assessment
-            - resources (object): Key resources they might be conflicting over
+            Determine if they are working on essentially the same task and might
+            conflict over the same resources.
             """
 
-            response = await self.llm_service.complete(prompt)
+            response = await self.llm_service.structured_output(
+                prompt=prompt,
+                output_type=LLMDuplicateAnalysisResponse,
+                system_prompt="You are an expert at detecting duplicate work between agents.",
+                output_retries=3,
+            )
             return response
 
         except Exception as e:

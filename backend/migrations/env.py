@@ -79,7 +79,8 @@ def run_migrations_online() -> None:
             include_object=include_object,
         )
 
-        context.run_migrations()
+        with context.begin_transaction():
+            context.run_migrations()
 
 
 def run_migrations_offline() -> None:

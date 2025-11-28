@@ -1,6 +1,7 @@
 """Task queue service for managing task assignment and retrieval."""
 
 from typing import List, Optional, TYPE_CHECKING
+import logging
 
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
@@ -8,20 +9,64 @@ from omoi_os.services.task_scorer import TaskScorer
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+    from omoi_os.services.event_bus import EventBusService
+
+logger = logging.getLogger(__name__)
 
 
 class TaskQueueService:
     """Manages task queue operations: enqueue, retrieve, assign, update."""
 
-    def __init__(self, db: DatabaseService):
+    def __init__(
+        self,
+        db: DatabaseService,
+        event_bus: Optional["EventBusService"] = None,
+    ):
         """
         Initialize task queue service.
 
         Args:
             db: DatabaseService instance
+            event_bus: Optional EventBusService for real-time updates
         """
         self.db = db
         self.scorer = TaskScorer(db)
+        self.event_bus = event_bus
+
+    def _publish_event(
+        self,
+        event_type: str,
+        task: Task,
+        extra_payload: Optional[dict] = None,
+    ) -> None:
+        """Publish task event to event bus."""
+        if not self.event_bus:
+            return
+
+        try:
+            from omoi_os.services.event_bus import SystemEvent
+
+            payload = {
+                "task_id": str(task.id),
+                "ticket_id": task.ticket_id,
+                "phase_id": task.phase_id,
+                "task_type": task.task_type,
+                "status": task.status,
+                "priority": task.priority,
+            }
+            if extra_payload:
+                payload.update(extra_payload)
+
+            event = SystemEvent(
+                event_type=event_type,
+                entity_type="task",
+                entity_id=str(task.id),
+                payload=payload,
+            )
+            self.event_bus.publish(event)
+            logger.debug(f"Published {event_type} for task {task.id}")
+        except Exception as e:
+            logger.warning(f"Failed to publish event {event_type}: {e}")
 
     def enqueue_task(
         self,
@@ -68,6 +113,9 @@ class TaskQueueService:
 
             # Don't commit here - let the caller handle it
             session.refresh(task)
+
+            # Publish event (after flush so task has ID)
+            self._publish_event("TASK_CREATED", task, {"description": description})
             return task
         else:
             # Create new session (original behavior)
@@ -92,6 +140,9 @@ class TaskQueueService:
                 session.refresh(task)
                 # Expunge the task so it can be used outside the session
                 session.expunge(task)
+
+                # Publish event after commit
+                self._publish_event("TASK_CREATED", task, {"description": description})
                 return task
 
     def get_next_task(
@@ -228,6 +279,15 @@ class TaskQueueService:
             if task:
                 task.assigned_agent_id = agent_id
                 task.status = "assigned"
+                session.commit()
+                session.refresh(task)
+
+                # Publish assignment event
+                self._publish_event(
+                    "TASK_ASSIGNED",
+                    task,
+                    {"agent_id": agent_id},
+                )
 
     def update_task_status(
         self,
@@ -254,6 +314,7 @@ class TaskQueueService:
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
             if task:
+                old_status = task.status
                 task.status = status
                 if result:
                     task.result = result
@@ -267,6 +328,27 @@ class TaskQueueService:
                     task.started_at = utc_now()
                 elif status in ("completed", "failed") and not task.completed_at:
                     task.completed_at = utc_now()
+
+                session.commit()
+                session.refresh(task)
+
+                # Publish status change event
+                event_type = {
+                    "running": "TASK_STARTED",
+                    "completed": "TASK_COMPLETED",
+                    "failed": "TASK_FAILED",
+                    "cancelled": "TASK_CANCELLED",
+                }.get(status, "TASK_STATUS_CHANGED")
+
+                self._publish_event(
+                    event_type,
+                    task,
+                    {
+                        "old_status": old_status,
+                        "error_message": error_message,
+                        "has_result": result is not None,
+                    },
+                )
 
     def get_assigned_tasks(self, agent_id: str) -> list[Task]:
         """

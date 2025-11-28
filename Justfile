@@ -47,14 +47,14 @@ default:
 # Development Setup
 # ============================================================================
 
-# Install all dependencies
+# Install all dependencies (including test)
 install:
-    cd {{backend_dir}} && uv sync
+    cd {{backend_dir}} && uv sync --active --group test
 
 # Install with dev and test dependencies
 [group('setup')]
 install-all:
-    cd {{backend_dir}} && uv sync --group dev --group test
+    cd {{backend_dir}} && uv sync --active --group dev --group test
 
 # Setup test environment (create .env.test, config/test.yaml)
 [group('setup')]
@@ -268,7 +268,7 @@ docker-rebuild:
 [group('docker')]
 docker-clean:
     cd {{backend_dir}} && docker-compose down -v
-    docker-compose up -d --build
+    cd {{backend_dir}} && docker-compose up -d --build
 
 # ============================================================================
 # Service Utilities

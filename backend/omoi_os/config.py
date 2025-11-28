@@ -330,6 +330,17 @@ class WorkspaceSettings(OmoiBaseSettings):
     root: str = str(Path.cwd() / "workspaces")
     worker_dir: str = "/tmp/omoi_os_workspaces"
 
+    # Workspace mode: "local", "docker", "remote"
+    mode: str = "local"
+
+    # Docker workspace settings (only used when mode="docker")
+    docker_base_image: Optional[str] = None
+    docker_server_image: Optional[str] = "ghcr.io/openhands/agent-server:latest"
+
+    # Remote workspace settings (only used when mode="remote")
+    remote_host: Optional[str] = None
+    remote_api_key: Optional[str] = None
+
 
 class MonitoringSettings(OmoiBaseSettings):
     """
@@ -352,7 +363,7 @@ class MonitoringSettings(OmoiBaseSettings):
 class DiagnosticSettings(OmoiBaseSettings):
     """
     Diagnostic agent system configuration.
-    
+
     Precedence: YAML defaults (config/base.yaml + config/<env>.yaml) < environment variables < init kwargs.
     """
 
@@ -454,6 +465,10 @@ def load_supabase_settings() -> SupabaseSettings:
 
 def load_auth_settings() -> AuthSettings:
     return get_app_settings().auth
+
+
+def load_workspace_settings() -> WorkspaceSettings:
+    return get_app_settings().workspace
 
 
 class AppSettings:

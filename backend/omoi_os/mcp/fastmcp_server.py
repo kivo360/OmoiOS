@@ -725,6 +725,9 @@ def request_handoff(
     }
 
 
-# Create HTTP app for FastAPI mounting
-mcp_app = mcp.http_app(path="/mcp")
+# Create HTTP app for FastAPI mounting using Streamable HTTP transport
+# Note: path="/" ensures proper routing when mounted at /mcp
+# FastAPI mount at /mcp + path="/" = endpoints at /mcp/
+# Using Streamable HTTP transport (default, recommended for production)
+mcp_app = mcp.http_app(path="/")
 
