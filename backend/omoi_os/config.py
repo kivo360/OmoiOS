@@ -395,6 +395,30 @@ class WorkerSettings(OmoiBaseSettings):
     concurrency: int = 2
 
 
+class DaytonaSettings(OmoiBaseSettings):
+    """
+    Daytona Cloud sandbox configuration.
+
+    Precedence: YAML defaults (config/base.yaml + config/<env>.yaml) < environment variables < init kwargs.
+    """
+
+    yaml_section = "daytona"
+    model_config = SettingsConfigDict(
+        env_prefix="DAYTONA_",
+        extra="ignore",
+    )
+
+    api_key: Optional[str] = None  # DAYTONA_API_KEY
+    api_url: str = "https://app.daytona.io/api"  # DAYTONA_API_URL
+    target: str = "us"  # DAYTONA_TARGET (us, eu)
+    snapshot: str = "python:3.12"  # DAYTONA_SNAPSHOT (base image)
+    timeout: int = 300  # DAYTONA_TIMEOUT (seconds)
+
+
+def load_daytona_settings() -> DaytonaSettings:
+    return get_app_settings().daytona
+
+
 class IntegrationSettings(OmoiBaseSettings):
     """
     External integration endpoints and tokens.
@@ -484,6 +508,7 @@ class AppSettings:
         self.monitoring = MonitoringSettings()
         self.diagnostic = DiagnosticSettings()
         self.worker = WorkerSettings()
+        self.daytona = DaytonaSettings()
         self.integrations = IntegrationSettings()
         self.embedding = EmbeddingSettings()
         self.observability = ObservabilitySettings()

@@ -31,6 +31,7 @@ from omoi_os.workspace import (
 if TYPE_CHECKING:
     from openhands.sdk.workspace import LocalWorkspace
     from openhands.workspace.docker import DockerWorkspace
+    from omoi_os.workspace.daytona import OpenHandsDaytonaWorkspace
 
 logger = None  # Will be initialized on first use
 
@@ -660,10 +661,11 @@ class OpenHandsWorkspaceFactory:
     """
     Factory for creating OpenHands SDK workspaces.
 
-    Supports three modes:
+    Supports four modes:
     - local: Direct filesystem access (LocalWorkspace)
     - docker: Isolated Docker container (DockerWorkspace)
     - remote: Connect to existing OpenHands agent server (RemoteWorkspace)
+    - daytona: Isolated Daytona Cloud sandbox (DaytonaWorkspace)
 
     Example:
         factory = OpenHandsWorkspaceFactory()
@@ -713,6 +715,8 @@ class OpenHandsWorkspaceFactory:
             return self._create_docker_workspace(workspace_path, project_id)
         elif mode == "remote":
             return self._create_remote_workspace(workspace_path)
+        elif mode == "daytona":
+            return self._create_daytona_workspace(workspace_path, project_id)
         else:
             log.warning(f"Unknown workspace mode '{mode}', falling back to local")
             return self._create_local_workspace(workspace_path)
@@ -778,6 +782,34 @@ class OpenHandsWorkspaceFactory:
                 "RemoteWorkspace not available, falling back to LocalWorkspace"
             )
             return self._create_local_workspace(workspace_path)
+
+    def _create_daytona_workspace(
+        self, workspace_path: Path, project_id: str
+    ) -> "OpenHandsDaytonaWorkspace":
+        """Create a Daytona Cloud sandbox workspace.
+
+        Args:
+            workspace_path: Local path for any file staging
+            project_id: Project identifier for sandbox labels
+
+        Returns:
+            OpenHandsDaytonaWorkspace instance
+        """
+        from omoi_os.config import load_daytona_settings
+
+        settings = load_daytona_settings()
+        if not settings.api_key:
+            get_logger().warning(
+                "DAYTONA_API_KEY not configured, falling back to LocalWorkspace. "
+                "Set DAYTONA_API_KEY in .env.local or config/base.yaml"
+            )
+            return self._create_local_workspace(workspace_path)
+
+        return OpenHandsDaytonaWorkspace(
+            working_dir=str(workspace_path),
+            project_id=project_id,
+            settings=settings,
+        )
 
     def get_project_workspace_path(self, project_id: str) -> Path:
         """Get the filesystem path for a project's workspace."""
