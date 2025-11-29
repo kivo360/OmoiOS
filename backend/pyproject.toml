@@ -37,6 +37,7 @@ dependencies = [
     "email-validator>=2.0.0,<3",
     "instructor>=1.13.0",
     "orjson>=3.11.4",
+    "daytona>=0.112.0",
 ]
 
 [build-system]

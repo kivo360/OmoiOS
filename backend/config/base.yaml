@@ -70,6 +70,13 @@ diagnostic:
 worker:
   concurrency: 2
 
+daytona:
+  api_key: ${DAYTONA_API_KEY}
+  api_url: https://app.daytona.io/api
+  target: us
+  snapshot: python:3.12
+  timeout: 300
+
 integrations:
   mcp_server_url: http://localhost:18000/mcp
   enable_mcp_tools: true
