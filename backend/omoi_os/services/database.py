@@ -3,11 +3,39 @@
 from contextlib import contextmanager, asynccontextmanager
 from typing import Generator, AsyncGenerator
 
+import orjson
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 from omoi_os.models.base import Base
+
+
+def _orjson_default(obj):
+    """Default handler for types orjson doesn't handle natively."""
+    from enum import Enum
+    if isinstance(obj, Enum):
+        return obj.value
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
+
+
+def _orjson_serializer(obj):
+    """Serialize objects to JSON using orjson.
+    
+    orjson natively handles UUID, datetime, and other types that
+    the standard json module cannot serialize. We add Enum support
+    via the default handler.
+    """
+    return orjson.dumps(
+        obj,
+        default=_orjson_default,
+        option=orjson.OPT_PASSTHROUGH_DATACLASS,
+    ).decode("utf-8")
+
+
+def _orjson_deserializer(s):
+    """Deserialize JSON using orjson."""
+    return orjson.loads(s)
 
 
 class DatabaseService:
@@ -22,13 +50,24 @@ class DatabaseService:
                 Example: "postgresql+psycopg://user:pass@localhost:15432/dbname"
         """
         # Sync engine (for backward compatibility)
-        self.engine = create_engine(connection_string, echo=False)
+        # Use orjson for faster JSON serialization and native UUID/datetime support
+        self.engine = create_engine(
+            connection_string,
+            echo=False,
+            json_serializer=_orjson_serializer,
+            json_deserializer=_orjson_deserializer,
+        )
         self.SessionLocal = sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
         
         # Async engine (for new auth system)
         # Convert sync URL to async (replace psycopg with psycopg for async support)
         async_url = connection_string.replace('postgresql+psycopg://', 'postgresql+psycopg://')
-        self.async_engine = create_async_engine(async_url, echo=False)
+        self.async_engine = create_async_engine(
+            async_url,
+            echo=False,
+            json_serializer=_orjson_serializer,
+            json_deserializer=_orjson_deserializer,
+        )
         self.AsyncSessionLocal = async_sessionmaker(
             self.async_engine,
             class_=AsyncSession,

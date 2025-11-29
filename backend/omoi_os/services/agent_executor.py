@@ -398,8 +398,8 @@ class AgentExecutor:
         register_omoi_tools()
 
     def _get_planning_tool_specs(self) -> list[Tool]:
-        """Get Tool specs for planning mode (task creation + planning tools)."""
-        return [
+        """Get Tool specs for planning mode (task creation + planning tools + MCP)."""
+        native_tools = [
             # Task tools (planning can create tasks)
             Tool(name=CreateTaskTool.name),
             Tool(name=GetTaskTool.name),
@@ -422,9 +422,26 @@ class AgentExecutor:
             Tool(name=AnalyzeRequirementsTool.name),
         ]
 
+        # Register and add MCP tools for ticket access and history
+        from omoi_os.tools.mcp_tools import register_mcp_tools, get_mcp_tools
+
+        mcp_url = "http://localhost:18000/mcp/"
+
+        # Register MCP tools globally first
+        register_mcp_tools(mcp_url)
+
+        # Add Tool specs for MCP tools
+        mcp_tool_classes = get_mcp_tools(mcp_url)
+        for tool_cls in mcp_tool_classes:
+            tools = tool_cls.create(None, mcp_url=mcp_url)
+            for tool in tools:
+                native_tools.append(Tool(name=tool.name))
+
+        return native_tools
+
     def _get_execution_tool_specs(self) -> list[Tool]:
-        """Get Tool specs for execution mode (task management + collaboration)."""
-        return [
+        """Get Tool specs for execution mode (task management + collaboration + MCP)."""
+        native_tools = [
             # Task tools (full CRUD)
             Tool(name=CreateTaskTool.name),
             Tool(name=UpdateTaskStatusTool.name),
@@ -439,6 +456,23 @@ class AgentExecutor:
             Tool(name=RequestHandoffTool.name),
             Tool(name=MarkMessageReadTool.name),
         ]
+
+        # Register and add MCP tools for ticket management and history
+        from omoi_os.tools.mcp_tools import register_mcp_tools, get_mcp_tools
+
+        mcp_url = "http://localhost:18000/mcp/"
+
+        # Register MCP tools globally first
+        register_mcp_tools(mcp_url)
+
+        # Add Tool specs for MCP tools
+        mcp_tool_classes = get_mcp_tools(mcp_url)
+        for tool_cls in mcp_tool_classes:
+            tools = tool_cls.create(None, mcp_url=mcp_url)
+            for tool in tools:
+                native_tools.append(Tool(name=tool.name))
+
+        return native_tools
 
     def prepare_conversation(self, task_id: str | None = None) -> Dict[str, str]:
         """
@@ -476,7 +510,7 @@ class AgentExecutor:
         )
 
         return {
-            "conversation_id": conversation.state.id,
+            "conversation_id": str(conversation.state.id),
             "persistence_dir": persistence_dir,
             "_conversation": conversation,  # Internal: store for execute_task
         }
@@ -547,10 +581,10 @@ class AgentExecutor:
 
             # Extract result with conversation metadata
             result = {
-                "status": conversation.state.execution_status,
+                "status": str(conversation.state.execution_status),
                 "event_count": len(conversation.state.events),
                 "cost": conversation.conversation_stats.get_combined_metrics().accumulated_cost,
-                "conversation_id": conversation.state.id,
+                "conversation_id": str(conversation.state.id),
                 "persistence_dir": persistence_dir,
             }
 

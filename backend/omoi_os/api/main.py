@@ -101,16 +101,19 @@ async def orchestrator_loop():
                     await asyncio.sleep(5)
                     continue
 
-                # Get task matching agent's phase and capabilities (REQ-TQM-ASSIGN-001)
+                # Store values we need before session closes
+                available_agent_id = str(available_agent.id)
                 agent_capabilities = available_agent.capabilities or []
+                
+                # Get task matching agent's phase and capabilities (REQ-TQM-ASSIGN-001)
                 task = queue.get_next_task(
                     phase_id, agent_capabilities=agent_capabilities
                 )
 
             if task:
-                # Assign task to available agent
-                queue.assign_task(task.id, available_agent.id)
-                agent_id = str(available_agent.id)
+                # Assign task to available agent (use stored ID, not detached object)
+                queue.assign_task(task.id, available_agent_id)
+                agent_id = available_agent_id
 
                 # Publish assignment event
                 from omoi_os.services.event_bus import SystemEvent
@@ -749,6 +752,26 @@ try:
     app.include_router(monitor.router, prefix="/api/v1", tags=["monitoring"])
 except ImportError:
     pass
+
+# Mount static files for web UI
+from pathlib import Path
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+static_dir = Path(__file__).parent.parent.parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+
+@app.get("/")
+async def serve_ui():
+    """Serve the web UI."""
+    index_file = static_dir / "index.html"
+    if index_file.exists():
+        return FileResponse(str(index_file))
+    return {
+        "message": "OmoiOS API - Web UI not found. Visit /docs for API documentation."
+    }
 
 
 @app.get("/health")

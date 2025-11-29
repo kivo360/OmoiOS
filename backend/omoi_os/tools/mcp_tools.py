@@ -5,6 +5,8 @@ enabling distributed agent architectures where workers only need
 HTTP access to the MCP server.
 """
 
+import asyncio
+import logging
 from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
 from pydantic import Field
 
@@ -13,6 +15,8 @@ from openhands.sdk.tool.schema import Action, Observation
 
 if TYPE_CHECKING:
     from openhands.sdk.core import ConversationState
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -70,7 +74,6 @@ class ListMCPToolsExecutor(ToolExecutor[ListMCPToolsAction, MCPToolsObservation]
         action: ListMCPToolsAction,
         conversation: Any = None,
     ) -> MCPToolsObservation:
-        import asyncio
         from omoi_os.services.mcp_client import MCPClientService
 
         async def _list_tools():
@@ -122,7 +125,6 @@ class CallMCPToolExecutor(ToolExecutor[CallMCPToolAction, MCPToolsObservation]):
         action: CallMCPToolAction,
         conversation: Any = None,
     ) -> MCPToolsObservation:
-        import asyncio
         from omoi_os.services.mcp_client import MCPClientService
 
         async def _call_tool():
@@ -175,10 +177,10 @@ class ListMCPToolsTool(ToolDefinition[ListMCPToolsAction, MCPToolsObservation]):
             cls(
                 name="mcp__list_tools",
                 description=(
-                    "List all available MCP tools on the central server. "
-                    "Use this to discover what operations are available, including "
-                    "ticket management, task management, discovery tracking, "
-                    "collaboration, and history/trajectory tools."
+                    "List all available tools on the MCP server. "
+                    "Returns the raw MCP tool names (like 'get_ticket', 'create_task'). "
+                    "Note: You should use the typed tools (get_ticket_mcp, create_task_mcp, etc.) "
+                    "instead of calling MCP tools directly."
                 ),
                 action_type=ListMCPToolsAction,
                 observation_type=MCPToolsObservation,
@@ -204,21 +206,15 @@ class CallMCPToolTool(ToolDefinition[CallMCPToolAction, MCPToolsObservation]):
                 name="mcp__call_tool",
                 description=(
                     "Call any MCP tool on the central server by name. "
-                    "This is the primary way for distributed agents to interact "
-                    "with the OmoiOS system. Available tools include:\n\n"
-                    "**Ticket Management:**\n"
-                    "- create_ticket, update_ticket, get_ticket, get_tickets\n"
-                    "- get_ticket_history, resolve_ticket, add_ticket_comment\n"
-                    "- link_commit, add_ticket_dependency, remove_ticket_dependency\n\n"
-                    "**Task Management:**\n"
-                    "- create_task, update_task_status, get_task\n\n"
-                    "**Discovery:**\n"
-                    "- get_task_discoveries, get_workflow_graph, get_discoveries_by_type\n\n"
-                    "**Collaboration:**\n"
+                    "⚠️ IMPORTANT: This is a LOW-LEVEL tool. Prefer using the typed tools like "
+                    "get_ticket_mcp, create_task_mcp, etc. instead.\n\n"
+                    "If you must use this tool, use ONLY these exact MCP server tool names "
+                    "(without any prefix/suffix):\n"
+                    "- get_ticket, resolve_ticket, add_ticket_comment, get_ticket_history\n"
+                    "- create_task, update_task_status, get_task, get_task_discoveries\n"
                     "- broadcast_message, send_message, get_messages, request_handoff\n\n"
-                    "**History & Trajectory:**\n"
-                    "- get_phase_history, get_task_timeline, get_agent_trajectory\n\n"
-                    "Example: call_tool('create_ticket', {'workflow_id': '...', 'title': '...'})"
+                    "❌ WRONG: tool_name='list_mcp_tools' or 'get_ticket_mcp'\n"
+                    "✅ CORRECT: tool_name='get_ticket' or 'create_task'"
                 ),
                 action_type=CallMCPToolAction,
                 observation_type=MCPToolsObservation,
@@ -264,7 +260,6 @@ class CreateTicketMCPExecutor(ToolExecutor[MCPCreateTicketAction, MCPToolsObserv
         action: MCPCreateTicketAction,
         conversation: Any = None,
     ) -> MCPToolsObservation:
-        import asyncio
         from omoi_os.services.mcp_client import MCPClientService
 
         async def _create_ticket():
@@ -366,7 +361,6 @@ class CreateTaskMCPExecutor(ToolExecutor[MCPCreateTaskAction, MCPToolsObservatio
         action: MCPCreateTaskAction,
         conversation: Any = None,
     ) -> MCPToolsObservation:
-        import asyncio
         from omoi_os.services.mcp_client import MCPClientService
 
         async def _create_task():
@@ -502,7 +496,6 @@ def _create_mcp_executor(mcp_url: str, tool_name: str, action_fields: List[str])
         def __call__(
             self, action: Action, conversation: Any = None
         ) -> MCPToolsObservation:
-            import asyncio
             from omoi_os.services.mcp_client import MCPClientService
 
             # Extract arguments from action
@@ -816,7 +809,10 @@ class MCPResolveTicketAction(Action):
     """Action to resolve a ticket."""
 
     ticket_id: str = Field(..., description="ID of the ticket to resolve")
-    resolution: str = Field(..., min_length=10, description="Resolution summary")
+    agent_id: str = Field(..., description="ID of agent resolving the ticket")
+    resolution_comment: str = Field(
+        ..., min_length=10, description="Comment explaining the resolution"
+    )
     commit_sha: Optional[str] = Field(
         default=None, description="Git commit SHA for the resolution"
     )
@@ -826,14 +822,19 @@ class MCPAddTicketCommentAction(Action):
     """Action to add a comment to a ticket."""
 
     ticket_id: str = Field(..., description="ID of the ticket")
-    author_id: str = Field(..., description="ID of the comment author")
-    content: str = Field(..., min_length=1, description="Comment content")
+    agent_id: str = Field(..., description="ID of agent adding the comment")
+    comment_text: str = Field(..., min_length=1, description="Comment content")
+    comment_type: str = Field(
+        default="general",
+        description="Type of comment (general, question, update, resolution)",
+    )
 
 
 class MCPAddTicketDependencyAction(Action):
     """Action to add a dependency to a ticket."""
 
     ticket_id: str = Field(..., description="ID of the ticket")
+    agent_id: str = Field(..., description="ID of agent adding the dependency")
     blocked_by_ticket_id: str = Field(..., description="ID of the blocking ticket")
 
 
@@ -841,6 +842,7 @@ class MCPRemoveTicketDependencyAction(Action):
     """Action to remove a dependency from a ticket."""
 
     ticket_id: str = Field(..., description="ID of the ticket")
+    agent_id: str = Field(..., description="ID of agent removing the dependency")
     blocked_by_ticket_id: str = Field(
         ..., description="ID of the blocking ticket to remove"
     )
@@ -903,14 +905,16 @@ class ResolveTicketMCPTool(ToolDefinition[MCPResolveTicketAction, MCPToolsObserv
     ) -> Sequence["ResolveTicketMCPTool"]:
         mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
         executor = _create_mcp_executor(
-            mcp_url, "resolve_ticket", ["ticket_id", "resolution", "commit_sha"]
+            mcp_url,
+            "resolve_ticket",
+            ["ticket_id", "agent_id", "resolution_comment", "commit_sha"],
         )
         return [
             cls(
                 name="mcp__resolve_ticket",
                 description=(
                     "Resolve a ticket and automatically unblock dependent tickets. "
-                    "Provide a resolution summary and optionally link the resolving commit."
+                    "Provide agent_id and resolution_comment explaining the resolution."
                 ),
                 action_type=MCPResolveTicketAction,
                 observation_type=MCPToolsObservation,
@@ -930,14 +934,16 @@ class AddTicketCommentMCPTool(
     ) -> Sequence["AddTicketCommentMCPTool"]:
         mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
         executor = _create_mcp_executor(
-            mcp_url, "add_ticket_comment", ["ticket_id", "author_id", "content"]
+            mcp_url,
+            "add_ticket_comment",
+            ["ticket_id", "agent_id", "comment_text", "comment_type"],
         )
         return [
             cls(
                 name="mcp__add_ticket_comment",
                 description=(
-                    "Add a comment to a ticket. Use for notes, questions, or updates "
-                    "that don't change the ticket's status."
+                    "Add a comment to a ticket. Requires agent_id and comment_text. "
+                    "Use comment_type: general, question, update, or resolution."
                 ),
                 action_type=MCPAddTicketCommentAction,
                 observation_type=MCPToolsObservation,
@@ -957,14 +963,16 @@ class AddTicketDependencyMCPTool(
     ) -> Sequence["AddTicketDependencyMCPTool"]:
         mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
         executor = _create_mcp_executor(
-            mcp_url, "add_ticket_dependency", ["ticket_id", "blocked_by_ticket_id"]
+            mcp_url,
+            "add_ticket_dependency",
+            ["ticket_id", "agent_id", "blocked_by_ticket_id"],
         )
         return [
             cls(
                 name="mcp__add_ticket_dependency",
                 description=(
-                    "Add a blocker dependency to a ticket. The ticket will be marked as "
-                    "blocked until the blocking ticket is resolved."
+                    "Add a blocker dependency to a ticket. Requires agent_id. The ticket "
+                    "will be marked as blocked until the blocking ticket is resolved."
                 ),
                 action_type=MCPAddTicketDependencyAction,
                 observation_type=MCPToolsObservation,
@@ -984,14 +992,16 @@ class RemoveTicketDependencyMCPTool(
     ) -> Sequence["RemoveTicketDependencyMCPTool"]:
         mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
         executor = _create_mcp_executor(
-            mcp_url, "remove_ticket_dependency", ["ticket_id", "blocked_by_ticket_id"]
+            mcp_url,
+            "remove_ticket_dependency",
+            ["ticket_id", "agent_id", "blocked_by_ticket_id"],
         )
         return [
             cls(
                 name="mcp__remove_ticket_dependency",
                 description=(
-                    "Remove a blocker dependency from a ticket. Use when a dependency "
-                    "is no longer relevant or was added in error."
+                    "Remove a blocker dependency from a ticket. Requires agent_id. Use when "
+                    "a dependency is no longer relevant or was added in error."
                 ),
                 action_type=MCPRemoveTicketDependencyAction,
                 observation_type=MCPToolsObservation,
@@ -1178,6 +1188,35 @@ def get_mcp_tools(mcp_url: str = "http://localhost:18000/mcp/") -> List[type]:
         GetAgentTrajectoryMCPTool,
         GetDiscoveriesByTypeMCPTool,
     ]
+
+
+_mcp_tools_registered = False
+
+
+def register_mcp_tools(mcp_url: str = "http://localhost:18000/mcp/") -> None:
+    """Register all MCP tools globally with OpenHands.
+
+    This must be called before using Tool(name=...) for MCP tools.
+
+    Args:
+        mcp_url: URL of the MCP server
+    """
+    global _mcp_tools_registered
+    if _mcp_tools_registered:
+        return
+
+    from openhands.sdk.tool import register_tool
+
+    mcp_tool_classes = get_mcp_tools(mcp_url)
+
+    for tool_cls in mcp_tool_classes:
+        # Create tool instance to get the name
+        tools = tool_cls.create(None, mcp_url=mcp_url)
+        for tool in tools:
+            register_tool(tool.name, tool_cls)
+
+    _mcp_tools_registered = True
+    logger.info(f"Registered {len(mcp_tool_classes)} MCP tools globally")
 
 
 def register_mcp_tools_with_agent(

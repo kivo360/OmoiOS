@@ -442,7 +442,7 @@ def main():
                         futures[future] = task
 
                     # Wait for completion (non-blocking with timeout)
-                    for future in as_completed(futures, timeout=2):
+                    for future in as_completed(futures, timeout=10):
                         task = futures[future]
                         try:
                             future.result()  # Get result to propagate exceptions
@@ -572,7 +572,6 @@ def execute_task_with_retry(
         workspace_dir: Base directory for workspaces
         timeout_manager: Optional TimeoutManager for cancellation checks
     """
-    import os
 
     # Check if this is a retry attempt
     is_retry = task.retry_count > 0
@@ -631,11 +630,16 @@ def execute_task_with_retry(
             conversation_metadata=conversation_metadata,
         )
 
+        # Sanitize result to ensure JSON serializability (UUIDs, enums, etc.)
+        from omoi_os.utils.datetime import sanitize_for_json
+
+        sanitized_result = sanitize_for_json(result)
+
         # Update task status to completed with final result
         task_queue.update_task_status(
             task.id,
             "completed",
-            result=result,
+            result=sanitized_result,
             conversation_id=conversation_id,
             persistence_dir=persistence_dir,
         )
@@ -647,7 +651,7 @@ def execute_task_with_retry(
                 entity_type="task",
                 entity_id=str(task.id),
                 payload={
-                    "result": result,
+                    "result": sanitized_result,
                     "retry_count": task.retry_count,
                     "max_retries": task.max_retries,
                 },
@@ -795,7 +799,6 @@ def execute_task(
         event_bus: Event bus service
         workspace_dir: Base directory for workspaces
     """
-    import os
 
     print(f"Executing task {task.id}: {task.description}")
 
@@ -839,11 +842,16 @@ def execute_task(
             conversation_metadata=conversation_metadata,
         )
 
+        # Sanitize result to ensure JSON serializability (UUIDs, enums, etc.)
+        from omoi_os.utils.datetime import sanitize_for_json
+
+        sanitized_result = sanitize_for_json(result)
+
         # Update task status to completed with final result
         task_queue.update_task_status(
             task.id,
             "completed",
-            result=result,
+            result=sanitized_result,
             conversation_id=conversation_id,
             persistence_dir=persistence_dir,
         )
@@ -854,7 +862,7 @@ def execute_task(
                 event_type="TASK_COMPLETED",
                 entity_type="task",
                 entity_id=str(task.id),
-                payload=result,
+                payload=sanitized_result,
             )
         )
 

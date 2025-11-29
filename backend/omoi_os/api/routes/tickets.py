@@ -27,6 +27,49 @@ from omoi_os.services.approval import ApprovalService, InvalidApprovalStateError
 router = APIRouter()
 
 
+class TicketListResponse(BaseModel):
+    """Response model for ticket list."""
+
+    tickets: list
+    total: int
+
+
+@router.get("", response_model=TicketListResponse)
+async def list_tickets(
+    limit: int = 10,
+    offset: int = 0,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """List tickets with pagination."""
+    from sqlalchemy import func
+
+    with db.get_session() as session:
+        total = session.query(func.count(Ticket.id)).scalar()
+        tickets = (
+            session.query(Ticket)
+            .order_by(Ticket.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return TicketListResponse(
+            tickets=[
+                {
+                    "id": str(t.id),
+                    "title": t.title,
+                    "description": t.description,
+                    "status": t.status,
+                    "priority": t.priority,
+                    "phase_id": t.phase_id,
+                    "approval_status": t.approval_status,
+                    "created_at": t.created_at.isoformat() if t.created_at else None,
+                }
+                for t in tickets
+            ],
+            total=total,
+        )
+
+
 class TicketCreate(BaseModel):
     """Request model for creating a ticket."""
 
@@ -45,6 +88,7 @@ class TicketResponse(BaseModel):
     phase_id: str
     status: str
     priority: str
+    approval_status: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

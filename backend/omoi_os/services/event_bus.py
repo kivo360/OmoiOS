@@ -1,20 +1,19 @@
 """Event bus service for system-wide event publishing and subscription."""
 
 import json
-from dataclasses import dataclass
 from typing import Any, Callable, Dict
 
 import redis
+from pydantic import BaseModel, Field
 
 
-@dataclass
-class SystemEvent:
+class SystemEvent(BaseModel):
     """System-wide orchestration event (not OpenHands conversation events)."""
 
-    event_type: str  # TASK_ASSIGNED, TASK_COMPLETED, AGENT_REGISTERED, etc.
-    entity_type: str  # ticket, task, agent
-    entity_id: str
-    payload: Dict[str, Any]
+    event_type: str = Field(..., description="Event type: TASK_ASSIGNED, TASK_COMPLETED, etc.")
+    entity_type: str = Field(..., description="Entity type: ticket, task, agent")
+    entity_id: str = Field(..., description="ID of the entity")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Event payload data")
 
 
 class EventBusService:
@@ -38,14 +37,9 @@ class EventBusService:
             event: SystemEvent to publish
         """
         channel = f"events.{event.event_type}"
-        message = json.dumps(
-            {
-                "event_type": event.event_type,
-                "entity_type": event.entity_type,
-                "entity_id": event.entity_id,
-                "payload": event.payload,
-            }
-        )
+        # Use Pydantic's model_dump_json for automatic JSON serialization
+        # This handles UUID and other types automatically
+        message = event.model_dump_json()
         self.redis_client.publish(channel, message)
 
     def subscribe(self, event_type: str, callback: Callable[[SystemEvent], None]) -> None:
