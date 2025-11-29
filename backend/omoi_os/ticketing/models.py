@@ -26,6 +26,7 @@ class Base(DeclarativeBase):
 
 class Ticket(Base):
     __tablename__ = "tickets"
+    __table_args__ = {"extend_existing": True}
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
     workflow_id: Mapped[str] = mapped_column(String, index=True)

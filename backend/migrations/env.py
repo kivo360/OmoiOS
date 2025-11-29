@@ -16,6 +16,8 @@ from omoi_os.models.base import Base  # noqa: E402
 
 # Import all models to register them with Base.metadata
 from omoi_os.models import Agent, Event, Task, Ticket, User  # noqa: E402, F401
+# Note: omoi_os.ticketing.models uses a separate Base, so we don't import it here
+# The ticketing tables are created via direct SQL in the migration
 from omoi_os.config import load_database_settings
 
 database_url = load_database_settings().url

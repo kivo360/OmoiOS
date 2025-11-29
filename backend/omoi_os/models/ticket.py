@@ -31,7 +31,7 @@ class Ticket(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     status: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True, default="backlog"
+        String(50), nullable=False, index=True, default=lambda: "backlog"
     )  # backlog, analyzing, building, building-done, testing, done (REQ-TKT-SM-001)
     priority: Mapped[str] = mapped_column(
         String(20), nullable=False, index=True
