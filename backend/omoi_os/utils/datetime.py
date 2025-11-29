@@ -1,6 +1,9 @@
-"""Datetime utilities using whenever library for timezone-aware datetime handling."""
+"""Datetime and serialization utilities."""
 
 from datetime import datetime
+from enum import Enum
+from typing import Any
+from uuid import UUID
 
 from whenever import Instant
 
@@ -36,4 +39,40 @@ def utc_datetime(year: int, month: int, day: int, hour: int = 0, minute: int = 0
     """
     instant = Instant.from_utc(year, month, day, hour, minute, second, microsecond)
     return instant.py_datetime()
+
+
+def sanitize_for_json(obj: Any) -> Any:
+    """
+    Recursively convert non-JSON-serializable objects to serializable types.
+
+    Handles:
+    - UUID -> str
+    - Enum -> value
+    - datetime -> ISO format string
+    - dict -> recursively sanitized dict
+    - list/tuple -> recursively sanitized list
+
+    Args:
+        obj: Object to sanitize
+
+    Returns:
+        JSON-serializable version of the object
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, Enum):
+        return obj.value
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, dict):
+        return {k: sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [sanitize_for_json(item) for item in obj]
+    if hasattr(obj, '__dict__'):
+        # Handle objects with __dict__ (convert to dict)
+        return sanitize_for_json(obj.__dict__)
+    # Return as-is for basic types (str, int, float, bool)
+    return obj
 
