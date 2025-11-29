@@ -462,7 +462,10 @@ class AgentExecutor:
         os.makedirs(persistence_dir, exist_ok=True)
 
         # Use task_id as conversation_id if provided, otherwise let OpenHands generate one
-        conversation_id = str(task_id) if task_id else None
+        # Note: OpenHands SDK expects UUID object, not string
+        from uuid import UUID
+
+        conversation_id = UUID(task_id) if task_id else None
 
         # Create conversation with persistence enabled
         conversation = Conversation(
@@ -513,7 +516,10 @@ class AgentExecutor:
             os.makedirs(persistence_dir, exist_ok=True)
 
             # Use task_id as conversation_id if provided, otherwise let OpenHands generate one
-            conversation_id = str(task_id) if task_id else None
+            # Note: OpenHands SDK expects UUID object, not string
+            from uuid import UUID
+
+            conversation_id = UUID(task_id) if task_id else None
 
             # Create conversation with persistence enabled
             conversation = Conversation(

@@ -304,3 +304,120 @@ class EventBusServiceProtocol(Protocol):
             event: Event to publish (typically SystemEvent)
         """
         ...
+
+
+# =============================================================================
+# Memory Service Protocol
+# =============================================================================
+
+
+@runtime_checkable
+class MemoryServiceProtocol(Protocol):
+    """Protocol for memory service operations.
+
+    This matches the interface of MemoryService from
+    omoi_os.services.memory.
+    """
+
+    def store_task_execution(
+        self,
+        task_id: str,
+        task_type: str,
+        description: str,
+        result: dict[str, Any],
+        agent_id: str | None = None,
+        phase_id: str | None = None,
+    ) -> str | None:
+        """
+        Store a task execution in memory.
+
+        Args:
+            task_id: Task ID
+            task_type: Type of task
+            description: Task description
+            result: Execution result
+            agent_id: Optional agent ID
+            phase_id: Optional phase ID
+
+        Returns:
+            Memory entry ID or None if failed
+        """
+        ...
+
+    def search_similar(
+        self,
+        query: str,
+        top_k: int = 5,
+        task_type: str | None = None,
+        phase_id: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """
+        Search for similar memories.
+
+        Args:
+            query: Search query
+            top_k: Number of results
+            task_type: Filter by task type
+            phase_id: Filter by phase
+
+        Returns:
+            List of similar memory entries
+        """
+        ...
+
+    def get_learned_patterns(
+        self,
+        task_type: str | None = None,
+        phase_id: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """
+        Get learned patterns from past executions.
+
+        Args:
+            task_type: Filter by task type
+            phase_id: Filter by phase
+            limit: Maximum patterns to return
+
+        Returns:
+            List of learned patterns
+        """
+        ...
+
+
+# =============================================================================
+# Context Service Protocol
+# =============================================================================
+
+
+@runtime_checkable
+class ContextServiceProtocol(Protocol):
+    """Protocol for context service operations."""
+
+    def get_ticket_context(self, ticket_id: str) -> dict[str, Any] | None:
+        """Get context for a ticket."""
+        ...
+
+    def get_phase_context(
+        self, phase_id: str, ticket_id: str | None = None
+    ) -> dict[str, Any]:
+        """Get context for a phase."""
+        ...
+
+
+# =============================================================================
+# Dependency Graph Service Protocol
+# =============================================================================
+
+
+@runtime_checkable
+class DependencyGraphServiceProtocol(Protocol):
+    """Protocol for dependency graph service operations."""
+
+    def get_dependency_graph(self, ticket_id: str) -> dict[str, Any]:
+        """Get the dependency graph for a ticket's tasks."""
+        ...
+
+    def analyze_blockers(self, ticket_id: str) -> dict[str, Any]:
+        """Analyze what's blocking task progress."""
+        ...
