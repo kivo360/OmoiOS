@@ -40,6 +40,7 @@ class DaytonaWorkspaceConfig:
     timeout: int = 60  # Sandbox creation timeout
     labels: dict = field(default_factory=dict)
     ephemeral: bool = True  # Auto-delete on stop
+    public: bool = False  # Make ports publicly accessible without auth
 
     @classmethod
     def from_settings(cls, settings: "DaytonaSettings" = None, **overrides) -> "DaytonaWorkspaceConfig":
@@ -102,6 +103,7 @@ class DaytonaWorkspaceConfig:
             timeout=overrides.get("timeout", settings.timeout),
             labels=overrides.get("labels", {}),
             ephemeral=overrides.get("ephemeral", True),
+            public=overrides.get("public", getattr(settings, "public", False)),
         )
 
 
@@ -237,15 +239,17 @@ class DaytonaWorkspace:
                 os_user=self.config.os_user,
                 labels=self.config.labels or None,
                 ephemeral=self.config.ephemeral,
+                public=self.config.public,
             )
-            logger.info(f"Creating Daytona sandbox with image: {self.config.image}")
+            logger.info(f"Creating Daytona sandbox with image: {self.config.image} (public={self.config.public})")
         else:
             params = CreateSandboxBaseParams(
                 language=CodeLanguage(self.config.language),
                 labels=self.config.labels or None,
                 ephemeral=self.config.ephemeral,
+                public=self.config.public,
             )
-            logger.info(f"Creating Daytona sandbox with language: {self.config.language}")
+            logger.info(f"Creating Daytona sandbox with language: {self.config.language} (public={self.config.public})")
 
         self._sandbox = self._daytona.create(
             params=params,
@@ -500,6 +504,36 @@ class DaytonaWorkspace:
             List of branches
         """
         return self.sandbox.git.branches(path)
+
+    # -------------------------------------------------------------------------
+    # Port / Preview Operations
+    # -------------------------------------------------------------------------
+
+    def get_preview_url(self, port: int) -> str:
+        """Get public preview URL for a port.
+
+        Args:
+            port: Port number running in sandbox
+
+        Returns:
+            Public URL to access the port
+
+        Note:
+            Sandbox must be created with public=True for unauthenticated access.
+        """
+        preview = self.sandbox.get_preview_link(port)
+        return preview.url
+
+    def get_preview_link(self, port: int):
+        """Get full preview link info including token.
+
+        Args:
+            port: Port number running in sandbox
+
+        Returns:
+            Preview link object with url, token, etc.
+        """
+        return self.sandbox.get_preview_link(port)
 
 
 class DaytonaWorkspaceManager(WorkspaceManager):
