@@ -9,7 +9,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-from daytona import AsyncDaytona, CreateSandboxBaseParams, Daytona, DaytonaConfig
+from daytona import (
+    AsyncDaytona,
+    CreateSandboxBaseParams,
+    CreateSandboxFromImageParams,
+    Daytona,
+    DaytonaConfig,
+)
 from daytona.common.daytona import CodeLanguage
 
 from omoi_os.workspace.managers import CommandExecutor, CommandResult, WorkspaceManager
@@ -28,6 +34,9 @@ class DaytonaWorkspaceConfig:
     api_url: str = "https://app.daytona.io/api"
     target: str = "us"
     language: str = "python"  # python, node, go, rust, etc.
+    image: Optional[str] = None  # Custom Docker image (overrides language)
+    os_user: Optional[str] = None  # OS user for custom images
+    working_dir: str = "/home/daytona"  # Working directory in sandbox
     timeout: int = 60  # Sandbox creation timeout
     labels: dict = field(default_factory=dict)
     ephemeral: bool = True  # Auto-delete on stop
@@ -38,7 +47,7 @@ class DaytonaWorkspaceConfig:
 
         Args:
             settings: Optional DaytonaSettings instance. If None, loads from config.
-            **overrides: Override specific fields (e.g., labels, snapshot)
+            **overrides: Override specific fields (e.g., labels, image)
 
         Returns:
             DaytonaWorkspaceConfig instance
@@ -47,9 +56,9 @@ class DaytonaWorkspaceConfig:
             # Use defaults from config/base.yaml and DAYTONA_* env vars
             config = DaytonaWorkspaceConfig.from_settings()
 
-            # Override snapshot for specific task
+            # Use custom Docker image
             config = DaytonaWorkspaceConfig.from_settings(
-                snapshot="node:20",
+                image="nikolaik/python-nodejs:python3.12-nodejs22",
                 labels={"task_id": "123"}
             )
         """
@@ -62,17 +71,34 @@ class DaytonaWorkspaceConfig:
                 "DAYTONA_API_KEY not configured. Set it in .env.local or config/base.yaml"
             )
 
-        # Map snapshot to language (e.g., "python:3.12" -> "python")
+        # Get image from settings or overrides
+        image = overrides.get("image", settings.image)
+
+        # Map snapshot to language (e.g., "python:3.12" -> "python") if no image
         language = overrides.get("language")
-        if not language and settings.snapshot:
+        if not language and not image and settings.snapshot:
             language = settings.snapshot.split(":")[0]  # "python:3.12" -> "python"
         language = language or "python"
+
+        # Set working_dir based on image or default
+        working_dir = overrides.get("working_dir", getattr(settings, "working_dir", None))
+        if not working_dir:
+            # nikolaik images use /home/pn
+            if image and "nikolaik" in image:
+                working_dir = "/home/pn"
+            elif image:
+                working_dir = "/root"  # Default for custom images
+            else:
+                working_dir = "/home/daytona"  # Default for language sandboxes
 
         return cls(
             api_key=overrides.get("api_key", settings.api_key),
             api_url=overrides.get("api_url", settings.api_url),
             target=overrides.get("target", settings.target),
             language=language,
+            image=image,
+            os_user=overrides.get("os_user", getattr(settings, "os_user", None)),
+            working_dir=working_dir,
             timeout=overrides.get("timeout", settings.timeout),
             labels=overrides.get("labels", {}),
             ephemeral=overrides.get("ephemeral", True),
@@ -193,7 +219,7 @@ class DaytonaWorkspace:
         self._async_daytona: Optional[AsyncDaytona] = None
         self._sandbox = None
         self._executor: Optional[DaytonaCommandExecutor] = None
-        self.working_dir = "/home/daytona"
+        self.working_dir = config.working_dir
 
     def __enter__(self) -> "DaytonaWorkspace":
         """Enter sync context - create sandbox."""
@@ -204,14 +230,23 @@ class DaytonaWorkspace:
         )
         self._daytona = Daytona(daytona_config)
 
-        # Create sandbox params
-        params = CreateSandboxBaseParams(
-            language=CodeLanguage(self.config.language),
-            labels=self.config.labels or None,
-            ephemeral=self.config.ephemeral,
-        )
+        # Create sandbox params - use image if specified, otherwise use language
+        if self.config.image:
+            params = CreateSandboxFromImageParams(
+                image=self.config.image,
+                os_user=self.config.os_user,
+                labels=self.config.labels or None,
+                ephemeral=self.config.ephemeral,
+            )
+            logger.info(f"Creating Daytona sandbox with image: {self.config.image}")
+        else:
+            params = CreateSandboxBaseParams(
+                language=CodeLanguage(self.config.language),
+                labels=self.config.labels or None,
+                ephemeral=self.config.ephemeral,
+            )
+            logger.info(f"Creating Daytona sandbox with language: {self.config.language}")
 
-        logger.info(f"Creating Daytona sandbox with language: {self.config.language}")
         self._sandbox = self._daytona.create(
             params=params,
             timeout=self.config.timeout,
