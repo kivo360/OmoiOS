@@ -766,39 +766,103 @@ class OpenHandsDaytonaWorkspace:
                 error=str(e),
             )
 
-    def git_changes(self, path: str):
+    def git_changes(self, path: str) -> list:
         """Get git changes for the repository at the path.
 
         Args:
             path: Path to the git repository (in sandbox)
 
         Returns:
-            list[GitChange] - currently returns empty list (not fully implemented)
+            list[GitChange] with status and path for each changed file
         """
-        # Execute git status in sandbox and parse output
-        # For now, return empty list - full implementation would parse git output
-        logger.warning(
-            "git_changes not fully implemented for Daytona workspace - returning empty list"
+        from openhands.sdk.git.models import GitChange, GitChangeStatus
+
+        if self._daytona_workspace is None:
+            raise RuntimeError("Workspace not initialized. Use 'with' context.")
+
+        # Run git status --porcelain to get changed files
+        # Format: XY PATH or XY ORIG -> PATH for renames
+        result = self._daytona_workspace.execute_command(
+            f"cd {path} && git status --porcelain",
+            cwd=self._daytona_workspace.working_dir,
         )
-        return []
+
+        if result.exit_code != 0:
+            logger.warning(f"git status failed: {result.stderr}")
+            return []
+
+        changes = []
+        # Use rstrip() to preserve leading spaces in status codes
+        for line in result.stdout.rstrip().split("\n"):
+            if not line or len(line) < 4:
+                continue
+
+            # Parse status codes (first two chars, third is space)
+            # Format: "XY filename" where X=index status, Y=worktree status
+            index_status = line[0]
+            worktree_status = line[1]
+            # Skip the space at position 2
+            file_path = line[3:]
+
+            # Handle renames: "R  old -> new"
+            if " -> " in file_path:
+                _, file_path = file_path.split(" -> ", 1)
+
+            # Determine status
+            if index_status == "A" or worktree_status == "A":
+                status = GitChangeStatus.ADDED
+            elif index_status == "D" or worktree_status == "D":
+                status = GitChangeStatus.DELETED
+            elif index_status == "R" or worktree_status == "R":
+                status = GitChangeStatus.MOVED
+            elif index_status == "M" or worktree_status == "M":
+                status = GitChangeStatus.UPDATED
+            elif index_status == "?":  # Untracked
+                status = GitChangeStatus.ADDED
+            else:
+                status = GitChangeStatus.UPDATED
+
+            changes.append(GitChange(status=status, path=Path(file_path)))
+
+        return changes
 
     def git_diff(self, path: str):
         """Get git diff for the file at the path.
 
         Args:
-            path: Path to the file (in sandbox)
+            path: Path to the file (in sandbox, relative to repo root)
 
         Returns:
-            GitDiff - currently returns empty diff (not fully implemented)
+            GitDiff with original and modified content
         """
         from openhands.sdk.git.models import GitDiff
 
-        # Execute git diff in sandbox and parse output
-        # For now, return empty diff - full implementation would parse git output
-        logger.warning(
-            "git_diff not fully implemented for Daytona workspace - returning empty diff"
+        if self._daytona_workspace is None:
+            raise RuntimeError("Workspace not initialized. Use 'with' context.")
+
+        working_dir = self._daytona_workspace.working_dir
+
+        # Get the original content from HEAD
+        original_result = self._daytona_workspace.execute_command(
+            f"git show HEAD:{path} 2>/dev/null || echo ''",
+            cwd=working_dir,
         )
-        return GitDiff()
+        original = original_result.stdout if original_result.exit_code == 0 else None
+
+        # Get the modified (current) content
+        modified_result = self._daytona_workspace.execute_command(
+            f"cat {path} 2>/dev/null || echo ''",
+            cwd=working_dir,
+        )
+        modified = modified_result.stdout if modified_result.exit_code == 0 else None
+
+        # Handle empty strings as None
+        if original == "":
+            original = None
+        if modified == "":
+            modified = None
+
+        return GitDiff(original=original, modified=modified)
 
     @property
     def sandbox_id(self) -> Optional[str]:
