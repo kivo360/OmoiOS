@@ -334,7 +334,7 @@ class WorkspaceSettings(OmoiBaseSettings):
     mode: str = "local"
 
     # Docker workspace settings (only used when mode="docker")
-    docker_base_image: Optional[str] = None
+    docker_base_image: Optional[str] = "nikolaik/python-nodejs:python3.12-nodejs22"
     docker_server_image: Optional[str] = "ghcr.io/openhands/agent-server:latest"
 
     # Remote workspace settings (only used when mode="remote")
@@ -411,7 +411,8 @@ class DaytonaSettings(OmoiBaseSettings):
     api_key: Optional[str] = None  # DAYTONA_API_KEY
     api_url: str = "https://app.daytona.io/api"  # DAYTONA_API_URL
     target: str = "us"  # DAYTONA_TARGET (us, eu)
-    snapshot: str = "python:3.12"  # DAYTONA_SNAPSHOT (base image)
+    image: Optional[str] = None  # DAYTONA_IMAGE (custom Docker image)
+    snapshot: str = "python:3.12"  # DAYTONA_SNAPSHOT (fallback language)
     timeout: int = 300  # DAYTONA_TIMEOUT (seconds)
 
 

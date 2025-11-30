@@ -441,8 +441,9 @@ def main():
                         )
                         futures[future] = task
 
-                    # Wait for completion (non-blocking with timeout)
-                    for future in as_completed(futures, timeout=10):
+                    # Wait for task completion
+                    # Note: No timeout here - task-level timeouts are handled by TimeoutManager
+                    for future in as_completed(futures):
                         task = futures[future]
                         try:
                             future.result()  # Get result to propagate exceptions

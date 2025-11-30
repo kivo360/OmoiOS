@@ -51,6 +51,8 @@ auth:
 workspace:
   root: ./workspaces
   worker_dir: /tmp/omoi_os_workspaces
+  mode: local
+  docker_base_image: nikolaik/python-nodejs:python3.12-nodejs22
 
 monitoring:
   guardian_interval_seconds: 60
@@ -74,6 +76,7 @@ daytona:
   api_key: ${DAYTONA_API_KEY}
   api_url: https://app.daytona.io/api
   target: us
+  image: nikolaik/python-nodejs:python3.12-nodejs22
   snapshot: python:3.12
   timeout: 300
 
