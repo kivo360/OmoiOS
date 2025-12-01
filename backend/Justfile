@@ -590,6 +590,46 @@ shell:
     {{python}} -i -c "from omoi_os.services.database import DatabaseService; from omoi_os.config import load_database_settings; print('OmoiOS shell ready')"
 
 # ============================================================================
+# Railway Deployment
+# ============================================================================
+
+# Deploy to Railway
+[group('deploy')]
+deploy:
+    @echo "🚀 Deploying to Railway..."
+    railway up
+
+# Deploy with detached mode (returns immediately)
+[group('deploy')]
+deploy-detach:
+    railway up --detach
+
+# View Railway logs
+[group('deploy')]
+deploy-logs:
+    railway logs -f
+
+# Open Railway dashboard
+[group('deploy')]
+deploy-open:
+    railway open
+
+# Run migrations on Railway
+[group('deploy')]
+deploy-migrate:
+    railway run python -m alembic upgrade head
+
+# Check Railway service status
+[group('deploy')]
+deploy-status:
+    railway status
+
+# Link to Railway project
+[group('deploy')]
+deploy-link:
+    railway link
+
+# ============================================================================
 # CI/CD Simulation
 # ============================================================================
 

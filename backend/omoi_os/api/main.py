@@ -605,8 +605,8 @@ async def lifespan(app: FastAPI):
         print(f"⚠️  Failed to initialize MonitoringLoop: {e}")
         monitoring_loop = None
 
-    # Create database tables if they don't exist
-    db.create_tables()
+    # NOTE: Database tables should be created via alembic migrations, not create_all()
+    # Run: alembic upgrade head (handled in Dockerfile CMD)
 
     # Start background loops
     orchestrator_task = asyncio.create_task(orchestrator_loop())
