@@ -180,6 +180,7 @@ class TicketService:
         ticket = self.session.get(Ticket, ticket_id)
         if not ticket:
             raise ValueError("Ticket not found")
+        now = utc_now()
         comment = TicketComment(
             id=_comment_id(),
             ticket_id=ticket.id,
@@ -188,7 +189,8 @@ class TicketService:
             comment_type=comment_type or "general",
             mentions={"ids": mentions} if mentions else None,
             attachments={"paths": attachments} if attachments else None,
-            created_at=utc_now(),
+            created_at=now,
+            updated_at=now,
             is_edited=False,
         )
         self.session.add(comment)

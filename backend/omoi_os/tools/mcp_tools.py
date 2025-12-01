@@ -1011,6 +1011,256 @@ class RemoveTicketDependencyMCPTool(
 
 
 # ============================================================================
+# Additional Ticket Management Tools (MCP-backed)
+# ============================================================================
+
+
+class MCPUpdateTicketAction(Action):
+    """Action to update fields of an existing ticket."""
+
+    ticket_id: str = Field(..., description="ID of ticket to update")
+    agent_id: str = Field(..., description="ID of agent making the update")
+    updates: Dict[str, Any] = Field(
+        ..., description="Dictionary of fields to update (e.g., title, description, priority, tags)"
+    )
+    update_comment: Optional[str] = Field(
+        default=None, description="Optional comment explaining the update"
+    )
+
+
+class MCPChangeTicketStatusAction(Action):
+    """Action to change ticket status with optional commit linkage."""
+
+    ticket_id: str = Field(..., description="ID of ticket to update")
+    agent_id: str = Field(..., description="ID of agent making the change")
+    new_status: str = Field(..., description="New status for the ticket")
+    comment: str = Field(
+        ..., min_length=10, description="Comment explaining the status change (min 10 chars)"
+    )
+    commit_sha: Optional[str] = Field(
+        default=None, description="Optional git commit SHA to link"
+    )
+
+
+class MCPSearchTicketsAction(Action):
+    """Action to search tickets using semantic, keyword, or hybrid search."""
+
+    workflow_id: str = Field(..., description="Workflow identifier")
+    agent_id: str = Field(..., description="ID of agent performing search")
+    query: str = Field(..., min_length=3, description="Search query (min 3 chars)")
+    search_type: str = Field(
+        default="hybrid",
+        description="Type of search: semantic, keyword, or hybrid",
+    )
+    filters: Dict[str, Any] = Field(
+        default_factory=dict, description="Additional filters to apply"
+    )
+    limit: int = Field(default=10, description="Maximum number of results")
+    include_comments: bool = Field(
+        default=True, description="Whether to include comments in search"
+    )
+
+
+class MCPGetTicketsAction(Action):
+    """Action to list tickets with filters and pagination."""
+
+    workflow_id: str = Field(..., description="Workflow identifier")
+    status: Optional[str] = Field(default=None, description="Optional status filter")
+    ticket_type: Optional[str] = Field(
+        default=None, description="Optional ticket type filter"
+    )
+    priority: Optional[str] = Field(default=None, description="Optional priority filter")
+    assigned_agent_id: Optional[str] = Field(
+        default=None, description="Optional assignee filter"
+    )
+    include_completed: bool = Field(
+        default=True, description="Whether to include completed tickets"
+    )
+    limit: int = Field(default=50, description="Maximum number of results")
+    offset: int = Field(default=0, description="Pagination offset")
+    sort_by: str = Field(
+        default="created_at",
+        description="Sort field: created_at, updated_at, priority, status",
+    )
+    sort_order: str = Field(default="desc", description="Sort direction: asc or desc")
+
+
+class MCPLinkCommitAction(Action):
+    """Action to link a git commit to a ticket."""
+
+    ticket_id: str = Field(..., description="ID of ticket to link commit to")
+    agent_id: str = Field(..., description="ID of agent linking the commit")
+    commit_sha: str = Field(..., description="Git commit SHA")
+    commit_message: Optional[str] = Field(
+        default=None, description="Optional commit message"
+    )
+
+
+class UpdateTicketMCPTool(
+    ToolDefinition[MCPUpdateTicketAction, MCPToolsObservation]
+):
+    """Tool to update ticket fields via MCP."""
+
+    @classmethod
+    def create(
+        cls, conv_state: "ConversationState", **kwargs
+    ) -> Sequence["UpdateTicketMCPTool"]:
+        mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
+        executor = _create_mcp_executor(
+            mcp_url,
+            "update_ticket",
+            ["ticket_id", "agent_id", "updates", "update_comment"],
+        )
+        return [
+            cls(
+                name="mcp__update_ticket",
+                description=(
+                    "Update fields of an existing ticket. Pass a dictionary of updates "
+                    "with fields like title, description, priority, tags, etc. "
+                    "Optionally include an update_comment explaining the change."
+                ),
+                action_type=MCPUpdateTicketAction,
+                observation_type=MCPToolsObservation,
+                executor=executor,
+            )
+        ]
+
+
+class ChangeTicketStatusMCPTool(
+    ToolDefinition[MCPChangeTicketStatusAction, MCPToolsObservation]
+):
+    """Tool to change ticket status via MCP."""
+
+    @classmethod
+    def create(
+        cls, conv_state: "ConversationState", **kwargs
+    ) -> Sequence["ChangeTicketStatusMCPTool"]:
+        mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
+        executor = _create_mcp_executor(
+            mcp_url,
+            "change_ticket_status",
+            ["ticket_id", "agent_id", "new_status", "comment", "commit_sha"],
+        )
+        return [
+            cls(
+                name="mcp__change_ticket_status",
+                description=(
+                    "Change the status of a ticket. Requires a comment (min 10 chars) "
+                    "explaining the status change. Optionally link a git commit SHA."
+                ),
+                action_type=MCPChangeTicketStatusAction,
+                observation_type=MCPToolsObservation,
+                executor=executor,
+            )
+        ]
+
+
+class SearchTicketsMCPTool(
+    ToolDefinition[MCPSearchTicketsAction, MCPToolsObservation]
+):
+    """Tool to search tickets via MCP."""
+
+    @classmethod
+    def create(
+        cls, conv_state: "ConversationState", **kwargs
+    ) -> Sequence["SearchTicketsMCPTool"]:
+        mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
+        executor = _create_mcp_executor(
+            mcp_url,
+            "search_tickets",
+            [
+                "workflow_id",
+                "agent_id",
+                "query",
+                "search_type",
+                "filters",
+                "limit",
+                "include_comments",
+            ],
+        )
+        return [
+            cls(
+                name="mcp__search_tickets",
+                description=(
+                    "Search tickets using semantic, keyword, or hybrid search. "
+                    "Supports filters and can include comments in the search. "
+                    "Use search_type='semantic' for meaning-based search, 'keyword' "
+                    "for exact matches, or 'hybrid' (default) for best of both."
+                ),
+                action_type=MCPSearchTicketsAction,
+                observation_type=MCPToolsObservation,
+                executor=executor,
+            )
+        ]
+
+
+class GetTicketsMCPTool(ToolDefinition[MCPGetTicketsAction, MCPToolsObservation]):
+    """Tool to list tickets via MCP."""
+
+    @classmethod
+    def create(
+        cls, conv_state: "ConversationState", **kwargs
+    ) -> Sequence["GetTicketsMCPTool"]:
+        mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
+        executor = _create_mcp_executor(
+            mcp_url,
+            "get_tickets",
+            [
+                "workflow_id",
+                "status",
+                "ticket_type",
+                "priority",
+                "assigned_agent_id",
+                "include_completed",
+                "limit",
+                "offset",
+                "sort_by",
+                "sort_order",
+            ],
+        )
+        return [
+            cls(
+                name="mcp__get_tickets",
+                description=(
+                    "List tickets with filters and pagination. Filter by status, type, "
+                    "priority, or assignee. Supports sorting by created_at, updated_at, "
+                    "priority, or status in ascending or descending order."
+                ),
+                action_type=MCPGetTicketsAction,
+                observation_type=MCPToolsObservation,
+                executor=executor,
+            )
+        ]
+
+
+class LinkCommitMCPTool(ToolDefinition[MCPLinkCommitAction, MCPToolsObservation]):
+    """Tool to link a git commit to a ticket via MCP."""
+
+    @classmethod
+    def create(
+        cls, conv_state: "ConversationState", **kwargs
+    ) -> Sequence["LinkCommitMCPTool"]:
+        mcp_url = kwargs.get("mcp_url", "http://localhost:18000/mcp/")
+        executor = _create_mcp_executor(
+            mcp_url,
+            "link_commit",
+            ["ticket_id", "agent_id", "commit_sha", "commit_message"],
+        )
+        return [
+            cls(
+                name="mcp__link_commit",
+                description=(
+                    "Link a git commit to a ticket. Use this to track which commits "
+                    "are related to which tickets for traceability."
+                ),
+                action_type=MCPLinkCommitAction,
+                observation_type=MCPToolsObservation,
+                executor=executor,
+            )
+        ]
+
+
+# ============================================================================
 # History & Trajectory Tools (MCP-backed)
 # ============================================================================
 
@@ -1166,11 +1416,16 @@ def get_mcp_tools(mcp_url: str = "http://localhost:18000/mcp/") -> List[type]:
         # Ticket management
         CreateTicketMCPTool,
         GetTicketMCPTool,
+        GetTicketsMCPTool,
         GetTicketHistoryMCPTool,
+        UpdateTicketMCPTool,
+        ChangeTicketStatusMCPTool,
         ResolveTicketMCPTool,
+        SearchTicketsMCPTool,
         AddTicketCommentMCPTool,
         AddTicketDependencyMCPTool,
         RemoveTicketDependencyMCPTool,
+        LinkCommitMCPTool,
         # Task management
         CreateTaskMCPTool,
         UpdateTaskStatusMCPTool,

@@ -32,11 +32,16 @@ from omoi_os.tools.mcp_tools import (
     # Ticket management tools
     CreateTicketMCPTool,
     GetTicketMCPTool,
+    GetTicketsMCPTool,
     GetTicketHistoryMCPTool,
+    UpdateTicketMCPTool,
+    ChangeTicketStatusMCPTool,
     ResolveTicketMCPTool,
+    SearchTicketsMCPTool,
     AddTicketCommentMCPTool,
     AddTicketDependencyMCPTool,
     RemoveTicketDependencyMCPTool,
+    LinkCommitMCPTool,
     # Task management tools
     CreateTaskMCPTool,
     UpdateTaskStatusMCPTool,
@@ -94,11 +99,16 @@ __all__ = [
     # Ticket management MCP tools
     "CreateTicketMCPTool",
     "GetTicketMCPTool",
+    "GetTicketsMCPTool",
     "GetTicketHistoryMCPTool",
+    "UpdateTicketMCPTool",
+    "ChangeTicketStatusMCPTool",
     "ResolveTicketMCPTool",
+    "SearchTicketsMCPTool",
     "AddTicketCommentMCPTool",
     "AddTicketDependencyMCPTool",
     "RemoveTicketDependencyMCPTool",
+    "LinkCommitMCPTool",
     # Task management MCP tools
     "CreateTaskMCPTool",
     "UpdateTaskStatusMCPTool",

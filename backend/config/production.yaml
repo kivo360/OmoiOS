@@ -1,14 +1,23 @@
+# Production Configuration for Railway
+# Environment variables override these values
+
 llm:
-  model: openai/glm-4.6
-  api_key: REDACTED_LLM_API_KEY
-  base_url: https://api.z.ai/api/coding/paas/v4
-  # fireworks_api_key loaded from LLM_FIREWORKS_API_KEY env var
+  model: ${LLM_MODEL:-openai/glm-4.6}
+  api_key: ${LLM_API_KEY}
+  base_url: ${LLM_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
 
 database:
-  url: postgresql+psycopg://postgres:postgres@localhost:15432/app_db
+  # Use pgvector template: https://railway.com/deploy/3jJFCA
+  # Then reference: DATABASE_URL=${{pgvector.DATABASE_URL}}
+  url: ${DATABASE_URL}
 
 redis:
-  url: redis://localhost:16379
+  # Railway provides REDIS_URL automatically when you add Redis
+  url: ${REDIS_URL}
+
+server:
+  host: "0.0.0.0"
+  port: ${PORT:-8000}
 
 task_queue:
   age_ceiling: 3600
@@ -28,14 +37,8 @@ approval:
   approval_timeout_seconds: 1800
   on_reject: delete
 
-supabase:
-  url: null
-  anon_key: null
-  service_role_key: null
-  db_url: null
-
 auth:
-  jwt_secret_key: dev-secret-key-change-in-production
+  jwt_secret_key: ${JWT_SECRET_KEY}
   jwt_algorithm: HS256
   access_token_expire_minutes: 15
   refresh_token_expire_days: 7
@@ -49,9 +52,9 @@ auth:
   session_expire_days: 30
 
 workspace:
-  root: ./workspaces
+  root: /tmp/workspaces
   worker_dir: /tmp/omoi_os_workspaces
-  mode: local
+  mode: daytona
   docker_base_image: nikolaik/python-nodejs:python3.12-nodejs22
 
 monitoring:
@@ -81,22 +84,16 @@ daytona:
   timeout: 300
 
 integrations:
-  mcp_server_url: http://localhost:18000/mcp
+  # MCP server URL - this will be the Railway public URL
+  mcp_server_url: ${MCP_SERVER_URL:-https://${RAILWAY_PUBLIC_DOMAIN}/mcp}
   enable_mcp_tools: true
-  github_token: null
+  github_token: ${GITHUB_TOKEN}
 
 embedding:
   provider: local
-  openai_api_key: null
+  openai_api_key: ${OPENAI_API_KEY}
   model_name: intfloat/multilingual-e5-large
 
 observability:
-  enable_tracing: false
-  logfire_token: null
-
-demo:
-  sdk_example: activate_skill
-  persistence_dir: ./.conversations
-  add_security_analyzer: false
-  confirm_all: true
-
+  enable_tracing: true
+  logfire_token: ${LOGFIRE_TOKEN}
