@@ -30,6 +30,8 @@ if TYPE_CHECKING:
 
 
 _db_service_instance: "DatabaseService | None" = None
+_event_bus_instance: "EventBusService | None" = None
+_task_queue_instance: "TaskQueueService | None" = None
 
 
 def get_db_service() -> "DatabaseService":
@@ -57,21 +59,49 @@ def get_db_service() -> "DatabaseService":
 
 
 def get_event_bus() -> "EventBusService":
-    """Get event bus service instance."""
+    """Get event bus service instance with lazy initialization fallback."""
+    global _event_bus_instance
+    
     import omoi_os.api.main as main_module
 
-    if main_module.event_bus is None:
-        raise RuntimeError("Event bus not initialized")
-    return main_module.event_bus
+    if main_module.event_bus is not None:
+        return main_module.event_bus
+
+    # Fallback: Use cached singleton or create new one
+    if _event_bus_instance is not None:
+        return _event_bus_instance
+
+    # Last resort: Create new EventBusService from config
+    from omoi_os.config import get_app_settings
+    from omoi_os.services.event_bus import EventBusService
+
+    app_settings = get_app_settings()
+    _event_bus_instance = EventBusService(redis_url=app_settings.redis.url)
+
+    return _event_bus_instance
 
 
 def get_task_queue() -> "TaskQueueService":
-    """Get task queue service instance."""
+    """Get task queue service instance with lazy initialization fallback."""
+    global _task_queue_instance
+    
     import omoi_os.api.main as main_module
 
-    if main_module.queue is None:
-        raise RuntimeError("Task queue not initialized")
-    return main_module.queue
+    if main_module.queue is not None:
+        return main_module.queue
+
+    # Fallback: Use cached singleton or create new one
+    if _task_queue_instance is not None:
+        return _task_queue_instance
+
+    # Last resort: Create new TaskQueueService (requires db and event_bus)
+    from omoi_os.services.task_queue import TaskQueueService
+
+    db = get_db_service()
+    event_bus = get_event_bus()
+    _task_queue_instance = TaskQueueService(db, event_bus=event_bus)
+
+    return _task_queue_instance
 
 
 def get_agent_health_service() -> "AgentHealthService":
