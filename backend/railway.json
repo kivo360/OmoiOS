@@ -4,7 +4,7 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "Dockerfile.api",
     "watchPatterns": [
-      "backend/**"
+      "**"
     ]
   },
   "deploy": {
