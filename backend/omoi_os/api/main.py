@@ -596,39 +596,10 @@ async def lifespan(app: FastAPI):
         monitoring_loop, \
         mcp_app
 
-    # Debug: Print environment configuration
-    import os
-
-    print("=" * 60, flush=True)
-    print("🔧 STARTUP CONFIGURATION DEBUG", flush=True)
-    print("=" * 60, flush=True)
-    print(
-        f"OMOIOS_ENV: {os.getenv('OMOIOS_ENV', 'NOT SET (defaults to local)')}",
-        flush=True,
-    )
-    print(
-        f"DATABASE_URL: {os.getenv('DATABASE_URL', 'NOT SET')[:50] + '...' if os.getenv('DATABASE_URL') else 'NOT SET'}",
-        flush=True,
-    )
-    print(f"REDIS_URL: {os.getenv('REDIS_URL', 'NOT SET')}", flush=True)
-    print("=" * 60, flush=True)
-
     app_settings = get_app_settings()
 
-    # Debug: Print resolved settings
-    print(
-        f"📋 Resolved database.url: {app_settings.database.url[:50]}..."
-        if len(app_settings.database.url) > 50
-        else f"📋 Resolved database.url: {app_settings.database.url}",
-        flush=True,
-    )
-    print(f"📋 Resolved redis.url: {app_settings.redis.url}", flush=True)
-    print("=" * 60, flush=True)
-
     # Initialize services
-    print("🔄 Creating DatabaseService...", flush=True)
     db = DatabaseService(connection_string=app_settings.database.url)
-    print(f"✅ DatabaseService created: db={db}, id={id(db)}", flush=True)
     event_bus = EventBusService(redis_url=app_settings.redis.url)
     queue = TaskQueueService(
         db, event_bus=event_bus
@@ -758,9 +729,6 @@ async def lifespan(app: FastAPI):
             print("✅ Intelligent Monitoring Loop started")
         except Exception as e:
             print(f"⚠️  Failed to start MonitoringLoop: {e}")
-
-    # Debug: Confirm db is set before yielding
-    print(f"🚀 ABOUT TO YIELD - db={db}, id={id(db) if db else 'None'}", flush=True)
 
     yield
 

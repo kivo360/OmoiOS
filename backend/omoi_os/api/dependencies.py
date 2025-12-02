@@ -31,35 +31,28 @@ if TYPE_CHECKING:
 
 _db_service_instance: "DatabaseService | None" = None
 
+
 def get_db_service() -> "DatabaseService":
     """Get database service instance with lazy initialization fallback."""
     global _db_service_instance
-    
+
     # First, try to get from main module (set by lifespan)
     import omoi_os.api.main as main_module
-    
-    db = main_module.db
-    
-    # Debug: Print what we got from main
-    print(f"🔍 get_db_service called: main.db={db}, id={id(db) if db else 'None'}", flush=True)
-    
-    if db is not None:
-        return db
-    
+
+    if main_module.db is not None:
+        return main_module.db
+
     # Fallback: Use cached singleton or create new one
     if _db_service_instance is not None:
-        print(f"🔄 Using cached singleton: id={id(_db_service_instance)}", flush=True)
         return _db_service_instance
-    
-    # Last resort: Create new DatabaseService
-    print("⚠️ Creating DatabaseService as fallback (main.db was None)", flush=True)
+
+    # Last resort: Create new DatabaseService from config
     from omoi_os.config import get_app_settings
     from omoi_os.services.database import DatabaseService
-    
+
     app_settings = get_app_settings()
     _db_service_instance = DatabaseService(connection_string=app_settings.database.url)
-    print(f"✅ Created fallback DatabaseService: id={id(_db_service_instance)}", flush=True)
-    
+
     return _db_service_instance
 
 
@@ -197,7 +190,11 @@ def get_restart_orchestrator():
     from omoi_os.services.restart_orchestrator import RestartOrchestrator
     import omoi_os.api.main as main_module
 
-    if main_module.db is None or main_module.registry_service is None or main_module.queue is None:
+    if (
+        main_module.db is None
+        or main_module.registry_service is None
+        or main_module.queue is None
+    ):
         raise RuntimeError("Required services not initialized")
 
     return RestartOrchestrator(
