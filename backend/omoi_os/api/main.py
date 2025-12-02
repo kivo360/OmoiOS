@@ -602,7 +602,10 @@ async def lifespan(app: FastAPI):
     print("=" * 60, flush=True)
     print("🔧 STARTUP CONFIGURATION DEBUG", flush=True)
     print("=" * 60, flush=True)
-    print(f"OMOIOS_ENV: {os.getenv('OMOIOS_ENV', 'NOT SET (defaults to local)')}", flush=True)
+    print(
+        f"OMOIOS_ENV: {os.getenv('OMOIOS_ENV', 'NOT SET (defaults to local)')}",
+        flush=True,
+    )
     print(
         f"DATABASE_URL: {os.getenv('DATABASE_URL', 'NOT SET')[:50] + '...' if os.getenv('DATABASE_URL') else 'NOT SET'}",
         flush=True,
@@ -758,7 +761,7 @@ async def lifespan(app: FastAPI):
 
     # Debug: Confirm db is set before yielding
     print(f"🚀 ABOUT TO YIELD - db={db}, id={id(db) if db else 'None'}", flush=True)
-    
+
     yield
 
     # Cleanup

@@ -31,8 +31,11 @@ if TYPE_CHECKING:
 
 def get_db_service() -> "DatabaseService":
     """Get database service instance."""
-    # Lazy import to avoid circular dependency
-    from omoi_os.api.main import db
+    # Access module attribute directly instead of importing the variable
+    # This ensures we get the current value, not the value at import time
+    import omoi_os.api.main as main_module
+    
+    db = main_module.db
 
     # Debug: Print what we got
     print(f"🔍 get_db_service called: db={db}, id={id(db) if db else 'None'}", flush=True)
@@ -44,104 +47,101 @@ def get_db_service() -> "DatabaseService":
 
 def get_event_bus() -> "EventBusService":
     """Get event bus service instance."""
-    # Lazy import to avoid circular dependency
-    from omoi_os.api.main import event_bus
+    import omoi_os.api.main as main_module
 
-    if event_bus is None:
+    if main_module.event_bus is None:
         raise RuntimeError("Event bus not initialized")
-    return event_bus
+    return main_module.event_bus
 
 
 def get_task_queue() -> "TaskQueueService":
     """Get task queue service instance."""
-    # Lazy import to avoid circular dependency
-    from omoi_os.api.main import queue
+    import omoi_os.api.main as main_module
 
-    if queue is None:
+    if main_module.queue is None:
         raise RuntimeError("Task queue not initialized")
-    return queue
+    return main_module.queue
 
 
 def get_agent_health_service() -> "AgentHealthService":
     """Get agent health service instance."""
-    # Lazy import to avoid circular dependency
-    from omoi_os.api.main import health_service
+    import omoi_os.api.main as main_module
 
-    if health_service is None:
+    if main_module.health_service is None:
         raise RuntimeError("Agent health service not initialized")
-    return health_service
+    return main_module.health_service
 
 
 def get_agent_registry_service() -> "AgentRegistryService":
     """Get agent registry service instance."""
-    from omoi_os.api.main import registry_service
+    import omoi_os.api.main as main_module
 
-    if registry_service is None:
+    if main_module.registry_service is None:
         raise RuntimeError("Agent registry service not initialized")
-    return registry_service
+    return main_module.registry_service
 
 
 def get_collaboration_service() -> "CollaborationService":
     """Get collaboration service instance."""
-    from omoi_os.api.main import collaboration_service
+    import omoi_os.api.main as main_module
 
-    if collaboration_service is None:
+    if main_module.collaboration_service is None:
         raise RuntimeError("Collaboration service not initialized")
-    return collaboration_service
+    return main_module.collaboration_service
 
 
 def get_resource_lock_service() -> "ResourceLockService":
     """Get resource lock service instance."""
-    from omoi_os.api.main import lock_service
+    import omoi_os.api.main as main_module
 
-    if lock_service is None:
+    if main_module.lock_service is None:
         raise RuntimeError("Resource lock service not initialized")
-    return lock_service
+    return main_module.lock_service
 
 
 def get_monitor_service() -> "MonitorService":
     """Get monitor service instance."""
-    from omoi_os.api.main import monitor_service
+    import omoi_os.api.main as main_module
 
-    if monitor_service is None:
+    if main_module.monitor_service is None:
         raise RuntimeError("Monitor service not initialized")
-    return monitor_service
+    return main_module.monitor_service
 
 
 def get_cost_tracking_service() -> "CostTrackingService":
     """Get cost tracking service instance."""
-    from omoi_os.api.main import cost_tracking_service
+    import omoi_os.api.main as main_module
 
-    if cost_tracking_service is None:
+    if main_module.cost_tracking_service is None:
         raise RuntimeError("Cost tracking service not initialized")
-    return cost_tracking_service
+    return main_module.cost_tracking_service
 
 
 def get_budget_enforcer_service() -> "BudgetEnforcerService":
     """Get budget enforcer service instance."""
-    from omoi_os.api.main import budget_enforcer_service
+    import omoi_os.api.main as main_module
 
-    if budget_enforcer_service is None:
+    if main_module.budget_enforcer_service is None:
         raise RuntimeError("Budget enforcer service not initialized")
-    return budget_enforcer_service
+    return main_module.budget_enforcer_service
 
 
 def get_heartbeat_protocol_service() -> "HeartbeatProtocolService":
     """Get heartbeat protocol service instance."""
-    from omoi_os.api.main import heartbeat_protocol_service
+    import omoi_os.api.main as main_module
 
-    if heartbeat_protocol_service is None:
+    if main_module.heartbeat_protocol_service is None:
         raise RuntimeError("Heartbeat protocol service not initialized")
-    return heartbeat_protocol_service
+    return main_module.heartbeat_protocol_service
 
 
 def get_phase_gate_service() -> "PhaseGateService":
     """Get phase gate service instance."""
-    from omoi_os.api.main import phase_gate_service
+    import omoi_os.api.main as main_module
 
-    if phase_gate_service is None:
+    if main_module.phase_gate_service is None:
         raise RuntimeError("Phase gate service not initialized")
-    return phase_gate_service
+    return main_module.phase_gate_service
 
 
 def get_event_bus_service() -> "EventBusService":
@@ -151,20 +151,20 @@ def get_event_bus_service() -> "EventBusService":
 
 def get_agent_status_manager() -> "AgentStatusManager":
     """Get agent status manager instance."""
-    from omoi_os.api.main import agent_status_manager
+    import omoi_os.api.main as main_module
 
-    if agent_status_manager is None:
+    if main_module.agent_status_manager is None:
         raise RuntimeError("Agent status manager not initialized")
-    return agent_status_manager
+    return main_module.agent_status_manager
 
 
 def get_approval_service() -> "ApprovalService":
     """Get approval service instance."""
-    from omoi_os.api.main import approval_service
+    import omoi_os.api.main as main_module
 
-    if approval_service is None:
+    if main_module.approval_service is None:
         raise RuntimeError("Approval service not initialized")
-    return approval_service
+    return main_module.approval_service
 
 
 def get_llm_service() -> "LLMService":
@@ -177,35 +177,29 @@ def get_llm_service() -> "LLMService":
 def get_restart_orchestrator():
     """Get RestartOrchestrator instance."""
     from omoi_os.services.restart_orchestrator import RestartOrchestrator
-    from omoi_os.api.main import (
-        db,
-        registry_service,
-        queue,
-        event_bus,
-        agent_status_manager,
-    )
+    import omoi_os.api.main as main_module
 
-    if db is None or registry_service is None or queue is None:
+    if main_module.db is None or main_module.registry_service is None or main_module.queue is None:
         raise RuntimeError("Required services not initialized")
 
     return RestartOrchestrator(
-        db=db,
-        agent_registry=registry_service,
-        task_queue=queue,
-        event_bus=event_bus,
-        status_manager=agent_status_manager,
+        db=main_module.db,
+        agent_registry=main_module.registry_service,
+        task_queue=main_module.queue,
+        event_bus=main_module.event_bus,
+        status_manager=main_module.agent_status_manager,
     )
 
 
 def get_guardian_service():
     """Get GuardianService instance."""
     from omoi_os.services.guardian import GuardianService
-    from omoi_os.api.main import db, event_bus
+    import omoi_os.api.main as main_module
 
-    if db is None:
+    if main_module.db is None:
         raise RuntimeError("Database service not initialized")
 
-    return GuardianService(db=db, event_bus=event_bus)
+    return GuardianService(db=main_module.db, event_bus=main_module.event_bus)
 
 
 def get_database_service() -> "DatabaseService":
@@ -215,11 +209,11 @@ def get_database_service() -> "DatabaseService":
 
 def get_monitoring_loop():
     """Get MonitoringLoop instance."""
-    from omoi_os.api.main import monitoring_loop
+    import omoi_os.api.main as main_module
 
-    if monitoring_loop is None:
+    if main_module.monitoring_loop is None:
         raise RuntimeError("Monitoring loop not initialized")
-    return monitoring_loop
+    return main_module.monitoring_loop
 
 
 def get_supabase_auth_service():
@@ -329,13 +323,13 @@ def require_role(allowed_roles: list[str]):
 
 async def get_db_session():
     """Get async database session from DatabaseService."""
-    from omoi_os.api.main import db
+    import omoi_os.api.main as main_module
 
-    if db is None:
+    if main_module.db is None:
         raise RuntimeError("Database service not initialized")
 
     # Use async context manager from DatabaseService
-    async with db.get_async_session() as session:
+    async with main_module.db.get_async_session() as session:
         yield session
 
 
