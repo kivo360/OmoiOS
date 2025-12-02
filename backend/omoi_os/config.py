@@ -415,6 +415,11 @@ class DaytonaSettings(OmoiBaseSettings):
     snapshot: str = "python:3.12"  # DAYTONA_SNAPSHOT (fallback language)
     timeout: int = 300  # DAYTONA_TIMEOUT (seconds)
 
+    # Sandbox execution mode
+    # When True: orchestrator spawns Daytona sandboxes per task
+    # When False: legacy mode - workers poll for tasks
+    sandbox_execution: bool = False  # DAYTONA_SANDBOX_EXECUTION
+
 
 def load_daytona_settings() -> DaytonaSettings:
     return get_app_settings().daytona

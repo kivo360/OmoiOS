@@ -72,7 +72,12 @@ monitoring_loop = None  # Intelligent monitoring loop  # Defined below in lifesp
 
 
 async def orchestrator_loop():
-    """Background task that polls queue and assigns tasks to workers."""
+    """Background task that polls queue and assigns tasks to workers.
+
+    Supports two execution modes:
+    1. Legacy mode (SANDBOX_EXECUTION=false): Assigns to DB agents, workers poll
+    2. Sandbox mode (SANDBOX_EXECUTION=true): Spawns Daytona sandboxes per task
+    """
     global db, queue, event_bus, registry_service
 
     if not db or not queue or not event_bus:
@@ -80,54 +85,150 @@ async def orchestrator_loop():
 
     print("Orchestrator loop started")
 
+    # Check if sandbox execution is enabled
+    from omoi_os.config import get_app_settings
+
+    settings = get_app_settings()
+    sandbox_execution = settings.daytona.sandbox_execution
+
+    # Initialize Daytona spawner if sandbox mode enabled
+    daytona_spawner = None
+    if sandbox_execution:
+        try:
+            from omoi_os.services.daytona_spawner import get_daytona_spawner
+
+            daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
+            print("Sandbox execution mode ENABLED - will spawn Daytona sandboxes")
+        except Exception as e:
+            print(f"Failed to initialize Daytona spawner: {e}")
+            print("Falling back to legacy mode")
+            sandbox_execution = False
+    else:
+        print("Legacy execution mode - workers poll for tasks")
+
     while True:
         try:
-            # Simple assignment: get next pending task and assign to first available worker
-            # TODO: Implement proper agent registry lookup
-            phase_id = "PHASE_IMPLEMENTATION"  # For MVP, hardcode phase
-
-            # Get available agent first to check capabilities (REQ-TQM-ASSIGN-001)
+            # Get next pending task (no agent filter in sandbox mode)
             from omoi_os.models.agent import Agent
             from omoi_os.models.agent_status import AgentStatus
 
             with db.get_session() as session:
-                available_agent = (
-                    session.query(Agent)
-                    .filter(Agent.status == AgentStatus.IDLE.value)
-                    .first()
-                )
-                if not available_agent:
-                    # No available agents, wait and retry
-                    await asyncio.sleep(5)
-                    continue
+                if sandbox_execution:
+                    # Sandbox mode: just get next pending task
+                    task = queue.get_next_task(phase_id=None)
+                else:
+                    # Legacy mode: check for available agent first
+                    available_agent = (
+                        session.query(Agent)
+                        .filter(Agent.status == AgentStatus.IDLE.value)
+                        .first()
+                    )
+                    if not available_agent:
+                        await asyncio.sleep(5)
+                        continue
 
-                # Store values we need before session closes
-                available_agent_id = str(available_agent.id)
-                agent_capabilities = available_agent.capabilities or []
-                
-                # Get task matching agent's phase and capabilities (REQ-TQM-ASSIGN-001)
-                task = queue.get_next_task(
-                    phase_id, agent_capabilities=agent_capabilities
-                )
+                    available_agent_id = str(available_agent.id)
+                    agent_capabilities = available_agent.capabilities or []
+                    phase_id = "PHASE_IMPLEMENTATION"
+
+                    task = queue.get_next_task(
+                        phase_id, agent_capabilities=agent_capabilities
+                    )
 
             if task:
-                # Assign task to available agent (use stored ID, not detached object)
-                queue.assign_task(task.id, available_agent_id)
-                agent_id = available_agent_id
+                task_id = str(task.id)
+                phase_id = task.phase_id or "PHASE_IMPLEMENTATION"
 
-                # Publish assignment event
-                from omoi_os.services.event_bus import SystemEvent
+                if sandbox_execution and daytona_spawner:
+                    # Sandbox mode: spawn a Daytona sandbox for this task
+                    try:
+                        # Determine agent type from phase
+                        from omoi_os.agents.templates import get_template_for_phase
 
-                event_bus.publish(
-                    SystemEvent(
-                        event_type="TASK_ASSIGNED",
-                        entity_type="task",
-                        entity_id=str(task.id),
-                        payload={"agent_id": agent_id},
+                        template = get_template_for_phase(phase_id)
+                        agent_type = template.agent_type.value
+
+                        # Register sandbox agent in database (skip heartbeat wait)
+                        from omoi_os.models.agent import Agent
+                        from uuid import uuid4
+
+                        agent_id = str(uuid4())
+                        capabilities = template.tools.get_sdk_tools() if template.tools else ["sandbox"]
+                        
+                        with db.get_session() as session:
+                            agent = Agent(
+                                id=agent_id,
+                                agent_type=agent_type,
+                                phase_id=phase_id,
+                                capabilities=capabilities,
+                                status="RUNNING",  # Valid status
+                                tags=["sandbox", "daytona"],
+                                health_status="healthy",  # Assume healthy
+                            )
+                            session.add(agent)
+                            session.commit()
+
+                        # Spawn sandbox
+                        sandbox_id = await daytona_spawner.spawn_for_task(
+                            task_id=task_id,
+                            agent_id=agent_id,
+                            phase_id=phase_id,
+                            agent_type=agent_type,
+                        )
+
+                        # Update task with sandbox info
+                        queue.assign_task(task.id, agent_id)
+
+                        print(
+                            f"🚀 Spawned sandbox {sandbox_id} for task {task_id} (agent: {agent_id})"
+                        )
+
+                        # Publish event
+                        from omoi_os.services.event_bus import SystemEvent
+
+                        event_bus.publish(
+                            SystemEvent(
+                                event_type="SANDBOX_SPAWNED",
+                                entity_type="sandbox",
+                                entity_id=sandbox_id,
+                                payload={
+                                    "task_id": task_id,
+                                    "agent_id": agent_id,
+                                    "phase_id": phase_id,
+                                },
+                            )
+                        )
+
+                    except Exception as spawn_error:
+                        import traceback
+                        error_details = traceback.format_exc()
+                        print(
+                            f"❌ Failed to spawn sandbox for task {task_id}: {spawn_error}"
+                        )
+                        print(f"   Traceback: {error_details}")
+                        # Mark task as failed
+                        queue.update_task_status(
+                            task.id,
+                            "failed",
+                            error_message=f"Sandbox spawn failed: {spawn_error}",
+                        )
+                else:
+                    # Legacy mode: assign to available agent
+                    queue.assign_task(task.id, available_agent_id)
+                    agent_id = available_agent_id
+
+                    from omoi_os.services.event_bus import SystemEvent
+
+                    event_bus.publish(
+                        SystemEvent(
+                            event_type="TASK_ASSIGNED",
+                            entity_type="task",
+                            entity_id=task_id,
+                            payload={"agent_id": agent_id},
+                        )
                     )
-                )
 
-                print(f"Assigned task {task.id} to agent {agent_id}")
+                    print(f"Assigned task {task_id} to agent {agent_id}")
 
             # Poll every 10 seconds
             await asyncio.sleep(10)

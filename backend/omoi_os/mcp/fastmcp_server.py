@@ -11,7 +11,7 @@ from pydantic import Field
 
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
-from omoi_os.services.event_bus import EventBusService
+from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
@@ -789,6 +789,128 @@ def update_task_status(
         "task_id": task_id,
         "status": status,
     }
+
+
+@mcp.tool()
+def register_conversation(
+    ctx: Context,
+    task_id: str,
+    conversation_id: str,
+    persistence_dir: Optional[str] = None,
+    sandbox_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Register OpenHands conversation info for a task.
+
+    This enables Guardian interventions by storing the conversation_id
+    that can be used to send messages to a running agent.
+
+    Args:
+        task_id: ID of the task
+        conversation_id: OpenHands conversation ID
+        persistence_dir: Directory where conversation state is persisted
+        sandbox_id: Optional Daytona sandbox ID
+
+    Returns:
+        Dictionary with success status
+    """
+    if not _db:
+        raise RuntimeError("Database service not initialized")
+
+    from omoi_os.models.task import Task
+
+    with _db.get_session() as session:
+        task = session.query(Task).filter_by(id=task_id).first()
+        if not task:
+            return {"success": False, "error": f"Task {task_id} not found"}
+
+        task.conversation_id = conversation_id
+        if persistence_dir:
+            task.persistence_dir = persistence_dir
+        if sandbox_id:
+            if not task.result:
+                task.result = {}
+            task.result["sandbox_id"] = sandbox_id
+
+        session.commit()
+
+    ctx.info(f"Registered conversation {conversation_id} for task {task_id}")
+
+    # Publish event for real-time tracking
+    if _event_bus:
+        _event_bus.publish(
+            SystemEvent(
+                event_type="CONVERSATION_REGISTERED",
+                entity_type="task",
+                entity_id=task_id,
+                payload={
+                    "conversation_id": conversation_id,
+                    "persistence_dir": persistence_dir,
+                    "sandbox_id": sandbox_id,
+                },
+            )
+        )
+
+    return {
+        "success": True,
+        "task_id": task_id,
+        "conversation_id": conversation_id,
+    }
+
+
+@mcp.tool()
+def report_agent_event(
+    ctx: Context,
+    task_id: str,
+    agent_id: str,
+    event_type: str,
+    event_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Report an agent event for Guardian observation.
+
+    This enables real-time monitoring of agent actions by streaming
+    events from sandbox workers back to the server.
+
+    Args:
+        task_id: ID of the task being executed
+        agent_id: ID of the agent
+        event_type: Type of event (action, observation, message, etc.)
+        event_data: Event details (action content, observation result, etc.)
+
+    Returns:
+        Dictionary with success status
+    """
+    if not _db:
+        raise RuntimeError("Database service not initialized")
+
+    from omoi_os.models.agent_log import AgentLog
+
+    # Store in agent_logs for Guardian trajectory analysis
+    with _db.get_session() as session:
+        log_entry = AgentLog(
+            agent_id=agent_id,
+            log_type=event_type,
+            message=event_data.get("message", str(event_data)[:500]),
+            details=event_data,
+        )
+        session.add(log_entry)
+        session.commit()
+
+    # Publish event for real-time monitoring
+    if _event_bus:
+        _event_bus.publish(
+            SystemEvent(
+                event_type="AGENT_EVENT",
+                entity_type="agent",
+                entity_id=agent_id,
+                payload={
+                    "task_id": task_id,
+                    "event_type": event_type,
+                    "event_data": event_data,
+                },
+            )
+        )
+
+    return {"success": True, "logged": True}
 
 
 @mcp.tool()

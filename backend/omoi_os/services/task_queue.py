@@ -146,7 +146,7 @@ class TaskQueueService:
                 return task
 
     def get_next_task(
-        self, phase_id: str, agent_capabilities: Optional[List[str]] = None
+        self, phase_id: Optional[str] = None, agent_capabilities: Optional[List[str]] = None
     ) -> Task | None:
         """
         Get highest-scored pending task for a phase that has all dependencies completed.
@@ -154,18 +154,17 @@ class TaskQueueService:
         Verifies capability matching per REQ-TQM-ASSIGN-001.
 
         Args:
-            phase_id: Phase identifier to filter by
+            phase_id: Phase identifier to filter by (None = any phase)
             agent_capabilities: Optional list of agent capabilities for matching (REQ-TQM-ASSIGN-001)
 
         Returns:
             Task object or None if no pending tasks with completed dependencies and matching capabilities
         """
         with self.db.get_session() as session:
-            tasks = (
-                session.query(Task)
-                .filter(Task.status == "pending", Task.phase_id == phase_id)
-                .all()
-            )
+            query = session.query(Task).filter(Task.status == "pending")
+            if phase_id is not None:
+                query = query.filter(Task.phase_id == phase_id)
+            tasks = query.all()
             if not tasks:
                 return None
 
