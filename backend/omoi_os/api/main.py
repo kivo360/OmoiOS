@@ -153,8 +153,12 @@ async def orchestrator_loop():
                         from uuid import uuid4
 
                         agent_id = str(uuid4())
-                        capabilities = template.tools.get_sdk_tools() if template.tools else ["sandbox"]
-                        
+                        capabilities = (
+                            template.tools.get_sdk_tools()
+                            if template.tools
+                            else ["sandbox"]
+                        )
+
                         with db.get_session() as session:
                             agent = Agent(
                                 id=agent_id,
@@ -201,6 +205,7 @@ async def orchestrator_loop():
 
                     except Exception as spawn_error:
                         import traceback
+
                         error_details = traceback.format_exc()
                         print(
                             f"❌ Failed to spawn sandbox for task {task_id}: {spawn_error}"
@@ -591,7 +596,22 @@ async def lifespan(app: FastAPI):
         monitoring_loop, \
         mcp_app
 
+    # Debug: Print environment configuration
+    import os
+    print("=" * 60)
+    print("🔧 STARTUP CONFIGURATION DEBUG")
+    print("=" * 60)
+    print(f"OMOIOS_ENV: {os.getenv('OMOIOS_ENV', 'NOT SET (defaults to local)')}")
+    print(f"DATABASE_URL: {os.getenv('DATABASE_URL', 'NOT SET')[:50] + '...' if os.getenv('DATABASE_URL') else 'NOT SET'}")
+    print(f"REDIS_URL: {os.getenv('REDIS_URL', 'NOT SET')}")
+    print("=" * 60)
+
     app_settings = get_app_settings()
+    
+    # Debug: Print resolved settings
+    print(f"📋 Resolved database.url: {app_settings.database.url[:50]}..." if len(app_settings.database.url) > 50 else f"📋 Resolved database.url: {app_settings.database.url}")
+    print(f"📋 Resolved redis.url: {app_settings.redis.url}")
+    print("=" * 60)
 
     # Initialize services
     db = DatabaseService(connection_string=app_settings.database.url)
