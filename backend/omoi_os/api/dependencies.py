@@ -229,16 +229,14 @@ def get_supabase_auth_service():
 
 
 async def get_current_user(
-    credentials: "HTTPAuthorizationCredentials",
-    supabase_auth=None,
-    db: "DatabaseService" = None,
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: "DatabaseService" = Depends(get_db_service),
 ):
     """
     Get current authenticated user from JWT token.
 
     Args:
         credentials: HTTP Bearer token credentials
-        supabase_auth: Supabase auth service
         db: Database service
 
     Returns:
@@ -247,11 +245,7 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
-
-    if supabase_auth is None:
-        supabase_auth = get_supabase_auth_service()
-    if db is None:
-        db = get_db_service()
+    supabase_auth = get_supabase_auth_service()
 
     from omoi_os.models.user import User
 
@@ -279,36 +273,25 @@ async def get_current_user(
         return user
 
 
+_optional_security = HTTPBearer(auto_error=False)
+
+
 async def get_current_user_optional(
-    credentials: Optional["HTTPAuthorizationCredentials"] = None,
-    supabase_auth=None,
-    db: "DatabaseService" = None,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(_optional_security),
+    db: "DatabaseService" = Depends(get_db_service),
 ):
     """
     Get current user if authenticated, None otherwise.
 
     Useful for endpoints that work with or without authentication.
     """
-    from fastapi.security import HTTPBearer
-
     if credentials is None:
-        try:
-            security = HTTPBearer(auto_error=False)
-            # This will be handled by FastAPI's dependency injection
-            return None
-        except Exception:
-            return None
-
-    if not credentials:
         return None
 
-    if supabase_auth is None:
         supabase_auth = get_supabase_auth_service()
-    if db is None:
-        db = get_db_service()
 
     try:
-        return await get_current_user(credentials, supabase_auth, db)
+        return await get_current_user(credentials, db)
     except Exception:
         return None
 

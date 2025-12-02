@@ -34,6 +34,55 @@ class SetDependenciesRequest(BaseModel):
     depends_on: List[str]
 
 
+class RegisterConversationRequest(BaseModel):
+    """Request model for registering a conversation from sandbox."""
+    conversation_id: str
+    sandbox_id: str = ""
+    persistence_dir: str = ""
+
+
+class AgentEventRequest(BaseModel):
+    """Request model for agent event from sandbox."""
+    task_id: str
+    agent_id: str
+    event_type: str
+    event_data: dict = {}
+
+
+@router.post("/{task_id}/register-conversation")
+async def register_conversation(
+    task_id: str,
+    request: RegisterConversationRequest,
+    db: DatabaseService = Depends(get_db_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """Register conversation ID from sandbox worker for Guardian observation."""
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task.conversation_id = request.conversation_id
+        task.persistence_dir = request.persistence_dir
+        task.sandbox_id = request.sandbox_id
+        session.commit()
+
+        # Publish event for Guardian
+        event_bus.publish(
+            SystemEvent(
+                event_type="CONVERSATION_REGISTERED",
+                entity_type="task",
+                entity_id=task_id,
+                payload={
+                    "conversation_id": request.conversation_id,
+                    "sandbox_id": request.sandbox_id,
+                },
+            )
+        )
+
+        return {"success": True, "task_id": task_id, "conversation_id": request.conversation_id}
+
+
 @router.get("/{task_id}", response_model=dict)
 async def get_task(
     task_id: str,

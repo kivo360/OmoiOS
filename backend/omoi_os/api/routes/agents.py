@@ -10,6 +10,7 @@ from omoi_os.api.dependencies import (
     get_agent_registry_service,
     get_db_service,
     get_heartbeat_protocol_service,
+    get_event_bus_service,
 )
 from omoi_os.models.agent import Agent
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
@@ -17,6 +18,8 @@ from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
+from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.models.agent_log import AgentLog
 
 router = APIRouter()
 
@@ -54,6 +57,14 @@ class AgentUpdateRequest(BaseModel):
     health_status: Optional[str] = None
 
 
+class AgentEventRequest(BaseModel):
+    """Request model for agent events from sandbox workers."""
+    task_id: str
+    agent_id: str
+    event_type: str
+    event_data: Dict = Field(default_factory=dict)
+
+
 class AgentAvailabilityRequest(BaseModel):
     available: bool = Field(..., description="True to mark agent idle/available")
 
@@ -88,6 +99,46 @@ class AgentMatchResponse(BaseModel):
     agent: AgentDTO
     match_score: float
     matched_capabilities: List[str]
+
+
+@router.post("/agent-events")
+async def report_agent_event(
+    request: AgentEventRequest,
+    db: DatabaseService = Depends(get_db_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Receive agent events from sandbox workers for Guardian observation.
+    
+    This endpoint allows sandboxed agents to stream their actions
+    back to the server for real-time monitoring and trajectory analysis.
+    """
+    # Store in agent_logs for trajectory analysis
+    with db.get_session() as session:
+        log_entry = AgentLog(
+            agent_id=request.agent_id,
+            log_type=request.event_type,
+            message=request.event_data.get("message", str(request.event_data)[:500]),
+            details=request.event_data,
+        )
+        session.add(log_entry)
+        session.commit()
+
+    # Publish event for real-time monitoring
+    event_bus.publish(
+        SystemEvent(
+            event_type="AGENT_EVENT",
+            entity_type="agent",
+            entity_id=request.agent_id,
+            payload={
+                "task_id": request.task_id,
+                "event_type": request.event_type,
+                "event_data": request.event_data,
+            },
+        )
+    )
+
+    return {"success": True, "logged": True}
 
 
 @router.post("/agents/register", response_model=AgentDTO, status_code=201)

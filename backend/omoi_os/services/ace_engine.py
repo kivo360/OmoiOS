@@ -3,6 +3,7 @@
 from typing import Optional, Dict, Any
 from dataclasses import dataclass
 
+from sqlalchemy import cast
 from sqlalchemy.orm import Session
 
 from omoi_os.services.database import DatabaseService
@@ -18,18 +19,18 @@ from omoi_os.models.task import Task
 @dataclass
 class ACEResult:
     """Complete ACE workflow result (REQ-MEM-ACE-004)."""
-    
+
     # Executor phase
     memory_id: str
     memory_type: str
     files_linked: list[str]
-    
+
     # Reflector phase
     tags_added: list[str]
     insights_found: list[Dict[str, Any]]  # Serialized Insight objects
     errors_identified: list[Dict[str, Any]]  # Serialized Error objects
     related_playbook_entries: list[str]  # Entry IDs
-    
+
     # Curator phase
     playbook_delta: Dict[str, Any]  # Serialized PlaybookDelta
     updated_bullets: list[Dict[str, Any]]  # Serialized PlaybookBullet objects
@@ -39,14 +40,14 @@ class ACEResult:
 class ACEEngine:
     """
     ACE workflow engine orchestrator (REQ-MEM-ACE-004).
-    
+
     Responsibilities:
     - Orchestrate three-phase workflow (Executor → Reflector → Curator)
     - Coordinate service calls and handle failures
     - Track workflow metrics
     - Return structured ACEResult
     """
-    
+
     def __init__(
         self,
         db: DatabaseService,
@@ -56,19 +57,19 @@ class ACEEngine:
     ):
         """
         Initialize ACE workflow engine.
-        
+
         Args:
             db: Database service
             memory_service: Memory service
             embedding_service: Embedding service
             event_bus: Optional event bus for publishing events
         """
-        self.db = db
-        self.executor = Executor(memory_service, embedding_service)
-        self.reflector = Reflector(embedding_service)
-        self.curator = Curator(embedding_service)
-        self.event_bus = event_bus
-    
+        self.db: DatabaseService = db
+        self.executor: Executor = Executor(memory_service, embedding_service)
+        self.reflector: Reflector = Reflector(embedding_service)
+        self.curator: Curator = Curator(embedding_service)
+        self.event_bus: EventBusService | None = event_bus
+
     def execute_workflow(
         self,
         task_id: str,
@@ -80,9 +81,9 @@ class ACEEngine:
     ) -> ACEResult:
         """
         Execute complete ACE workflow (REQ-MEM-ACE-004).
-        
+
         Runs Executor → Reflector → Curator in sequence.
-        
+
         Args:
             task_id: Task ID
             goal: What the agent was trying to accomplish
@@ -90,20 +91,21 @@ class ACEEngine:
             tool_usage: List of tool usage records
             feedback: Output from environment (stdout, stderr, test results)
             agent_id: Agent ID that completed the task
-            
+
         Returns:
             ACEResult with memory_id, tags, insights, playbook_delta
         """
         with self.db.get_session() as session:
             # Get task to find ticket_id
-            task = session.get(Task, task_id)
+            session: Session = cast(Session, session)
+            task: Task | None = session.get(Task, task_id)
             if not task:
                 raise ValueError(f"Task {task_id} not found")
-            
+
             ticket_id = task.ticket_id
-            
+
             # Phase 1: Executor (REQ-MEM-ACE-001)
-            executor_result = self.executor.execute(
+            executor_result: ExecutorResult = self.executor.execute(
                 session=session,
                 task_id=task_id,
                 goal=goal,
@@ -112,9 +114,9 @@ class ACEEngine:
                 feedback=feedback,
             )
             session.flush()
-            
+
             # Phase 2: Reflector (REQ-MEM-ACE-002)
-            reflector_result = self.reflector.analyze(
+            reflector_result: ReflectorResult = self.reflector.analyze(
                 session=session,
                 executor_result=executor_result,
                 memory_id=executor_result.memory_id,
@@ -124,9 +126,9 @@ class ACEEngine:
                 result=result,
             )
             session.flush()
-            
+
             # Phase 3: Curator (REQ-MEM-ACE-003)
-            curator_result = self.curator.curate(
+            curator_result: CuratorResult = self.curator.curate(
                 session=session,
                 executor_result=executor_result,
                 reflector_result=reflector_result,
@@ -135,7 +137,7 @@ class ACEEngine:
                 agent_id=agent_id,
             )
             session.commit()
-            
+
             # Publish event (REQ-MEM-ACE-004)
             if self.event_bus:
                 self.event_bus.publish(
@@ -156,7 +158,7 @@ class ACEEngine:
                         },
                     )
                 )
-            
+
             # Build result
             return ACEResult(
                 memory_id=executor_result.memory_id,
@@ -204,4 +206,3 @@ class ACEEngine:
                 ],
                 change_id=curator_result.change_id,
             )
-

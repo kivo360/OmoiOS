@@ -1,7 +1,9 @@
 llm:
   api_key: REDACTED_LLM_API_KEY
-  fireworks_api_key: null
+  model: openai/glm-4.6
   base_url: https://api.z.ai/api/coding/paas/v4
+
+  fireworks_api_key: REDACTED_FIREWORKS_API_KEY
 
 supabase:
   url: https://example.supabase.co
@@ -20,7 +22,7 @@ workspace:
   worker_dir: /tmp/omoi_os_workspaces
 
 integrations:
-  mcp_server_url: http://localhost:18000/mcp
+  mcp_server_url: https://omoi-api-production.up.railway.app/mcp
   enable_mcp_tools: true
 
 demo:
