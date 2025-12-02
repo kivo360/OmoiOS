@@ -614,7 +614,9 @@ async def lifespan(app: FastAPI):
     print("=" * 60)
 
     # Initialize services
+    print("🔄 Creating DatabaseService...")
     db = DatabaseService(connection_string=app_settings.database.url)
+    print(f"✅ DatabaseService created: db={db}, id={id(db)}")
     event_bus = EventBusService(redis_url=app_settings.redis.url)
     queue = TaskQueueService(
         db, event_bus=event_bus
@@ -745,6 +747,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             print(f"⚠️  Failed to start MonitoringLoop: {e}")
 
+    # Debug: Confirm db is set before yielding
+    print(f"🚀 ABOUT TO YIELD - db={db}, id={id(db) if db else 'None'}")
+    
     yield
 
     # Cleanup

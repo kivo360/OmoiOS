@@ -34,6 +34,9 @@ def get_db_service() -> "DatabaseService":
     # Lazy import to avoid circular dependency
     from omoi_os.api.main import db
 
+    # Debug: Print what we got
+    print(f"🔍 get_db_service called: db={db}, id={id(db) if db else 'None'}")
+    
     if db is None:
         raise RuntimeError("Database service not initialized")
     return db
