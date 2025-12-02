@@ -205,7 +205,14 @@ async def websocket_events(
         "payload": {...}
     }
     """
-    ws_manager = get_ws_manager()
+    # Handle case where services aren't ready yet
+    try:
+        ws_manager = get_ws_manager()
+    except RuntimeError:
+        await websocket.accept()
+        await websocket.send_json({"error": "Service not ready, please retry"})
+        await websocket.close(code=1013)  # Try again later
+        return
 
     # Parse query parameter filters
     filters = {}
