@@ -128,7 +128,10 @@ def get_agent_status_manager() -> "AgentStatusManager":
         return _agent_status_manager_instance
 
     from omoi_os.services.agent_status_manager import AgentStatusManager
-    _agent_status_manager_instance = AgentStatusManager(get_db_service(), get_event_bus())
+
+    _agent_status_manager_instance = AgentStatusManager(
+        get_db_service(), get_event_bus()
+    )
     return _agent_status_manager_instance
 
 
@@ -144,7 +147,10 @@ def get_agent_health_service() -> "AgentHealthService":
         return _agent_health_service_instance
 
     from omoi_os.services.agent_health import AgentHealthService
-    _agent_health_service_instance = AgentHealthService(get_db_service(), get_agent_status_manager())
+
+    _agent_health_service_instance = AgentHealthService(
+        get_db_service(), get_agent_status_manager()
+    )
     return _agent_health_service_instance
 
 
@@ -160,7 +166,10 @@ def get_agent_registry_service() -> "AgentRegistryService":
         return _registry_service_instance
 
     from omoi_os.services.agent_registry import AgentRegistryService
-    _registry_service_instance = AgentRegistryService(get_db_service(), get_event_bus(), get_agent_status_manager())
+
+    _registry_service_instance = AgentRegistryService(
+        get_db_service(), get_event_bus(), get_agent_status_manager()
+    )
     return _registry_service_instance
 
 
@@ -176,7 +185,10 @@ def get_collaboration_service() -> "CollaborationService":
         return _collaboration_service_instance
 
     from omoi_os.services.collaboration import CollaborationService
-    _collaboration_service_instance = CollaborationService(get_db_service(), get_event_bus())
+
+    _collaboration_service_instance = CollaborationService(
+        get_db_service(), get_event_bus()
+    )
     return _collaboration_service_instance
 
 
@@ -192,6 +204,7 @@ def get_resource_lock_service() -> "ResourceLockService":
         return _resource_lock_service_instance
 
     from omoi_os.services.resource_lock import ResourceLockService
+
     _resource_lock_service_instance = ResourceLockService(get_db_service())
     return _resource_lock_service_instance
 
@@ -208,6 +221,7 @@ def get_monitor_service() -> "MonitorService":
         return _monitor_service_instance
 
     from omoi_os.services.monitor import MonitorService
+
     _monitor_service_instance = MonitorService(get_db_service(), get_event_bus())
     return _monitor_service_instance
 
@@ -224,7 +238,10 @@ def get_cost_tracking_service() -> "CostTrackingService":
         return _cost_tracking_service_instance
 
     from omoi_os.services.cost_tracking import CostTrackingService
-    _cost_tracking_service_instance = CostTrackingService(get_db_service(), get_event_bus())
+
+    _cost_tracking_service_instance = CostTrackingService(
+        get_db_service(), get_event_bus()
+    )
     return _cost_tracking_service_instance
 
 
@@ -240,7 +257,10 @@ def get_budget_enforcer_service() -> "BudgetEnforcerService":
         return _budget_enforcer_service_instance
 
     from omoi_os.services.budget_enforcer import BudgetEnforcerService
-    _budget_enforcer_service_instance = BudgetEnforcerService(get_db_service(), get_event_bus())
+
+    _budget_enforcer_service_instance = BudgetEnforcerService(
+        get_db_service(), get_event_bus()
+    )
     return _budget_enforcer_service_instance
 
 
@@ -256,6 +276,7 @@ def get_heartbeat_protocol_service() -> "HeartbeatProtocolService":
         return _heartbeat_protocol_service_instance
 
     from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
+
     _heartbeat_protocol_service_instance = HeartbeatProtocolService(
         get_db_service(), get_event_bus(), get_agent_status_manager()
     )
@@ -274,6 +295,7 @@ def get_phase_gate_service() -> "PhaseGateService":
         return _phase_gate_service_instance
 
     from omoi_os.services.phase_gate import PhaseGateService
+
     _phase_gate_service_instance = PhaseGateService(get_db_service())
     return _phase_gate_service_instance
 
@@ -295,6 +317,7 @@ def get_approval_service() -> "ApprovalService":
         return _approval_service_instance
 
     from omoi_os.services.approval import ApprovalService
+
     _approval_service_instance = ApprovalService(get_db_service(), get_event_bus())
     return _approval_service_instance
 

@@ -10,7 +10,7 @@ This class implements the core concept from trajectory thinking:
 import logging
 import re
 from collections import defaultdict
-from datetime import datetime, timedelta, UTC
+from datetime import timedelta
 from typing import Dict, Any, List, Optional, Tuple
 
 from omoi_os.models.agent import Agent
@@ -79,9 +79,12 @@ class TrajectoryContext:
 
         with self.db.get_session() as session:
             # Get all logs for complete understanding
-            logs = session.query(AgentLog).filter_by(
-                agent_id=agent_id
-            ).order_by(AgentLog.created_at).all()
+            logs = (
+                session.query(AgentLog)
+                .filter_by(agent_id=agent_id)
+                .order_by(AgentLog.created_at)
+                .all()
+            )
 
             if not logs:
                 logger.warning(f"No logs found for agent {agent_id}")
@@ -92,10 +95,11 @@ class TrajectoryContext:
             task = None
             if agent:
                 # Get current running task assigned to this agent
-                task = session.query(Task).filter_by(
-                    assigned_agent_id=str(agent.id),
-                    status="running"
-                ).first()
+                task = (
+                    session.query(Task)
+                    .filter_by(assigned_agent_id=str(agent.id), status="running")
+                    .first()
+                )
 
             # Build conversation history
             conversation = self._build_conversation_history(logs, include_full_history)
@@ -107,18 +111,19 @@ class TrajectoryContext:
                 "evolved_goals": self._track_goal_evolution(conversation),
                 "constraints": self._extract_persistent_constraints(conversation),
                 "lifted_constraints": self._identify_lifted_constraints(conversation),
-                "standing_instructions": self._extract_standing_instructions(conversation),
-
+                "standing_instructions": self._extract_standing_instructions(
+                    conversation
+                ),
                 # Reference resolution
                 "references": self._resolve_references(conversation),
                 "context_markers": self._extract_context_markers(conversation),
-
                 # Journey tracking
                 "phases_completed": self._identify_completed_phases(conversation),
                 "current_focus": self._determine_current_focus(conversation),
-                "attempted_approaches": self._extract_attempted_approaches(conversation),
+                "attempted_approaches": self._extract_attempted_approaches(
+                    conversation
+                ),
                 "discovered_blockers": self._find_discovered_blockers(conversation),
-
                 # Meta information
                 "conversation_length": len(conversation),
                 "session_duration": self._calculate_session_duration(logs),
@@ -131,7 +136,9 @@ class TrajectoryContext:
             # Add task-specific context
             if task:
                 context["task_id"] = task.id
-                context["task_description"] = task.enriched_description or task.raw_description
+                context["task_description"] = (
+                    task.enriched_description or task.raw_description
+                )
                 context["done_definition"] = task.done_definition
                 context["task_complexity"] = task.estimated_complexity or 5
                 context["task_status"] = task.status
@@ -202,24 +209,36 @@ class TrajectoryContext:
             }
 
             # Add to conversation based on log type
-            if log.log_type in ["input", "output", "message", "steering", "intervention"]:
+            if log.log_type in [
+                "input",
+                "output",
+                "message",
+                "steering",
+                "intervention",
+            ]:
                 conversation.append(entry)
             elif log.log_type == "steering":
                 # Include steering as it affects trajectory
-                conversation.append({
-                    **entry,
-                    "steering_type": log.details.get("type", "unknown"),
-                })
+                conversation.append(
+                    {
+                        **entry,
+                        "steering_type": log.details.get("type", "unknown"),
+                    }
+                )
 
         # Limit history if requested (but keep key messages)
         if not include_full and len(conversation) > 200:
             # Keep first 50, last 100, and all interventions
             important = conversation[:50]
             recent = conversation[-100:]
-            interventions = [c for c in conversation[50:-100] if c.get("intervention_type")]
+            interventions = [
+                c for c in conversation[50:-100] if c.get("intervention_type")
+            ]
 
             conversation = important + interventions + recent
-            logger.debug(f"Limited conversation from {len(logs)} to {len(conversation)} entries")
+            logger.debug(
+                f"Limited conversation from {len(logs)} to {len(conversation)} entries"
+            )
 
         return conversation
 
@@ -252,7 +271,9 @@ class TrajectoryContext:
         # Find most recent significant goal statement
         if refined_goals and len(refined_goals) > 0:
             # Use the most detailed recent goal
-            recent_goal = max(refined_goals[-5:], key=len) if refined_goals else base_goal
+            recent_goal = (
+                max(refined_goals[-5:], key=len) if refined_goals else base_goal
+            )
             if len(recent_goal) > len(base_goal) * 0.5:  # If it's substantial enough
                 return recent_goal.strip().capitalize()
 
@@ -582,12 +603,27 @@ class TrajectoryContext:
             violation_checks = [
                 ("no external" in constraint_lower and "pip install" in action_lower),
                 ("no external" in constraint_lower and "npm install" in action_lower),
-                ("simple" in constraint_lower and any(term in action_lower for term in ["factory", "abstract", "framework"])),
-                ("don't write" in constraint_lower and any(term in action_lower for term in ["creating", "writing", "implementing"])),
-                ("avoid" in constraint_lower and any(
-                    avoided in action_lower
-                    for avoided in constraint_lower.split("avoid")[1].split()
-                )),
+                (
+                    "simple" in constraint_lower
+                    and any(
+                        term in action_lower
+                        for term in ["factory", "abstract", "framework"]
+                    )
+                ),
+                (
+                    "don't write" in constraint_lower
+                    and any(
+                        term in action_lower
+                        for term in ["creating", "writing", "implementing"]
+                    )
+                ),
+                (
+                    "avoid" in constraint_lower
+                    and any(
+                        avoided in action_lower
+                        for avoided in constraint_lower.split("avoid")[1].split()
+                    )
+                ),
             ]
 
             if any(violation_checks):
@@ -613,10 +649,10 @@ class TrajectoryContext:
             f"Duration: {str(context['session_duration']).split('.')[0]}",
         ]
 
-        if context['constraints']:
+        if context["constraints"]:
             summary_parts.append(f"Constraints: {len(context['constraints'])}")
 
-        if context['discovered_blockers']:
+        if context["discovered_blockers"]:
             summary_parts.append(f"Blockers: {len(context['discovered_blockers'])}")
 
         return " | ".join(summary_parts)
@@ -631,9 +667,7 @@ class TrajectoryContext:
 
     # Helper methods for Pydantic model conversion
     def _calculate_completion_rate(
-        self,
-        context: Dict[str, Any],
-        task: Optional[Task]
+        self, context: Dict[str, Any], task: Optional[Task]
     ) -> float:
         """Calculate task completion rate from context."""
         if not task:
