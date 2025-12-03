@@ -2,11 +2,15 @@
 
 import asyncio
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from omoi_os.config import get_app_settings
+from omoi_os.mcp.fastmcp_server import mcp_app
 from omoi_os.api.routes import (
     agents,
     alerts,
@@ -847,8 +851,6 @@ app.include_router(
 )
 
 # Mount FastMCP server at /mcp
-from omoi_os.mcp.fastmcp_server import mcp_app
-
 app.mount("/mcp", mcp_app)
 
 # Conditionally include monitor router if Phase 4 is available
@@ -860,10 +862,6 @@ except ImportError:
     pass
 
 # Mount static files for web UI
-from pathlib import Path
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-
 static_dir = Path(__file__).parent.parent.parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
