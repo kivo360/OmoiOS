@@ -11,7 +11,24 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. The foundation and design system components from Prompt 1 are already built. Now build the Authentication Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use the design system components (Buttons, Inputs, Cards, etc.) from the foundation.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components (Button, Input, Card, etc.) with the custom warm theme from the foundation.
+
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent, CardFooter) for auth forms
+- Input for email/password fields
+- Button (variant="default" for primary, variant="outline" for secondary)
+- Checkbox for "remember me" / terms
+- Label for form labels
+- Separator for dividers
+- Alert for error messages
+- Skeleton for loading states
+
+**DESIGN NOTES:**
+- Use warm cream background bg-background for full-page layouts
+- Centered Card layouts with border-border, no heavy shadows
+- Primary Button uses dark accent (--primary), not blue
+- Text hierarchy: text-foreground, text-muted-foreground, placeholder:text-muted-foreground
+- Minimal shadows, generous whitespace, low contrast aesthetic
 
 **AUTHENTICATION PAGES TO BUILD:**
 

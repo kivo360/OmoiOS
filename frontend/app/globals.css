@@ -4,58 +4,138 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 0 0% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 3.9%;
-    --primary: 0 0% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 0 0% 96.1%;
-    --secondary-foreground: 0 0% 9%;
-    --muted: 0 0% 96.1%;
-    --muted-foreground: 0 0% 45.1%;
-    --accent: 0 0% 96.1%;
-    --accent-foreground: 0 0% 9%;
-    --destructive: 0 84.2% 60.2%;
+    /* OmoiOS Warm Cream Theme - Cursor BG Agent Inspired */
+    
+    /* Background colors */
+    --background: 48 20% 96%;        /* #F5F5F0 Warm cream */
+    --foreground: 0 0% 10%;          /* #1A1A1A Near black */
+    
+    /* Card/Surface */
+    --card: 0 0% 100%;               /* #FFFFFF White surfaces */
+    --card-foreground: 0 0% 10%;     /* #1A1A1A */
+    
+    /* Popover */
+    --popover: 0 0% 100%;            /* #FFFFFF */
+    --popover-foreground: 0 0% 10%;  /* #1A1A1A */
+    
+    /* Primary - Dark accent (not blue) */
+    --primary: 0 0% 10%;             /* #1A1A1A */
+    --primary-foreground: 48 20% 96%; /* #F5F5F0 */
+    
+    /* Secondary */
+    --secondary: 48 14% 95%;         /* Warm light gray */
+    --secondary-foreground: 0 0% 10%; /* #1A1A1A */
+    
+    /* Muted */
+    --muted: 48 14% 95%;             /* Warm light gray */
+    --muted-foreground: 0 0% 42%;    /* #6B6B6B Secondary text */
+    
+    /* Accent */
+    --accent: 48 12% 94%;            /* Warm hover state */
+    --accent-foreground: 0 0% 10%;   /* #1A1A1A */
+    
+    /* Destructive - Git red */
+    --destructive: 355 70% 47%;      /* #CB2431 */
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 89.8%;
-    --input: 0 0% 89.8%;
-    --ring: 0 0% 3.9%;
+    
+    /* Borders */
+    --border: 48 12% 90%;            /* #E8E8E3 Warm gray borders */
+    --input: 48 12% 90%;             /* #E8E8E3 */
+    --ring: 0 0% 10%;                /* #1A1A1A Focus ring */
+    
+    /* Radius */
     --radius: 0.5rem;
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
-    --chart-4: 43 74% 66%;
-    --chart-5: 27 87% 67%;
+    
+    /* Custom semantic colors */
+    --success: 133 59% 33%;          /* #22863A Git green */
+    --warning: 45 100% 35%;          /* #B08800 Amber */
+    --info: 212 97% 43%;             /* #0366D6 Blue */
+    
+    /* Tertiary text */
+    --tertiary: 0 0% 61%;            /* #9B9B9B Placeholder */
+    
+    /* Chart colors */
+    --chart-1: 133 59% 33%;          /* Success green */
+    --chart-2: 212 97% 43%;          /* Info blue */
+    --chart-3: 45 100% 35%;          /* Warning amber */
+    --chart-4: 355 70% 47%;          /* Destructive red */
+    --chart-5: 0 0% 42%;             /* Muted gray */
+    
+    /* Sidebar - Slightly warmer than main */
+    --sidebar-background: 48 14% 98%; /* #FAFAF8 */
+    --sidebar-foreground: 0 0% 10%;   /* #1A1A1A */
+    --sidebar-primary: 0 0% 10%;      /* #1A1A1A */
+    --sidebar-primary-foreground: 48 20% 96%;
+    --sidebar-accent: 48 12% 94%;     /* Warm hover */
+    --sidebar-accent-foreground: 0 0% 10%;
+    --sidebar-border: 48 12% 90%;     /* #E8E8E3 */
+    --sidebar-ring: 0 0% 10%;         /* #1A1A1A */
   }
 
   .dark {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
-    --accent: 0 0% 14.9%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
+    /* OmoiOS Dark Theme - Warm dark tones */
+    
+    /* Background colors */
+    --background: 0 0% 12%;          /* #1E1E1E */
+    --foreground: 0 0% 90%;          /* #E5E5E5 */
+    
+    /* Card/Surface */
+    --card: 0 0% 18%;                /* #2D2D2D */
+    --card-foreground: 0 0% 90%;     /* #E5E5E5 */
+    
+    /* Popover */
+    --popover: 0 0% 18%;             /* #2D2D2D */
+    --popover-foreground: 0 0% 90%;  /* #E5E5E5 */
+    
+    /* Primary */
+    --primary: 0 0% 90%;             /* #E5E5E5 */
+    --primary-foreground: 0 0% 12%;  /* #1E1E1E */
+    
+    /* Secondary */
+    --secondary: 0 0% 18%;           /* #2D2D2D */
+    --secondary-foreground: 0 0% 90%; /* #E5E5E5 */
+    
+    /* Muted */
+    --muted: 0 0% 18%;               /* #2D2D2D */
+    --muted-foreground: 0 0% 55%;    /* #8B8B8B */
+    
+    /* Accent */
+    --accent: 0 0% 20%;              /* Slightly lighter hover */
+    --accent-foreground: 0 0% 90%;   /* #E5E5E5 */
+    
+    /* Destructive */
+    --destructive: 355 60% 40%;      /* Darker red for dark mode */
     --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 0 0% 83.1%;
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
+    
+    /* Borders */
+    --border: 0 0% 24%;              /* #3D3D3D */
+    --input: 0 0% 24%;               /* #3D3D3D */
+    --ring: 0 0% 90%;                /* #E5E5E5 */
+    
+    /* Custom semantic colors */
+    --success: 133 50% 40%;          /* Brighter green for dark */
+    --warning: 45 90% 45%;           /* Brighter amber for dark */
+    --info: 212 90% 55%;             /* Brighter blue for dark */
+    
+    /* Tertiary text */
+    --tertiary: 0 0% 36%;            /* #5B5B5B */
+    
+    /* Chart colors - adjusted for dark mode */
+    --chart-1: 133 50% 40%;
+    --chart-2: 212 90% 55%;
+    --chart-3: 45 90% 45%;
+    --chart-4: 355 60% 50%;
+    --chart-5: 0 0% 55%;
+    
+    /* Sidebar */
+    --sidebar-background: 0 0% 15%;  /* #252525 */
+    --sidebar-foreground: 0 0% 90%;  /* #E5E5E5 */
+    --sidebar-primary: 0 0% 90%;     /* #E5E5E5 */
+    --sidebar-primary-foreground: 0 0% 15%;
+    --sidebar-accent: 0 0% 20%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 24%;      /* #3D3D3D */
+    --sidebar-ring: 0 0% 90%;
   }
 }
 
@@ -65,6 +145,31 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
 
+@layer utilities {
+  /* Git-style line change colors */
+  .text-git-add {
+    color: hsl(var(--success));
+  }
+  .text-git-delete {
+    color: hsl(var(--destructive));
+  }
+  
+  /* JetBrains Mono for code/line counts */
+  .font-mono-code {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+  
+  /* Time group header styling */
+  .time-group-header {
+    @apply text-[11px] uppercase tracking-wider text-muted-foreground font-medium;
+  }
+  
+  /* Warm hover state */
+  .hover-warm {
+    @apply hover:bg-accent transition-colors duration-150;
+  }
+}

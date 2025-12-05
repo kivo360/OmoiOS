@@ -11,7 +11,28 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation through Specs & Kanban are already built. Now build the Graph & Phase Management Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme.
+
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent) - phase cards, node detail panels
+- Button (default, outline, ghost) - actions, navigation
+- Badge - status badges, phase badges
+- Tabs (TabsList, TabsTrigger, TabsContent) - phase detail tabs
+- Input, Textarea, Label - phase forms
+- Checkbox - transition checkboxes, terminal phase toggle
+- Slider - timeout, WIP limit configuration
+- ScrollArea - sidebar filters, long content
+- Sheet (side="right") - node detail drawer on graph
+- Dialog - create phase modal, confirmations
+- Collapsible - expandable phase sections
+- Table - task lists, approval lists
+- Select - filter dropdowns
+
+**DESIGN NOTES:**
+- Background: bg-background, graph canvas: bg-card
+- Graph: use @xyflow/react (React Flow), warm node colors
+- Phase cards: Card with subtle border, hover:shadow-sm
+- Status colors: text-success, text-destructive, text-warning (muted versions)
 
 **PAGES TO BUILD:**
 
