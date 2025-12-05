@@ -11,7 +11,28 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation through User Settings (Prompt 8A) are already built. Now build the Project Settings Pages section (final section).
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme.
+
+**SHADCN COMPONENTS TO USE:**
+- Sidebar (or custom nav) - settings navigation (consistent with User Settings)
+- Card (CardHeader, CardContent) - form sections, phase cards
+- Button (default, outline, ghost, destructive) - actions
+- Input, Textarea, Label - form fields
+- Select - phase mapping, ticket type, status selectors
+- Switch - auto-sync toggles
+- Checkbox - sync options
+- Badge - connection status, phase badges
+- Table - phase lists
+- Dialog - create phase modal
+- AlertDialog - disconnect confirmation
+- Separator - section dividers
+- Sortable list - board columns (use @dnd-kit)
+
+**DESIGN NOTES:**
+- Background: bg-background, form sections: bg-card
+- Board columns: drag handle (GripVertical icon), reorder with @dnd-kit
+- GitHub status: Badge variant (green for connected, destructive for disconnected)
+- OAuth: Button variant="outline" with GitHub icon
 
 **PAGES TO BUILD:**
 

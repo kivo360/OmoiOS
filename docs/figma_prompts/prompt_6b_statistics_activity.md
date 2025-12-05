@@ -11,7 +11,31 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation through Graph & Phase Management (Prompt 6A) are already built. Now build the Statistics & Activity Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme.
+
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent) - stat cards, chart containers
+- Tabs (TabsList, TabsTrigger, TabsContent) - statistics tabs
+- Button (outline, ghost) - export, date range
+- Badge - event type badges
+- ScrollArea - activity timeline scroll
+- Select - date range selector, filters
+- Popover - date picker (with Calendar)
+- Calendar - date range selection
+- Avatar - user avatars in activity
+- Separator - timeline markers
+- Skeleton - loading states for charts
+
+**CHARTS:**
+- Use Recharts library with custom theme colors
+- Chart colors from CSS variables: --chart-1 through --chart-5
+- Muted palette, consistent with warm design
+
+**DESIGN NOTES:**
+- Background: bg-background, chart containers: bg-card
+- Timeline: vertical ScrollArea with Separator between groups
+- Event cards: compact, icon + text + timestamp (text-muted-foreground)
+- Export: Button variant="outline" with download icon
 
 **PAGES TO BUILD:**
 

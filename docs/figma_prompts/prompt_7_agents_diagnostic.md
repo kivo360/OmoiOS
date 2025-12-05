@@ -11,7 +11,29 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation through Graph, Phases & Statistics are already built. Now build the Agent Management & Diagnostic Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme. Note: Reuse AgentCard pattern from Command Center (Prompt 4A) for consistency.
+
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent, CardFooter) - agent cards, detail panels
+- Button (default, outline, ghost) - actions, controls
+- Badge - status badges, phase badges
+- Progress - alignment score, task progress
+- Tabs (TabsList, TabsTrigger, TabsContent) - agent detail tabs
+- ScrollArea - timeline scroll, workspace files
+- Table - commit list, task list
+- Avatar - agent icons
+- Collapsible - expandable sections
+- Sheet (side="right") - agent detail drawer
+- Dialog - intervention modal, confirmations
+- Textarea - intervention message input
+- Code - code blocks (custom or use prose)
+
+**DESIGN NOTES:**
+- Background: bg-background, panels: bg-card
+- Agent cards: Card with status icon, reuse from Command Center
+- Status: text-warning (⟳), text-success (✓), text-destructive (✗)
+- Line changes: font-mono text-xs, text-success/text-destructive
+- Code blocks: bg-muted rounded-md p-3 font-mono text-sm
 
 **AGENT MANAGEMENT & DIAGNOSTIC PAGES TO BUILD:**
 

@@ -11,7 +11,29 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation through Agents & Diagnostic are already built. Now build the User Settings Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme.
+
+**SHADCN COMPONENTS TO USE:**
+- Sidebar (or custom nav) - settings navigation
+- Card (CardHeader, CardContent) - form sections
+- Button (default, outline, ghost, destructive) - actions
+- Input, Textarea, Label - form fields
+- Select - timezone, language, theme selectors
+- RadioGroup - theme selection (light/dark/system)
+- Switch - notification toggles
+- Avatar (AvatarImage, AvatarFallback) - profile avatar
+- Table - API keys list, sessions list
+- Dialog - confirmations, key detail
+- AlertDialog - destructive action confirmations
+- Badge - status badges (active, expired)
+- Separator - section dividers
+- Toast/Sonner - success/error notifications
+
+**DESIGN NOTES:**
+- Background: bg-background, form sections: bg-card
+- Settings nav: vertical list, text-sm, hover:bg-accent
+- API keys: font-mono for key values, bg-muted for display
+- Destructive: Button variant="destructive" (muted red)
 
 **PAGES TO BUILD:**
 

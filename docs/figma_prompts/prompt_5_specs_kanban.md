@@ -11,7 +11,29 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation through Dashboard & Projects are already built. Now build the Spec Workspace & Kanban Board Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme.
+
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent) - spec cards, ticket cards
+- Button (default, outline, ghost) - actions, CTAs
+- Badge - status badges, priority indicators, phase badges
+- Tabs (TabsList, TabsTrigger, TabsContent) - spec workspace tabs
+- Sheet (side="right") - ticket detail drawer
+- ScrollArea - scrollable columns, content areas
+- DropdownMenu - action menus, column options
+- Dialog - create modals, confirmations
+- Input, Textarea - search, spec content
+- Avatar - assignee avatars
+- Separator - column dividers
+- Tooltip - hover info on truncated text
+
+**DESIGN NOTES:**
+- Background: bg-background (#F5F5F0), cards: bg-card
+- Kanban columns: ScrollArea with subtle border-r
+- Ticket cards: Card with compact padding (p-3)
+- Commit stats: font-mono text-xs, text-success (+) / text-destructive (-)
+- Drag: use @dnd-kit, subtle ring on drag, bg-accent on drop target
+- WIP limits: text-destructive when exceeded
 
 **SPEC WORKSPACE & KANBAN PAGES TO BUILD:**
 

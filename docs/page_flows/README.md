@@ -11,6 +11,7 @@ This documentation has been split into focused sections for easier navigation an
 ### Core Navigation
 - **[00_index.md](./00_index.md)** - Navigation Summary, Main Routes, and Quick Reference
 - **[01_authentication.md](./01_authentication.md)** - Flow 1: Registration & First Login
+- **[10_command_center.md](./10_command_center.md)** - Flows 33-36: Command Center (Primary Landing), Unified Project/Repo Selection, Recent Agents, Analytics Dashboard
 
 ### Project & Spec Management
 - **[02_projects_specs.md](./02_projects_specs.md)** - Flows 2-3: Project Selection & Creation, Spec-Driven Workflow
@@ -44,20 +45,24 @@ This documentation has been split into focused sections for easier navigation an
 
 **Getting Started:**
 1. [01_authentication.md](./01_authentication.md) - Registration and login flows
-2. [02_projects_specs.md](./02_projects_specs.md) - Creating projects and specs
+2. [10_command_center.md](./10_command_center.md) - Command Center (primary landing page)
+3. [02_projects_specs.md](./02_projects_specs.md) - Creating projects and specs
 
 **Core Workflows:**
+- [10_command_center.md](./10_command_center.md) - Quick task creation with GitHub repo selection
 - [03_agents_workspaces.md](./03_agents_workspaces.md) - Managing agents and workspaces
 - [04_kanban_tickets.md](./04_kanban_tickets.md) - Kanban board and ticket management
 - [07_phases.md](./07_phases.md) - Phase system and configuration
 
 **Monitoring & Analysis:**
 - [06_visualizations.md](./06_visualizations.md) - Graphs, statistics, and activity timelines
-- [09_diagnostic.md](./09_diagnostic.md) - Understanding why decisions were made
+- [10_command_center.md](./10_command_center.md) - Analytics Dashboard (secondary page)
+- [09a_diagnostic_reasoning.md](./09a_diagnostic_reasoning.md) - Understanding why decisions were made
 
 **Administration:**
 - [05_organizations_api.md](./05_organizations_api.md) - Organization and API management
-- [08_collaboration.md](./08_collaboration.md) - Collaboration features and GitHub integration
+- [08a_comments_collaboration.md](./08a_comments_collaboration.md) - Collaboration features
+- [08c_github_integration.md](./08c_github_integration.md) - GitHub integration
 
 ## Flow Reference
 
@@ -82,6 +87,10 @@ This documentation has been split into focused sections for easier navigation an
 | 25 | Diagnostic Reasoning | [09a_diagnostic_reasoning.md](./09a_diagnostic_reasoning.md) |
 | 26-27 | Phase Overview & Graph | [09b_phase_overview_graph.md](./09b_phase_overview_graph.md) |
 | 28-32 | Phase Configuration | [09c_phase_configuration.md](./09c_phase_configuration.md) |
+| 33 | Command Center (Primary Landing) | [10_command_center.md](./10_command_center.md) |
+| 34 | Unified Project/Repo Selection | [10_command_center.md](./10_command_center.md) |
+| 35 | Recent Agents Sidebar | [10_command_center.md](./10_command_center.md) |
+| 36 | Analytics Dashboard (Secondary) | [10_command_center.md](./10_command_center.md) |
 
 ## Related Documentation
 

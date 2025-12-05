@@ -11,7 +11,27 @@ Build this following engineering best practices:
 You are Figma Make. Continue building the OmoiOS application. Foundation, design system, and authentication pages are already built. Now build the Organization Management Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure (Header, Sidebar, MainContentArea).
+OmoiOS is a spec-driven autonomous engineering platform. Use Shadcn UI components with the custom warm theme.
+
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent, CardFooter) for organization cards
+- Button (default, outline, ghost variants)
+- Badge for role indicators (Owner, Admin, Member)
+- Avatar with AvatarFallback for org logos
+- Input, Textarea for forms
+- Slider for resource limits
+- Table (TableHeader, TableRow, TableCell) for member lists
+- Tabs (TabsList, TabsTrigger, TabsContent) for org detail sections
+- Dialog for confirmations
+- Skeleton for loading states
+- Toast for success/error feedback
+
+**DESIGN NOTES:**
+- Warm cream background bg-background, Card for surfaces
+- Minimal header (48px), right-aligned navigation
+- Organization Card: border-border, no heavy shadows
+- Badge: variant="secondary" for muted role badges
+- Button variant="default" for primary actions (dark, not blue)
 
 **ORGANIZATION PAGES TO BUILD:**
 

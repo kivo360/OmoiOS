@@ -1,4 +1,4 @@
-# Figma Make Prompt 4: Dashboard & Project Pages
+# Figma Make Prompt 4: Analytics Dashboard & Project Pages
 
 Build this following engineering best practices:
 - Write all code to WCAG AA accessibility standards
@@ -8,22 +8,44 @@ Build this following engineering best practices:
 - Build actual code components, not static image SVGs
 - Keep code clean, maintainable, and well-structured
 
-You are Figma Make. Continue building the OmoiOS application. Foundation, design system, authentication, and organization pages are already built. Now build the Dashboard & Project Pages section.
+You are Figma Make. Continue building the OmoiOS application. Foundation, design system, authentication, organization pages, and Command Center are already built. Now build the Analytics Dashboard & Project Pages section.
 
 **PROJECT CONTEXT:**
-OmoiOS is a spec-driven autonomous engineering platform. Use existing design system components and layout structure.
+OmoiOS is a spec-driven autonomous engineering platform. The Command Center (`/`) is the primary landing page. The Analytics Dashboard is a SECONDARY page accessed via deliberate navigation. Use Shadcn UI components.
 
-**DASHBOARD & PROJECT PAGES TO BUILD:**
+**SHADCN COMPONENTS TO USE:**
+- Card (CardHeader, CardContent) - stat cards, spec cards, project cards
+- Button - CTAs, quick actions
+- Badge - status badges (Draft, Active, Completed)
+- Progress - spec progress bars
+- Avatar - user avatars in activity feed
+- Sidebar - left navigation (reuse from foundation)
+- DropdownMenu - project filter, action menus
+- Command (cmdk) - Command Palette (Cmd+K)
+- ScrollArea - activity feed scrolling
+- Skeleton - loading states
 
-**1. Dashboard (`/dashboard`)**
+**DESIGN NOTES:**
+- Background: bg-background, cards: bg-card
+- Stats cards: minimal, large numbers, small labels
+- Spec cards: Progress component (thin), Badge for status
+- Activity feed: ScrollArea with timestamped items
+- Navigation: Sidebar with active state on "Analytics"
+- Command Palette: Command component with search + recent actions
+
+**ANALYTICS DASHBOARD & PROJECT PAGES TO BUILD:**
+
+**1. Analytics Dashboard (`/analytics`) - Secondary Page**
 - Layout: Top navigation bar, left sidebar with main nav, main content area (2-column: overview + activity feed), right sidebar (collapsible activity feed)
-- Components: Top nav bar (Logo, Projects, Search, Notifications, Profile menu), Left sidebar navigation (Home, Projects, Board, Graph, Specs, Stats, Agents, Cost, Audit), Overview section (stats cards: Total Specs, Active Agents, Tickets in Progress, Recent Commits), Active Specs grid (spec cards with progress bars), Quick Actions section (New Spec, New Project buttons), Recent Activity sidebar (collapsible chronological feed), Command Palette (Cmd+K)
+- Components: Top nav bar (Logo, Command, Projects, Agents, [Analytics] active, Search, Profile menu), Left sidebar navigation (Home, Projects, Board, Graph, Specs, Stats, Agents, Cost, Audit), Overview section (stats cards: Total Specs, Active Agents, Tickets in Progress, Recent Commits), Active Specs grid (spec cards with progress bars), Quick Actions section (New Spec, New Project buttons), Recent Activity sidebar (collapsible chronological feed), Project Filter dropdown, Command Palette (Cmd+K)
 - Content:
+  - Page title: "Analytics Dashboard"
+  - Project filter: [All Projects ▼]
   - Stats cards: Total Specs "5", Active Agents "3", Tickets in Progress "12", Recent Commits "8"
-  - Spec cards: Spec name, description, progress bar (0-100%), status badge (Draft, Requirements, Design, Tasks, Executing, Completed), last updated timestamp, quick actions ([View] [Edit] [Export])
+  - Spec cards: Spec name, description, progress bar (0-100%), status badge (Draft, Requirements, Design, Tasks, Executing, Completed), last updated timestamp, quick actions ([View] [Board])
   - Activity feed: "Spec 'Auth System' requirements approved", "Agent worker-1 completed task 'Setup JWT'", "Discovery: Bug found in login flow", "Guardian intervention sent to worker-2"
-- States: Loading (skeleton cards and stats), Empty ("Create Your First Project" CTA), Populated (overview with specs and activity), Error (error message with retry)
-- Navigation: Click spec card → spec workspace, Click "New Spec" → create spec modal/page, Click "New Project" → `/projects/new`, Click activity item → related page, Cmd+K → Command Palette
+- States: Loading (skeleton cards and stats), Empty ("No activity yet" - redirect CTA to Command Center), Populated (overview with specs and activity), Error (error message with retry)
+- Navigation: Click spec card → spec workspace, Click "New Spec" → create spec modal/page, Click "New Project" → `/projects/new`, Click activity item → related page, Cmd+K → Command Palette, Click Logo or "Command" → `/` (Command Center)
 
 **2. Projects List (`/projects`)**
 - Layout: Header with "Create Project" button, filter/search bar, projects grid/list view toggle
