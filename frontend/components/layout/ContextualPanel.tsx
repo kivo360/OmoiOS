@@ -10,10 +10,14 @@ import {
   AnalyticsPanel,
   SettingsPanel,
   OrganizationsPanel,
+  GraphFiltersPanel,
+  DiagnosticContextPanel,
+  ActivityFiltersPanel,
 } from "@/components/panels"
 
 interface ContextualPanelProps {
   activeSection: NavSection
+  pathname?: string
   isCollapsed?: boolean
   onToggleCollapse?: () => void
   className?: string
@@ -21,11 +25,35 @@ interface ContextualPanelProps {
 
 export function ContextualPanel({
   activeSection,
+  pathname = "",
   isCollapsed = false,
   onToggleCollapse,
   className,
 }: ContextualPanelProps) {
+  // Route-aware panel selection
+  // Specific routes get specialized panels regardless of activeSection
   const renderPanel = () => {
+    // Graph pages get Graph Filters
+    if (pathname.startsWith("/graph")) {
+      return <GraphFiltersPanel />
+    }
+
+    // Diagnostic pages get Diagnostic Context
+    if (pathname.startsWith("/diagnostic")) {
+      return <DiagnosticContextPanel />
+    }
+
+    // Activity page gets Activity Filters
+    if (pathname === "/activity" || pathname.startsWith("/activity")) {
+      return <ActivityFiltersPanel />
+    }
+
+    // Board pages can use Projects panel for project context
+    if (pathname.startsWith("/board")) {
+      return <ProjectsPanel />
+    }
+
+    // Default: use activeSection-based panels
     switch (activeSection) {
       case "command":
       case "agents":
@@ -45,12 +73,13 @@ export function ContextualPanel({
 
   if (isCollapsed) {
     return (
-      <div className="flex h-full w-0 items-start justify-center overflow-hidden border-r">
+      <div className="flex h-full w-10 flex-col items-center border-r bg-background pt-3">
         <Button
           variant="ghost"
           size="icon"
           onClick={onToggleCollapse}
-          className="mt-4 h-8 w-8"
+          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+          title="Expand sidebar"
         >
           <PanelLeft className="h-4 w-4" />
         </Button>
@@ -61,7 +90,7 @@ export function ContextualPanel({
   return (
     <div
       className={cn(
-        "flex h-full w-64 flex-col border-r bg-background transition-all duration-200",
+        "relative flex h-full w-64 flex-col border-r bg-background transition-all duration-200",
         className
       )}
     >
@@ -72,13 +101,14 @@ export function ContextualPanel({
           size="icon"
           onClick={onToggleCollapse}
           className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          title="Collapse sidebar"
         >
           <PanelLeftClose className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Panel Content */}
-      <div className="relative flex-1 overflow-hidden pt-1">
+      <div className="flex-1 overflow-hidden pt-1">
         {renderPanel()}
       </div>
     </div>

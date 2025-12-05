@@ -78,6 +78,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       {/* Contextual Panel */}
       <ContextualPanel
         activeSection={activeSection}
+        pathname={pathname}
         isCollapsed={isPanelCollapsed}
         onToggleCollapse={handleTogglePanel}
       />
