@@ -1,5 +1,6 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -10,33 +11,49 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, Settings, User, Keyboard } from "lucide-react"
+import { LogOut, Settings, User, Search } from "lucide-react"
+import { CommandPalette } from "@/components/command"
 
 export function MinimalHeader() {
-  return (
-    <header className="h-12 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-full items-center justify-between px-4">
-        {/* Left side - Breadcrumb area */}
-        <div className="flex items-center gap-2">
-          {/* Can be used for breadcrumbs in the future */}
-        </div>
+  const [commandOpen, setCommandOpen] = React.useState(false)
 
-        {/* Right side - Actions and Profile */}
-        <div className="flex items-center gap-2">
-          {/* Keyboard Shortcuts Hint */}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="hidden text-xs text-muted-foreground md:flex"
-            onClick={() => {
-              // Could open a shortcuts modal
-            }}
-          >
-            <Keyboard className="mr-1.5 h-3 w-3" />
-            <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
-              <span className="text-xs">⌘</span>K
-            </kbd>
-          </Button>
+  // Handle keyboard shortcut
+  React.useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault()
+        setCommandOpen((open) => !open)
+      }
+    }
+
+    document.addEventListener("keydown", down)
+    return () => document.removeEventListener("keydown", down)
+  }, [])
+
+  return (
+    <>
+      <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
+      <header className="h-12 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex h-full items-center justify-between px-4">
+          {/* Left side - Breadcrumb area */}
+          <div className="flex items-center gap-2">
+            {/* Can be used for breadcrumbs in the future */}
+          </div>
+
+          {/* Right side - Actions and Profile */}
+          <div className="flex items-center gap-2">
+            {/* Command Palette Trigger */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="hidden text-xs text-muted-foreground md:flex"
+              onClick={() => setCommandOpen(true)}
+            >
+              <Search className="mr-1.5 h-3 w-3" />
+              <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                <span className="text-xs">⌘</span>K
+              </kbd>
+            </Button>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -85,5 +102,6 @@ export function MinimalHeader() {
         </div>
       </div>
     </header>
+    </>
   )
 }
