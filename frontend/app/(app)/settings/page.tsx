@@ -2,14 +2,33 @@
 
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { User, Key, Shield, Palette, Bell, Globe } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { User, Key, Shield, Palette, Bell, Globe, ChevronRight } from "lucide-react"
 
 const settingsLinks = [
   {
     href: "/settings/profile",
     icon: User,
     title: "Profile",
-    description: "Manage your personal information and preferences",
+    description: "Manage your personal information, timezone, and language preferences",
+  },
+  {
+    href: "/settings/security",
+    icon: Shield,
+    title: "Security",
+    description: "Change password, enable 2FA, and manage active sessions",
+  },
+  {
+    href: "/settings/notifications",
+    icon: Bell,
+    title: "Notifications",
+    description: "Configure how and when you receive notifications",
+  },
+  {
+    href: "/settings/appearance",
+    icon: Palette,
+    title: "Appearance",
+    description: "Customize theme, colors, fonts, and layout preferences",
   },
   {
     href: "/settings/api-keys",
@@ -18,30 +37,10 @@ const settingsLinks = [
     description: "Create and manage API keys for programmatic access",
   },
   {
-    href: "/settings/sessions",
-    icon: Shield,
-    title: "Active Sessions",
-    description: "View and manage your active login sessions",
-  },
-  {
-    href: "/settings/preferences",
-    icon: Palette,
-    title: "Preferences",
-    description: "Customize your application experience",
-    disabled: true,
-  },
-  {
-    href: "/settings/notifications",
-    icon: Bell,
-    title: "Notifications",
-    description: "Configure notification preferences",
-    disabled: true,
-  },
-  {
     href: "/settings/integrations",
     icon: Globe,
     title: "Integrations",
-    description: "Connect third-party services",
+    description: "Connect third-party services like GitHub and Slack",
     disabled: true,
   },
 ]
@@ -59,20 +58,27 @@ export default function SettingsPage() {
           <Link
             key={item.href}
             href={item.disabled ? "#" : item.href}
-            className={item.disabled ? "pointer-events-none opacity-50" : ""}
+            className={item.disabled ? "pointer-events-none" : ""}
           >
-            <Card className="h-full hover:border-primary/50 transition-colors">
+            <Card className={`h-full transition-all hover:border-primary/50 hover:shadow-sm ${item.disabled ? "opacity-60" : ""}`}>
               <CardHeader className="pb-3">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <item.icon className="h-5 w-5 text-primary" />
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <item.icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-base">{item.title}</CardTitle>
+                      {item.disabled && (
+                        <Badge variant="secondary" className="text-xs mt-1">
+                          Coming soon
+                        </Badge>
+                      )}
+                    </div>
                   </div>
-                  <div>
-                    <CardTitle className="text-base">{item.title}</CardTitle>
-                    {item.disabled && (
-                      <span className="text-xs text-muted-foreground">Coming soon</span>
-                    )}
-                  </div>
+                  {!item.disabled && (
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
