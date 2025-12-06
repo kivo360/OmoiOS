@@ -21,6 +21,11 @@
     │
     ├── /analytics (Analytics Dashboard) ← SECONDARY (deliberate navigation)
     │
+    ├── /health (System Health Dashboard) ← MONITORING (header indicator access)
+    │   ├── /health/trajectories (Active Trajectory Analyses)
+    │   ├── /health/interventions (Intervention History)
+    │   └── /health/settings (Monitoring Configuration)
+    │
     ├── /organizations (Organization list)
     │   ├── /organizations/new (Create organization)
     │   └── /organizations/:id (Organization detail)
@@ -95,6 +100,11 @@
 34. **Phase Gate Management**: Project → Phase Gates → View Pending Gates → Review Artifacts → Approve/Reject → Auto-Progress Ticket
 35. **Task Phase Management**: Project → Tasks → Filter by Phase → View Phase-Specific Tasks → Move Task to Phase → Validate Transition
 36. **Phase Metrics Dashboard**: Project → Statistics → Phases Tab → View Phase Performance → Compare Phase Efficiency → Identify Bottlenecks
+37. **System Health Access**: Command Center → Click 🛡️ Guardian indicator → System Health Dashboard
+38. **Monitoring Overview**: System Health → View Guardian/Conductor status → See active agents → Check alignment scores
+39. **Trajectory Analysis**: System Health → Trajectories Tab → View agent alignment → See constraint tracking → Send intervention
+40. **Intervention Review**: System Health → Interventions Tab → View history → Check success rates → Analyze recovery times
+41. **Monitoring Configuration**: System Health → Settings → Configure thresholds → Set notification preferences → Adjust adaptive learning
 
 ---
 

@@ -182,6 +182,122 @@ Can export audit trail:
 - JSON export
 ```
 
+#### 5.6 Monitoring System Insights
+
+```
+User navigates to System Health → Insights tab:
+   ↓
+Views monitoring patterns and adaptive learning:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Monitoring Insights                          [Export] [⚙️] │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Intervention Effectiveness                          │  │
+│  │                                                      │  │
+│  │  Overall Success Rate: 92% (46/50 interventions)    │  │
+│  │  ████████████████████████████████████░░░░ 92%       │  │
+│  │                                                      │  │
+│  │  By Type:                                           │  │
+│  │  • Refocus:    96% success (24/25)                  │  │
+│  │  • Prioritize: 90% success (18/20)                  │  │
+│  │  • Stop:       80% success (4/5)                    │  │
+│  │                                                      │  │
+│  │  Average Recovery Time: 2.3 minutes                 │  │
+│  │  Fastest Recovery: 0.5 minutes                      │  │
+│  │  Slowest Recovery: 8.2 minutes                      │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Pattern Learning Progress                           │  │
+│  │                                                      │  │
+│  │  Successful Patterns Stored: 12                     │  │
+│  │  • OAuth implementation patterns (3)                 │  │
+│  │  • Database connection patterns (4)                  │  │
+│  │  • Testing workflow patterns (5)                     │  │
+│  │                                                      │  │
+│  │  Failure Patterns Avoided: 3                        │  │
+│  │  • Infinite retry loops                              │  │
+│  │  • Scope creep detection                            │  │
+│  │  • Constraint violation patterns                     │  │
+│  │                                                      │  │
+│  │  Adaptive Thresholds:                               │  │
+│  │  • Alignment threshold: 70% → 72% (adjusted)        │  │
+│  │  • Intervention delay: 60s → 45s (optimized)        │  │
+│  │  • Last updated: 2 hours ago                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Common Drift Patterns Detected                      │  │
+│  │                                                      │  │
+│  │  ┌─────────────────────────────────────────────┐   │  │
+│  │  │ Scope Creep (34%)                           │   │  │
+│  │  │ ████████████████░░░░░░░░░░░░░░░░░░░░░░░░░  │   │  │
+│  │  │ Agent adds features not in requirements     │   │  │
+│  │  └─────────────────────────────────────────────┘   │  │
+│  │                                                      │  │
+│  │  ┌─────────────────────────────────────────────┐   │  │
+│  │  │ Test Skipping (28%)                         │   │  │
+│  │  │ ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │   │  │
+│  │  │ Agent proceeds without running tests        │   │  │
+│  │  └─────────────────────────────────────────────┘   │  │
+│  │                                                      │  │
+│  │  ┌─────────────────────────────────────────────┐   │  │
+│  │  │ Constraint Violations (22%)                 │   │  │
+│  │  │ ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │   │  │
+│  │  │ Agent ignores constraints from earlier      │   │  │
+│  │  └─────────────────────────────────────────────┘   │  │
+│  │                                                      │  │
+│  │  ┌─────────────────────────────────────────────┐   │  │
+│  │  │ Idle After Completion (16%)                 │   │  │
+│  │  │ ███████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  │   │  │
+│  │  │ Agent finishes but doesn't update status    │   │  │
+│  │  └─────────────────────────────────────────────┘   │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Conductor Coherence History                         │  │
+│  │                                                      │  │
+│  │  System Coherence (Last 24h):                       │  │
+│  │  ████████████████████████████████████████ 96%       │  │
+│  │                                                      │  │
+│  │  Duplicate Work Prevented: 2 instances              │  │
+│  │  • worker-1 and worker-3 both starting on JWT       │  │
+│  │  • worker-2 attempting completed task               │  │
+│  │                                                      │  │
+│  │  Agent Conflicts Resolved: 1 instance               │  │
+│  │  • Merge conflict between parallel branches         │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Cross-Project Learning (Organization-wide)          │  │
+│  │                                                      │  │
+│  │  Patterns shared from other projects: 8             │  │
+│  │  Patterns contributed to org knowledge: 4           │  │
+│  │                                                      │  │
+│  │  Top Shared Patterns:                               │  │
+│  │  • PostgreSQL connection pooling (used 12x)         │  │
+│  │  • OAuth2 token refresh handling (used 8x)          │  │
+│  │  • API rate limiting patterns (used 6x)             │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Monitoring Insights Available:**
+- **Intervention Effectiveness**: Success rates by intervention type, recovery times
+- **Pattern Learning**: Successful patterns stored, failure patterns avoided, adaptive threshold adjustments
+- **Drift Pattern Analysis**: Common reasons agents drift (scope creep, test skipping, constraint violations, idle detection)
+- **Conductor Coherence History**: Duplicate work prevention, conflict resolution
+- **Cross-Project Learning**: Patterns shared across organization projects
+
+**How the System Learns:**
+1. Successful interventions → Stored as patterns → Reused in similar situations
+2. Failed interventions → Marked as failure patterns → Avoided in future
+3. Agent discoveries → Stored in semantic memory → Referenced by future agents
+4. Threshold adjustments → Based on success/failure rates → Continuously optimized
+
 ---
 
 
