@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Progress } from "@/components/ui/progress"
 import {
   Select,
   SelectContent,
@@ -23,6 +24,10 @@ import {
   Loader2,
   AlertCircle,
   Terminal,
+  Activity,
+  Zap,
+  Pause,
+  TrendingUp,
 } from "lucide-react"
 import { mockAgents } from "@/lib/mock"
 import { LineChanges } from "@/components/custom"
@@ -44,6 +49,13 @@ export default function AgentsPage() {
     return matchesSearch && matchesStatus
   })
 
+  // Calculate metrics
+  const totalAgents = mockAgents.length
+  const activeAgents = mockAgents.filter((a) => a.status === "running").length
+  const completedAgents = mockAgents.filter((a) => a.status === "completed").length
+  const blockedAgents = mockAgents.filter((a) => a.status === "blocked" || a.status === "failed").length
+  const avgAlignment = 78 // Mock value
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       {/* Header */}
@@ -57,6 +69,58 @@ export default function AgentsPage() {
             <Plus className="mr-2 h-4 w-4" /> Spawn Agent
           </Link>
         </Button>
+      </div>
+
+      {/* Metrics Cards */}
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Agents</CardTitle>
+            <Bot className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalAgents}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active</CardTitle>
+            <Zap className="h-4 w-4 text-warning" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-warning">{activeAgents}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
+            <CheckCircle className="h-4 w-4 text-success" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-success">{completedAgents}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Stuck/Failed</CardTitle>
+            <AlertCircle className="h-4 w-4 text-destructive" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-destructive">{blockedAgents}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Avg Alignment</CardTitle>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-2">
+              <div className="text-2xl font-bold">{avgAlignment}%</div>
+              <Progress value={avgAlignment} className="h-2 w-16" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
