@@ -15,7 +15,7 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Header: Logo | Projects | Search | Notifications | Profile  │
+│  Header: Logo | Projects | 🛡️ Guardian | Search | Notifications | Profile  │
 ├─────────────────────────────────────────────────────────────┤
 │                                                              │
 │  ┌─────────┐  ┌──────────────────────────────────────┐   │
@@ -27,8 +27,9 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 │  │ • Specs │  │  │ • Active Agents: 3              │ │   │
 │  │ • Stats │  │  │ • Tickets in Progress: 12        │ │   │
 │  │ • Agents│  │  │ • Recent Commits: 8              │ │   │
-│  │ • Cost  │  │  └────────────────────────────────┘ │   │
-│  │ • Audit │  │                                       │   │
+│  │ • Cost  │  │  │ • Guardian: 🟢 Monitoring        │ │   │
+│  │ • Audit │  │  │ • System Health: 94%            │ │   │
+│  │ • Health│  │  └────────────────────────────────┘ │   │
 │  │         │  │  ┌────────────────────────────────┐ │   │
 │  │         │  │  │ Active Specs Grid               │ │   │
 │  │         │  │  │                                │ │   │
@@ -51,17 +52,19 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 │  │  • Spec "Auth System" requirements approved          │  │
 │  │  • Agent worker-1 completed task "Setup JWT"        │  │
 │  │  • Discovery: Bug found in login flow               │  │
-│  │  • Guardian intervention sent to worker-2            │  │
+│  │  • 🛡️ Guardian intervention sent to worker-2        │  │
+│  │  • 🔄 Monitoring cycle completed (5 agents checked) │  │
 │  └──────────────────────────────────────────────────────┘  │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
 
 **Dashboard Sections:**
-- **Overview Section**: Key metrics (total specs, active agents, tickets in progress, recent commits)
+- **Overview Section**: Key metrics (total specs, active agents, tickets in progress, recent commits, Guardian status, system health)
 - **Active Specs Grid**: Cards showing all active specs with progress bars
 - **Quick Actions**: Buttons for common actions (+ New Spec, + New Project)
-- **Recent Activity Sidebar**: Chronological feed of recent events (collapsible)
+- **Recent Activity Sidebar**: Chronological feed of recent events including monitoring cycles (collapsible)
+- **Guardian Status Indicator**: Real-time monitoring system status in header (🛡️ icon)
 
 **Managing Multiple Specs:**
 - Dashboard shows grid view of all active specs

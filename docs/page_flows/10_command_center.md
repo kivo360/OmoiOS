@@ -16,7 +16,8 @@
 | Agent Card | Status icon + Task name + Time + Line changes (+X -Y) + Repo |
 | Line Changes | JetBrains Mono, green (#22863A) for +, red (#CB2431) for - |
 | Time Groups | TODAY, THIS WEEK, THIS MONTH (11px uppercase, muted) |
-| Header | Minimal - right-aligned Dashboard link + Profile avatar |
+| Header | Minimal - right-aligned 🛡️ Guardian indicator + Dashboard link + Profile avatar |
+| Guardian Indicator | 🟢 Active (monitoring) / 🟡 Paused / 🔴 Issue - clickable to /health |
 
 ---
 ### Flow 33: Command Center (Primary Landing Page)
@@ -27,8 +28,8 @@
 │  Background: Warm cream #F5F5F0                              │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  [Logo]                          Dashboard | [Avatar] │   │
-│  │  (minimal header - right-aligned nav)                 │   │
+│  │  [Logo]               🛡️ | Dashboard | [Avatar]      │   │
+│  │  (minimal header - Guardian indicator + nav)          │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌────────────────┐  ┌──────────────────────────────────┐   │
@@ -364,7 +365,7 @@
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │  Header: Logo | [Command] [Projects] [Agents]        │   │
-│  │          [Analytics] | Search | Profile              │   │
+│  │          [Analytics] | 🛡️ | Search | Profile         │   │
 │  │                 ^^^^^ (Active)                        │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
@@ -419,7 +420,8 @@
 │  │  • Spec "Auth System" requirements approved  (2h)   │   │
 │  │  • Agent worker-1 completed task "Setup JWT" (3h)   │   │
 │  │  • Discovery: Bug found in login flow        (4h)   │   │
-│  │  • Guardian intervention sent to worker-2    (5h)   │   │
+│  │  • 🛡️ Guardian intervention sent to worker-2 (5h)   │   │
+│  │  • 🔄 Monitoring cycle completed (5 agents)  (5h)   │   │
 │  │  • Ticket "Add OAuth2" moved to Implementation (6h) │   │
 │  │                                                      │   │
 │  │  [View All Activity]                                 │   │
@@ -433,6 +435,73 @@
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+### Flow 37: System Health Access (Guardian Indicator)
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  COMPONENT: Guardian Indicator (Header)                      │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  [Logo]               🛡️ | Dashboard | [Avatar]      │   │
+│  │                        ↑                              │   │
+│  │                        └── Guardian Indicator         │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│  Indicator States:                                          │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  🟢 Active    - Monitoring running, all agents OK    │   │
+│  │  🟡 Attention - Agent needs attention (alignment <70%)│   │
+│  │  🟠 Drifting  - Multiple agents drifting             │   │
+│  │  🔴 Critical  - Agent stuck or intervention failed   │   │
+│  │  ⏸️ Paused    - Monitoring temporarily paused        │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│           │ Click Guardian indicator                        │
+│           ▼                                                 │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Quick Status Popover                                │   │
+│  │                                                      │   │
+│  │  System Health: 94%                                 │   │
+│  │  ┌──────────────────────────────────────────────┐  │   │
+│  │  │ Guardian: 🟢 Active (12s ago)                │  │   │
+│  │  │ Conductor: 🟢 Active                         │  │   │
+│  │  │ Agents: 5/5 OK                               │  │   │
+│  │  │ Avg Alignment: 78%                           │  │   │
+│  │  └──────────────────────────────────────────────┘  │   │
+│  │                                                      │   │
+│  │  Recent Activity:                                   │   │
+│  │  • worker-2 alignment recovered (72% → 85%)        │   │
+│  │  • Intervention sent to worker-1 (2m ago)          │   │
+│  │                                                      │   │
+│  │  [View System Health] [Pause Monitoring]           │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│           │ Click "View System Health"                      │
+│           ▼                                                 │
+│                                                              │
+│  Navigates to: /health (System Health Dashboard)            │
+│  See: [10a_monitoring_system.md](./10a_monitoring_system.md)│
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Guardian Indicator Behavior:**
+- Always visible in header across all authenticated pages
+- Shows real-time monitoring status via WebSocket updates
+- Click opens quick status popover with summary
+- Click "View System Health" navigates to full dashboard
+- Indicator color reflects worst-case agent status
+- Badge count shows number of agents needing attention
+
+**Popover Quick Actions:**
+- **View System Health**: Navigate to /health for full dashboard
+- **Pause Monitoring**: Temporarily pause Guardian analysis
+- **View Interventions**: Navigate to /health/interventions
+- **Dismiss**: Close popover
 
 ---
 
@@ -453,6 +522,11 @@
 └── / (Authenticated - Command Center) ← PRIMARY
     │
     ├── /analytics (Analytics Dashboard) ← SECONDARY
+    │
+    ├── /health (System Health Dashboard) ← MONITORING
+    │   ├── /health/trajectories (Active Trajectory Analyses)
+    │   ├── /health/interventions (Intervention History)
+    │   └── /health/settings (Monitoring Configuration)
     │
     ├── /projects (Project list)
     │   ├── /projects/new (Create project)
@@ -492,6 +566,8 @@
 4. **Analytics Access**: / → Click "Analytics" in nav → Analytics Dashboard
 5. **Agent History**: / → Click agent in sidebar → Agent Detail View
 6. **Return to Command**: Any page → Click logo or "Command" → /
+7. **System Health Access**: Any page → Click 🛡️ Guardian indicator → Quick Status Popover → View System Health → /health
+8. **Quick Intervention**: Any page → Click 🛡️ indicator (🟡/🔴) → See agent status → Send Intervention
 
 ---
 
@@ -506,6 +582,8 @@ GET  /api/projects               # List user's projects with connected repos
 POST /api/projects/quick-create  # Create project with defaults from repo
 POST /api/agents/spawn           # Spawn agent with initial task
 GET  /api/agents/recent          # List recent agents grouped by time
+GET  /api/health/status          # System health summary for header indicator
+GET  /api/health/quick           # Quick status popover data
 ```
 
 ### Unified Selector Response

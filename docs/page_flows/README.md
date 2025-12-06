@@ -11,7 +11,8 @@ This documentation has been split into focused sections for easier navigation an
 ### Core Navigation
 - **[00_index.md](./00_index.md)** - Navigation Summary, Main Routes, and Quick Reference
 - **[01_authentication.md](./01_authentication.md)** - Flow 1: Registration & First Login
-- **[10_command_center.md](./10_command_center.md)** - Flows 33-36: Command Center (Primary Landing), Unified Project/Repo Selection, Recent Agents, Analytics Dashboard
+- **[10_command_center.md](./10_command_center.md)** - Flows 33-37: Command Center (Primary Landing), Unified Project/Repo Selection, Recent Agents, Analytics Dashboard, System Health Access
+- **[10a_monitoring_system.md](./10a_monitoring_system.md)** - Flows 38-41: System Health Dashboard, Trajectory Analysis, Intervention Management, Monitoring Configuration
 
 ### Project & Spec Management
 - **[02_projects_specs.md](./02_projects_specs.md)** - Flows 2-3: Project Selection & Creation, Spec-Driven Workflow
@@ -27,6 +28,7 @@ This documentation has been split into focused sections for easier navigation an
 
 ### Visualization & Monitoring
 - **[06_visualizations.md](./06_visualizations.md)** - Flows 9-12: Dependency Graph View, Spec Workspace Views, Statistics Dashboard, Activity Timeline View
+- **[10a_monitoring_system.md](./10a_monitoring_system.md)** - Flows 38-41: Guardian & Monitoring System (System Health, Trajectories, Interventions, Configuration)
 
 ### Phase Management
 - **[07_phases.md](./07_phases.md)** - Flows 13-15, 26-32: Phase Management & Configuration, Task Phase Management, Phase Gate Approval, Phase Overview Dashboard, Phase Configuration, Custom Phase Creation, Phase Metrics
@@ -57,6 +59,7 @@ This documentation has been split into focused sections for easier navigation an
 **Monitoring & Analysis:**
 - [06_visualizations.md](./06_visualizations.md) - Graphs, statistics, and activity timelines
 - [10_command_center.md](./10_command_center.md) - Analytics Dashboard (secondary page)
+- [10a_monitoring_system.md](./10a_monitoring_system.md) - Guardian & System Health monitoring
 - [09a_diagnostic_reasoning.md](./09a_diagnostic_reasoning.md) - Understanding why decisions were made
 
 **Administration:**
@@ -91,6 +94,11 @@ This documentation has been split into focused sections for easier navigation an
 | 34 | Unified Project/Repo Selection | [10_command_center.md](./10_command_center.md) |
 | 35 | Recent Agents Sidebar | [10_command_center.md](./10_command_center.md) |
 | 36 | Analytics Dashboard (Secondary) | [10_command_center.md](./10_command_center.md) |
+| 37 | System Health Access | [10_command_center.md](./10_command_center.md) |
+| 38 | System Health Dashboard | [10a_monitoring_system.md](./10a_monitoring_system.md) |
+| 39 | Trajectory Analysis View | [10a_monitoring_system.md](./10a_monitoring_system.md) |
+| 40 | Intervention Management | [10a_monitoring_system.md](./10a_monitoring_system.md) |
+| 41 | Monitoring Configuration | [10a_monitoring_system.md](./10a_monitoring_system.md) |
 
 ## Related Documentation
 

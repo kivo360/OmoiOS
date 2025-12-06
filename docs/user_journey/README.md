@@ -18,6 +18,7 @@ This documentation has been split into focused sections for easier navigation an
 
 ### System Documentation
 - **[06_key_interactions.md](./06_key_interactions.md)** - Key User Interactions (Command Palette, Real-Time Updates, Intervention Tools, Spec Management)
+- **[06a_monitoring_system.md](./06a_monitoring_system.md)** - Guardian & Monitoring System (System Health, Trajectory Analysis, Interventions, Pattern Learning)
 - **[07_phase_system.md](./07_phase_system.md)** - Phase System Overview (Default Phases, Custom Phases, Discovery-Based Branching)
 - **[08_user_personas.md](./08_user_personas.md)** - User Personas & Use Cases (Engineering Manager, Senior IC Engineer, CTO/Technical Lead)
 - **[09_design_principles.md](./09_design_principles.md)** - Visual Design Principles & Success Metrics
@@ -41,8 +42,9 @@ This documentation has been split into focused sections for easier navigation an
 3. Review [02_feature_planning.md](./02_feature_planning.md) to understand feature creation
 
 **Understanding the System:**
-- [06_phase_system.md](./06_phase_system.md) - How phases work
-- [07_user_personas.md](./07_user_personas.md) - Who uses OmoiOS and how
+- [06a_monitoring_system.md](./06a_monitoring_system.md) - How the Guardian & monitoring system works
+- [07_phase_system.md](./07_phase_system.md) - How phases work
+- [08_user_personas.md](./08_user_personas.md) - Who uses OmoiOS and how
 
 **Daily Operations:**
 - [03_execution_monitoring.md](./03_execution_monitoring.md) - Monitoring agent work

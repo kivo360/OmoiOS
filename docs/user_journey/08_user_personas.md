@@ -9,16 +9,24 @@
 **Primary Use Case**: Monitor multiple projects, approve phase transitions, review PRs, manage organizations
 
 **Typical Flow:**
-1. Logs in → Sees dashboard overview
+1. Logs in → Sees dashboard overview with Guardian status indicator
 2. Switches organization context (if member of multiple orgs)
-3. Reviews pending approvals → Approves phase transitions
-4. Monitors agent activity → Sees Guardian interventions
-5. Reviews PRs → Approves merges
-6. Checks statistics → Views project health
-7. Manages organization settings → Updates resource limits
-8. Generates API keys → For CI/CD integration
+3. Checks System Health dashboard → Views overall monitoring status
+4. Reviews pending approvals → Approves phase transitions
+5. Monitors agent activity → Sees Guardian interventions and alignment scores
+6. Reviews intervention history → Checks success rates and recovery times
+7. Reviews PRs → Approves merges
+8. Checks statistics → Views project health and monitoring insights
+9. Manages organization settings → Updates resource limits
+10. Generates API keys → For CI/CD integration
 
 **Time Investment**: 10-15 minutes per day for strategic oversight
+
+**Monitoring Touchpoints:**
+- Header Guardian indicator for quick system health check
+- System Health dashboard for detailed monitoring status
+- Intervention alerts in notification center
+- Alignment scores in agent list view
 
 **Organization Management:**
 - View organization members and roles
@@ -47,13 +55,23 @@
 2. Sets up new project → AI-assisted exploration
 3. Configures approval gates → Sets phase gate requirements
 4. Configures workspace isolation → Sets workspace types and policies
-5. Monitors system health → Views statistics dashboard
-6. Reviews cost tracking → Optimizes agent usage
-7. Configures Guardian rules → Sets intervention thresholds
-8. Manages API keys → For programmatic access
-9. Reviews workspace isolation → Checks agent workspace health
+5. Configures Guardian thresholds → Sets alignment score thresholds and intervention timing
+6. Configures monitoring policies → Sets notification preferences and escalation rules
+7. Monitors system health → Views System Health dashboard with real-time trajectory analyses
+8. Reviews monitoring insights → Analyzes intervention effectiveness and pattern learning
+9. Reviews cost tracking → Optimizes agent usage
+10. Reviews cross-project patterns → Views organization-wide learning insights
+11. Manages API keys → For programmatic access
+12. Reviews workspace isolation → Checks agent workspace health
 
 **Time Investment**: Initial setup (1-2 hours), ongoing monitoring (15 min/day)
+
+**Monitoring Configuration:**
+- Set alignment score thresholds (default: 70%)
+- Configure intervention timing (default: 60s cycles)
+- Set notification preferences for monitoring alerts
+- Define escalation rules for critical alignment drops
+- Review and adjust adaptive learning thresholds
 
 **Organization Setup:**
 - Create organization with unique slug
