@@ -13,6 +13,7 @@ import {
   GraphFiltersPanel,
   DiagnosticContextPanel,
   ActivityFiltersPanel,
+  ProjectSettingsPanel,
 } from "@/components/panels"
 
 interface ContextualPanelProps {
@@ -33,6 +34,11 @@ export function ContextualPanel({
   // Route-aware panel selection
   // Specific routes get specialized panels regardless of activeSection
   const renderPanel = () => {
+    // Project settings pages get Project Settings panel
+    if (pathname.includes("/projects/") && pathname.includes("/settings")) {
+      return <ProjectSettingsPanel />
+    }
+
     // Graph pages get Graph Filters
     if (pathname.startsWith("/graph")) {
       return <GraphFiltersPanel />
