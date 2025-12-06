@@ -14,6 +14,7 @@ import {
   DiagnosticContextPanel,
   ActivityFiltersPanel,
   ProjectSettingsPanel,
+  PhasesPanel,
 } from "@/components/panels"
 
 interface ContextualPanelProps {
@@ -59,6 +60,11 @@ export function ContextualPanel({
       return <ProjectsPanel />
     }
 
+    // Phases pages get Phases panel
+    if (pathname.startsWith("/phases")) {
+      return <PhasesPanel />
+    }
+
     // Default: use activeSection-based panels
     switch (activeSection) {
       case "command":
@@ -66,6 +72,8 @@ export function ContextualPanel({
         return <AgentsPanel />
       case "projects":
         return <ProjectsPanel />
+      case "phases":
+        return <PhasesPanel />
       case "analytics":
         return <AnalyticsPanel />
       case "settings":

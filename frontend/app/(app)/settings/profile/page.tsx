@@ -10,7 +10,44 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Loader2, Camera } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  ArrowLeft,
+  Loader2,
+  Camera,
+  Sun,
+  Moon,
+  Monitor,
+} from "lucide-react"
+
+const timezones = [
+  { value: "UTC", label: "UTC (Coordinated Universal Time)" },
+  { value: "America/New_York", label: "Eastern Time (ET)" },
+  { value: "America/Chicago", label: "Central Time (CT)" },
+  { value: "America/Denver", label: "Mountain Time (MT)" },
+  { value: "America/Los_Angeles", label: "Pacific Time (PT)" },
+  { value: "Europe/London", label: "London (GMT/BST)" },
+  { value: "Europe/Paris", label: "Central European Time (CET)" },
+  { value: "Asia/Tokyo", label: "Japan Standard Time (JST)" },
+  { value: "Asia/Shanghai", label: "China Standard Time (CST)" },
+  { value: "Australia/Sydney", label: "Australian Eastern Time (AET)" },
+]
+
+const languages = [
+  { value: "en", label: "English" },
+  { value: "es", label: "Español" },
+  { value: "fr", label: "Français" },
+  { value: "de", label: "Deutsch" },
+  { value: "ja", label: "日本語" },
+  { value: "zh", label: "中文" },
+]
 
 export default function ProfileSettingsPage() {
   const [isLoading, setIsLoading] = useState(false)
@@ -21,6 +58,9 @@ export default function ProfileSettingsPage() {
     company: "Acme Inc",
     location: "San Francisco, CA",
     website: "https://johndoe.dev",
+    timezone: "America/Los_Angeles",
+    language: "en",
+    theme: "system",
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,7 +70,7 @@ export default function ProfileSettingsPage() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 1000))
       toast.success("Profile updated successfully!")
-    } catch (error) {
+    } catch {
       toast.error("Failed to update profile")
     } finally {
       setIsLoading(false)
@@ -47,108 +87,227 @@ export default function ProfileSettingsPage() {
         Back to Settings
       </Link>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile Settings</CardTitle>
-          <CardDescription>Manage your personal information</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Avatar */}
-            <div className="flex items-center gap-4">
-              <Avatar className="h-20 w-20">
-                <AvatarImage src="/avatars/user.png" />
-                <AvatarFallback className="text-lg">JD</AvatarFallback>
-              </Avatar>
-              <div>
-                <Button type="button" variant="outline" size="sm">
-                  <Camera className="mr-2 h-4 w-4" />
-                  Change Avatar
-                </Button>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  JPG, PNG or GIF. Max 2MB.
-                </p>
-              </div>
-            </div>
+      <div>
+        <h1 className="text-2xl font-bold">Profile Settings</h1>
+        <p className="text-muted-foreground">Manage your personal information and preferences</p>
+      </div>
 
-            <Separator />
+      <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Profile Info Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Personal Information</CardTitle>
+                <CardDescription>Update your profile details</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Avatar */}
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-20 w-20">
+                    <AvatarImage src="/avatars/user.png" />
+                    <AvatarFallback className="text-lg">JD</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <Button type="button" variant="outline" size="sm">
+                      <Camera className="mr-2 h-4 w-4" />
+                      Change Avatar
+                    </Button>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      JPG, PNG or GIF. Max 2MB.
+                    </p>
+                  </div>
+                </div>
 
-            {/* Name */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Full Name</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-            </div>
+                <Separator />
 
-            {/* Email */}
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                disabled
-              />
-              <p className="text-xs text-muted-foreground">
-                Contact support to change your email address.
-              </p>
-            </div>
+                {/* Name & Email */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Full Name</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      disabled
+                      className="bg-muted"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      <Link href="/settings/security" className="text-primary hover:underline">
+                        Change email in Security settings
+                      </Link>
+                    </p>
+                  </div>
+                </div>
 
-            {/* Bio */}
-            <div className="space-y-2">
-              <Label htmlFor="bio">Bio</Label>
-              <Textarea
-                id="bio"
-                value={formData.bio}
-                onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                rows={3}
-              />
-            </div>
+                {/* Bio */}
+                <div className="space-y-2">
+                  <Label htmlFor="bio">Bio</Label>
+                  <Textarea
+                    id="bio"
+                    value={formData.bio}
+                    onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
+                    rows={3}
+                    placeholder="Tell us about yourself..."
+                  />
+                </div>
 
-            {/* Company */}
-            <div className="space-y-2">
-              <Label htmlFor="company">Company</Label>
-              <Input
-                id="company"
-                value={formData.company}
-                onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-              />
-            </div>
+                {/* Company & Location */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="company">Company</Label>
+                    <Input
+                      id="company"
+                      value={formData.company}
+                      onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                      placeholder="Your company"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="location">Location</Label>
+                    <Input
+                      id="location"
+                      value={formData.location}
+                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                      placeholder="City, Country"
+                    />
+                  </div>
+                </div>
 
-            {/* Location */}
-            <div className="space-y-2">
-              <Label htmlFor="location">Location</Label>
-              <Input
-                id="location"
-                value={formData.location}
-                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              />
-            </div>
+                {/* Website */}
+                <div className="space-y-2">
+                  <Label htmlFor="website">Website</Label>
+                  <Input
+                    id="website"
+                    type="url"
+                    value={formData.website}
+                    onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                    placeholder="https://yoursite.com"
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-            {/* Website */}
-            <div className="space-y-2">
-              <Label htmlFor="website">Website</Label>
-              <Input
-                id="website"
-                type="url"
-                value={formData.website}
-                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-              />
-            </div>
+            {/* Regional Settings Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Regional Settings</CardTitle>
+                <CardDescription>Configure timezone and language preferences</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="timezone">Timezone</Label>
+                    <Select
+                      value={formData.timezone}
+                      onValueChange={(value) => setFormData({ ...formData, timezone: value })}
+                    >
+                      <SelectTrigger id="timezone">
+                        <SelectValue placeholder="Select timezone" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {timezones.map((tz) => (
+                          <SelectItem key={tz.value} value={tz.value}>
+                            {tz.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="language">Language</Label>
+                    <Select
+                      value={formData.language}
+                      onValueChange={(value) => setFormData({ ...formData, language: value })}
+                    >
+                      <SelectTrigger id="language">
+                        <SelectValue placeholder="Select language" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {languages.map((lang) => (
+                          <SelectItem key={lang.value} value={lang.value}>
+                            {lang.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-            <div className="flex justify-end">
-              <Button type="submit" disabled={isLoading}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Changes
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+            {/* Theme Selection Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Appearance</CardTitle>
+                <CardDescription>Choose your preferred theme</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RadioGroup
+                  value={formData.theme}
+                  onValueChange={(value) => setFormData({ ...formData, theme: value })}
+                  className="grid grid-cols-3 gap-4"
+                >
+                  <div>
+                    <RadioGroupItem
+                      value="light"
+                      id="theme-light"
+                      className="peer sr-only"
+                    />
+                    <Label
+                      htmlFor="theme-light"
+                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    >
+                      <Sun className="mb-3 h-6 w-6" />
+                      <span className="text-sm font-medium">Light</span>
+                    </Label>
+                  </div>
+                  <div>
+                    <RadioGroupItem
+                      value="dark"
+                      id="theme-dark"
+                      className="peer sr-only"
+                    />
+                    <Label
+                      htmlFor="theme-dark"
+                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    >
+                      <Moon className="mb-3 h-6 w-6" />
+                      <span className="text-sm font-medium">Dark</span>
+                    </Label>
+                  </div>
+                  <div>
+                    <RadioGroupItem
+                      value="system"
+                      id="theme-system"
+                      className="peer sr-only"
+                    />
+                    <Label
+                      htmlFor="theme-system"
+                      className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
+                    >
+                      <Monitor className="mb-3 h-6 w-6" />
+                      <span className="text-sm font-medium">System</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+              </CardContent>
+            </Card>
+
+        {/* Save Button */}
+        <div className="flex justify-end">
+          <Button type="submit" disabled={isLoading}>
+            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save Changes
+          </Button>
+        </div>
+      </form>
     </div>
   )
 }

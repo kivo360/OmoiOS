@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings,
   Building2,
+  Workflow,
 } from "lucide-react"
 import {
   Tooltip,
@@ -18,7 +19,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-export type NavSection = "command" | "projects" | "agents" | "analytics" | "organizations" | "settings"
+export type NavSection = "command" | "projects" | "phases" | "agents" | "analytics" | "organizations" | "settings"
 
 interface NavItem {
   id: NavSection
@@ -32,6 +33,7 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { id: "command", label: "Command", icon: Terminal, href: "/command" },
   { id: "projects", label: "Projects", icon: FolderGit2, href: "/projects" },
+  { id: "phases", label: "Phases", icon: Workflow, href: "/phases" },
   { id: "agents", label: "Agents", icon: Bot, href: "/agents", badge: 3 },
   { id: "analytics", label: "Analytics", icon: BarChart3, href: "/analytics" },
   { id: "organizations", label: "Organizations", icon: Building2, href: "/organizations" },
@@ -54,6 +56,7 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
     if (activeSection) return activeSection
     if (pathname.startsWith("/command")) return "command"
     if (pathname.startsWith("/projects")) return "projects"
+    if (pathname.startsWith("/phases")) return "phases"
     if (pathname.startsWith("/agents") || pathname.startsWith("/board")) return "agents"
     if (pathname.startsWith("/analytics")) return "analytics"
     if (pathname.startsWith("/organizations")) return "organizations"
