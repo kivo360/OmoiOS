@@ -387,6 +387,137 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Graph visualization endpoints are prefixed with `/api/v1/`.
+
+---
+
+### GET /api/v1/graph/dependency-graph/project/{project_id}
+**Description:** Get dependency graph for entire project
+
+**Path Params:** `project_id` (string)
+
+**Query Params:**
+- `include_resolved` (default: true): Include completed tasks
+
+**Response (200):**
+```json
+{
+  "nodes": [
+    {
+      "id": "ticket-uuid",
+      "type": "ticket",
+      "data": {
+        "title": "Implement OAuth2",
+        "status": "building",
+        "phase_id": "PHASE_IMPLEMENTATION",
+        "priority": "HIGH"
+      }
+    },
+    {
+      "id": "discovery-uuid",
+      "type": "discovery",
+      "data": {
+        "description": "Bug found in login flow",
+        "severity": "high",
+        "created_at": "2025-01-15T10:00:00Z"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "ticket-1",
+      "target": "ticket-2",
+      "type": "depends_on"
+    }
+  ],
+  "metadata": {
+    "total_nodes": 25,
+    "total_edges": 18
+  }
+}
+```
+
+---
+
+### GET /api/v1/graph/dependency-graph/ticket/{ticket_id}
+**Description:** Get dependency graph for a specific ticket
+
+**Query Params:**
+- `include_resolved` (default: true): Include completed tasks
+- `include_discoveries` (default: true): Include discovery nodes
+
+**Response (200):**
+```json
+{
+  "nodes": [...],
+  "edges": [...],
+  "metadata": {
+    "focus_ticket_id": "ticket-uuid",
+    "direct_dependencies": 3,
+    "blocking_count": 2
+  }
+}
+```
+
+---
+
+### GET /api/v1/graph/dependency-graph/task/{task_id}/blocked
+**Description:** Get all tasks blocked by this task
+
+**Response (200):**
+```json
+{
+  "task_id": "task-uuid",
+  "blocked_tasks": [
+    {
+      "id": "blocked-task-uuid",
+      "description": "Write integration tests",
+      "status": "pending",
+      "priority": "MEDIUM",
+      "phase_id": "PHASE_TESTING"
+    }
+  ],
+  "blocked_count": 2
+}
+```
+
+---
+
+### GET /api/v1/graph/dependency-graph/task/{task_id}/blocking
+**Description:** Get all tasks that block this task (dependencies)
+
+**Response (200):**
+```json
+{
+  "task_id": "task-uuid",
+  "blocking_tasks": [
+    {
+      "id": "blocking-task-uuid",
+      "description": "Setup OAuth2 handler",
+      "status": "completed",
+      "priority": "HIGH",
+      "phase_id": "PHASE_IMPLEMENTATION",
+      "is_complete": true
+    }
+  ],
+  "all_dependencies_complete": false
+}
+```
+
+---
+
+### GET /api/v1/events (PLANNED)
+**Description:** Get activity timeline events (for activity feed)
+
+**Note:** This endpoint is planned but not yet implemented. Currently, activity events can be retrieved via WebSocket at `WS /api/v1/ws/events`.
+
+**Query Params:**
+- `entity_type` (optional): Filter by entity type
+- `limit` (default: 50)
 
 ---
 

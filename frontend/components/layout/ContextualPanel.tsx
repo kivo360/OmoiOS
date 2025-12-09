@@ -15,6 +15,7 @@ import {
   ActivityFiltersPanel,
   ProjectSettingsPanel,
   PhasesPanel,
+  HealthPanel,
 } from "@/components/panels"
 
 interface ContextualPanelProps {
@@ -38,6 +39,11 @@ export function ContextualPanel({
     // Project settings pages get Project Settings panel
     if (pathname.includes("/projects/") && pathname.includes("/settings")) {
       return <ProjectSettingsPanel />
+    }
+
+    // Health pages get Health panel
+    if (pathname.startsWith("/health")) {
+      return <HealthPanel />
     }
 
     // Graph pages get Graph Filters

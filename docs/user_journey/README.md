@@ -23,6 +23,15 @@ This documentation has been split into focused sections for easier navigation an
 - **[08_user_personas.md](./08_user_personas.md)** - User Personas & Use Cases (Engineering Manager, Senior IC Engineer, CTO/Technical Lead)
 - **[09_design_principles.md](./09_design_principles.md)** - Visual Design Principles & Success Metrics
 
+### Cost & Resource Management
+- **[11_cost_memory_management.md](./11_cost_memory_management.md)** - Cost & Memory Management:
+  - Cost Dashboard & Monitoring
+  - Budget Management & Alerts
+  - Cost Forecasting
+  - Agent Memory Search & Patterns
+  - Pattern Extraction & Learning
+  - Memory Insights Dashboard
+
 ### Additional Information
 - **[10_additional_flows.md](./10_additional_flows.md)** - Additional Flows & Edge Cases:
   - Error Handling & Failure Recovery
@@ -51,8 +60,11 @@ This documentation has been split into focused sections for easier navigation an
 - [04_approvals_completion.md](./04_approvals_completion.md) - Approving work and completing features
 - [05_optimization.md](./05_optimization.md) - Ongoing monitoring and optimization
 
+**Cost & Resource Management:**
+- [11_cost_memory_management.md](./11_cost_memory_management.md) - Cost tracking, budgets, and agent learning
+
 **Advanced Topics:**
-- [08_additional_flows.md](./08_additional_flows.md) - Edge cases, error handling, collaboration
+- [10_additional_flows.md](./10_additional_flows.md) - Edge cases, error handling, collaboration
 - [09_design_principles.md](./09_design_principles.md) - Design system and success metrics
 
 ## Related Documentation

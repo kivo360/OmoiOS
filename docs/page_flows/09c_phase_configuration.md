@@ -514,11 +514,256 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Phase configuration and gate endpoints.
 
 ---
 
-**Next**: See [README.md](./README.md) for complete documentation index.
+### GET /api/v1/tickets/{ticket_id}/gate-status
+**Description:** Get gate requirement status for phase configuration view
 
+**Query Params:**
+- `phase_id` (optional): Target phase
+
+**Response (200):**
+```json
+{
+  "ticket_id": "uuid",
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "requirements": [
+    { "name": "All code files created", "status": "passed" },
+    { "name": "Minimum 3 test cases passing", "status": "failed", "current": 2, "required": 3 }
+  ],
+  "artifacts": [
+    { "name": "Source files", "pattern": "src/auth/*.py", "found": 3, "expected": "1+", "status": "passed" }
+  ],
+  "overall_status": "failed"
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/artifacts
+**Description:** Register phase gate artifacts
+
+**Request Body:**
+```json
+{
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "artifact_type": "source_file",
+  "artifact_path": "src/auth/oauth2_handler.py",
+  "artifact_content": null,
+  "collected_by": "worker-1"
+}
+```
+
+---
+
+### GET /api/v1/projects/{project_id}/stats
+**Description:** Get project statistics for phase metrics dashboard
+
+**Response (200):**
+```json
+{
+  "project_id": "uuid",
+  "total_tickets": 25,
+  "tickets_by_status": {
+    "backlog": 10,
+    "building": 8,
+    "testing": 5,
+    "done": 2
+  },
+  "tickets_by_phase": {
+    "PHASE_REQUIREMENTS": 3,
+    "PHASE_IMPLEMENTATION": 12,
+    "PHASE_TESTING": 5
+  },
+  "active_agents": 3,
+  "total_commits": 47
+}
+```
+
+---
+
+### GET /api/v1/board/stats
+**Description:** Get column statistics (for phase flow metrics)
+
+**Response (200):**
+```json
+[
+  {
+    "column_id": "building",
+    "name": "Building",
+    "ticket_count": 4,
+    "wip_limit": 5,
+    "utilization": 0.8,
+    "wip_exceeded": false
+  }
+]
+```
+
+---
+
+## Quality Metrics API
+
+Quality metrics track task execution quality and enable predictive quality scoring.
+
+### POST /api/v1/quality/metrics/record
+**Description:** Record a quality metric for a task
+
+**Request Body:**
+```json
+{
+  "task_id": "task-uuid",
+  "metric_name": "test_coverage",
+  "value": 85.5,
+  "metadata": {
+    "test_count": 24,
+    "passing_tests": 24
+  }
+}
+```
+
+**Response (201):**
+```json
+{
+  "metric_id": "uuid",
+  "task_id": "task-uuid",
+  "metric_name": "test_coverage",
+  "value": 85.5,
+  "recorded_at": "2025-01-15T10:30:00Z"
+}
+```
+
+---
+
+### GET /api/v1/quality/metrics/{task_id}
+**Description:** Get all quality metrics for a task
+
+**Path Params:** `task_id` (string)
+
+**Response (200):**
+```json
+{
+  "task_id": "task-uuid",
+  "metrics": {
+    "test_coverage": 85.5,
+    "code_complexity": 12,
+    "lint_score": 95,
+    "documentation_coverage": 70
+  },
+  "overall_score": 82.5,
+  "recorded_at": "2025-01-15T10:30:00Z"
+}
+```
+
+---
+
+### POST /api/v1/quality/predict
+**Description:** Predict quality score for a planned task using Memory patterns
+
+**Request Body:**
+```json
+{
+  "task_description": "Implement OAuth2 authentication with JWT",
+  "context": {
+    "phase_id": "PHASE_IMPLEMENTATION",
+    "agent_id": "worker-5"
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "predicted_score": 78.5,
+  "confidence": 0.85,
+  "similar_tasks_analyzed": 5,
+  "recommendations": [
+    "Consider adding integration tests for token refresh",
+    "Similar tasks had issues with session expiry - add explicit handling"
+  ],
+  "risk_factors": [
+    {
+      "factor": "complexity",
+      "level": "medium",
+      "description": "OAuth2 implementations typically have moderate complexity"
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/v1/quality/trends
+**Description:** Get quality trends across tasks
+
+**Query Params:**
+- `phase_id` (optional): Filter by phase
+- `limit` (default: 10): Number of recent tasks
+
+**Response (200):**
+```json
+{
+  "period": "last_30_days",
+  "average_score": 81.2,
+  "trend": "improving",
+  "trend_change": "+5.3%",
+  "by_phase": {
+    "PHASE_IMPLEMENTATION": {
+      "average_score": 79.5,
+      "task_count": 45
+    },
+    "PHASE_TESTING": {
+      "average_score": 88.2,
+      "task_count": 32
+    }
+  },
+  "recent_scores": [
+    {"task_id": "uuid", "score": 85, "date": "2025-01-15"},
+    {"task_id": "uuid", "score": 78, "date": "2025-01-14"}
+  ]
+}
+```
+
+---
+
+### POST /api/v1/quality/gates/{gate_id}/evaluate
+**Description:** Evaluate a quality gate for a task
+
+**Path Params:** `gate_id` (string)
+
+**Query Params:**
+- `task_id` (required): Task to evaluate
+
+**Response (200):**
+```json
+{
+  "gate_id": "gate-uuid",
+  "task_id": "task-uuid",
+  "passed": true,
+  "score": 85.5,
+  "threshold": 80.0,
+  "criteria": [
+    {
+      "name": "test_coverage",
+      "required": 80,
+      "actual": 85.5,
+      "passed": true
+    },
+    {
+      "name": "lint_score",
+      "required": 90,
+      "actual": 95,
+      "passed": true
+    }
+  ],
+  "evaluated_at": "2025-01-15T10:30:00Z"
+}
+```
 
 ---
 

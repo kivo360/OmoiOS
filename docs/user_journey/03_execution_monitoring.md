@@ -342,6 +342,8 @@ Agent A encounters PostgreSQL timeout error:
 - Consistent patterns across codebase
 - Knowledge accumulates over time
 
+> 💡 **For user-facing memory management flows**, see [11_cost_memory_management.md](./11_cost_memory_management.md) (Memory Search, Patterns, Insights).
+
 #### 3.5 Guardian Interventions
 
 ```

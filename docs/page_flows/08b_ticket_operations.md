@@ -318,6 +318,132 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Ticket operation endpoints are prefixed with `/api/v1/tickets/`.
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/transition
+**Description:** Transition ticket to new status with state machine validation
+
+**Request Body:**
+```json
+{
+  "to_status": "testing",
+  "reason": "All implementation tasks complete",
+  "force": false
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "title": "Implement OAuth2",
+  "description": "...",
+  "phase_id": "PHASE_TESTING",
+  "status": "testing",
+  "priority": "HIGH"
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/block
+**Description:** Mark ticket as blocked
+
+**Query Params:**
+- `blocker_type`: Blocker classification (e.g., `dependency`, `external`, `technical`)
+- `suggested_remediation` (optional): Suggested fix
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "status": "blocked",
+  "blocker_type": "dependency"
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/unblock
+**Description:** Unblock a blocked ticket
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/regress
+**Description:** Regress ticket to previous actionable phase
+
+**Query Params:**
+- `to_status`: Target status (typically `building` for testing regressions)
+- `validation_feedback` (optional): Feedback about why regression needed
+
+---
+
+### POST /api/v1/tickets/detect-blocking
+**Description:** Detect tickets that should be marked as blocked
+
+**Response (200):**
+```json
+{
+  "detected": 3,
+  "results": [
+    {
+      "ticket_id": "uuid",
+      "should_block": true,
+      "blocker_type": "dependency",
+      "reason": "Depends on unresolved ticket"
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/v1/tickets/{ticket_id}/context
+**Description:** Retrieve aggregated context and summary for a ticket
+
+**Response (200):**
+```json
+{
+  "ticket_id": "uuid",
+  "full_context": {
+    "requirements": "...",
+    "implementation_notes": "..."
+  },
+  "summary": "OAuth2 implementation with JWT tokens"
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/update-context
+**Description:** Aggregate phase tasks and update ticket context
+
+**Query Params:**
+- `phase_id`: Phase to aggregate from
+
+---
+
+### GET /api/v1/tickets/approval-status
+**Description:** Get approval status for a ticket
+
+**Query Params:**
+- `ticket_id`: Ticket ID
+
+**Response (200):**
+```json
+{
+  "ticket_id": "uuid",
+  "approval_status": "pending_review",
+  "requested_by": "worker-1",
+  "requested_at": "2025-01-15T10:00:00Z"
+}
+```
 
 ---
 

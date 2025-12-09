@@ -486,18 +486,17 @@
 ### System Health APIs
 
 ```
-GET  /api/health/status           # Overall system health status
-GET  /api/health/quick            # Quick popover data
-GET  /api/health/overview         # Full overview tab data
-GET  /api/health/trajectories     # All active trajectories
-GET  /api/health/trajectories/:id # Single trajectory detail
-GET  /api/health/interventions    # Intervention history
-POST /api/health/interventions    # Send manual intervention
-GET  /api/health/insights         # Pattern learning insights
-GET  /api/health/settings         # Current monitoring config
-PUT  /api/health/settings         # Update monitoring config
-POST /api/health/pause            # Pause monitoring
-POST /api/health/resume           # Resume monitoring
+GET  /api/v1/watchdog/monitor-status      # Monitor agent health summary
+POST /api/v1/watchdog/execute-remediation # Apply remediation policy to agent
+GET  /api/v1/watchdog/remediation-history # Remediation history (agent_id?, limit)
+GET  /api/v1/watchdog/policies            # Loaded remediation policies
+
+POST /api/validation/give_review          # Submit validation review for task
+POST /api/validation/spawn_validator      # Spawn validator agent for task
+POST /api/validation/send_feedback        # Deliver validation feedback to agent
+GET  /api/validation/status               # Validation status for task (task_id)
+
+WS   /api/v1/ws/events                    # Event stream (filters: event_types, entity_types, entity_ids)
 ```
 
 ### WebSocket Events
@@ -517,64 +516,264 @@ CONSTRAINT_VIOLATION         # Agent violated constraint
 ### Response Examples
 
 ```python
-# GET /api/health/status
-Response:
-{
-    "guardian_status": "active",
-    "guardian_last_cycle": "2024-01-15T10:30:12Z",
-    "conductor_status": "active",
-    "agents_total": 5,
-    "agents_healthy": 5,
-    "agents_drifting": 0,
-    "agents_stuck": 0,
-    "overall_health": 94,
-    "avg_alignment": 78.4,
-    "interventions_today": 3,
-    "pattern_matches": 2
-}
+# WATCHDOG (prefix /api/v1/watchdog)
+GET  /api/v1/watchdog/monitor-status
+  Returns: { issues: [...], total_monitors, healthy_monitors, unhealthy_monitors }
 
-# GET /api/health/trajectories
-Response:
-{
-    "trajectories": [
-        {
-            "agent_id": "worker-1",
-            "alignment_score": 85,
-            "status": "on_track",
-            "task_name": "Implement JWT authentication",
-            "phase": "PHASE_IMPLEMENTATION",
-            "last_check": "2024-01-15T10:30:12Z",
-            "constraints": [
-                {"text": "Use Node.js crypto module only", "set_at": "..."},
-                {"text": "All endpoints must return JSON", "set_at": "..."}
-            ],
-            "mandatory_steps": {
-                "total": 4,
-                "completed": 3,
-                "steps": [...]
-            },
-            "drift_reason": null,
-            "intervention_pending": false
-        },
-        ...
-    ]
-}
+POST /api/v1/watchdog/execute-remediation
+  Body: { agent_id, policy_name, reason, watchdog_agent_id }
+  Returns: WatchdogActionDTO (action_id, action_type, target_agent_id, remediation_policy, reason, initiated_by, executed_at?, success, escalated_to_guardian, guardian_action_id?, audit_log?, created_at?)
 
-# POST /api/health/interventions
-Request:
-{
-    "agent_id": "worker-4",
-    "type": "refocus",
-    "message": "Stop using the 'jsonwebtoken' library..."
-}
+GET  /api/v1/watchdog/remediation-history
+  Query: agent_id? string, limit int (1-200, default 50)
+  Returns: [WatchdogActionDTO]
 
-Response:
+GET  /api/v1/watchdog/policies
+  Returns: { policy_name: policy_config }
+
+# VALIDATION (prefix /api/validation)
+POST /api/validation/give_review
+  Body: { task_id, validator_agent_id, validation_passed: bool, feedback: str, evidence?: dict, recommendations?: list[str] }
+  Returns: { status, message, iteration }
+
+POST /api/validation/spawn_validator
+  Body: { task_id, commit_sha?: str }
+  Returns: { validator_agent_id }
+
+POST /api/validation/send_feedback
+  Body: { agent_id, feedback: str }
+  Returns: { delivered: bool }
+
+GET  /api/validation/status
+  Query: task_id (required)
+  Returns: { task_id, state, iteration, review_done, last_feedback? }
+
+# EVENTS (WebSocket, prefix /api/v1)
+WS   /api/v1/ws/events
+  Query: event_types?, entity_types?, entity_ids? (comma-separated)
+  Client may send {"type": "subscribe", ...} to update filters
+  Messages: { event_type, entity_type, entity_id, payload }
+```
+
+---
+
+## Alerts API
+
+System alerts for monitoring threshold breaches, anomalies, and critical events.
+
+### GET /api/v1/alerts
+**Description:** List active alerts with optional filtering
+
+**Query Params:**
+- `severity` (optional): Filter by severity (`critical`, `warning`, `info`)
+- `limit` (default: 100): Maximum alerts to return
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "alert_type": "budget_exceeded",
+    "severity": "warning",
+    "title": "Budget threshold reached",
+    "message": "Ticket AUTH-042 has reached 90% of budget limit",
+    "entity_type": "ticket",
+    "entity_id": "ticket-uuid",
+    "acknowledged": false,
+    "resolved": false,
+    "created_at": "2025-01-15T10:30:00Z"
+  }
+]
+```
+
+---
+
+### GET /api/v1/alerts/{alert_id}
+**Description:** Get specific alert details
+
+**Path Params:** `alert_id` (uuid)
+
+**Response (200):**
+```json
 {
-    "intervention_id": "uuid",
-    "status": "sent",
-    "sent_at": "2024-01-15T10:35:00Z"
+  "id": "uuid",
+  "alert_type": "alignment_drop",
+  "severity": "critical",
+  "title": "Agent alignment dropped below threshold",
+  "message": "worker-5 alignment dropped to 45% (threshold: 70%)",
+  "entity_type": "agent",
+  "entity_id": "worker-5",
+  "metadata": {
+    "previous_alignment": 82,
+    "current_alignment": 45,
+    "threshold": 70
+  },
+  "acknowledged": false,
+  "acknowledged_by": null,
+  "acknowledged_at": null,
+  "resolved": false,
+  "resolved_by": null,
+  "resolved_at": null,
+  "created_at": "2025-01-15T10:30:00Z"
 }
 ```
+
+---
+
+### POST /api/v1/alerts/{alert_id}/acknowledge
+**Description:** Acknowledge an alert
+
+**Path Params:** `alert_id` (uuid)
+
+**Request Body:**
+```json
+{
+  "acknowledged_by": "user-uuid",
+  "notes": "Investigating the issue"
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "acknowledged": true,
+  "acknowledged_by": "user-uuid",
+  "acknowledged_at": "2025-01-15T10:35:00Z"
+}
+```
+
+---
+
+### POST /api/v1/alerts/{alert_id}/resolve
+**Description:** Resolve an alert
+
+**Path Params:** `alert_id` (uuid)
+
+**Request Body:**
+```json
+{
+  "resolved_by": "user-uuid",
+  "resolution": "Increased budget limit and agent realigned"
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "resolved": true,
+  "resolved_by": "user-uuid",
+  "resolved_at": "2025-01-15T11:00:00Z",
+  "resolution": "Increased budget limit and agent realigned"
+}
+```
+
+---
+
+### GET /api/v1/alerts/rules
+**Description:** List configured alert rules
+
+**Response (200):**
+```json
+[
+  {
+    "rule_id": "uuid",
+    "name": "Budget Warning",
+    "condition": "budget_utilization > 80%",
+    "severity": "warning",
+    "enabled": true
+  },
+  {
+    "rule_id": "uuid",
+    "name": "Alignment Critical",
+    "condition": "alignment_score < 50%",
+    "severity": "critical",
+    "enabled": true
+  }
+]
+```
+
+---
+
+## WebSocket Events (Expanded)
+
+### Connection
+```
+WS /api/v1/ws/events?event_types=TASK_ASSIGNED,TASK_COMPLETED&entity_types=task,ticket
+```
+
+### Query Parameters
+- `event_types`: Comma-separated event types to subscribe to
+- `entity_types`: Comma-separated entity types to filter
+- `entity_ids`: Comma-separated specific entity IDs to watch
+
+### Dynamic Subscription
+Clients can update subscriptions by sending:
+```json
+{
+  "type": "subscribe",
+  "event_types": ["ALIGNMENT_CHANGED", "STEERING_ISSUED"],
+  "entity_types": ["agent"],
+  "entity_ids": ["worker-5", "worker-3"]
+}
+```
+
+Server responds:
+```json
+{
+  "status": "subscribed",
+  "filters": {
+    "event_types": ["ALIGNMENT_CHANGED", "STEERING_ISSUED"],
+    "entity_types": ["agent"],
+    "entity_ids": ["worker-5", "worker-3"]
+  }
+}
+```
+
+### Event Message Format
+```json
+{
+  "event_type": "ALIGNMENT_CHANGED",
+  "entity_type": "agent",
+  "entity_id": "worker-5",
+  "payload": {
+    "previous_alignment": 82,
+    "current_alignment": 68,
+    "threshold": 70,
+    "at_risk": true
+  }
+}
+```
+
+### Keep-Alive
+Server sends ping every 30 seconds:
+```json
+{"type": "ping"}
+```
+
+### Event Types Reference
+
+| Event Type | Entity Type | Description |
+|------------|-------------|-------------|
+| `TASK_CREATED` | task | New task created |
+| `TASK_ASSIGNED` | task | Task assigned to agent |
+| `TASK_COMPLETED` | task | Task completed |
+| `TASK_FAILED` | task | Task failed |
+| `TICKET_CREATED` | ticket | New ticket created |
+| `TICKET_TRANSITIONED` | ticket | Ticket status changed |
+| `AGENT_REGISTERED` | agent | New agent registered |
+| `AGENT_HEARTBEAT` | agent | Agent heartbeat received |
+| `ALIGNMENT_CHANGED` | agent | Agent alignment score changed |
+| `STEERING_ISSUED` | agent | Intervention sent to agent |
+| `INTERVENTION_RESULT` | agent | Intervention outcome |
+| `MONITORING_CYCLE_COMPLETE` | system | Guardian completed analysis |
+| `COHERENCE_UPDATE` | system | Conductor analysis result |
+| `PATTERN_LEARNED` | memory | New pattern stored |
+| `STUCK_DETECTED` | agent | Agent appears stuck |
+| `CONSTRAINT_VIOLATION` | agent | Agent violated constraint |
+| `ALERT_CREATED` | alert | New alert generated |
+| `ALERT_RESOLVED` | alert | Alert resolved |
 
 ---
 

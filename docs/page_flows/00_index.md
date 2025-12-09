@@ -55,6 +55,13 @@
     │
     ├── /commits/:commitSha (Commit diff viewer)
     │
+    ├── /costs (Cost Dashboard)
+    │   └── /costs?tab=records|budgets|forecast (Cost views)
+    │
+    ├── /memory (Agent Memory)
+    │   ├── /memory?tab=search (Semantic search)
+    │   └── /memory?tab=patterns (Learned patterns)
+    │
     └── /settings (User settings)
         ├── /settings/profile (User profile)
         ├── /settings/api-keys (API key management)
@@ -105,6 +112,11 @@
 39. **Trajectory Analysis**: System Health → Trajectories Tab → View agent alignment → See constraint tracking → Send intervention
 40. **Intervention Review**: System Health → Interventions Tab → View history → Check success rates → Analyze recovery times
 41. **Monitoring Configuration**: System Health → Settings → Configure thresholds → Set notification preferences → Adjust adaptive learning
+42. **Cost Tracking**: Analytics/Project → Costs Tab → View spend by scope → Track budget utilization → Set alerts
+43. **Budget Management**: Costs → Budgets → Create Budget → Set limits → Monitor utilization → Receive alerts
+44. **Cost Forecasting**: Costs → Forecast → Estimate pending costs → Adjust parameters → Plan budget
+45. **Memory Search**: Memory → Search → Enter task description → Find similar past tasks → Apply learnings
+46. **Pattern Learning**: Memory → Patterns → View learned patterns → Provide feedback → Extract new patterns
 
 ---
 
