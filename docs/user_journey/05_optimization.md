@@ -19,6 +19,8 @@ Views analytics:
 - Cost tracking: LLM costs per workflow
 ```
 
+> 💡 **For detailed cost management flows**, see [11_cost_memory_management.md](./11_cost_memory_management.md) (Cost Dashboard, Budgets, Forecasting).
+
 #### 5.2 Agents Overview Page
 
 ```

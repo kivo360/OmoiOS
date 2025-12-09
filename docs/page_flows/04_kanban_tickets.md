@@ -164,6 +164,216 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Ticket endpoints are prefixed with `/api/v1/tickets/` and board endpoints with `/api/v1/board/`.
+
+---
+
+### GET /api/v1/tickets
+**Description:** List tickets with pagination
+
+**Query Params:**
+- `limit` (default: 10): Maximum tickets to return
+- `offset` (default: 0): Number of tickets to skip
+
+**Response (200):**
+```json
+{
+  "tickets": [
+    {
+      "id": "uuid",
+      "title": "Add OAuth2 Authentication",
+      "description": "Implement OAuth2 for user login",
+      "status": "building",
+      "priority": "HIGH",
+      "phase_id": "PHASE_IMPLEMENTATION",
+      "approval_status": "approved",
+      "created_at": "2025-01-15T10:00:00Z"
+    }
+  ],
+  "total": 25
+}
+```
+
+---
+
+### POST /api/v1/tickets
+**Description:** Create a new ticket
+
+**Request Body:**
+```json
+{
+  "title": "Implement OAuth2 Authentication",
+  "description": "Add OAuth2 support for user login",
+  "phase_id": "PHASE_REQUIREMENTS",
+  "priority": "HIGH"
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "title": "Implement OAuth2 Authentication",
+  "description": "Add OAuth2 support for user login",
+  "phase_id": "PHASE_REQUIREMENTS",
+  "status": "backlog",
+  "priority": "HIGH",
+  "approval_status": "pending_review"
+}
+```
+
+---
+
+### GET /api/v1/tickets/{ticket_id}
+**Description:** Get ticket by ID
+
+---
+
+### GET /api/v1/board/view
+**Description:** Get complete Kanban board view
+
+**Query Params:**
+- `project_id` (optional): Filter by project ID
+
+**Response (200):**
+```json
+{
+  "columns": [
+    {
+      "id": "backlog",
+      "name": "Backlog",
+      "wip_limit": null,
+      "phase_mappings": ["PHASE_BACKLOG"],
+      "tickets": [
+        {
+          "id": "uuid",
+          "title": "Setup Infrastructure",
+          "priority": "MEDIUM",
+          "phase_id": "PHASE_BACKLOG"
+        }
+      ]
+    },
+    {
+      "id": "building",
+      "name": "Building",
+      "wip_limit": 5,
+      "phase_mappings": ["PHASE_IMPLEMENTATION"],
+      "tickets": []
+    }
+  ]
+}
+```
+
+---
+
+### POST /api/v1/board/move
+**Description:** Move ticket to different column
+
+**Request Body:**
+```json
+{
+  "ticket_id": "uuid",
+  "target_column_id": "testing",
+  "force": false
+}
+```
+
+**Response (200):**
+```json
+{
+  "ticket_id": "uuid",
+  "new_phase": "PHASE_TESTING",
+  "new_column": "testing",
+  "status": "moved"
+}
+```
+
+---
+
+### GET /api/v1/board/stats
+**Description:** Get column statistics
+
+**Response (200):**
+```json
+[
+  {
+    "column_id": "building",
+    "name": "Building",
+    "ticket_count": 4,
+    "wip_limit": 5,
+    "utilization": 0.8,
+    "wip_exceeded": false
+  }
+]
+```
+
+---
+
+### GET /api/v1/board/wip-violations
+**Description:** Check for WIP limit violations
+
+---
+
+### GET /api/v1/commits/ticket/{ticket_id}
+**Description:** Get all commits linked to a ticket
+
+**Query Params:**
+- `limit` (default: 100, max: 1000)
+- `offset` (default: 0)
+
+**Response (200):**
+```json
+{
+  "commits": [
+    {
+      "id": "commit-uuid",
+      "commit_sha": "02979f61095b7d...",
+      "commit_message": "Implement OAuth2 handler",
+      "commit_timestamp": "2025-01-15T12:47:00Z",
+      "agent_id": "worker-1",
+      "ticket_id": "uuid",
+      "files_changed": 17,
+      "insertions": 2255,
+      "deletions": 0
+    }
+  ],
+  "total": 3
+}
+```
+
+---
+
+### GET /api/v1/commits/{commit_sha}
+**Description:** Get commit details by SHA
+
+---
+
+### GET /api/v1/commits/{commit_sha}/diff
+**Description:** Get commit diff (file-by-file changes)
+
+**Query Params:**
+- `file_path` (optional): Specific file path
+
+**Response (200):**
+```json
+{
+  "commit_sha": "02979f61095b7d...",
+  "files": [
+    {
+      "path": "src/auth/oauth2_handler.py",
+      "additions": 450,
+      "deletions": 0,
+      "changes": 450,
+      "status": "added",
+      "patch": "..."
+    }
+  ]
+}
+```
 
 ---
 

@@ -3,6 +3,7 @@
 **Part of**: [Page Flow Documentation](./README.md)
 
 ---
+
 ### Flow 26: Phase Overview Dashboard (Phasor System)
 
 ```
@@ -258,6 +259,118 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Phase overview and workflow graph endpoints use graph and task APIs.
+
+---
+
+### GET /api/v1/graph/dependency-graph/project/{project_id}
+
+**Description:** Get complete dependency graph for project (used for workflow graph)
+
+**Query Params:**
+
+- `include_resolved` (default: true): Include completed tasks
+- `include_discoveries` (default: true): Include discovery nodes
+
+**Response (200):**
+
+```json
+{
+  "nodes": [
+    {
+      "id": "task-uuid",
+      "type": "task",
+      "data": {
+        "description": "Implement API",
+        "status": "completed",
+        "phase_id": "PHASE_IMPLEMENTATION"
+      }
+    },
+    {
+      "id": "discovery-uuid",
+      "type": "discovery",
+      "data": {
+        "description": "Caching pattern could improve performance",
+        "discovery_type": "optimization",
+        "spawned_task_id": "task-101"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "source": "task-001",
+      "target": "task-002",
+      "type": "depends_on"
+    },
+    {
+      "source": "task-002",
+      "target": "discovery-001",
+      "type": "discovery",
+      "data": { "discovery_type": "optimization" }
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/v1/tasks
+
+**Description:** List tasks with optional filtering (for phase overview)
+
+**Query Params:**
+
+- `status` (optional): Filter by status
+- `phase_id` (optional): Filter by phase
+
+**Response (200):**
+
+```json
+[
+  {
+    "id": "task-uuid",
+    "ticket_id": "ticket-uuid",
+    "phase_id": "PHASE_IMPLEMENTATION",
+    "task_type": "implement_feature",
+    "description": "Implement OAuth2 handler",
+    "priority": "HIGH",
+    "status": "running",
+    "assigned_agent_id": "worker-1",
+    "created_at": "2025-01-15T10:00:00Z"
+  }
+]
+```
+
+---
+
+### GET /api/v1/tasks/{task_id}
+
+**Description:** Get task details (for reasoning chain view)
+
+**Response (200):**
+
+```json
+{
+  "id": "task-uuid",
+  "ticket_id": "ticket-uuid",
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "task_type": "implement_feature",
+  "description": "Implement OAuth2 handler",
+  "priority": "HIGH",
+  "status": "completed",
+  "assigned_agent_id": "worker-1",
+  "conversation_id": "conv-uuid",
+  "result": { "files_created": 3, "tests_passing": 5 },
+  "dependencies": { "depends_on": ["task-001"] },
+  "created_at": "2025-01-15T10:00:00Z",
+  "started_at": "2025-01-15T10:05:00Z",
+  "completed_at": "2025-01-15T11:00:00Z"
+}
+```
 
 ---
 

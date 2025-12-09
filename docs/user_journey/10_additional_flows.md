@@ -122,6 +122,43 @@ Slack channel receives updates:
 - Quick action buttons
 ```
 
+**Cost & Budget Alerts:**
+```
+System monitors cost thresholds:
+   ↓
+Budget warning triggered (e.g., 80% utilization):
+   - Alert created (severity: warning)
+   - In-app notification shown
+   - Email sent (if configured)
+   ↓
+User views alert:
+   - Click notification or Cost → Budgets
+   - See current spend vs limit
+   - Options: [Increase Limit] [View Records]
+   ↓
+If hard limit exceeded:
+   - Agents automatically paused
+   - Alert severity: critical
+   - User must take action to resume
+```
+
+**Memory & Pattern Alerts:**
+```
+Pattern learning events:
+   ↓
+New pattern extracted:
+   - Alert created (severity: info)
+   - Shows pattern name and confidence
+   - Links to pattern details
+   ↓
+Pattern confidence declining:
+   - Alert created (severity: warning)
+   - Suggests pattern review
+   - Links to affected tasks
+```
+
+> 💡 **For detailed cost and memory flows**, see [11_cost_memory_management.md](./11_cost_memory_management.md).
+
 ### Settings & Configuration
 
 #### User Settings Flow

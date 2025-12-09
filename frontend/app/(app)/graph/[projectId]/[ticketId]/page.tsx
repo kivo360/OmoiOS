@@ -119,6 +119,32 @@ const allTickets = [
   { ...mockBlocked[1], blockedBy: ["TICKET-010"] },
 ]
 
+const discoveryEvents = [
+  {
+    id: "disc-022",
+    branch: "reset-flow",
+    summary: "Email template reuse discovered; reduces downstream effort",
+    ticketId: "TICKET-005",
+    type: "opportunity",
+    impact: "Refactor shared assets",
+  },
+  {
+    id: "disc-024",
+    branch: "login-hotfix",
+    summary: "Found auth middleware race causing redirect loop",
+    ticketId: "TICKET-007",
+    type: "bug",
+    impact: "Blocks integration tests until patched",
+  },
+]
+
+const ticketThread = {
+  ticketId: "TICKET-005",
+  thread: "reset-flow → integration-tests",
+  phases: ["Backlog", "Requirements", "Design", "Implementation"],
+  current: "Implementation",
+}
+
 const statusConfig = {
   pending: { label: "Pending", color: "#9ca3af", bgColor: "#f3f4f6", icon: Clock },
   in_progress: { label: "In Progress", color: "#3b82f6", bgColor: "#dbeafe", icon: Loader2 },
@@ -333,6 +359,7 @@ function ticketsToFlowElements(tickets: typeof allTickets, focusId: string) {
 export default function TicketGraphPage({ params }: TicketGraphPageProps) {
   const { projectId, ticketId } = use(params)
   const [direction, setDirection] = useState<"TB" | "LR">("TB")
+  const [showDiscoveries, setShowDiscoveries] = useState(true)
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () => ticketsToFlowElements(allTickets, ticketId),
@@ -545,7 +572,8 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
         </div>
       </div>
 
-      {/* Graph Area */}
+      {/* Graph Area + overlays */}
+      <div className="flex-1 flex">
       <div className="flex-1">
         <ReactFlow
           nodes={nodes}
@@ -584,6 +612,79 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
             </Card>
           </Panel>
         </ReactFlow>
+        </div>
+
+        {/* Discovery + threading panel */}
+        <div className="w-96 border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 overflow-y-auto">
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Discovery overlays</h3>
+                <p className="text-xs text-muted-foreground">Branching around this ticket</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowDiscoveries((v) => !v)}>
+                {showDiscoveries ? "Hide" : "Show"}
+              </Button>
+            </div>
+
+            {showDiscoveries && (
+              <div className="space-y-3">
+                {discoveryEvents.map((d) => (
+                  <Card key={d.id}>
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Badge variant="secondary" className="font-mono text-[10px]">
+                          {d.id}
+                        </Badge>
+                        <Badge>{d.branch}</Badge>
+                      </div>
+                      <p className="text-sm font-medium">{d.summary}</p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Ticket {d.ticketId}</span>
+                        <span className="capitalize">{d.type}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Impact: {d.impact}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Ticket threading</h3>
+                <p className="text-xs text-muted-foreground">Phase path & linked branch</p>
+              </div>
+              <Card>
+                <CardContent className="p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Badge variant="outline" className="font-mono text-[11px]">
+                      {ticketThread.ticketId}
+                    </Badge>
+                    <Badge variant="secondary">{ticketThread.current}</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Thread: {ticketThread.thread}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {ticketThread.phases.map((p) => (
+                      <Badge
+                        key={p}
+                        variant="outline"
+                        className={p === ticketThread.current ? "border-primary text-primary" : ""}
+                      >
+                        {p}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Button variant="link" size="sm" className="px-0 text-xs" asChild>
+                    <Link href={`/board/${projectId}/${ticketThread.ticketId}`}>Open ticket</Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

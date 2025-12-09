@@ -148,6 +148,93 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Diagnostic endpoints are prefixed with `/api/v1/diagnostic/`.
+
+---
+
+### GET /api/v1/diagnostic/stuck-workflows
+**Description:** List currently stuck workflows
+
+**Response (200):**
+```json
+{
+  "stuck_count": 2,
+  "stuck_workflows": [
+    {
+      "workflow_id": "workflow-uuid",
+      "ticket_id": "ticket-uuid",
+      "total_tasks": 10,
+      "done_tasks": 10,
+      "failed_tasks": 0,
+      "time_since_last_task_seconds": 300,
+      "reason": "All tasks finished but no validated result"
+    }
+  ]
+}
+```
+
+---
+
+### GET /api/v1/diagnostic/runs
+**Description:** Get diagnostic run history
+
+**Query Params:**
+- `limit` (default: 100)
+- `workflow_id` (optional): Filter by workflow
+
+**Response (200):**
+```json
+[
+  {
+    "run_id": "uuid",
+    "workflow_id": "workflow-uuid",
+    "diagnostic_agent_id": "diag-agent-uuid",
+    "diagnostic_task_id": "task-uuid",
+    "triggered_at": "2025-01-15T12:00:00Z",
+    "total_tasks_at_trigger": 10,
+    "done_tasks_at_trigger": 10,
+    "failed_tasks_at_trigger": 0,
+    "time_since_last_task_seconds": 300,
+    "tasks_created_count": 2,
+    "tasks_created_ids": { "task_ids": ["task-1", "task-2"] },
+    "workflow_goal": "Complete implementation",
+    "phases_analyzed": {},
+    "agents_reviewed": {},
+    "diagnosis": "Workflow missing result submission",
+    "completed_at": "2025-01-15T12:05:00Z",
+    "status": "completed",
+    "created_at": "2025-01-15T12:00:00Z"
+  }
+]
+```
+
+---
+
+### POST /api/v1/diagnostic/trigger/{workflow_id}
+**Description:** Manually trigger diagnostic agent for a stuck workflow
+
+**Path Params:** `workflow_id` (string)
+
+**Response (200):**
+```json
+{
+  "run_id": "uuid",
+  "workflow_id": "workflow-uuid",
+  "diagnostic_agent_id": null,
+  "diagnostic_task_id": null,
+  "triggered_at": "2025-01-15T12:00:00Z",
+  "status": "pending"
+}
+```
+
+---
+
+### GET /api/v1/diagnostic/runs/{run_id}
+**Description:** Get diagnostic run details
 
 ---
 

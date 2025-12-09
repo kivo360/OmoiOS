@@ -24,6 +24,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 import {
   Select,
   SelectContent,
@@ -49,15 +50,12 @@ import {
   Filter,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   LayoutGrid,
-  Download,
   Bot,
   AlertCircle,
   CheckCircle,
   Clock,
   Loader2,
-  ChevronRight,
 } from "lucide-react"
 
 interface GraphPageProps {
@@ -161,6 +159,48 @@ const priorityColors = {
   medium: "#ca8a04",
   low: "#6b7280",
 }
+
+const discoveryEvents = [
+  {
+    id: "disc-011",
+    ticketId: "TICKET-002",
+    branch: "auth-hardening",
+    type: "discovery",
+    summary: "JWT validation missing kid rotation handling; spawned hardening branch",
+    impact: "Adds new sub-branch and tests",
+  },
+  {
+    id: "disc-014",
+    ticketId: "TICKET-007",
+    branch: "login-hotfix",
+    type: "bug",
+    summary: "Login redirect loop reproduced; hotfix branch created",
+    impact: "Blocks integration tests until merged",
+  },
+  {
+    id: "disc-016",
+    ticketId: "TICKET-005",
+    branch: "reset-flow",
+    type: "opportunity",
+    summary: "Found shared email template module; reuse reduces effort",
+    impact: "Threaded into reset-flow branch",
+  },
+]
+
+const ticketThreads = [
+  {
+    ticketId: "TICKET-005",
+    phases: ["Backlog", "Requirements", "Design", "Implementation"],
+    current: "Implementation",
+    thread: "reset-flow → integration-tests",
+  },
+  {
+    ticketId: "TICKET-007",
+    phases: ["Backlog", "Requirements", "Implementation"],
+    current: "Implementation",
+    thread: "login-hotfix → integration-tests",
+  },
+]
 
 // Node data type
 interface TicketNodeData {
@@ -350,6 +390,7 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [direction, setDirection] = useState<"TB" | "LR">("TB")
+  const [showDiscoveries, setShowDiscoveries] = useState(true)
 
   // Filter tickets
   const filteredTickets = useMemo(() => {
@@ -484,7 +525,8 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
         </div>
       </div>
 
-      {/* Graph */}
+      {/* Graph + overlays */}
+      <div className="flex-1 flex">
       <div className="flex-1">
         <ReactFlow
           nodes={nodes}
@@ -584,6 +626,81 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
             </Card>
           </Panel>
         </ReactFlow>
+        </div>
+
+        {/* Discovery + threading side panel */}
+        <div className="w-96 border-l bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 overflow-y-auto">
+          <div className="p-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-semibold">Discovery overlays</h3>
+                <p className="text-xs text-muted-foreground">Branching reasons & impact</p>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => setShowDiscoveries((v) => !v)}>
+                {showDiscoveries ? "Hide" : "Show"}
+              </Button>
+            </div>
+
+            {showDiscoveries && (
+              <div className="space-y-3">
+                {discoveryEvents.map((d) => (
+                  <Card key={d.id}>
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant="secondary" className="font-mono text-[10px]">
+                          {d.id}
+                        </Badge>
+                        <Badge>{d.branch}</Badge>
+                      </div>
+                      <p className="text-sm font-medium">{d.summary}</p>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Ticket {d.ticketId}</span>
+                        <span className="capitalize">{d.type}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Impact: {d.impact}</p>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Ticket threading</h3>
+                <p className="text-xs text-muted-foreground">Phase path & linked branches</p>
+              </div>
+              {ticketThreads.map((t) => (
+                <Card key={t.ticketId}>
+                  <CardContent className="p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline" className="font-mono text-[11px]">
+                        {t.ticketId}
+                      </Badge>
+                      <Badge variant="secondary">{t.current}</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Thread: {t.thread}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {t.phases.map((p) => (
+                        <Badge
+                          key={p}
+                          variant="outline"
+                          className={p === t.current ? "border-primary text-primary" : ""}
+                        >
+                          {p}
+                        </Badge>
+                      ))}
+                    </div>
+                    <Button variant="link" size="sm" className="px-0 text-xs" asChild>
+                      <Link href={`/board/${projectId}/${t.ticketId}`}>Open ticket</Link>
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -576,20 +576,27 @@
 ### Required Endpoints
 
 ```
-GET  /api/command/selector       # Unified list: projects + unconnected repos
-GET  /api/github/repos           # List user's authorized GitHub repos
-GET  /api/projects               # List user's projects with connected repos
-POST /api/projects/quick-create  # Create project with defaults from repo
-POST /api/agents/spawn           # Spawn agent with initial task
-GET  /api/agents/recent          # List recent agents grouped by time
-GET  /api/health/status          # System health summary for header indicator
-GET  /api/health/quick           # Quick status popover data
+GET  /api/v1/command/selector     # Unified list: projects + unconnected repos (PLANNED)
+### Existing Endpoints
+GET  /api/v1/github/repos                     # List user's authorized GitHub repos
+GET  /api/v1/projects                         # List user's projects with connected repos
+GET  /api/v1/agents                           # List all agents
+POST /api/v1/agents/register                  # Register a new agent
+GET  /api/v1/agents/health                    # System-wide agent health summary
+GET  /api/v1/monitor/dashboard                # Dashboard summary statistics
+GET  /health                                  # Basic health check
+
+### Planned Endpoints (Not Yet Implemented)
+POST /api/v1/projects/quick-create            # Create project with defaults from repo (PLANNED)
+POST /api/v1/agents/spawn                     # Spawn agent with initial task (PLANNED)
+GET  /api/v1/agents/recent                    # List recent agents grouped by time (PLANNED)
+GET  /api/v1/command/selector                 # Unified selector data (PLANNED)
 ```
 
-### Unified Selector Response
+### Unified Selector Response (Planned)
 
 ```python
-# GET /api/command/selector
+# GET /api/v1/command/selector (PLANNED)
 Response:
 {
     "projects": [
@@ -625,10 +632,10 @@ Response:
 }
 ```
 
-### Quick Create Request/Response
+### Quick Create Request/Response (Planned)
 
 ```python
-# POST /api/projects/quick-create
+# POST /api/v1/projects/quick-create (PLANNED)
 Request:
 {
     "github_repo": "owner/repo-name",
@@ -645,10 +652,10 @@ Response:
 }
 ```
 
-### Spawn Agent (Existing Project)
+### Spawn Agent (Planned)
 
 ```python
-# POST /api/agents/spawn
+# POST /api/v1/agents/spawn (PLANNED - current alternative: POST /api/v1/agents/register)
 Request:
 {
     "project_id": "uuid",

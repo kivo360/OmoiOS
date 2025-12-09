@@ -11,6 +11,17 @@
 
 You already have **extensive frontend infrastructure** documented (~10,000+ lines). This guide shows you how to assemble it into a working Next.js app.
 
+### API integration targets (keep mocks until final wiring)
+When replacing mocks, use these endpoints/contracts to stay aligned with backend:
+- Health: `GET /api/health/overview` (alignment, active_agents, alerts, interventions_24h), `GET /api/health/trajectories` (agent_id, project_id, alignment_score, status, last_event, note), `GET /api/health/interventions` (id, agent_id, type, result, summary, timestamp), `GET/PUT /api/health/settings` (alignment_min, idle_minutes, poll_seconds, notify_email, notify_slack).
+- Graph/Discovery: `GET /api/projects/{projectId}/graph` (tickets with status/priority/blocked_by/assignee), `GET /api/projects/{projectId}/discoveries` (id, ticket_id, branch, type, summary, impact), `GET /api/tickets/{ticketId}/thread` (phases[], current_phase, thread_label).
+- Phase Gates: `GET /api/projects/{projectId}/phase-gates/pending`, `POST /api/phase-gates/{gateId}/decision` (approve/reject, comment, artifacts[]).
+- Analytics: `GET /api/analytics/overview` (per-project stats), `GET /api/analytics/activity` (event feed).
+- Workspaces/Agents: `GET /api/workspaces` (id, agent_id, project_id, repo, status, last_sync), `GET /api/agents/{agentId}` (status, current_ticket, heartbeat).
+- Command Center: `GET /api/projects` (id, name, repo, ticket_count), `GET /api/repos` (full_name, private), `POST /api/agents` (prompt, project_id|repo_full_name, model) → returns agent_id.
+
+Use React Query hooks to replace mock arrays; keep identical shapes to avoid UI churn.
+
 **✅ You Already Have:**
 
 ### Product & Design Documentation

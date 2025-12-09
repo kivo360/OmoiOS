@@ -265,6 +265,184 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+All organization endpoints are prefixed with `/api/v1/organizations/`.
+
+---
+
+### POST /api/v1/organizations
+**Description:** Create a new organization
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Request Body:**
+```json
+{
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "description": "Engineering team at Acme",
+  "billing_email": "billing@acme.com"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "name": "Acme Corp",
+  "slug": "acme-corp",
+  "description": "Engineering team at Acme",
+  "owner_id": "user-uuid",
+  "billing_email": "billing@acme.com",
+  "is_active": true,
+  "max_concurrent_agents": 5,
+  "max_agent_runtime_hours": 100.0,
+  "created_at": "2025-01-15T10:00:00Z"
+}
+```
+
+---
+
+### GET /api/v1/organizations
+**Description:** List organizations current user is a member of
+
+**Response (200):**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Acme Corp",
+    "slug": "acme-corp",
+    "role": "owner"
+  }
+]
+```
+
+---
+
+### GET /api/v1/organizations/{org_id}
+**Description:** Get organization details
+
+---
+
+### PATCH /api/v1/organizations/{org_id}
+**Description:** Update organization
+
+**Request Body (all fields optional):**
+```json
+{
+  "name": "Updated Name",
+  "description": "Updated description",
+  "billing_email": "new-billing@acme.com",
+  "settings": { "theme": "dark" },
+  "max_concurrent_agents": 10,
+  "max_agent_runtime_hours": 200.0
+}
+```
+
+---
+
+### DELETE /api/v1/organizations/{org_id}
+**Description:** Archive organization (soft delete, owner only)
+
+---
+
+### POST /api/v1/organizations/{org_id}/members
+**Description:** Add a member to organization
+
+**Request Body:**
+```json
+{
+  "user_id": "user-uuid",
+  "role_id": "role-uuid"
+}
+```
+
+---
+
+### GET /api/v1/organizations/{org_id}/members
+**Description:** List organization members
+
+**Response (200):**
+```json
+[
+  {
+    "id": "membership-uuid",
+    "user_id": "user-uuid",
+    "agent_id": null,
+    "organization_id": "org-uuid",
+    "role_id": "role-uuid",
+    "role_name": "admin",
+    "joined_at": "2025-01-15T10:00:00Z"
+  }
+]
+```
+
+---
+
+### PATCH /api/v1/organizations/{org_id}/members/{member_id}
+**Description:** Update member role
+
+**Request Body:**
+```json
+{
+  "role_id": "new-role-uuid"
+}
+```
+
+---
+
+### DELETE /api/v1/organizations/{org_id}/members/{member_id}
+**Description:** Remove member from organization
+
+---
+
+### GET /api/v1/organizations/{org_id}/roles
+**Description:** List roles available in organization
+
+**Query Params:**
+- `include_system` (default: true): Include system roles
+
+**Response (200):**
+```json
+[
+  {
+    "id": "role-uuid",
+    "name": "admin",
+    "description": "Full access to all resources",
+    "permissions": ["org:*", "project:*", "agent:*"],
+    "is_system": true
+  }
+]
+```
+
+---
+
+### POST /api/v1/organizations/{org_id}/roles
+**Description:** Create custom role
+
+**Request Body:**
+```json
+{
+  "name": "developer",
+  "description": "Can manage projects and agents",
+  "permissions": ["project:read", "project:write", "agent:read"],
+  "inherits_from": "viewer"
+}
+```
+
+---
+
+### PATCH /api/v1/organizations/{org_id}/roles/{role_id}
+**Description:** Update custom role (cannot update system roles)
+
+---
+
+### DELETE /api/v1/organizations/{org_id}/roles/{role_id}
+**Description:** Delete custom role (cannot delete system roles)
 
 ---
 

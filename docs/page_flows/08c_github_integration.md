@@ -375,11 +375,90 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+GitHub integration endpoints are prefixed with `/api/v1/github/`.
 
 ---
 
-**Next**: See [README.md](./README.md) for complete documentation index.
+### POST /api/v1/github/connect
+**Description:** Connect a GitHub repository to a project
 
+**Query Params:**
+- `project_id`: Project ID to connect
+
+**Request Body:**
+```json
+{
+  "owner": "kivo360",
+  "repo": "auth-system",
+  "webhook_secret": "optional-secret"
+}
+```
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Repository connected successfully",
+  "project_id": "uuid",
+  "webhook_url": "/api/v1/webhooks/github"
+}
+```
+
+---
+
+### GET /api/v1/github/repos
+**Description:** List all connected GitHub repositories
+
+**Response (200):**
+```json
+[
+  {
+    "owner": "kivo360",
+    "repo": "auth-system",
+    "connected": true,
+    "webhook_configured": true
+  }
+]
+```
+
+---
+
+### POST /api/v1/github/webhooks/github
+**Description:** Handle GitHub webhook events
+
+**Headers:**
+- `X-GitHub-Event`: Event type (e.g., `push`, `pull_request`)
+- `X-Hub-Signature-256`: Webhook signature for verification
+
+**Body:** GitHub webhook payload (varies by event type)
+
+---
+
+### POST /api/v1/github/sync
+**Description:** Manually trigger sync with GitHub repository
+
+**Query Params:**
+- `project_id`: Project ID to sync
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Sync initiated for kivo360/auth-system"
+}
+```
+
+---
+
+### GitHub OAuth Scopes Required:
+- `repo`: Full control of private repositories
+- `read:org`: Read org and team membership
+- `workflow`: Update GitHub Action workflows
+- `admin:repo_hook`: Full control of repository hooks
 
 ---
 

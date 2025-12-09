@@ -316,6 +316,176 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+Phase gate endpoints are prefixed with `/api/v1/`.
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/validate-gate
+**Description:** Validate phase gate for a ticket
+
+**Path Params:** `ticket_id` (uuid)
+
+**Query Params:**
+- `phase_id` (optional): Target phase to validate (defaults to current phase)
+
+**Response (200):**
+```json
+{
+  "gate_status": "passed",
+  "requirements_met": true,
+  "blocking_reasons": []
+}
+```
+
+**Example (failed gate):**
+```json
+{
+  "gate_status": "failed",
+  "requirements_met": false,
+  "blocking_reasons": [
+    "Minimum 3 test cases required, only 2 passing",
+    "Code coverage below 80%"
+  ]
+}
+```
+
+---
+
+### GET /api/v1/tickets/{ticket_id}/gate-status
+**Description:** Retrieve current gate requirement status
+
+**Query Params:**
+- `phase_id` (optional): Target phase
+
+**Response (200):**
+```json
+{
+  "ticket_id": "uuid",
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "requirements": [
+    { "name": "All code files created", "status": "passed" },
+    { "name": "Minimum 3 test cases passing", "status": "failed", "current": 2, "required": 3 },
+    { "name": "All tasks completed", "status": "passed" }
+  ],
+  "artifacts": [
+    { "name": "Source files", "pattern": "src/auth/*.py", "found": 3, "expected": "1+", "status": "passed" },
+    { "name": "Test files", "pattern": "tests/test_auth/*.py", "found": 2, "expected": "3+", "status": "failed" }
+  ],
+  "overall_status": "failed"
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/artifacts
+**Description:** Register a phase gate artifact manually
+
+**Request Body:**
+```json
+{
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "artifact_type": "source_file",
+  "artifact_path": "src/auth/oauth2_handler.py",
+  "artifact_content": null,
+  "collected_by": "worker-1"
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "artifact-uuid",
+  "artifact_type": "source_file",
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "artifact_path": "src/auth/oauth2_handler.py",
+  "artifact_content": null
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/transition
+**Description:** Transition ticket to new status
+
+**Request Body:**
+```json
+{
+  "to_status": "testing",
+  "reason": "All implementation tasks completed",
+  "force": false
+}
+```
+
+---
+
+### POST /api/v1/tickets/{ticket_id}/progress
+**Description:** Auto-progress ticket to next phase if gate criteria met
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "title": "Implement OAuth2",
+  "phase_id": "PHASE_TESTING",
+  "status": "testing"
+}
+```
+
+**Or if no progression:**
+```json
+{
+  "status": "no_progression"
+}
+```
+
+---
+
+### POST /api/v1/tickets/approve
+**Description:** Approve a pending ticket
+
+**Request Body:**
+```json
+{
+  "ticket_id": "uuid"
+}
+```
+
+**Response (200):**
+```json
+{
+  "ticket_id": "uuid",
+  "status": "approved"
+}
+```
+
+---
+
+### POST /api/v1/tickets/reject
+**Description:** Reject a pending ticket
+
+**Request Body:**
+```json
+{
+  "ticket_id": "uuid",
+  "rejection_reason": "Requirements incomplete"
+}
+```
+
+---
+
+### GET /api/v1/tickets/pending-review-count
+**Description:** Get count of tickets pending approval
+
+**Response (200):**
+```json
+{
+  "pending_count": 5
+}
+```
 
 ---
 

@@ -392,6 +392,145 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+All project endpoints are prefixed with `/api/v1/projects/`.
+
+---
+
+### GET /api/v1/projects
+**Description:** List all projects
+
+**Query Params:**
+- `status` (optional): Filter by status (`active`, `archived`, `completed`)
+- `limit` (default: 100, max: 1000): Maximum number of projects
+- `offset` (default: 0): Number of projects to skip
+
+**Response (200):**
+```json
+{
+  "projects": [
+    {
+      "id": "uuid",
+      "name": "Auth System",
+      "description": "OAuth2 implementation",
+      "github_owner": "kivo360",
+      "github_repo": "auth-system",
+      "github_connected": true,
+      "default_phase_id": "PHASE_BACKLOG",
+      "status": "active",
+      "settings": {},
+      "created_at": "2025-01-15T10:00:00Z",
+      "updated_at": "2025-01-15T12:00:00Z"
+    }
+  ],
+  "total": 5
+}
+```
+
+---
+
+### POST /api/v1/projects
+**Description:** Create a new project
+
+**Request Body:**
+```json
+{
+  "name": "Auth System",
+  "description": "OAuth2 implementation for the platform",
+  "default_phase_id": "PHASE_BACKLOG",
+  "github_owner": "kivo360",
+  "github_repo": "auth-system",
+  "settings": {
+    "auto_approve": false,
+    "max_agents": 5
+  }
+}
+```
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "name": "Auth System",
+  "description": "OAuth2 implementation for the platform",
+  "github_owner": "kivo360",
+  "github_repo": "auth-system",
+  "github_connected": false,
+  "default_phase_id": "PHASE_BACKLOG",
+  "status": "active",
+  "settings": {},
+  "created_at": "2025-01-15T10:00:00Z",
+  "updated_at": "2025-01-15T10:00:00Z"
+}
+```
+
+---
+
+### GET /api/v1/projects/{project_id}
+**Description:** Get project by ID
+
+**Path Params:** `project_id` (string)
+
+---
+
+### PATCH /api/v1/projects/{project_id}
+**Description:** Update project
+
+**Request Body (all fields optional):**
+```json
+{
+  "name": "Updated Name",
+  "description": "Updated description",
+  "default_phase_id": "PHASE_REQUIREMENTS",
+  "status": "active",
+  "github_owner": "org-name",
+  "github_repo": "repo-name",
+  "github_connected": true,
+  "settings": { "auto_approve": true }
+}
+```
+
+---
+
+### DELETE /api/v1/projects/{project_id}
+**Description:** Soft delete project (archives it)
+
+**Response (200):**
+```json
+{
+  "success": true,
+  "message": "Project archived"
+}
+```
+
+---
+
+### GET /api/v1/projects/{project_id}/stats
+**Description:** Get project statistics
+
+**Response (200):**
+```json
+{
+  "project_id": "uuid",
+  "total_tickets": 25,
+  "tickets_by_status": {
+    "backlog": 10,
+    "building": 8,
+    "testing": 5,
+    "done": 2
+  },
+  "tickets_by_phase": {
+    "PHASE_REQUIREMENTS": 3,
+    "PHASE_IMPLEMENTATION": 12,
+    "PHASE_TESTING": 5
+  },
+  "active_agents": 3,
+  "total_commits": 47
+}
+```
 
 ---
 

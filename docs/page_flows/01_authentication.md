@@ -165,6 +165,227 @@
 
 ---
 
+## API Integration
+
+### Backend Endpoints
+
+All authentication endpoints are prefixed with `/api/v1/auth/`.
+
+---
+
+### POST /api/v1/auth/register
+**Description:** Register a new user account
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!",
+  "full_name": "John Doe",
+  "department": "Engineering"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "department": "Engineering",
+  "is_verified": false,
+  "created_at": "2025-01-15T10:00:00Z"
+}
+```
+
+---
+
+### POST /api/v1/auth/login
+**Description:** Authenticate user and return JWT tokens
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com",
+  "password": "SecurePass123!"
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "expires_in": 900
+}
+```
+
+---
+
+### POST /api/v1/auth/refresh
+**Description:** Refresh access token using refresh token
+
+**Request Body:**
+```json
+{
+  "refresh_token": "eyJ..."
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJ...",
+  "refresh_token": "eyJ...",
+  "expires_in": 900
+}
+```
+
+---
+
+### POST /api/v1/auth/logout
+**Description:** Logout current user (invalidate session)
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+---
+
+### GET /api/v1/auth/me
+**Description:** Get current authenticated user information
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "id": "uuid",
+  "email": "user@example.com",
+  "full_name": "John Doe",
+  "department": "Engineering",
+  "is_verified": true,
+  "attributes": {}
+}
+```
+
+---
+
+### PATCH /api/v1/auth/me
+**Description:** Update current user profile
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Request Body:**
+```json
+{
+  "full_name": "John Smith",
+  "department": "Product",
+  "attributes": { "theme": "dark" }
+}
+```
+
+---
+
+### POST /api/v1/auth/verify-email
+**Description:** Verify user email using verification token
+
+**Request Body:**
+```json
+{
+  "token": "verification-token-from-email"
+}
+```
+
+---
+
+### POST /api/v1/auth/forgot-password
+**Description:** Request password reset email
+
+**Request Body:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+---
+
+### POST /api/v1/auth/reset-password
+**Description:** Reset password using reset token
+
+**Request Body:**
+```json
+{
+  "token": "reset-token-from-email",
+  "new_password": "NewSecurePass123!"
+}
+```
+
+---
+
+### POST /api/v1/auth/change-password
+**Description:** Change password for authenticated user
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Request Body:**
+```json
+{
+  "current_password": "OldPass123!",
+  "new_password": "NewPass456!"
+}
+```
+
+---
+
+### POST /api/v1/auth/api-keys
+**Description:** Create API key for programmatic access
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Request Body:**
+```json
+{
+  "name": "CI/CD Pipeline",
+  "scopes": ["read:agents", "write:tickets"],
+  "organization_id": "org-uuid",
+  "expires_in_days": 90
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "name": "CI/CD Pipeline",
+  "key": "sk_live_...",
+  "scopes": ["read:agents", "write:tickets"],
+  "created_at": "2025-01-15T10:00:00Z",
+  "expires_at": "2025-04-15T10:00:00Z"
+}
+```
+
+---
+
+### GET /api/v1/auth/api-keys
+**Description:** List user's API keys
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+---
+
+### DELETE /api/v1/auth/api-keys/{key_id}
+**Description:** Revoke an API key
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Path Params:** `key_id` (uuid)
 
 ---
 
