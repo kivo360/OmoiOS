@@ -76,11 +76,11 @@ integrations:
   enable_webhooks: false
 
 embedding:
-  provider: local  # Always use local in tests
-  model_name: intfloat/multilingual-e5-large
-  chunk_size: 500  # Smaller chunks for faster tests
-  chunk_overlap: 50
-  batch_size: 16
+  provider: fireworks
+  fireworks_api_key: REDACTED_FIREWORKS_API_KEY
+  model_name: fireworks/qwen3-embedding-8b
+  # Dimensions for embeddings - must be <= 2000 for pgvector standard indexing
+  dimensions: 1536
 
 observability:
   enable_tracing: false  # Disable in tests

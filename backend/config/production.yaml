@@ -90,9 +90,12 @@ integrations:
   github_token: ${GITHUB_TOKEN}
 
 embedding:
-  provider: local
+  provider: fireworks
+  fireworks_api_key: ${EMBEDDING_FIREWORKS_API_KEY}
   openai_api_key: ${OPENAI_API_KEY}
-  model_name: intfloat/multilingual-e5-large
+  model_name: fireworks/qwen3-embedding-8b
+  # Dimensions for embeddings - must be <= 2000 for pgvector standard indexing
+  dimensions: 1536
 
 observability:
   enable_tracing: true

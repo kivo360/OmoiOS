@@ -5,6 +5,13 @@ import tempfile
 from typing import Generator
 from uuid import uuid4
 
+# =============================================================================
+# CRITICAL: Set test environment BEFORE importing any omoi_os modules
+# This prevents the slow ML embedding model from loading during tests
+# =============================================================================
+os.environ.setdefault("EMBEDDING_PROVIDER", "fireworks")  # Skip local model loading
+os.environ.setdefault("TESTING", "true")
+
 import pytest
 from fastapi.testclient import TestClient
 
