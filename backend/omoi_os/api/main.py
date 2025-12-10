@@ -21,6 +21,7 @@ from omoi_os.api.routes import (
     costs,
     diagnostic,
     events,
+    explore,
     github,
     graph,
     guardian,
@@ -30,7 +31,9 @@ from omoi_os.api.routes import (
     phases,
     projects,
     quality,
+    reasoning,
     results,
+    specs,
     tasks,
     tickets,
     validation,
@@ -849,6 +852,15 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(
     organizations.router, prefix="/api/v1/organizations", tags=["organizations"]
 )
+
+# Specs routes
+app.include_router(specs.router, prefix="/api/v1", tags=["specs"])
+
+# Reasoning chain routes
+app.include_router(reasoning.router, prefix="/api/v1", tags=["reasoning"])
+
+# Code exploration routes
+app.include_router(explore.router, prefix="/api/v1", tags=["explore"])
 
 # Mount FastMCP server at /mcp
 app.mount("/mcp", mcp_app)

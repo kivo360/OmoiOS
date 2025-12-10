@@ -1,14 +1,14 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   ArrowLeft,
   Search,
@@ -24,88 +24,89 @@ import {
   Clock,
   ChevronRight,
   Loader2,
+  Plus,
+  Trash2,
 } from "lucide-react"
-import { mockProjects } from "@/lib/mock"
+import { useProject } from "@/hooks/useProjects"
+import {
+  useConversations,
+  useConversation,
+  useCreateConversation,
+  useSendMessage,
+  useDeleteConversation,
+  useProjectFiles,
+  useSuggestions,
+} from "@/hooks/useExplore"
+import type { Message } from "@/lib/api/explore"
 
 interface ExplorePageProps {
   params: Promise<{ id: string }>
 }
 
-// Mock conversation history
-const mockConversations = [
-  {
-    id: "conv-1",
-    title: "Authentication flow analysis",
-    lastMessage: "The auth module uses JWT tokens with refresh...",
-    timestamp: "2 hours ago",
-  },
-  {
-    id: "conv-2",
-    title: "Database schema questions",
-    lastMessage: "The user table has the following relations...",
-    timestamp: "1 day ago",
-  },
-  {
-    id: "conv-3",
-    title: "API endpoint documentation",
-    lastMessage: "Here are all the REST endpoints...",
-    timestamp: "3 days ago",
-  },
-]
-
-// Mock suggestions
-const mockSuggestions = [
-  "Explain the authentication flow",
-  "Show me the database schema",
-  "What tests are failing?",
-  "Find unused dependencies",
-  "Summarize recent changes",
-]
-
-// Mock file structure
-const mockFiles = [
-  { path: "src/auth/jwt.ts", type: "file", lines: 156 },
-  { path: "src/auth/middleware.ts", type: "file", lines: 89 },
-  { path: "src/api/routes.ts", type: "file", lines: 234 },
-  { path: "src/db/models/user.ts", type: "file", lines: 67 },
-  { path: "src/db/models/project.ts", type: "file", lines: 92 },
-]
-
-// Mock AI response
-const mockResponses = [
-  {
-    role: "user",
-    content: "Explain the authentication flow in this project",
-  },
-  {
-    role: "assistant",
-    content: `## Authentication Flow
-
-The project uses **JWT-based authentication** with the following flow:
-
-1. **Login Request**: User submits credentials to \`POST /api/auth/login\`
-2. **Validation**: Server validates credentials against the database
-3. **Token Generation**: On success, generates access + refresh tokens
-4. **Token Storage**: Client stores tokens (access in memory, refresh in httpOnly cookie)
-
-### Key Files:
-- \`src/auth/jwt.ts\` - Token generation and validation
-- \`src/auth/middleware.ts\` - Route protection middleware
-- \`src/api/routes/auth.ts\` - Auth endpoints
-
-### Security Features:
-- Access tokens expire in 15 minutes
-- Refresh tokens expire in 7 days
-- Tokens are signed with RS256 algorithm`,
-  },
-]
-
 export default function ExplorePage({ params }: ExplorePageProps) {
   const { id } = use(params)
-  const project = mockProjects.find((p) => p.id === id)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const [query, setQuery] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [messages, setMessages] = useState(mockResponses)
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [localMessages, setLocalMessages] = useState<Message[]>([])
+
+  // Fetch data from API
+  const { data: project, isLoading: projectLoading } = useProject(id)
+  const { data: conversationsData, isLoading: conversationsLoading } = useConversations(id)
+  const { data: conversationData } = useConversation(id, activeConversationId || undefined)
+  const { data: filesData, isLoading: filesLoading } = useProjectFiles(id)
+  const { data: suggestionsData } = useSuggestions(id)
+
+  // Mutations
+  const createConversationMutation = useCreateConversation(id)
+  const sendMessageMutation = useSendMessage(id, activeConversationId || "")
+  const deleteConversationMutation = useDeleteConversation(id)
+
+  const conversations = conversationsData?.conversations || []
+  const files = filesData?.files || []
+  const suggestions = suggestionsData?.suggestions || [
+    "Explain the authentication flow",
+    "Show me the database schema",
+    "What tests are failing?",
+  ]
+
+  // Set active conversation when data loads
+  useEffect(() => {
+    if (conversations.length > 0 && !activeConversationId) {
+      setActiveConversationId(conversations[0].id)
+    }
+  }, [conversations, activeConversationId])
+
+  // Update local messages when conversation changes
+  useEffect(() => {
+    if (conversationData?.conversation) {
+      setLocalMessages(conversationData.conversation.messages)
+    }
+  }, [conversationData])
+
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [localMessages])
+
+  const isLoading = projectLoading
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid gap-6 lg:grid-cols-[1fr_300px]">
+          <Skeleton className="h-[600px]" />
+          <div className="space-y-4">
+            <Skeleton className="h-48" />
+            <Skeleton className="h-48" />
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!project) {
     return (
@@ -120,27 +121,64 @@ export default function ExplorePage({ params }: ExplorePageProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!query.trim()) return
+    if (!query.trim() || !activeConversationId) return
 
-    setIsLoading(true)
-    setMessages([...messages, { role: "user", content: query }])
+    const userMessage: Message = {
+      id: `temp-${Date.now()}`,
+      role: "user",
+      content: query,
+      timestamp: new Date().toISOString(),
+    }
+
+    // Optimistically add user message
+    setLocalMessages((prev) => [...prev, userMessage])
     setQuery("")
 
-    // Simulate AI response
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    try {
+      const response = await sendMessageMutation.mutateAsync(query)
+      // Replace temp message with real ones
+      setLocalMessages((prev) => [
+        ...prev.filter((m) => m.id !== userMessage.id),
+        response.user_message,
+        response.assistant_message,
+      ])
+    } catch (error) {
+      toast.error("Failed to send message")
+      // Remove optimistic message on error
+      setLocalMessages((prev) => prev.filter((m) => m.id !== userMessage.id))
+    }
+  }
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        role: "assistant",
-        content: `I've analyzed your question about "${query}". Here's what I found in the codebase...\n\nThis is a mock response. In the real implementation, this would connect to the AI service to analyze the project codebase and provide relevant insights.`,
-      },
-    ])
-    setIsLoading(false)
+  const handleNewConversation = async () => {
+    try {
+      const result = await createConversationMutation.mutateAsync()
+      setActiveConversationId(result.conversation.id)
+      setLocalMessages(result.conversation.messages)
+      toast.success("New conversation created")
+    } catch (error) {
+      toast.error("Failed to create conversation")
+    }
+  }
+
+  const handleDeleteConversation = async (convId: string) => {
+    try {
+      await deleteConversationMutation.mutateAsync(convId)
+      if (activeConversationId === convId) {
+        setActiveConversationId(null)
+        setLocalMessages([])
+      }
+      toast.success("Conversation deleted")
+    } catch (error) {
+      toast.error("Failed to delete conversation")
+    }
   }
 
   const handleSuggestionClick = (suggestion: string) => {
     setQuery(suggestion)
+  }
+
+  const handleConversationClick = (convId: string) => {
+    setActiveConversationId(convId)
   }
 
   return (
@@ -179,11 +217,11 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                 Codebase Q&A
               </CardTitle>
             </CardHeader>
-            <ScrollArea className="flex-1 p-4">
+            <ScrollArea className="flex-1 p-4" ref={scrollRef}>
               <div className="space-y-4">
-                {messages.map((message, index) => (
+                {localMessages.map((message, index) => (
                   <div
-                    key={index}
+                    key={message.id || index}
                     className={`flex gap-3 ${
                       message.role === "user" ? "justify-end" : ""
                     }`}
@@ -216,7 +254,7 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                     )}
                   </div>
                 ))}
-                {isLoading && (
+                {sendMessageMutation.isPending && (
                   <div className="flex gap-3">
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10">
                       <Bot className="h-4 w-4 text-primary" />
@@ -234,21 +272,21 @@ export default function ExplorePage({ params }: ExplorePageProps) {
                   placeholder="Ask about the codebase..."
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
-                  disabled={isLoading}
+                  disabled={sendMessageMutation.isPending || !activeConversationId}
                 />
-                <Button type="submit" disabled={isLoading || !query.trim()}>
+                <Button type="submit" disabled={sendMessageMutation.isPending || !query.trim() || !activeConversationId}>
                   <Send className="h-4 w-4" />
                 </Button>
               </form>
               <div className="mt-3 flex flex-wrap gap-2">
-                {mockSuggestions.slice(0, 3).map((suggestion, index) => (
+                {suggestions.slice(0, 3).map((suggestion, index) => (
                   <Button
                     key={index}
                     variant="outline"
                     size="sm"
                     className="text-xs"
                     onClick={() => handleSuggestionClick(suggestion)}
-                    disabled={isLoading}
+                    disabled={sendMessageMutation.isPending}
                   >
                     <Lightbulb className="mr-1 h-3 w-3" />
                     {suggestion}
@@ -263,26 +301,66 @@ export default function ExplorePage({ params }: ExplorePageProps) {
         <div className="space-y-4">
           {/* Recent Conversations */}
           <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-sm">Recent Conversations</CardTitle>
+            <CardHeader className="py-3 flex flex-row items-center justify-between">
+              <CardTitle className="text-sm">Conversations</CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleNewConversation}
+                disabled={createConversationMutation.isPending}
+              >
+                {createConversationMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+              </Button>
             </CardHeader>
             <CardContent className="space-y-2">
-              {mockConversations.map((conv) => (
-                <button
-                  key={conv.id}
-                  className="w-full text-left rounded-lg border p-3 hover:bg-accent transition-colors"
-                  onClick={() => toast.info("Loading conversation...")}
-                >
-                  <p className="text-sm font-medium truncate">{conv.title}</p>
-                  <p className="text-xs text-muted-foreground truncate mt-1">
-                    {conv.lastMessage}
-                  </p>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
-                    <Clock className="h-3 w-3" />
-                    {conv.timestamp}
+              {conversationsLoading ? (
+                <>
+                  <Skeleton className="h-16 w-full" />
+                  <Skeleton className="h-16 w-full" />
+                </>
+              ) : conversations.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No conversations yet
+                </p>
+              ) : (
+                conversations.map((conv) => (
+                  <div
+                    key={conv.id}
+                    className={`w-full text-left rounded-lg border p-3 hover:bg-accent transition-colors cursor-pointer ${
+                      activeConversationId === conv.id ? "bg-accent border-primary" : ""
+                    }`}
+                    onClick={() => handleConversationClick(conv.id)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{conv.title}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-1">
+                          {conv.last_message}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteConversation(conv.id)
+                        }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
+                      <Clock className="h-3 w-3" />
+                      {conv.timestamp}
+                    </div>
                   </div>
-                </button>
-              ))}
+                ))
+              )}
             </CardContent>
           </Card>
 
@@ -295,20 +373,27 @@ export default function ExplorePage({ params }: ExplorePageProps) {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-1">
-              {mockFiles.map((file) => (
-                <button
-                  key={file.path}
-                  className="w-full text-left flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent transition-colors text-sm"
-                  onClick={() => {
-                    setQuery(`Explain the code in ${file.path}`)
-                    toast.info(`Analyzing ${file.path}...`)
-                  }}
-                >
-                  <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span className="truncate font-mono text-xs">{file.path}</span>
-                  <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
-                </button>
-              ))}
+              {filesLoading ? (
+                <>
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                  <Skeleton className="h-8 w-full" />
+                </>
+              ) : (
+                files.map((file) => (
+                  <button
+                    key={file.path}
+                    className="w-full text-left flex items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent transition-colors text-sm"
+                    onClick={() => {
+                      setQuery(`Explain the code in ${file.path}`)
+                    }}
+                  >
+                    <FileCode className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className="truncate font-mono text-xs">{file.path}</span>
+                    <ChevronRight className="h-3 w-3 text-muted-foreground ml-auto shrink-0" />
+                  </button>
+                ))
+              )}
             </CardContent>
           </Card>
 

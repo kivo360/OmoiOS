@@ -1,7 +1,8 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useMemo } from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -54,23 +56,10 @@ import {
   X,
   Link as LinkIcon,
 } from "lucide-react"
+import { useSpec, useProjectSpecs, useApproveRequirements, useApproveDesign } from "@/hooks/useSpecs"
 
 interface SpecPageProps {
   params: Promise<{ id: string; specId: string }>
-}
-
-// Mock spec data
-const mockSpec = {
-  id: "spec-001",
-  title: "User Authentication System",
-  description: "Implement secure user authentication with OAuth2 and JWT tokens",
-  status: "executing",
-  phase: "Implementation",
-  progress: 75,
-  testCoverage: 65,
-  activeAgents: 2,
-  updatedAt: new Date(Date.now() - 2 * 60 * 60 * 1000),
-  linkedTickets: 5,
 }
 
 // Mock requirements (EARS-style)
@@ -293,9 +282,29 @@ const priorityConfig = {
 }
 
 export default function SpecWorkspacePage({ params }: SpecPageProps) {
-  const { id, specId } = use(params)
+  const { id: projectId, specId } = use(params)
   const [activeTab, setActiveTab] = useState("requirements")
   const [expandedRequirements, setExpandedRequirements] = useState<string[]>(["REQ-001"])
+
+  // Fetch spec data
+  const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId)
+  const { data: allSpecs } = useProjectSpecs(projectId)
+  const approveReqMutation = useApproveRequirements(specId)
+  const approveDesignMutation = useApproveDesign(specId)
+
+  // Use API data or fallback to mock data for missing fields
+  const mockSpec = useMemo(() => ({
+    id: spec?.id || specId,
+    title: spec?.title || "Loading...",
+    description: spec?.description || "",
+    status: spec?.status || "draft",
+    phase: spec?.phase || "Requirements",
+    progress: spec?.progress || 0,
+    testCoverage: spec?.test_coverage || 0,
+    activeAgents: spec?.active_agents || 0,
+    updatedAt: spec?.updated_at ? new Date(spec.updated_at) : new Date(),
+    linkedTickets: spec?.linked_tickets || 0,
+  }), [spec, specId])
 
   const toggleRequirement = (reqId: string) => {
     setExpandedRequirements((prev) =>
@@ -313,6 +322,57 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     const days = Math.floor(hours / 24)
     return `${days}d ago`
   }
+
+  const handleApproveRequirements = async () => {
+    try {
+      await approveReqMutation.mutateAsync()
+      toast.success("Requirements approved!")
+    } catch {
+      toast.error("Failed to approve requirements")
+    }
+  }
+
+  const handleApproveDesign = async () => {
+    try {
+      await approveDesignMutation.mutateAsync()
+      toast.success("Design approved!")
+    } catch {
+      toast.error("Failed to approve design")
+    }
+  }
+
+  if (specLoading) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+        <div className="space-y-4 text-center">
+          <Loader2 className="mx-auto h-8 w-8 animate-spin text-muted-foreground" />
+          <p className="text-muted-foreground">Loading specification...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (specError) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+        <div className="text-center space-y-4">
+          <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+          <h2 className="text-xl font-semibold">Spec not found</h2>
+          <p className="text-muted-foreground">The specification may have been deleted.</p>
+          <Button asChild>
+            <Link href={`/projects/${projectId}/specs`}>Back to Specs</Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  // Use API requirements if available, otherwise use mock
+  const requirements = spec?.requirements?.length ? spec.requirements : mockRequirements
+  const design = spec?.design || mockDesign
+  const tasks = spec?.tasks?.length ? spec.tasks : mockTasks
+  const execution = spec?.execution || mockExecution
+  const id = projectId
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] overflow-hidden">
@@ -336,27 +396,23 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                 All Specs
               </p>
-              {[
-                { id: "spec-001", name: "User Authentication", status: "executing" },
-                { id: "spec-002", name: "Payment Processing", status: "design" },
-                { id: "spec-003", name: "API Rate Limiting", status: "requirements" },
-              ].map((spec) => (
+              {(allSpecs?.specs || []).map((s) => (
                 <Link
-                  key={spec.id}
-                  href={`/projects/${id}/specs/${spec.id}`}
+                  key={s.id}
+                  href={`/projects/${id}/specs/${s.id}`}
                   className={`block rounded-md px-3 py-2 text-sm transition-colors ${
-                    spec.id === specId
+                    s.id === specId
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground"
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="truncate">{spec.name}</span>
+                    <span className="truncate">{s.title}</span>
                     <div
                       className={`h-2 w-2 rounded-full ${
-                        spec.status === "executing"
+                        s.status === "executing"
                           ? "bg-primary"
-                          : spec.status === "design"
+                          : s.status === "design"
                           ? "bg-warning"
                           : "bg-muted-foreground"
                       }`}
@@ -364,6 +420,9 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                   </div>
                 </Link>
               ))}
+              {(!allSpecs?.specs || allSpecs.specs.length === 0) && (
+                <p className="text-xs text-muted-foreground px-3 py-2">No specs yet</p>
+              )}
             </div>
           </ScrollArea>
         </div>
@@ -608,7 +667,10 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                 {/* Approval Actions */}
                 <div className="flex items-center justify-end gap-2 pt-4 border-t">
                   <Button variant="outline">Request Changes</Button>
-                  <Button>Approve Requirements</Button>
+                  <Button onClick={handleApproveRequirements} disabled={approveReqMutation.isPending}>
+                    {approveReqMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Approve Requirements
+                  </Button>
                 </div>
               </div>
             </TabsContent>
@@ -695,7 +757,10 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                 {/* Approval Actions */}
                 <div className="flex items-center justify-end gap-2 pt-4 border-t">
                   <Button variant="outline">Request Changes</Button>
-                  <Button>Approve Design</Button>
+                  <Button onClick={handleApproveDesign} disabled={approveDesignMutation.isPending}>
+                    {approveDesignMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Approve Design
+                  </Button>
                 </div>
               </div>
             </TabsContent>
