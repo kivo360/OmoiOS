@@ -67,8 +67,9 @@ class Ticket(Base):
     embedding: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     embedding_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # Optional pgvector column for semantic search
+    # Dimension must match EmbeddingSettings.dimensions (default 1536)
     embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
-        Vector(), nullable=True
+        Vector(1536), nullable=True
     )
 
     blocked_by_ticket_ids: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)

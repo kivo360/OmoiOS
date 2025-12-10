@@ -10,8 +10,8 @@ from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
 
 @pytest.fixture
 def embedding_service():
-    """Fixture for embedding service (local model for tests)."""
-    return EmbeddingService(provider=EmbeddingProvider.LOCAL)
+    """Fixture for embedding service (Fireworks AI for tests)."""
+    return EmbeddingService(provider=EmbeddingProvider.FIREWORKS)
 
 
 @pytest.fixture

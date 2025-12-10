@@ -4,6 +4,7 @@ from typing import List, Optional, TYPE_CHECKING
 from enum import Enum
 import logging
 import threading
+import time
 
 import numpy as np
 
@@ -15,10 +16,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Default embedding dimensions - must match pgvector column definitions
+# pgvector supports up to 16,000 dimensions for storage, but standard indexing
+# (HNSW/IVFFlat) is limited to 2,000 dimensions. Using 1536 for compatibility.
+DEFAULT_EMBEDDING_DIMENSIONS = 1536
+
+# Retry configuration for API calls
+MAX_RETRIES = 3
+RETRY_BASE_DELAY = 1.0  # seconds
+RETRY_MAX_DELAY = 10.0  # seconds
+
 
 class EmbeddingProvider(str, Enum):
     """Embedding provider options."""
 
+    FIREWORKS = "fireworks"  # Fireworks AI - fast, affordable, OpenAI-compatible
     OPENAI = "openai"
     LOCAL = "local"
 
@@ -136,30 +148,44 @@ def is_model_loaded() -> bool:
 
 class EmbeddingService:
     """
-    Service for generating text embeddings using OpenAI or local models.
+    Service for generating text embeddings using Fireworks AI, OpenAI, or local models.
 
     Supports:
+    - Fireworks AI qwen3-embedding-8b (1536 dimensions default, fast & affordable) [DEFAULT]
     - OpenAI text-embedding-3-small (1536 dimensions, production)
-    - FastEmbed intfloat/multilingual-e5-large (1024 dimensions, development)
+    - FastEmbed intfloat/multilingual-e5-large (1024 dimensions, local/no API)
+
+    Note: Dimensions are set to 1536 by default for pgvector compatibility.
+    pgvector supports up to 16,000 dimensions for storage, but standard indexing
+    (HNSW/IVFFlat) is limited to 2,000 dimensions.
 
     The service automatically pads local embeddings to 1536 dimensions for
     consistency with OpenAI embeddings.
 
-    Note: multilingual-e5-large requires prefixes for optimal performance:
+    Configuration (via env vars or YAML):
+        EMBEDDING_PROVIDER: "fireworks" | "openai" | "local"
+        EMBEDDING_FIREWORKS_API_KEY: Your Fireworks AI API key
+        EMBEDDING_OPENAI_API_KEY: Your OpenAI API key
+        EMBEDDING_MODEL_NAME: Override model name
+        EMBEDDING_DIMENSIONS: Override output dimensions
+
+    Note: multilingual-e5-large (local) requires prefixes for optimal performance:
     - Use "query: " prefix for queries
     - Use "passage: " prefix for passages/documents
-    - For symmetric tasks, use "query: " prefix for all inputs
 
     Performance optimizations:
-    - Models are cached in a configurable directory (embedding.cache_dir)
-    - Local models use a singleton pattern (loaded once, shared app-wide)
-    - Lazy loading defers model initialization until first use
-    - Optional background preloading (embedding.preload_in_background)
+    - Fireworks/OpenAI: Lazy client initialization, no model loading
+    - Local: Models cached in embedding.cache_dir, singleton pattern
+    - All: Lazy loading defers initialization until first use
     """
+
+    # Fireworks AI API base URL (OpenAI-compatible)
+    FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
 
     def __init__(
         self,
         provider: Optional[EmbeddingProvider] = None,
+        fireworks_api_key: Optional[str] = None,
         openai_api_key: Optional[str] = None,
         model_name: Optional[str] = None,
     ):
@@ -167,7 +193,9 @@ class EmbeddingService:
         Initialize embedding service.
 
         Args:
-            provider: Embedding provider (openai or local). Defaults to settings.embedding.provider.
+            provider: Embedding provider (fireworks, openai, or local).
+                      Defaults to settings.embedding.provider.
+            fireworks_api_key: Fireworks AI API key. Defaults to settings.embedding.fireworks_api_key.
             openai_api_key: OpenAI API key. Defaults to settings.embedding.openai_api_key.
             model_name: Model name override. Defaults based on provider.
         """
@@ -182,31 +210,95 @@ class EmbeddingService:
             if isinstance(provider_value, EmbeddingProvider)
             else EmbeddingProvider(provider_value)
         )
+
+        # Store API keys
+        self.fireworks_api_key = (
+            fireworks_api_key or embedding_settings.fireworks_api_key
+        )
         self.openai_api_key = openai_api_key or embedding_settings.openai_api_key
         self._cache_dir = embedding_settings.cache_dir
         self._lazy_load = embedding_settings.lazy_load
+        self._configured_dimensions = embedding_settings.dimensions
 
         # Lazy-loaded clients (initialized on first use)
+        self._fireworks_client: Optional["OpenAI"] = None
         self._openai_client: Optional["OpenAI"] = None
         self._local_model: Optional["TextEmbedding"] = None
 
-        # Set model names
-        if self.provider == EmbeddingProvider.OPENAI:
-            default_openai_model = (
-                embedding_settings.model_name or "text-embedding-3-small"
+        # Set model names and dimensions based on provider
+        # Note: Only use config model_name if it matches the provider type,
+        # otherwise use provider-specific defaults
+        config_model = embedding_settings.model_name
+        config_provider = embedding_settings.provider
+
+        if self.provider == EmbeddingProvider.FIREWORKS:
+            # Use config model only if config is also set to fireworks
+            if config_provider == "fireworks" and config_model:
+                default_model = config_model
+            else:
+                default_model = "fireworks/qwen3-embedding-8b"
+            self.model_name = model_name or default_model
+            # Use DEFAULT_EMBEDDING_DIMENSIONS for pgvector compatibility (max 2000 for standard indexing)
+            # Qwen3 supports variable dimensions via API parameter
+            self.dimensions = (
+                self._configured_dimensions or DEFAULT_EMBEDDING_DIMENSIONS
             )
-            self.model_name = model_name or default_openai_model
-            self.dimensions = 1536
+            if not self._lazy_load:
+                self._init_fireworks()
+        elif self.provider == EmbeddingProvider.OPENAI:
+            # Use config model only if config is also set to openai
+            if config_provider == "openai" and config_model:
+                default_model = config_model
+            else:
+                default_model = "text-embedding-3-small"
+            self.model_name = model_name or default_model
+            self.dimensions = (
+                self._configured_dimensions or DEFAULT_EMBEDDING_DIMENSIONS
+            )
             if not self._lazy_load:
                 self._init_openai()
-        else:
-            default_local_model = (
-                embedding_settings.model_name or "intfloat/multilingual-e5-large"
+        else:  # LOCAL
+            # Use config model only if config is also set to local
+            if config_provider == "local" and config_model:
+                default_model = config_model
+            else:
+                default_model = "intfloat/multilingual-e5-large"
+            self.model_name = model_name or default_model
+            self.dimensions = (
+                DEFAULT_EMBEDDING_DIMENSIONS  # Padded to match API providers
             )
-            self.model_name = model_name or default_local_model
-            self.dimensions = 1536  # Padded to match OpenAI
             if not self._lazy_load:
                 self._init_local()
+
+    def _init_fireworks(self) -> None:
+        """Initialize Fireworks AI client (lazy, OpenAI-compatible)."""
+        if self._fireworks_client is not None:
+            return
+
+        if not self.fireworks_api_key:
+            raise ValueError(
+                "Fireworks API key required for Fireworks embeddings. "
+                "Configure embedding.fireworks_api_key in YAML or EMBEDDING_FIREWORKS_API_KEY env var."
+            )
+        try:
+            from openai import OpenAI
+
+            self._fireworks_client = OpenAI(
+                api_key=self.fireworks_api_key,
+                base_url=self.FIREWORKS_BASE_URL,
+            )
+            logger.info(
+                f"Initialized Fireworks AI client with model: {self.model_name}"
+            )
+        except ImportError:
+            raise ImportError("openai package not installed. Run: uv add openai")
+
+    @property
+    def fireworks_client(self) -> "OpenAI":
+        """Get Fireworks client, initializing lazily if needed."""
+        if self._fireworks_client is None:
+            self._init_fireworks()
+        return self._fireworks_client  # type: ignore
 
     def _init_openai(self) -> None:
         """Initialize OpenAI client (lazy)."""
@@ -255,23 +347,46 @@ class EmbeddingService:
                      If False, adds "passage: " prefix (default for documents).
 
         Returns:
-            1536-dimensional embedding vector.
+            Embedding vector (dimensions depend on provider/model).
         """
         if not text or not text.strip():
             raise ValueError("Text cannot be empty")
 
-        if self.provider == EmbeddingProvider.OPENAI:
+        if self.provider == EmbeddingProvider.FIREWORKS:
+            return self._generate_fireworks_embedding(text)
+        elif self.provider == EmbeddingProvider.OPENAI:
             return self._generate_openai_embedding(text)
         else:
             return self._generate_local_embedding(text, is_query=is_query)
 
-    def _generate_openai_embedding(self, text: str) -> List[float]:
-        """Generate embedding using OpenAI API."""
-        response = self.openai_client.embeddings.create(
-            model=self.model_name,
-            input=text,
+    def _generate_fireworks_embedding(self, text: str) -> List[float]:
+        """Generate embedding using Fireworks AI API (OpenAI-compatible) with retry."""
+        kwargs = {
+            "model": self.model_name,
+            "input": text,
+        }
+        # Add dimensions if configured (for variable-length embeddings)
+        if self._configured_dimensions:
+            kwargs["dimensions"] = self._configured_dimensions
+
+        embedding = self._call_with_retry(
+            lambda: self.fireworks_client.embeddings.create(**kwargs).data[0].embedding,
+            "Fireworks embedding",
         )
-        return response.data[0].embedding
+        return self._validate_embedding(embedding)
+
+    def _generate_openai_embedding(self, text: str) -> List[float]:
+        """Generate embedding using OpenAI API with retry."""
+        embedding = self._call_with_retry(
+            lambda: self.openai_client.embeddings.create(
+                model=self.model_name,
+                input=text,
+            )
+            .data[0]
+            .embedding,
+            "OpenAI embedding",
+        )
+        return self._validate_embedding(embedding)
 
     def _generate_local_embedding(
         self, text: str, is_query: bool = False
@@ -288,8 +403,8 @@ class EmbeddingService:
         embedding_iter = self.local_model.embed([prefixed_text])
         base_embedding = next(embedding_iter)
 
-        # Pad to 1536 dimensions for consistency with OpenAI
-        padded = np.zeros(1536, dtype=np.float32)
+        # Pad to DEFAULT_EMBEDDING_DIMENSIONS for consistency with API providers
+        padded = np.zeros(DEFAULT_EMBEDDING_DIMENSIONS, dtype=np.float32)
         padded[: len(base_embedding)] = base_embedding
 
         return padded.tolist()
@@ -306,23 +421,52 @@ class EmbeddingService:
                      If False, adds "passage: " prefix (default for documents).
 
         Returns:
-            List of 1536-dimensional embedding vectors.
+            List of embedding vectors (dimensions depend on provider/model).
         """
         if not texts:
             return []
 
-        if self.provider == EmbeddingProvider.OPENAI:
+        if self.provider == EmbeddingProvider.FIREWORKS:
+            return self._batch_generate_fireworks_embeddings(texts)
+        elif self.provider == EmbeddingProvider.OPENAI:
             return self._batch_generate_openai_embeddings(texts)
         else:
             return self._batch_generate_local_embeddings(texts, is_query=is_query)
 
-    def _batch_generate_openai_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Batch generate embeddings using OpenAI API."""
-        response = self.openai_client.embeddings.create(
-            model=self.model_name,
-            input=texts,
+    def _batch_generate_fireworks_embeddings(
+        self, texts: List[str]
+    ) -> List[List[float]]:
+        """Batch generate embeddings using Fireworks AI API (OpenAI-compatible) with retry."""
+        kwargs = {
+            "model": self.model_name,
+            "input": texts,
+        }
+        # Add dimensions if configured (for variable-length embeddings)
+        if self._configured_dimensions:
+            kwargs["dimensions"] = self._configured_dimensions
+
+        embeddings = self._call_with_retry(
+            lambda: [
+                item.embedding
+                for item in self.fireworks_client.embeddings.create(**kwargs).data
+            ],
+            "Fireworks batch embedding",
         )
-        return [item.embedding for item in response.data]
+        return [self._validate_embedding(emb) for emb in embeddings]
+
+    def _batch_generate_openai_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Batch generate embeddings using OpenAI API with retry."""
+        embeddings = self._call_with_retry(
+            lambda: [
+                item.embedding
+                for item in self.openai_client.embeddings.create(
+                    model=self.model_name,
+                    input=texts,
+                ).data
+            ],
+            "OpenAI batch embedding",
+        )
+        return [self._validate_embedding(emb) for emb in embeddings]
 
     def _batch_generate_local_embeddings(
         self, texts: List[str], is_query: bool = False
@@ -339,14 +483,105 @@ class EmbeddingService:
         embedding_iter = self.local_model.embed(prefixed_texts)
         base_embeddings = list(embedding_iter)
 
-        # Pad all embeddings to 1536 dimensions
+        # Pad all embeddings to DEFAULT_EMBEDDING_DIMENSIONS
         padded_embeddings = []
         for emb in base_embeddings:
-            padded = np.zeros(1536, dtype=np.float32)
+            padded = np.zeros(DEFAULT_EMBEDDING_DIMENSIONS, dtype=np.float32)
             padded[: len(emb)] = emb
             padded_embeddings.append(padded.tolist())
 
         return padded_embeddings
+
+    def _call_with_retry(self, func, operation_name: str):
+        """
+        Call a function with exponential backoff retry on transient failures.
+
+        Args:
+            func: Callable to execute
+            operation_name: Name for logging purposes
+
+        Returns:
+            Result of the function call
+
+        Raises:
+            Exception: After all retries exhausted
+        """
+        last_exception = None
+
+        for attempt in range(MAX_RETRIES):
+            try:
+                return func()
+            except Exception as e:
+                last_exception = e
+                error_type = type(e).__name__
+
+                # Check if error is retryable (rate limits, timeouts, server errors)
+                retryable = any(
+                    indicator in str(e).lower()
+                    for indicator in [
+                        "rate limit",
+                        "timeout",
+                        "503",
+                        "502",
+                        "429",
+                        "connection",
+                        "temporarily",
+                    ]
+                )
+
+                if not retryable or attempt == MAX_RETRIES - 1:
+                    logger.error(
+                        f"{operation_name} failed after {attempt + 1} attempts: {error_type}: {e}"
+                    )
+                    raise
+
+                # Exponential backoff with jitter
+                delay = min(
+                    RETRY_BASE_DELAY * (2**attempt) + np.random.uniform(0, 1),
+                    RETRY_MAX_DELAY,
+                )
+                logger.warning(
+                    f"{operation_name} failed ({error_type}), retrying in {delay:.1f}s "
+                    f"(attempt {attempt + 1}/{MAX_RETRIES})"
+                )
+                time.sleep(delay)
+
+        # Should not reach here, but just in case
+        raise last_exception  # type: ignore
+
+    def _validate_embedding(self, embedding: List[float]) -> List[float]:
+        """
+        Validate embedding dimensions match expected configuration.
+
+        Args:
+            embedding: The embedding vector to validate
+
+        Returns:
+            The validated embedding
+
+        Raises:
+            ValueError: If embedding dimensions don't match expected
+        """
+        expected_dims = self.dimensions
+        actual_dims = len(embedding)
+
+        if actual_dims != expected_dims:
+            logger.warning(
+                f"Embedding dimension mismatch: got {actual_dims}, expected {expected_dims}. "
+                f"This may cause pgvector indexing issues."
+            )
+            # Truncate or pad to match expected dimensions
+            if actual_dims > expected_dims:
+                logger.info(
+                    f"Truncating embedding from {actual_dims} to {expected_dims}"
+                )
+                return embedding[:expected_dims]
+            else:
+                logger.info(f"Padding embedding from {actual_dims} to {expected_dims}")
+                padded = list(embedding) + [0.0] * (expected_dims - actual_dims)
+                return padded
+
+        return embedding
 
     @staticmethod
     def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:

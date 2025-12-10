@@ -444,6 +444,11 @@ class IntegrationSettings(OmoiBaseSettings):
 class EmbeddingSettings(OmoiBaseSettings):
     """
     Embedding provider configuration.
+
+    Supported providers:
+    - "fireworks": Fireworks AI (default) - fast, affordable, OpenAI-compatible
+    - "openai": OpenAI embeddings
+    - "local": Local FastEmbed model (slow startup, no API costs)
     """
 
     yaml_section = "embedding"
@@ -452,11 +457,23 @@ class EmbeddingSettings(OmoiBaseSettings):
         extra="ignore",
     )
 
-    provider: str = "local"
-    openai_api_key: Optional[str] = None
-    model_name: str = "intfloat/multilingual-e5-large"
+    # Provider configuration
+    provider: str = "fireworks"  # "fireworks", "openai", or "local"
 
-    # Model caching and loading optimization
+    # API keys (set via env vars: EMBEDDING_FIREWORKS_API_KEY, EMBEDDING_OPENAI_API_KEY)
+    fireworks_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
+
+    # Model name (provider-specific defaults applied if not set)
+    # Fireworks: "fireworks/qwen3-embedding-8b"
+    # OpenAI: "text-embedding-3-small"
+    # Local: "intfloat/multilingual-e5-large"
+    model_name: Optional[str] = None
+
+    # Output dimensions (None = use model default)
+    dimensions: Optional[int] = None
+
+    # Local model optimization (only applies when provider="local")
     cache_dir: Optional[str] = None  # Defaults to ~/.cache/fastembed if None
     lazy_load: bool = True  # Defer model loading until first use
     preload_in_background: bool = False  # Preload model in background thread at startup
