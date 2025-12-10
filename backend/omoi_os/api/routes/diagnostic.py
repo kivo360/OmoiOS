@@ -37,8 +37,10 @@ def serialize_diagnostic_run(run: DiagnosticRun) -> Dict:
 
 # Response Models
 
+
 class DiagnosticRunDTO(BaseModel):
     """Diagnostic run response model."""
+
     run_id: str
     workflow_id: str
     diagnostic_agent_id: str | None
@@ -58,26 +60,30 @@ class DiagnosticRunDTO(BaseModel):
     status: str
     created_at: str | None
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "run_id": "uuid",
-        "workflow_id": "workflow-uuid",
-        "diagnostic_agent_id": None,
-        "diagnostic_task_id": None,
-        "triggered_at": "2025-11-17T12:00:00Z",
-        "total_tasks_at_trigger": 10,
-        "done_tasks_at_trigger": 10,
-        "failed_tasks_at_trigger": 0,
-        "time_since_last_task_seconds": 300,
-        "tasks_created_count": 2,
-        "tasks_created_ids": {"task_ids": ["task-1", "task-2"]},
-        "workflow_goal": "Complete implementation",
-        "phases_analyzed": {},
-        "agents_reviewed": {},
-        "diagnosis": "Workflow missing result submission",
-        "completed_at": "2025-11-17T12:05:00Z",
-        "status": "completed",
-        "created_at": "2025-11-17T12:00:00Z",
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "run_id": "uuid",
+                "workflow_id": "workflow-uuid",
+                "diagnostic_agent_id": None,
+                "diagnostic_task_id": None,
+                "triggered_at": "2025-11-17T12:00:00Z",
+                "total_tasks_at_trigger": 10,
+                "done_tasks_at_trigger": 10,
+                "failed_tasks_at_trigger": 0,
+                "time_since_last_task_seconds": 300,
+                "tasks_created_count": 2,
+                "tasks_created_ids": {"task_ids": ["task-1", "task-2"]},
+                "workflow_goal": "Complete implementation",
+                "phases_analyzed": {},
+                "agents_reviewed": {},
+                "diagnosis": "Workflow missing result submission",
+                "completed_at": "2025-11-17T12:05:00Z",
+                "status": "completed",
+                "created_at": "2025-11-17T12:00:00Z",
+            }
+        }
+    )
 
 
 # Dependency injection
@@ -88,16 +94,16 @@ def get_diagnostic_service() -> DiagnosticService:
     from omoi_os.services.memory import MemoryService
     from omoi_os.services.monitor import MonitorService
     from omoi_os.services.embedding import EmbeddingService
-    
+
     db = get_db_service()
     event_bus = get_event_bus()
-    
+
     # Initialize required services
     embedding = EmbeddingService()
-    memory = MemoryService(db=db, embedding=embedding, event_bus=event_bus)
+    memory = MemoryService(embedding_service=embedding, event_bus=event_bus)
     discovery = DiscoveryService(event_bus=event_bus)
     monitor = MonitorService(db=db, event_bus=event_bus)
-    
+
     return DiagnosticService(
         db=db,
         discovery=discovery,
@@ -109,6 +115,7 @@ def get_diagnostic_service() -> DiagnosticService:
 
 # Routes
 
+
 @router.get(
     "/stuck-workflows",
     status_code=200,
@@ -118,7 +125,7 @@ def get_stuck_workflows(
     diagnostic_service: DiagnosticService = Depends(get_diagnostic_service),
 ) -> Dict:
     """Get workflows that are currently stuck.
-    
+
     A workflow is stuck when:
     - All tasks are finished
     - No validated result exists
@@ -128,7 +135,7 @@ def get_stuck_workflows(
         cooldown_seconds=60,
         stuck_threshold_seconds=60,
     )
-    
+
     return {
         "stuck_count": len(stuck),
         "stuck_workflows": stuck,
@@ -147,14 +154,14 @@ def get_diagnostic_runs(
     diagnostic_service: DiagnosticService = Depends(get_diagnostic_service),
 ) -> List[DiagnosticRunDTO]:
     """Get diagnostic run history.
-    
+
     Returns diagnostic runs sorted by most recent first.
     """
     runs = diagnostic_service.get_diagnostic_runs(
         workflow_id=workflow_id,
         limit=limit,
     )
-    
+
     return [DiagnosticRunDTO(**serialize_diagnostic_run(run)) for run in runs]
 
 
@@ -169,27 +176,28 @@ async def manual_trigger_diagnostic(
     diagnostic_service: DiagnosticService = Depends(get_diagnostic_service),
 ) -> DiagnosticRunDTO:
     """Manually trigger diagnostic agent for a stuck workflow.
-    
+
     Bypasses cooldown and stuck time checks.
     """
     # Build context
     context = diagnostic_service.build_diagnostic_context(workflow_id)
-    
+
     if not context:
         raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
-    
+
     # Load diagnostic settings for max_tasks
     from omoi_os.config import get_app_settings
+
     app_settings = get_app_settings()
     max_tasks = app_settings.diagnostic.max_tasks_per_run
-    
+
     # Spawn diagnostic (async)
     diagnostic_run = await diagnostic_service.spawn_diagnostic_agent(
         workflow_id=workflow_id,
         context=context,
         max_tasks=max_tasks,
     )
-    
+
     return DiagnosticRunDTO(**serialize_diagnostic_run(diagnostic_run))
 
 
@@ -205,10 +213,11 @@ def get_diagnostic_details(
 ) -> DiagnosticRunDTO:
     """Get detailed information about a specific diagnostic run."""
     runs = diagnostic_service.get_diagnostic_runs(limit=1000)  # Get all to search
-    
+
     run = next((r for r in runs if r.id == run_id), None)
     if not run:
-        raise HTTPException(status_code=404, detail=f"Diagnostic run {run_id} not found")
-    
-    return DiagnosticRunDTO(**serialize_diagnostic_run(run))
+        raise HTTPException(
+            status_code=404, detail=f"Diagnostic run {run_id} not found"
+        )
 
+    return DiagnosticRunDTO(**serialize_diagnostic_run(run))

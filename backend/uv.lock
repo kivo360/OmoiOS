@@ -2717,8 +2717,11 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "httpx" },
     { name = "openhands-agent-server" },
     { name = "openhands-workspace" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
 ]
 test = [
     { name = "aiosqlite" },
@@ -2772,8 +2775,11 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "openhands-agent-server", specifier = ">=1.1.0" },
     { name = "openhands-workspace", specifier = ">=1.1.0" },
+    { name = "pytest", specifier = ">=8.4.2" },
+    { name = "pytest-asyncio", specifier = ">=0.26.0" },
 ]
 test = [
     { name = "aiosqlite", specifier = ">=0.19.0" },
