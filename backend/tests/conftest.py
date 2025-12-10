@@ -3,15 +3,200 @@
 import os
 import tempfile
 from typing import Generator
+from uuid import uuid4
 
 import pytest
+from fastapi.testclient import TestClient
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.task import Task
+from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.task_queue import TaskQueueService
+
+
+# =============================================================================
+# API CLIENT FIXTURES
+# =============================================================================
+
+
+@pytest.fixture(scope="session")
+def client() -> Generator[TestClient, None, None]:
+    """Create a FastAPI test client (unauthenticated).
+
+    Session-scoped because the app's MCP server can only start once.
+    Use this for testing public endpoints or when you want to test
+    authentication failures.
+    """
+    from omoi_os.api.main import app
+
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def test_user(db_service: DatabaseService) -> User:
+    """Create a test user in the database.
+
+    Returns a User object that can be used for authentication tests.
+    The password is 'TestPass123!' before hashing.
+    """
+    from omoi_os.services.auth_service import AuthService
+
+    auth_service = AuthService(
+        db=db_service,
+        jwt_secret="test-secret-key-for-testing-only",
+        jwt_algorithm="HS256",
+        access_token_expire_minutes=15,
+        refresh_token_expire_days=7,
+    )
+
+    with db_service.get_session() as session:
+        user = User(
+            id=uuid4(),
+            email=f"testuser_{uuid4().hex[:8]}@example.com",
+            full_name="Test User",
+            hashed_password=auth_service.hash_password("TestPass123!"),
+            is_active=True,
+            is_verified=True,
+            is_super_admin=False,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
+@pytest.fixture
+def admin_user(db_service: DatabaseService) -> User:
+    """Create a test admin user in the database."""
+    from omoi_os.services.auth_service import AuthService
+
+    auth_service = AuthService(
+        db=db_service,
+        jwt_secret="test-secret-key-for-testing-only",
+        jwt_algorithm="HS256",
+        access_token_expire_minutes=15,
+        refresh_token_expire_days=7,
+    )
+
+    with db_service.get_session() as session:
+        user = User(
+            id=uuid4(),
+            email=f"admin_{uuid4().hex[:8]}@example.com",
+            full_name="Admin User",
+            hashed_password=auth_service.hash_password("AdminPass123!"),
+            is_active=True,
+            is_verified=True,
+            is_super_admin=True,
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        session.expunge(user)
+        return user
+
+
+@pytest.fixture
+def auth_token(db_service: DatabaseService, test_user: User) -> str:
+    """Get a valid JWT access token for the test user.
+
+    Use this when you need just the token string.
+    """
+    from omoi_os.services.auth_service import AuthService
+
+    auth_service = AuthService(
+        db=db_service,
+        jwt_secret="test-secret-key-for-testing-only",
+        jwt_algorithm="HS256",
+        access_token_expire_minutes=15,
+        refresh_token_expire_days=7,
+    )
+    return auth_service.create_access_token(test_user.id)
+
+
+@pytest.fixture
+def auth_headers(auth_token: str) -> dict:
+    """Get authorization headers with Bearer token.
+
+    Use this with the regular client fixture:
+        response = client.get("/api/v1/auth/me", headers=auth_headers)
+    """
+    return {"Authorization": f"Bearer {auth_token}"}
+
+
+@pytest.fixture
+def authenticated_client(
+    client: TestClient, auth_headers: dict
+) -> Generator[TestClient, None, None]:
+    """TestClient with authentication headers pre-configured.
+
+    All requests made with this client will include the auth token.
+    Note: This creates a real user and token in the test database.
+    """
+    # Store original headers
+    original_headers = client.headers.copy()
+
+    # Add auth headers
+    client.headers.update(auth_headers)
+
+    yield client
+
+    # Restore original headers
+    client.headers = original_headers
+
+
+@pytest.fixture
+def mock_user() -> User:
+    """Create a mock user object (not persisted to database).
+
+    Use this with mock_authenticated_client for fast unit tests
+    that don't need real database users.
+    """
+    from datetime import datetime, timezone
+
+    return User(
+        id=uuid4(),
+        email="mockuser@example.com",
+        full_name="Mock User",
+        hashed_password="not-a-real-hash",
+        is_active=True,
+        is_verified=True,
+        is_super_admin=False,
+        created_at=datetime.now(timezone.utc),
+    )
+
+
+@pytest.fixture
+def mock_authenticated_client(
+    client: TestClient,
+    mock_user: User,
+) -> Generator[TestClient, None, None]:
+    """TestClient with mocked authentication (no real JWT).
+
+    This overrides the get_current_user dependency to return mock_user
+    directly, bypassing JWT validation. Fastest option for unit tests.
+
+    Example:
+        def test_protected_route(mock_authenticated_client):
+            response = mock_authenticated_client.get("/api/v1/auth/me")
+            assert response.status_code == 200
+    """
+    from omoi_os.api.main import app
+    from omoi_os.api.dependencies import get_current_user
+
+    async def override_get_current_user():
+        return mock_user
+
+    app.dependency_overrides[get_current_user] = override_get_current_user
+
+    yield client
+
+    # Clean up override
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.fixture(scope="session")

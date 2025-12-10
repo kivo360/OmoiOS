@@ -15,7 +15,10 @@ from omoi_os.api.dependencies import (
 from omoi_os.models.agent import Agent
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.services.agent_health import AgentHealthService
-from omoi_os.services.agent_registry import AgentRegistryService
+from omoi_os.services.agent_registry import (
+    AgentRegistryService,
+    RegistrationRejectedError,
+)
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
@@ -188,9 +191,20 @@ async def register_agent(
         )
 
         return AgentDTO(**serialize_agent(agent))
-    except Exception as exc:
+    except RegistrationRejectedError as exc:
+        # Registration was explicitly rejected (e.g., duplicate agent, invalid phase)
         raise HTTPException(
-            status_code=500, detail=f"Failed to register agent: {exc}"
+            status_code=400,
+            detail=f"Registration rejected: {exc.reason}"
+            if hasattr(exc, "reason") and exc.reason
+            else "Agent registration was rejected",
+        ) from exc
+    except Exception as exc:
+        import traceback
+
+        error_msg = str(exc) if str(exc) else traceback.format_exc().split("\n")[-2]
+        raise HTTPException(
+            status_code=500, detail=f"Failed to register agent: {error_msg}"
         ) from exc
 
 

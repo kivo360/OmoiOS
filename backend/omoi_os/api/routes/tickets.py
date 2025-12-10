@@ -18,7 +18,10 @@ from omoi_os.models.approval_status import ApprovalStatus
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.context_service import ContextService
-from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
+from omoi_os.services.ticket_workflow import (
+    TicketWorkflowOrchestrator,
+    InvalidTransitionError,
+)
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.approval import ApprovalService, InvalidApprovalStateError
@@ -266,13 +269,16 @@ async def transition_ticket_status(
         old_ticket = session.get(Ticket, ticket_id)
         old_status = old_ticket.status if old_ticket else "unknown"
 
-    ticket = orchestrator.transition_status(
-        str(ticket_id),
-        request.to_status,
-        initiated_by="api",
-        reason=request.reason,
-        force=request.force,
-    )
+    try:
+        ticket = orchestrator.transition_status(
+            str(ticket_id),
+            request.to_status,
+            initiated_by="api",
+            reason=request.reason,
+            force=request.force,
+        )
+    except InvalidTransitionError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     # Log reasoning event for status transition
     log_reasoning_event(

@@ -482,6 +482,17 @@ def require_role(allowed_roles: list[str]):
 # New auth system dependencies
 
 
+def get_sync_db_session():
+    """Get sync database session from DatabaseService.
+
+    Use this for sync routes that need a SQLAlchemy Session.
+    The session is automatically committed on success or rolled back on error.
+    """
+    db = get_db_service()
+    with db.get_session() as session:
+        yield session
+
+
 async def get_db_session():
     """Get async database session from DatabaseService using fallback-enabled getter."""
     db = get_db_service()
