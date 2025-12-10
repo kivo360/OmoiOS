@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -32,222 +32,23 @@ import {
   AlertTriangle,
   Brain,
   GitBranch,
-  Clock,
   Bot,
   FileText,
   CheckCircle,
   XCircle,
   AlertCircle,
-  ArrowRight,
   ExternalLink,
   Code,
-  MessageSquare,
-  Play,
-  Pause,
-  RefreshCw,
+  Loader2,
 } from "lucide-react"
+import { useReasoningChain } from "@/hooks/useReasoning"
+import type { Evidence, Alternative } from "@/lib/api/reasoning"
 
 interface DiagnosticPageProps {
   params: Promise<{ entityType: string; entityId: string }>
 }
 
-interface Evidence {
-  type: string
-  content: string
-  link?: string
-}
-
-// Mock diagnostic events
-const mockEvents = [
-  {
-    id: "event-1",
-    timestamp: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    type: "ticket_created",
-    title: "Ticket Created",
-    description: "Created from spec requirement REQ-001: OAuth2 Support",
-    agent: null,
-    details: {
-      sourceSpec: "spec-001",
-      sourceRequirement: "REQ-001",
-      createdBy: "system",
-      context: "During automated spec-to-ticket decomposition, the system identified OAuth2 authentication as a discrete implementation unit.",
-    },
-    evidence: [],
-    decision: null,
-  },
-  {
-    id: "event-2",
-    timestamp: new Date(Date.now() - 2.5 * 24 * 60 * 60 * 1000),
-    type: "task_spawned",
-    title: "Tasks Auto-Generated",
-    description: "5 implementation tasks created from ticket requirements",
-    agent: "orchestrator",
-    details: {
-      tasksCreated: 5,
-      reasoning: "Analyzed ticket description and spec requirements to decompose into actionable tasks. Each task represents an atomic unit of work that can be completed independently.",
-      tasks: [
-        "TASK-001: Setup OAuth2 Configuration",
-        "TASK-002: Implement JWT Generator",
-        "TASK-003: Build Token Validator",
-        "TASK-004: Write Integration Tests",
-        "TASK-005: API Documentation",
-      ],
-    },
-    evidence: [
-      { type: "requirement", content: "REQ-001: OAuth2 Support", link: "/projects/senseii-games/specs/spec-001" },
-    ],
-    decision: null,
-  },
-  {
-    id: "event-3",
-    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    type: "discovery",
-    title: "Discovery: Database Dependency",
-    description: "Agent discovered that auth tables must exist before implementing OAuth",
-    agent: "worker-1",
-    details: {
-      discoveryType: "dependency",
-      context: "While attempting to implement OAuth provider storage, the agent encountered a database constraint error.",
-      evidence: "Failed to create OAuth provider record - table 'oauth_providers' does not exist",
-      action: "Linked to TICKET-038 as blocker",
-      impact: "Blocked implementation until database migration is complete",
-    },
-    evidence: [
-      { type: "error", content: "PostgresError: relation \"oauth_providers\" does not exist" },
-      { type: "log", content: "SELECT * FROM oauth_providers WHERE user_id = $1" },
-    ],
-    decision: {
-      type: "block",
-      action: "Added TICKET-038 as blocker",
-      reasoning: "Cannot proceed with OAuth implementation until database schema is updated",
-    },
-  },
-  {
-    id: "event-4",
-    timestamp: new Date(Date.now() - 1.5 * 24 * 60 * 60 * 1000),
-    type: "agent_decision",
-    title: "Implementation Order Decision",
-    description: "Decided to implement Google OAuth before GitHub",
-    agent: "worker-1",
-    details: {
-      context: "Evaluating which OAuth provider to implement first",
-      reasoning: "Google OAuth has more comprehensive documentation and larger user base. Starting with Google allows establishing patterns that GitHub implementation can follow. The Google OAuth library is also more mature and has better TypeScript support.",
-      alternatives: [
-        { option: "Implement both in parallel", rejected: "Would require context switching and duplicate testing setup" },
-        { option: "Start with GitHub", rejected: "GitHub's OAuth documentation is less detailed" },
-      ],
-      confidence: 0.85,
-    },
-    evidence: [
-      { type: "doc", content: "Google OAuth2 documentation: 47 pages with examples" },
-      { type: "doc", content: "GitHub OAuth documentation: 12 pages, fewer examples" },
-      { type: "stats", content: "Google: 92% of users, GitHub: 8% of users (from analytics)" },
-    ],
-    decision: {
-      type: "proceed",
-      action: "Implement Google OAuth first, then GitHub",
-      reasoning: "Higher user impact, better documentation, establishes reusable patterns",
-    },
-  },
-  {
-    id: "event-5",
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    type: "blocking_added",
-    title: "Blocking Relationship Added",
-    description: "TICKET-045 now blocked by this ticket",
-    agent: "worker-1",
-    details: {
-      blockedTicket: "TICKET-045",
-      blockedTitle: "User Profile Management",
-      reason: "User Profile Management requires authentication to be complete",
-      context: "During code review, identified that profile endpoints depend on authenticated user context.",
-    },
-    evidence: [
-      { type: "code", content: "const user = req.auth?.user // undefined without OAuth" },
-      { type: "requirement", content: "Profile API must return authenticated user data" },
-    ],
-    decision: {
-      type: "block",
-      action: "Added blocking relationship",
-      reasoning: "Profile endpoints cannot function without user authentication context",
-    },
-  },
-  {
-    id: "event-6",
-    timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000),
-    type: "code_change",
-    title: "Implementation: JWT Generator",
-    description: "Completed JWT token generation service",
-    agent: "worker-1",
-    details: {
-      task: "TASK-002",
-      linesAdded: 450,
-      linesRemoved: 12,
-      filesChanged: 5,
-      testsPassing: 12,
-      testsTotal: 12,
-      commit: "a1b2c3d",
-    },
-    evidence: [
-      { type: "test", content: "12/12 tests passing" },
-      { type: "coverage", content: "85% code coverage" },
-    ],
-    decision: {
-      type: "complete",
-      action: "Marked TASK-002 as complete",
-      reasoning: "All tests passing, code review approved, coverage threshold met",
-    },
-  },
-  {
-    id: "event-7",
-    timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
-    type: "error",
-    title: "Error: Token Refresh Failure",
-    description: "Encountered edge case in token refresh flow",
-    agent: "worker-1",
-    details: {
-      errorType: "TokenRefreshError",
-      context: "During integration testing, token refresh failed for users with expired refresh tokens",
-      stackTrace: "at TokenService.refresh (token.ts:142)\nat AuthMiddleware.handle (auth.ts:58)",
-      impact: "Users with expired refresh tokens cannot re-authenticate",
-    },
-    evidence: [
-      { type: "error", content: "TokenRefreshError: Refresh token expired" },
-      { type: "log", content: "Token expiry: 2024-01-15T00:00:00Z, Current: 2024-01-20T12:00:00Z" },
-    ],
-    decision: {
-      type: "investigate",
-      action: "Created investigation task",
-      reasoning: "Need to implement graceful fallback for expired refresh tokens",
-    },
-  },
-  {
-    id: "event-8",
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    type: "agent_decision",
-    title: "Error Resolution Strategy",
-    description: "Decided to implement re-authentication flow for expired tokens",
-    agent: "worker-1",
-    details: {
-      context: "Evaluating approaches to handle expired refresh tokens",
-      reasoning: "Silent re-authentication provides better UX than forcing logout. Users with valid sessions can obtain new tokens without interruption.",
-      alternatives: [
-        { option: "Force logout", rejected: "Poor UX, users lose context" },
-        { option: "Extend token validity", rejected: "Security concern, tokens should expire" },
-      ],
-      confidence: 0.92,
-    },
-    evidence: [
-      { type: "doc", content: "OAuth2 best practices: silent re-auth for session continuity" },
-      { type: "code", content: "if (isRefreshExpired) { await silentReauth(); }" },
-    ],
-    decision: {
-      type: "implement",
-      action: "Implementing silent re-authentication",
-      reasoning: "Best balance of security and user experience",
-    },
-  },
-]
+// Event types removed - now fetched from API
 
 const eventTypeConfig: Record<string, { icon: typeof Plus; color: string; bg: string }> = {
   ticket_created: { icon: Plus, color: "text-blue-600", bg: "bg-blue-100" },
@@ -274,7 +75,17 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
   const { entityType, entityId } = use(params)
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
-  const [expandedEvents, setExpandedEvents] = useState<string[]>(["event-3", "event-4"])
+  const [expandedEvents, setExpandedEvents] = useState<string[]>([])
+
+  // Fetch reasoning chain from API
+  const { data: chainData, isLoading, error } = useReasoningChain(
+    entityType,
+    entityId,
+    { event_type: typeFilter !== "all" ? typeFilter : undefined }
+  )
+
+  const events = chainData?.events || []
+  const stats = chainData?.stats || { total: 0, decisions: 0, discoveries: 0, errors: 0 }
 
   const toggleEvent = (eventId: string) => {
     setExpandedEvents((prev) =>
@@ -283,7 +94,7 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
   }
 
   const expandAll = () => {
-    setExpandedEvents(mockEvents.map((e) => e.id))
+    setExpandedEvents(events.map((e) => e.id))
   }
 
   const collapseAll = () => {
@@ -291,17 +102,17 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
   }
 
   const filteredEvents = useMemo(() => {
-    return mockEvents.filter((event) => {
+    return events.filter((event) => {
       const matchesSearch =
         searchQuery === "" ||
         event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         event.description.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesType = typeFilter === "all" || event.type === typeFilter
-      return matchesSearch && matchesType
+      return matchesSearch
     })
-  }, [searchQuery, typeFilter])
+  }, [events, searchQuery])
 
-  const formatTimeAgo = (date: Date) => {
+  const formatTimeAgo = (dateStr: string) => {
+    const date = new Date(dateStr)
     const now = new Date()
     const diff = now.getTime() - date.getTime()
     const minutes = Math.floor(diff / (1000 * 60))
@@ -312,7 +123,8 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
     return `${days}d ago`
   }
 
-  const formatDate = (date: Date) => {
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr)
     return date.toLocaleDateString("en-US", {
       month: "short",
       day: "numeric",
@@ -321,19 +133,35 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
     })
   }
 
-  // Stats
-  const stats = useMemo(() => {
-    const byType: Record<string, number> = {}
-    mockEvents.forEach((event) => {
-      byType[event.type] = (byType[event.type] || 0) + 1
-    })
-    return {
-      total: mockEvents.length,
-      decisions: mockEvents.filter((e) => e.decision).length,
-      discoveries: byType.discovery || 0,
-      errors: byType.error || 0,
-    }
-  }, [])
+  if (isLoading) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+        <div className="flex-shrink-0 border-b bg-background px-6 py-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-96 mt-2" />
+        </div>
+        <div className="flex-1 px-6 py-4">
+          <div className="max-w-4xl mx-auto space-y-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-24 w-full" />
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h2 className="text-lg font-semibold">Failed to load reasoning chain</h2>
+          <p className="text-muted-foreground">{(error as Error).message}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
@@ -498,7 +326,7 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
                                   <div>
                                     <span className="font-medium">Alternatives considered:</span>
                                     <ul className="mt-1 space-y-1 text-muted-foreground">
-                                      {event.details.alternatives.map((alt: { option: string; rejected: string }, i: number) => (
+                                      {event.details.alternatives.map((alt: Alternative, i: number) => (
                                         <li key={i} className="flex items-start gap-2">
                                           <XCircle className="h-4 w-4 text-red-500 mt-0.5 flex-shrink-0" />
                                           <span>
@@ -517,16 +345,16 @@ export default function DiagnosticPage({ params }: DiagnosticPageProps) {
                                     </Badge>
                                   </div>
                                 )}
-                                {event.details.linesAdded !== undefined && (
+                                {event.details.lines_added !== undefined && (
                                   <div className="flex items-center gap-4">
                                     <span className="font-mono">
-                                      <span className="text-green-600">+{event.details.linesAdded}</span>
+                                      <span className="text-green-600">+{event.details.lines_added}</span>
                                       {" / "}
-                                      <span className="text-red-600">-{event.details.linesRemoved}</span>
+                                      <span className="text-red-600">-{event.details.lines_removed}</span>
                                     </span>
-                                    <span>{event.details.filesChanged} files</span>
+                                    <span>{event.details.files_changed} files</span>
                                     <span>
-                                      {event.details.testsPassing}/{event.details.testsTotal} tests
+                                      {event.details.tests_passing}/{event.details.tests_total} tests
                                     </span>
                                   </div>
                                 )}
