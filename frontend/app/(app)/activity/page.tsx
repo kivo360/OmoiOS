@@ -1,13 +1,12 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Separator } from "@/components/ui/separator"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
   Select,
@@ -24,17 +23,12 @@ import {
   Bot,
   User,
   GitCommit,
-  GitBranch,
   GitPullRequest,
   MessageSquare,
   CheckCircle,
-  XCircle,
   AlertCircle,
-  Clock,
-  Play,
   Pause,
   FileText,
-  Code,
   Zap,
   Lightbulb,
   AlertTriangle,
@@ -42,202 +36,112 @@ import {
   Plus,
   ArrowRight,
   ExternalLink,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
+import { useEvents, type SystemEvent } from "@/hooks/useEvents"
 
-// Mock activity events spanning different types
-const mockActivities = [
-  {
-    id: "act-1",
-    timestamp: new Date(Date.now() - 5 * 60 * 1000),
-    type: "commit",
-    title: "Pushed 3 commits",
-    description: "worker-1 pushed commits to feature/oauth2-auth",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      branch: "feature/oauth2-auth",
-      commits: [
-        { sha: "a1b2c3d", message: "Implement Google OAuth flow" },
-        { sha: "e4f5g6h", message: "Add token refresh logic" },
-        { sha: "i7j8k9l", message: "Fix edge case in auth middleware" },
-      ],
-      linesAdded: 456,
-      linesRemoved: 23,
-    },
-    link: "/board/senseii-games/TICKET-042",
-  },
-  {
-    id: "act-2",
-    timestamp: new Date(Date.now() - 12 * 60 * 1000),
-    type: "decision",
-    title: "Implementation Decision",
-    description: "Decided to use silent re-authentication for expired tokens",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      confidence: 0.92,
-      alternatives: ["Force logout", "Extend token validity"],
-    },
-    link: "/diagnostic/ticket/TICKET-042",
-  },
-  {
-    id: "act-3",
-    timestamp: new Date(Date.now() - 25 * 60 * 1000),
-    type: "comment",
-    title: "New Comment",
-    description: "You commented on TICKET-042",
-    actor: { type: "user", name: "You", avatar: "U" },
-    project: "senseii-games",
-    metadata: {
-      ticket: "TICKET-042",
-      preview: "Let's prioritize Google OAuth first, then GitHub.",
-    },
-    link: "/board/senseii-games/TICKET-042",
-  },
-  {
-    id: "act-4",
-    timestamp: new Date(Date.now() - 45 * 60 * 1000),
-    type: "task_complete",
-    title: "Task Completed",
-    description: "TASK-002: Implement JWT Generator marked as complete",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      task: "TASK-002",
-      testsPass: 12,
-      testsTotal: 12,
-      coverage: 85,
-    },
-    link: "/board/senseii-games/TICKET-042",
-  },
-  {
-    id: "act-5",
-    timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000),
-    type: "error",
-    title: "Error Encountered",
-    description: "Token refresh failure in integration test",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      errorType: "TokenRefreshError",
-      file: "token.ts:142",
-    },
-    link: "/diagnostic/ticket/TICKET-042",
-  },
-  {
-    id: "act-6",
-    timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-    type: "pr_opened",
-    title: "Pull Request Opened",
-    description: "PR #42: feat: Add OAuth2 authentication",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      prNumber: 42,
-      branch: "feature/oauth2-auth",
-      baseBranch: "main",
-    },
-    link: "#",
-  },
-  {
-    id: "act-7",
-    timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000),
-    type: "discovery",
-    title: "Dependency Discovered",
-    description: "Found database dependency - auth tables required first",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      blocker: "TICKET-038",
-      reason: "Database schema must be updated",
-    },
-    link: "/diagnostic/ticket/TICKET-042",
-  },
-  {
-    id: "act-8",
-    timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000),
-    type: "blocking_added",
-    title: "Blocking Relationship",
-    description: "TICKET-045 is now blocked by TICKET-042",
-    actor: { type: "agent", name: "worker-1", avatar: "W1" },
-    project: "senseii-games",
-    metadata: {
-      blocker: "TICKET-042",
-      blocked: "TICKET-045",
-    },
-    link: "/graph/senseii-games",
-  },
-  {
-    id: "act-9",
-    timestamp: new Date(Date.now() - 6 * 60 * 60 * 1000),
-    type: "ticket_status",
-    title: "Status Changed",
-    description: "TICKET-042 moved to Implementation",
-    actor: { type: "agent", name: "orchestrator", avatar: "O" },
-    project: "senseii-games",
-    metadata: {
-      from: "Requirements",
-      to: "Implementation",
-    },
-    link: "/board/senseii-games",
-  },
-  {
-    id: "act-10",
-    timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000),
-    type: "agent_spawned",
-    title: "Agent Spawned",
-    description: "worker-3 spawned for code review tasks",
-    actor: { type: "system", name: "System", avatar: "S" },
-    project: null,
-    metadata: {
-      agentType: "worker",
-      specialization: "code-review",
-    },
-    link: "/agents",
-  },
-  {
-    id: "act-11",
-    timestamp: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    type: "tasks_generated",
-    title: "Tasks Generated",
-    description: "5 tasks auto-generated from TICKET-042 requirements",
-    actor: { type: "agent", name: "orchestrator", avatar: "O" },
-    project: "senseii-games",
-    metadata: {
-      ticketId: "TICKET-042",
-      taskCount: 5,
-    },
-    link: "/board/senseii-games/TICKET-042",
-  },
-  {
-    id: "act-12",
-    timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-    type: "spec_approved",
-    title: "Spec Approved",
-    description: "User Authentication System spec approved",
-    actor: { type: "user", name: "You", avatar: "U" },
-    project: "senseii-games",
-    metadata: {
-      specId: "spec-001",
-      specName: "User Authentication System",
-    },
-    link: "/projects/senseii-games/specs/spec-001",
-  },
-]
+// Activity type derived from system events
+interface Activity {
+  id: string
+  timestamp: Date
+  type: string
+  title: string
+  description: string
+  actor: { type: string; name: string; avatar: string }
+  project: string | null
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metadata: Record<string, any>
+  link: string
+}
 
 const activityTypeConfig: Record<string, { icon: typeof Plus; color: string; bg: string; label: string }> = {
+  // Commit events
+  COMMIT_LINKED: { icon: GitCommit, color: "text-cyan-600", bg: "bg-cyan-100", label: "Commit" },
   commit: { icon: GitCommit, color: "text-cyan-600", bg: "bg-cyan-100", label: "Commit" },
-  decision: { icon: Brain, color: "text-green-600", bg: "bg-green-100", label: "Decision" },
-  comment: { icon: MessageSquare, color: "text-blue-600", bg: "bg-blue-100", label: "Comment" },
+  // Task events
+  TASK_COMPLETED: { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-100", label: "Complete" },
+  TASK_ASSIGNED: { icon: ArrowRight, color: "text-indigo-600", bg: "bg-indigo-100", label: "Assigned" },
+  TASK_CREATED: { icon: Plus, color: "text-blue-600", bg: "bg-blue-100", label: "Created" },
   task_complete: { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-100", label: "Complete" },
+  // Ticket events
+  TICKET_TRANSITION: { icon: ArrowRight, color: "text-indigo-600", bg: "bg-indigo-100", label: "Status" },
+  TICKET_BLOCKED: { icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-100", label: "Blocked" },
+  TICKET_UNBLOCKED: { icon: CheckCircle, color: "text-green-600", bg: "bg-green-100", label: "Unblocked" },
+  ticket_status: { icon: ArrowRight, color: "text-indigo-600", bg: "bg-indigo-100", label: "Status" },
+  // Agent events
+  AGENT_REGISTERED: { icon: Zap, color: "text-pink-600", bg: "bg-pink-100", label: "Spawned" },
+  AGENT_HEARTBEAT: { icon: Wifi, color: "text-gray-500", bg: "bg-gray-100", label: "Heartbeat" },
+  agent_spawned: { icon: Zap, color: "text-pink-600", bg: "bg-pink-100", label: "Spawned" },
+  // Decision events
+  decision: { icon: Brain, color: "text-green-600", bg: "bg-green-100", label: "Decision" },
+  // Comment events
+  comment: { icon: MessageSquare, color: "text-blue-600", bg: "bg-blue-100", label: "Comment" },
+  // Error events
   error: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-100", label: "Error" },
+  ERROR: { icon: AlertCircle, color: "text-red-600", bg: "bg-red-100", label: "Error" },
+  // PR events
   pr_opened: { icon: GitPullRequest, color: "text-purple-600", bg: "bg-purple-100", label: "PR Opened" },
+  // Discovery events
   discovery: { icon: Lightbulb, color: "text-yellow-600", bg: "bg-yellow-100", label: "Discovery" },
   blocking_added: { icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-100", label: "Blocking" },
-  ticket_status: { icon: ArrowRight, color: "text-indigo-600", bg: "bg-indigo-100", label: "Status" },
-  agent_spawned: { icon: Zap, color: "text-pink-600", bg: "bg-pink-100", label: "Spawned" },
   tasks_generated: { icon: Zap, color: "text-violet-600", bg: "bg-violet-100", label: "Generated" },
   spec_approved: { icon: FileText, color: "text-teal-600", bg: "bg-teal-100", label: "Approved" },
+  // Default for unknown types
+  default: { icon: Zap, color: "text-gray-600", bg: "bg-gray-100", label: "Event" },
+}
+
+// Transform a SystemEvent into an Activity
+function eventToActivity(event: SystemEvent, index: number): Activity {
+  const payload = event.payload || {}
+  
+  // Determine actor based on entity type and payload
+  let actorType = "system"
+  let actorName = "System"
+  let actorAvatar = "S"
+  
+  if (event.entity_type === "agent" || payload.agent_id) {
+    actorType = "agent"
+    actorName = (payload.agent_id as string) || event.entity_id || "Agent"
+    actorAvatar = actorName.substring(0, 2).toUpperCase()
+  } else if (payload.user_id) {
+    actorType = "user"
+    actorName = "User"
+    actorAvatar = "U"
+  }
+  
+  // Build description from event type and payload
+  let description = event.event_type.replace(/_/g, " ").toLowerCase()
+  if (payload.message) {
+    description = payload.message as string
+  } else if (event.entity_type && event.entity_id) {
+    description = `${event.event_type} on ${event.entity_type} ${event.entity_id}`
+  }
+  
+  // Extract project from payload if available
+  const project = (payload.project_id as string) || (payload.project as string) || null
+  
+  // Build link based on entity type
+  let link = "#"
+  if (event.entity_type === "ticket" && event.entity_id) {
+    link = `/board/${project || "default"}/${event.entity_id}`
+  } else if (event.entity_type === "agent" && event.entity_id) {
+    link = `/agents/${event.entity_id}`
+  } else if (event.entity_type === "task" && event.entity_id) {
+    link = `/board/${project || "default"}`
+  }
+  
+  return {
+    id: `event-${index}-${Date.now()}`,
+    timestamp: new Date(),
+    type: event.event_type,
+    title: event.event_type.replace(/_/g, " "),
+    description,
+    actor: { type: actorType, name: actorName, avatar: actorAvatar },
+    project,
+    metadata: payload,
+    link,
+  }
 }
 
 export default function ActivityPage() {
@@ -246,9 +150,25 @@ export default function ActivityPage() {
   const [actorFilter, setActorFilter] = useState<string>("all")
   const [projectFilter, setProjectFilter] = useState<string>("all")
   const [isLive, setIsLive] = useState(true)
+  const [activities, setActivities] = useState<Activity[]>([])
+  
+  // Handle new events from WebSocket
+  const handleNewEvent = useCallback((event: SystemEvent) => {
+    setActivities((prev) => {
+      const activity = eventToActivity(event, prev.length)
+      return [activity, ...prev].slice(0, 100) // Keep max 100 activities
+    })
+  }, [])
+  
+  // Subscribe to real-time events
+  const { isConnected, isConnecting, error, clearEvents } = useEvents({
+    enabled: isLive,
+    onEvent: handleNewEvent,
+    maxEvents: 100,
+  })
 
   const filteredActivities = useMemo(() => {
-    return mockActivities.filter((activity) => {
+    return activities.filter((activity) => {
       const matchesSearch =
         searchQuery === "" ||
         activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -261,7 +181,7 @@ export default function ActivityPage() {
         projectFilter === "all" || activity.project === projectFilter || (!activity.project && projectFilter === "system")
       return matchesSearch && matchesType && matchesActor && matchesProject
     })
-  }, [searchQuery, typeFilter, actorFilter, projectFilter])
+  }, [activities, searchQuery, typeFilter, actorFilter, projectFilter])
 
   const formatTimeAgo = (date: Date) => {
     const now = new Date()
@@ -276,7 +196,7 @@ export default function ActivityPage() {
 
   // Group activities by date
   const groupedActivities = useMemo(() => {
-    const groups: { label: string; activities: typeof mockActivities }[] = []
+    const groups: { label: string; activities: Activity[] }[] = []
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
@@ -303,11 +223,17 @@ export default function ActivityPage() {
   // Unique projects for filter
   const projects = useMemo(() => {
     const set = new Set<string>()
-    mockActivities.forEach((a) => {
+    activities.forEach((a) => {
       if (a.project) set.add(a.project)
     })
     return Array.from(set)
-  }, [])
+  }, [activities])
+  
+  // Handle refresh - clear events
+  const handleRefresh = () => {
+    setActivities([])
+    clearEvents()
+  }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
@@ -321,6 +247,25 @@ export default function ActivityPage() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Connection status */}
+            {isConnecting && (
+              <Badge variant="outline" className="text-yellow-600">
+                <Wifi className="mr-1 h-3 w-3 animate-pulse" />
+                Connecting...
+              </Badge>
+            )}
+            {error && (
+              <Badge variant="destructive">
+                <WifiOff className="mr-1 h-3 w-3" />
+                Disconnected
+              </Badge>
+            )}
+            {isConnected && (
+              <Badge variant="outline" className="text-green-600">
+                <Wifi className="mr-1 h-3 w-3" />
+                Connected
+              </Badge>
+            )}
             <Badge variant="outline">{filteredActivities.length} events</Badge>
             <Button
               variant={isLive ? "default" : "outline"}
@@ -342,7 +287,7 @@ export default function ActivityPage() {
                 </>
               )}
             </Button>
-            <Button variant="outline" size="icon">
+            <Button variant="outline" size="icon" onClick={handleRefresh}>
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
@@ -435,7 +380,7 @@ export default function ActivityPage() {
               </h2>
               <div className="space-y-3">
                 {group.activities.map((activity) => {
-                  const config = activityTypeConfig[activity.type] || activityTypeConfig.commit
+                  const config = activityTypeConfig[activity.type] || activityTypeConfig.default
                   const ActivityIcon = config.icon
 
                   return (
@@ -496,77 +441,49 @@ export default function ActivityPage() {
                               )}
 
                               {/* Type-specific metadata */}
-                              {activity.type === "commit" && activity.metadata.commits && (
+                              {(activity.type === "COMMIT_LINKED" || activity.type === "commit") && activity.metadata.commit_sha && (
+                                <span className="text-muted-foreground font-mono">
+                                  {String(activity.metadata.commit_sha).substring(0, 7)}
+                                </span>
+                              )}
+                              {(activity.type === "TASK_COMPLETED" || activity.type === "task_complete") && activity.metadata.task_id && (
                                 <span className="text-muted-foreground">
-                                  {activity.metadata.commits.length} commits on{" "}
-                                  <code className="font-mono">{activity.metadata.branch}</code>
+                                  Task: {String(activity.metadata.task_id)}
                                 </span>
                               )}
-                              {activity.type === "commit" && (
-                                <span className="font-mono">
-                                  <span className="text-green-600">+{activity.metadata.linesAdded}</span>
-                                  {" "}
-                                  <span className="text-red-600">-{activity.metadata.linesRemoved}</span>
-                                </span>
-                              )}
-                              {activity.type === "decision" && activity.metadata.confidence !== undefined && (
+                              {(activity.type === "TICKET_TRANSITION" || activity.type === "ticket_status") && activity.metadata.from_status && (
                                 <span className="text-muted-foreground">
-                                  Confidence: {Math.round(activity.metadata.confidence * 100)}%
+                                  {String(activity.metadata.from_status)} → {String(activity.metadata.to_status)}
                                 </span>
                               )}
-                              {activity.type === "task_complete" && activity.metadata.testsPass !== undefined && (
+                              {activity.type === "AGENT_REGISTERED" && activity.metadata.agent_type && (
                                 <span className="text-muted-foreground">
-                                  {activity.metadata.testsPass}/{activity.metadata.testsTotal} tests,{" "}
-                                  {activity.metadata.coverage}% coverage
+                                  Type: {String(activity.metadata.agent_type)}
                                 </span>
                               )}
-                              {activity.type === "error" && activity.metadata.errorType && (
+                              {(activity.type === "ERROR" || activity.type === "error") && activity.metadata.error_type && (
                                 <span className="text-red-600 font-mono">
-                                  {activity.metadata.errorType}
+                                  {String(activity.metadata.error_type)}
                                 </span>
                               )}
-                              {activity.type === "pr_opened" && activity.metadata.prNumber !== undefined && (
+                              {activity.metadata.ticket_id && (
                                 <span className="text-muted-foreground">
-                                  #{activity.metadata.prNumber} •{" "}
-                                  <code className="font-mono">{activity.metadata.branch}</code> →{" "}
-                                  <code className="font-mono">{activity.metadata.baseBranch}</code>
-                                </span>
-                              )}
-                              {activity.type === "ticket_status" && activity.metadata.from && (
-                                <span className="text-muted-foreground">
-                                  {activity.metadata.from} → {activity.metadata.to}
-                                </span>
-                              )}
-                              {activity.type === "tasks_generated" && activity.metadata.taskCount !== undefined && (
-                                <span className="text-muted-foreground">
-                                  {activity.metadata.taskCount} tasks
+                                  Ticket: {String(activity.metadata.ticket_id)}
                                 </span>
                               )}
                             </div>
 
-                            {/* Comment preview */}
-                            {activity.type === "comment" && activity.metadata.preview && (
-                              <div className="mt-2 p-2 rounded bg-muted/50 text-sm italic">
-                                "{activity.metadata.preview}"
+                            {/* Message/content preview */}
+                            {activity.metadata.message && (
+                              <div className="mt-2 p-2 rounded bg-muted/50 text-sm">
+                                {String(activity.metadata.message)}
                               </div>
                             )}
-
-                            {/* Commit list */}
-                            {activity.type === "commit" && activity.metadata.commits && (
-                              <div className="mt-2 space-y-1">
-                                {activity.metadata.commits.slice(0, 2).map((commit: { sha: string; message: string }) => (
-                                  <div key={commit.sha} className="flex items-center gap-2 text-xs">
-                                    <code className="font-mono text-muted-foreground">
-                                      {commit.sha}
-                                    </code>
-                                    <span className="truncate">{commit.message}</span>
-                                  </div>
-                                ))}
-                                {activity.metadata.commits.length > 2 && (
-                                  <span className="text-xs text-muted-foreground">
-                                    +{activity.metadata.commits.length - 2} more
-                                  </span>
-                                )}
+                            
+                            {/* Commit message */}
+                            {(activity.type === "COMMIT_LINKED" || activity.type === "commit") && activity.metadata.commit_message && (
+                              <div className="mt-2 text-xs text-muted-foreground">
+                                {String(activity.metadata.commit_message)}
                               </div>
                             )}
                           </div>
@@ -595,7 +512,24 @@ export default function ActivityPage() {
 
           {filteredActivities.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
-              No activities match your filters
+              {isConnected ? (
+                <div className="space-y-2">
+                  <Wifi className="h-8 w-8 mx-auto opacity-50" />
+                  <p>Listening for events...</p>
+                  <p className="text-xs">Activities will appear here as they happen</p>
+                </div>
+              ) : isConnecting ? (
+                <div className="space-y-2">
+                  <Wifi className="h-8 w-8 mx-auto opacity-50 animate-pulse" />
+                  <p>Connecting to event stream...</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <WifiOff className="h-8 w-8 mx-auto opacity-50" />
+                  <p>Not connected</p>
+                  <p className="text-xs">Enable live mode to receive events</p>
+                </div>
+              )}
             </div>
           )}
         </div>

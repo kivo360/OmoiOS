@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { ArrowLeft, Loader2, Mail } from "lucide-react"
+import { forgotPassword } from "@/lib/api/auth"
+import { ApiError } from "@/lib/api/client"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
@@ -20,21 +22,14 @@ export default function ForgotPasswordPage() {
     setError("")
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-      const res = await fetch(`${apiUrl}/api/v1/auth/forgot-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.message || "Failed to send reset email")
-      }
-
+      await forgotPassword({ email })
       setIsSubmitted(true)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError("Failed to send reset email. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -43,8 +38,8 @@ export default function ForgotPasswordPage() {
   if (isSubmitted) {
     return (
       <div className="space-y-6 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
-          <Mail className="h-6 w-6 text-success" />
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
+          <Mail className="h-6 w-6 text-green-600" />
         </div>
         <div>
           <CardTitle className="text-2xl">Check your email</CardTitle>
@@ -98,6 +93,7 @@ export default function ForgotPasswordPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="email"
           />
         </div>
 

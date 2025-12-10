@@ -9,11 +9,14 @@ import { CardDescription, CardTitle } from "@/components/ui/card"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Progress } from "@/components/ui/progress"
 import { Loader2, ArrowRight, Building2, User, Github, CheckCircle } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { api } from "@/lib/api/client"
 
 type Step = "role" | "organization" | "github" | "complete"
 
 export default function OnboardingPage() {
   const router = useRouter()
+  const { user } = useAuth()
   const [currentStep, setCurrentStep] = useState<Step>("role")
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -41,21 +44,14 @@ export default function OnboardingPage() {
   const handleComplete = async () => {
     setIsLoading(true)
     try {
-      // Save onboarding data
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-      await fetch(`${apiUrl}/api/v1/users/onboarding`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("auth_token")}`,
-        },
-        body: JSON.stringify(formData),
+      // Save onboarding data (API endpoint may not exist yet)
+      await api.post("/api/v1/users/onboarding", formData).catch(() => {
+        // Silently fail if endpoint doesn't exist
+        console.log("Onboarding endpoint not available, skipping...")
       })
-    } catch (err) {
-      console.error("Failed to save onboarding data:", err)
     } finally {
       setIsLoading(false)
-      router.push("/")
+      router.push("/command")
     }
   }
 
@@ -66,6 +62,13 @@ export default function OnboardingPage() {
 
   return (
     <div className="space-y-6">
+      {/* Welcome message */}
+      {user?.full_name && currentStepIndex === 0 && (
+        <div className="text-center text-sm text-muted-foreground">
+          Welcome, {user.full_name}! 👋
+        </div>
+      )}
+
       {/* Progress */}
       <div className="space-y-2">
         <div className="flex justify-between text-sm text-muted-foreground">
@@ -198,8 +201,8 @@ export default function OnboardingPage() {
       {/* Step: Complete */}
       {currentStep === "complete" && (
         <div className="space-y-6 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-success/10">
-            <CheckCircle className="h-8 w-8 text-success" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
+            <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
           <div>
             <CardTitle className="text-2xl">You&apos;re all set!</CardTitle>

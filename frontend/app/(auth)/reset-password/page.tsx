@@ -7,7 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CardDescription, CardTitle } from "@/components/ui/card"
-import { ArrowLeft, Loader2, CheckCircle } from "lucide-react"
+import { ArrowLeft, Loader2, CheckCircle, CheckCircle2, XCircle } from "lucide-react"
+import { resetPassword } from "@/lib/api/auth"
+import { ApiError } from "@/lib/api/client"
+
+// Password requirements (same as register)
+const PASSWORD_REQUIREMENTS = [
+  { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
+  { id: "uppercase", label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
+  { id: "lowercase", label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  { id: "number", label: "One number", test: (p: string) => /\d/.test(p) },
+]
 
 function ResetPasswordForm() {
   const router = useRouter()
@@ -21,6 +31,15 @@ function ResetPasswordForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
   const [error, setError] = useState("")
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false)
+
+  // Check which password requirements are met
+  const passwordChecks = PASSWORD_REQUIREMENTS.map((req) => ({
+    ...req,
+    met: req.test(formData.password),
+  }))
+
+  const allPasswordRequirementsMet = passwordChecks.every((check) => check.met)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -33,28 +52,28 @@ function ResetPasswordForm() {
       return
     }
 
-    try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-      const res = await fetch(`${apiUrl}/api/v1/auth/reset-password`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          password: formData.password,
-        }),
-      })
+    if (!allPasswordRequirementsMet) {
+      setError("Password does not meet all requirements")
+      setIsLoading(false)
+      return
+    }
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.message || "Failed to reset password")
-      }
+    try {
+      await resetPassword({
+        token: token!,
+        new_password: formData.password,
+      })
 
       setIsSuccess(true)
       setTimeout(() => {
         router.push("/login")
       }, 3000)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError("Failed to reset password. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -77,8 +96,8 @@ function ResetPasswordForm() {
   if (isSuccess) {
     return (
       <div className="space-y-6 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
-          <CheckCircle className="h-6 w-6 text-success" />
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
+          <CheckCircle className="h-6 w-6 text-green-600" />
         </div>
         <div>
           <CardTitle className="text-2xl">Password reset!</CardTitle>
@@ -112,13 +131,35 @@ function ResetPasswordForm() {
           <Input
             id="password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder="Create a strong password"
             value={formData.password}
             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            onFocus={() => setShowPasswordRequirements(true)}
             required
-            minLength={8}
             disabled={isLoading}
+            autoComplete="new-password"
           />
+          
+          {/* Password requirements checklist */}
+          {showPasswordRequirements && formData.password && (
+            <div className="mt-2 space-y-1 text-xs">
+              {passwordChecks.map((check) => (
+                <div
+                  key={check.id}
+                  className={`flex items-center gap-2 ${
+                    check.met ? "text-green-600" : "text-muted-foreground"
+                  }`}
+                >
+                  {check.met ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {check.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -131,10 +172,18 @@ function ResetPasswordForm() {
             onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
             required
             disabled={isLoading}
+            autoComplete="new-password"
           />
+          {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+            <p className="text-xs text-destructive">Passwords do not match</p>
+          )}
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading || !allPasswordRequirementsMet}
+        >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isLoading ? "Resetting..." : "Reset password"}
         </Button>
@@ -155,7 +204,7 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="text-center">Loading...</div>}>
+    <Suspense fallback={<div className="text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin" /></div>}>
       <ResetPasswordForm />
     </Suspense>
   )

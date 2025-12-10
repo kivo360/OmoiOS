@@ -1,20 +1,20 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Search,
   Plus,
   Building2,
-  Users,
-  FolderGit2,
   Settings,
   MoreHorizontal,
+  AlertCircle,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -22,47 +22,63 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
-// Mock organizations
-const mockOrganizations = [
-  {
-    id: "org-001",
-    name: "Acme Inc",
-    slug: "acme-inc",
-    avatar: null,
-    role: "owner",
-    memberCount: 12,
-    projectCount: 5,
-    plan: "pro",
-  },
-  {
-    id: "org-002",
-    name: "Personal",
-    slug: "personal",
-    avatar: null,
-    role: "owner",
-    memberCount: 1,
-    projectCount: 3,
-    plan: "free",
-  },
-  {
-    id: "org-003",
-    name: "Open Source Collective",
-    slug: "oss-collective",
-    avatar: null,
-    role: "member",
-    memberCount: 48,
-    projectCount: 15,
-    plan: "enterprise",
-  },
-]
+import { useOrganizations } from "@/hooks/useOrganizations"
 
 export default function OrganizationsPage() {
   const [searchQuery, setSearchQuery] = useState("")
+  const { data: organizations, isLoading, error } = useOrganizations()
 
-  const filteredOrgs = mockOrganizations.filter((org) =>
-    org.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredOrgs = useMemo(() => {
+    if (!organizations) return []
+    return organizations.filter((org) =>
+      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      org.slug.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [organizations, searchQuery])
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto max-w-4xl p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Organizations</h1>
+            <p className="text-muted-foreground">
+              Manage your organizations and teams
+            </p>
+          </div>
+        </div>
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto max-w-4xl p-6">
+        <Card className="p-12 text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground" />
+          <h3 className="mt-4 text-lg font-semibold">Failed to load organizations</h3>
+          <p className="mt-2 text-sm text-muted-foreground">
+            There was an error loading your organizations. Please try again.
+          </p>
+        </Card>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto max-w-4xl p-6 space-y-6">
@@ -100,7 +116,6 @@ export default function OrganizationsPage() {
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-4">
                   <Avatar className="h-12 w-12">
-                    <AvatarImage src={org.avatar || undefined} />
                     <AvatarFallback className="bg-primary/10 text-primary">
                       {org.name.charAt(0).toUpperCase()}
                     </AvatarFallback>
@@ -115,9 +130,6 @@ export default function OrganizationsPage() {
                       </Link>
                       <Badge variant={org.role === "owner" ? "default" : "secondary"}>
                         {org.role}
-                      </Badge>
-                      <Badge variant="outline" className="capitalize">
-                        {org.plan}
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">@{org.slug}</p>
@@ -144,17 +156,6 @@ export default function OrganizationsPage() {
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
-
-              <div className="mt-4 flex items-center gap-6 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Users className="h-4 w-4" />
-                  {org.memberCount} member{org.memberCount !== 1 ? "s" : ""}
-                </span>
-                <span className="flex items-center gap-1">
-                  <FolderGit2 className="h-4 w-4" />
-                  {org.projectCount} project{org.projectCount !== 1 ? "s" : ""}
-                </span>
               </div>
             </CardContent>
           </Card>

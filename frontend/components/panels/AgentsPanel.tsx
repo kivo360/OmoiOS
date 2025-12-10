@@ -1,24 +1,69 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import Link from "next/link"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Search, Filter, SortAsc, Plus } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Search, Filter, SortAsc, Plus, AlertCircle } from "lucide-react"
 import { AgentCard, TimeGroupHeader } from "@/components/custom"
-import { mockAgents } from "@/lib/mock"
+import { useAgents } from "@/hooks/useAgents"
+
+// Map API agent status to component status
+type AgentCardStatus = "running" | "completed" | "failed" | "blocked"
+
+function mapAgentStatus(status: string): AgentCardStatus {
+  switch (status.toLowerCase()) {
+    case "active":
+    case "running":
+      return "running"
+    case "completed":
+    case "done":
+      return "completed"
+    case "failed":
+    case "error":
+      return "failed"
+    case "blocked":
+    case "stalled":
+      return "blocked"
+    default:
+      return "completed"
+  }
+}
+
+function formatTimeAgo(dateStr: string): string {
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
+  
+  if (diffMins < 60) return `${diffMins}m`
+  if (diffHours < 24) return `${diffHours}h`
+  if (diffDays < 7) return `${diffDays}d`
+  return `${Math.floor(diffDays / 7)}w`
+}
 
 export function AgentsPanel() {
   const [searchQuery, setSearchQuery] = useState("")
+  const { data: agents, isLoading, error } = useAgents()
 
-  const filteredAgents = mockAgents.filter((agent) =>
-    agent.taskName.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredAgents = useMemo(() => {
+    if (!agents) return []
+    return agents.filter((agent) =>
+      agent.agent_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      agent.agent_id.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  }, [agents, searchQuery])
 
-  const todayAgents = filteredAgents.filter((a) => a.status === "running")
-  const weekAgents = filteredAgents.filter((a) => a.status === "completed")
-  const erroredAgents = filteredAgents.filter((a) => a.status === "failed" || a.status === "blocked")
+  const todayAgents = filteredAgents.filter((a) => mapAgentStatus(a.status) === "running")
+  const weekAgents = filteredAgents.filter((a) => mapAgentStatus(a.status) === "completed")
+  const erroredAgents = filteredAgents.filter((a) => {
+    const status = mapAgentStatus(a.status)
+    return status === "failed" || status === "blocked"
+  })
 
   return (
     <div className="flex h-full flex-col">
@@ -51,64 +96,70 @@ export function AgentsPanel() {
       {/* Agent List */}
       <ScrollArea className="flex-1">
         <div className="p-3 space-y-4">
-          {todayAgents.length > 0 && (
-            <div className="space-y-1">
-              <TimeGroupHeader>Today</TimeGroupHeader>
-              {todayAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  id={agent.id}
-                  taskName={agent.taskName}
-                  status={agent.status}
-                  timeAgo={agent.timeAgo}
-                  additions={agent.additions}
-                  deletions={agent.deletions}
-                  repoName={agent.repoName}
-                />
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-14 w-full rounded-lg" />
               ))}
             </div>
-          )}
-
-          {weekAgents.length > 0 && (
-            <div className="space-y-1">
-              <TimeGroupHeader>This Week</TimeGroupHeader>
-              {weekAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  id={agent.id}
-                  taskName={agent.taskName}
-                  status={agent.status}
-                  timeAgo={agent.timeAgo}
-                  additions={agent.additions}
-                  deletions={agent.deletions}
-                  repoName={agent.repoName}
-                />
-              ))}
-            </div>
-          )}
-
-          {erroredAgents.length > 0 && (
-            <div className="space-y-1">
-              <TimeGroupHeader>Errored</TimeGroupHeader>
-              {erroredAgents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  id={agent.id}
-                  taskName={agent.taskName}
-                  status={agent.status}
-                  timeAgo={agent.timeAgo}
-                  additions={agent.additions}
-                  deletions={agent.deletions}
-                  repoName={agent.repoName}
-                />
-              ))}
-            </div>
-          )}
-
-          {filteredAgents.length === 0 && (
+          ) : error ? (
             <div className="py-8 text-center text-sm text-muted-foreground">
-              No agents found
+              <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+              Failed to load agents
             </div>
+          ) : (
+            <>
+              {todayAgents.length > 0 && (
+                <div className="space-y-1">
+                  <TimeGroupHeader>Running</TimeGroupHeader>
+                  {todayAgents.map((agent) => (
+                    <AgentCard
+                      key={agent.agent_id}
+                      id={agent.agent_id}
+                      taskName={agent.agent_type}
+                      status={mapAgentStatus(agent.status)}
+                      timeAgo={agent.created_at ? formatTimeAgo(agent.created_at) : "N/A"}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {weekAgents.length > 0 && (
+                <div className="space-y-1">
+                  <TimeGroupHeader>Completed</TimeGroupHeader>
+                  {weekAgents.map((agent) => (
+                    <AgentCard
+                      key={agent.agent_id}
+                      id={agent.agent_id}
+                      taskName={agent.agent_type}
+                      status={mapAgentStatus(agent.status)}
+                      timeAgo={agent.created_at ? formatTimeAgo(agent.created_at) : "N/A"}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {erroredAgents.length > 0 && (
+                <div className="space-y-1">
+                  <TimeGroupHeader>Errored</TimeGroupHeader>
+                  {erroredAgents.map((agent) => (
+                    <AgentCard
+                      key={agent.agent_id}
+                      id={agent.agent_id}
+                      taskName={agent.agent_type}
+                      status={mapAgentStatus(agent.status)}
+                      timeAgo={agent.created_at ? formatTimeAgo(agent.created_at) : "N/A"}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {filteredAgents.length === 0 && (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  No agents found
+                </div>
+              )}
+            </>
           )}
         </div>
       </ScrollArea>

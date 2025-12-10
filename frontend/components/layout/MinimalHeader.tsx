@@ -11,11 +11,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { LogOut, Settings, User, Search } from "lucide-react"
+import { LogOut, Settings, User, Search, Loader2 } from "lucide-react"
 import { CommandPalette } from "@/components/command"
+import { useAuth } from "@/hooks/useAuth"
 
 export function MinimalHeader() {
+  const { user, isLoading, logout } = useAuth()
   const [commandOpen, setCommandOpen] = React.useState(false)
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false)
 
   // Handle keyboard shortcut
   React.useEffect(() => {
@@ -29,6 +32,25 @@ export function MinimalHeader() {
     document.addEventListener("keydown", down)
     return () => document.removeEventListener("keydown", down)
   }, [])
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    try {
+      await logout()
+    } finally {
+      setIsLoggingOut(false)
+    }
+  }
+
+  // Get user initials for avatar fallback
+  const getUserInitials = () => {
+    if (!user?.full_name) return user?.email?.charAt(0).toUpperCase() || "U"
+    const names = user.full_name.split(" ")
+    if (names.length >= 2) {
+      return `${names[0].charAt(0)}${names[1].charAt(0)}`.toUpperCase()
+    }
+    return names[0].charAt(0).toUpperCase()
+  }
 
   return (
     <>
@@ -59,9 +81,9 @@ export function MinimalHeader() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage src="/avatars/user.png" alt="User" />
-                  <AvatarFallback className="bg-muted text-muted-foreground">
-                    U
+                  <AvatarImage src={user?.avatar_url || undefined} alt={user?.full_name || "User"} />
+                  <AvatarFallback className="bg-primary/10 text-primary">
+                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : getUserInitials()}
                   </AvatarFallback>
                 </Avatar>
               </Button>
@@ -69,8 +91,8 @@ export function MinimalHeader() {
             <DropdownMenuContent className="w-56" align="end" forceMount>
               <div className="flex items-center justify-start gap-2 p-2">
                 <div className="flex flex-col space-y-1 leading-none">
-                  <p className="font-medium">User Name</p>
-                  <p className="text-xs text-muted-foreground">user@example.com</p>
+                  <p className="font-medium">{user?.full_name || "User"}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email}</p>
                 </div>
               </div>
               <DropdownMenuSeparator />
@@ -89,13 +111,15 @@ export function MinimalHeader() {
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
-                onClick={() => {
-                  localStorage.removeItem("auth_token")
-                  window.location.href = "/login"
-                }}
+                onClick={handleLogout}
+                disabled={isLoggingOut}
               >
-                <LogOut className="mr-2 h-4 w-4" />
-                Log out
+                {isLoggingOut ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="mr-2 h-4 w-4" />
+                )}
+                {isLoggingOut ? "Logging out..." : "Log out"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

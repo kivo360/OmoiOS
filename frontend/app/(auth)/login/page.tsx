@@ -1,17 +1,22 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { useRouter } from "next/navigation"
-import { Github, Mail } from "lucide-react"
-import Link from "next/link"
+import { Github, Mail, Loader2 } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { login as apiLogin, getCurrentUser } from "@/lib/api/auth"
+import { ApiError } from "@/lib/api/client"
 
 export default function LoginPage() {
   const router = useRouter()
+  const { login } = useAuth()
+  
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [isLoading, setIsLoading] = useState(false)
@@ -23,25 +28,23 @@ export default function LoginPage() {
     setError("")
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-      const res = await fetch(`${apiUrl}/api/v1/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.message || "Login failed")
-      }
-
-      const data = await res.json()
-      // Store token (e.g., in localStorage or httpOnly cookie)
-      localStorage.setItem("auth_token", data.token)
+      // Login and get tokens
+      await apiLogin({ email, password })
       
-      router.push("/projects")
-    } catch (err: any) {
-      setError(err.message)
+      // Fetch user data
+      const user = await getCurrentUser()
+      
+      // Update auth context
+      login(user)
+      
+      // Redirect to command center
+      router.push("/command")
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError("An unexpected error occurred. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -76,6 +79,7 @@ export default function LoginPage() {
             onChange={(e) => setEmail(e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="email"
           />
         </div>
 
@@ -96,10 +100,12 @@ export default function LoginPage() {
             onChange={(e) => setPassword(e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="current-password"
           />
         </div>
 
         <Button type="submit" className="w-full" disabled={isLoading}>
+          {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isLoading ? "Signing in..." : "Sign in"}
         </Button>
       </form>
@@ -109,7 +115,7 @@ export default function LoginPage() {
           <Separator />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-background px-2 text-muted-foreground">
+          <span className="bg-card px-2 text-muted-foreground">
             Or continue with
           </span>
         </div>
@@ -145,4 +151,3 @@ export default function LoginPage() {
     </div>
   )
 }
-

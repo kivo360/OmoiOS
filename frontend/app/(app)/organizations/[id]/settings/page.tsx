@@ -1,24 +1,18 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,72 +29,113 @@ import {
   Loader2,
   Camera,
   Building2,
-  CreditCard,
   Shield,
   Trash2,
   AlertTriangle,
-  Check,
-  Zap,
+  AlertCircle,
 } from "lucide-react"
+import { useOrganization, useUpdateOrganization, useDeleteOrganization, useMembers } from "@/hooks/useOrganizations"
+import { useProjects } from "@/hooks/useProjects"
 
 interface OrganizationSettingsPageProps {
   params: Promise<{ id: string }>
 }
 
-// Mock organization data
-const mockOrg = {
-  id: "org-001",
-  name: "Acme Inc",
-  slug: "acme-inc",
-  description: "Building the future of automation",
-  avatar: null,
-  plan: "pro",
-  memberCount: 12,
-  projectCount: 5,
-  billing: {
-    email: "billing@acme.com",
-    address: "123 Tech Street, San Francisco, CA 94102",
-  },
-  limits: {
-    maxMembers: 25,
-    maxProjects: 20,
-    maxAgentsPerProject: 10,
-    maxConcurrentAgents: 5,
-  },
-}
-
-const plans = [
-  { id: "free", name: "Free", price: "$0/mo", features: ["5 members", "3 projects", "2 agents/project"] },
-  { id: "pro", name: "Pro", price: "$49/mo", features: ["25 members", "20 projects", "10 agents/project"] },
-  { id: "enterprise", name: "Enterprise", price: "Custom", features: ["Unlimited members", "Unlimited projects", "Custom limits"] },
-]
-
 export default function OrganizationSettingsPage({ params }: OrganizationSettingsPageProps) {
   const { id } = use(params)
-  const [isLoading, setIsLoading] = useState(false)
+  const router = useRouter()
   const [formData, setFormData] = useState({
-    name: mockOrg.name,
-    slug: mockOrg.slug,
-    description: mockOrg.description || "",
-    billingEmail: mockOrg.billing.email,
-    billingAddress: mockOrg.billing.address,
+    name: "",
+    slug: "",
+    description: "",
   })
   const [settings, setSettings] = useState({
     allowMemberInvites: true,
     requireApproval: false,
-    defaultMemberRole: "member",
   })
+
+  const { data: org, isLoading: orgLoading, error: orgError } = useOrganization(id)
+  const { data: members } = useMembers(id)
+  const { data: projects } = useProjects()
+  const updateMutation = useUpdateOrganization()
+  const deleteMutation = useDeleteOrganization()
+
+  // Populate form when org loads
+  useEffect(() => {
+    if (org) {
+      setFormData({
+        name: org.name || "",
+        slug: org.slug || "",
+        description: org.description || "",
+      })
+    }
+  }, [org])
+
+  const memberCount = members?.length || 0
+  // Note: Projects don't have organization_id in the current API response
+  // For now, we just show the total count from members in this org
+  const projectCount = projects?.total || 0
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsLoading(false)
-    toast.success("Organization settings updated")
+    try {
+      await updateMutation.mutateAsync({
+        orgId: id,
+        data: {
+          name: formData.name,
+          description: formData.description || undefined,
+        },
+      })
+      toast.success("Organization settings updated")
+    } catch (err) {
+      toast.error("Failed to update organization")
+    }
   }
 
   const handleDeleteOrganization = async () => {
-    toast.error("Organization deletion is disabled in demo mode")
+    try {
+      await deleteMutation.mutateAsync(id)
+      toast.success("Organization deleted")
+      router.push("/organizations")
+    } catch (err) {
+      toast.error("Failed to delete organization")
+    }
+  }
+
+  if (orgLoading) {
+    return (
+      <div className="container mx-auto max-w-3xl p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-48" />
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <Skeleton className="h-20 w-20 rounded-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (orgError || !org) {
+    return (
+      <div className="container mx-auto max-w-3xl p-6">
+        <Card className="border-destructive/50">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-destructive/50" />
+            <h3 className="mt-4 text-lg font-semibold">Failed to load organization</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The organization may not exist or you don&apos;t have access.
+            </p>
+            <Button variant="outline" className="mt-4" asChild>
+              <Link href="/organizations">Back to Organizations</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -132,7 +167,6 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
             {/* Avatar */}
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20">
-                <AvatarImage src={mockOrg.avatar || undefined} />
                 <AvatarFallback className="bg-primary/10 text-primary text-2xl">
                   {formData.name.charAt(0).toUpperCase()}
                 </AvatarFallback>
@@ -159,19 +193,13 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="slug">URL Slug</Label>
-                <div className="flex">
-                  <span className="inline-flex items-center rounded-l-md border border-r-0 bg-muted px-3 text-sm text-muted-foreground">
-                    omoios.com/
-                  </span>
-                  <Input
-                    id="slug"
-                    value={formData.slug}
-                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                    className="rounded-l-none"
-                    required
-                  />
+                <Label>Slug</Label>
+                <div className="flex items-center h-10 px-3 rounded-md border bg-muted text-sm text-muted-foreground">
+                  {org.slug}
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Slug cannot be changed after creation
+                </p>
               </div>
             </div>
 
@@ -188,83 +216,6 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
           </CardContent>
         </Card>
 
-        {/* Billing */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard className="h-5 w-5" />
-              Billing
-            </CardTitle>
-            <CardDescription>Manage billing information and subscription</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg border p-4">
-              <div>
-                <p className="font-medium">Current Plan</p>
-                <p className="text-sm text-muted-foreground">
-                  {plans.find((p) => p.id === mockOrg.plan)?.name} - {plans.find((p) => p.id === mockOrg.plan)?.price}
-                </p>
-              </div>
-              <Badge variant="default" className="capitalize">
-                <Zap className="mr-1 h-3 w-3" />
-                {mockOrg.plan}
-              </Badge>
-            </div>
-
-            <div className="grid gap-3">
-              {plans.map((plan) => (
-                <div
-                  key={plan.id}
-                  className={`flex items-center justify-between rounded-lg border p-4 ${
-                    plan.id === mockOrg.plan ? "border-primary bg-primary/5" : ""
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{plan.name}</p>
-                      <span className="text-sm text-muted-foreground">{plan.price}</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {plan.features.join(" • ")}
-                    </p>
-                  </div>
-                  {plan.id === mockOrg.plan ? (
-                    <Badge variant="outline">
-                      <Check className="mr-1 h-3 w-3" />
-                      Current
-                    </Badge>
-                  ) : (
-                    <Button variant="outline" size="sm" type="button">
-                      {plan.id === "enterprise" ? "Contact Sales" : "Upgrade"}
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <Separator />
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="billingEmail">Billing Email</Label>
-                <Input
-                  id="billingEmail"
-                  type="email"
-                  value={formData.billingEmail}
-                  onChange={(e) => setFormData({ ...formData, billingEmail: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="billingAddress">Billing Address</Label>
-                <Input
-                  id="billingAddress"
-                  value={formData.billingAddress}
-                  onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Member Settings */}
         <Card>
@@ -306,58 +257,27 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Default member role</Label>
-              <Select
-                value={settings.defaultMemberRole}
-                onValueChange={(value) =>
-                  setSettings({ ...settings, defaultMemberRole: value })
-                }
-              >
-                <SelectTrigger className="w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="member">Member</SelectItem>
-                  <SelectItem value="admin">Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              Note: These settings are stored locally. Backend support coming soon.
+            </p>
           </CardContent>
         </Card>
 
-        {/* Usage & Limits */}
+        {/* Usage Summary */}
         <Card>
           <CardHeader>
-            <CardTitle>Usage & Limits</CardTitle>
-            <CardDescription>Current usage against your plan limits</CardDescription>
+            <CardTitle>Usage Summary</CardTitle>
+            <CardDescription>Current organization resources</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Members</span>
-                <span className="text-sm font-medium">
-                  {mockOrg.memberCount} / {mockOrg.limits.maxMembers}
-                </span>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="rounded-lg border p-4">
+                <p className="text-sm text-muted-foreground">Members</p>
+                <p className="text-2xl font-bold">{memberCount}</p>
               </div>
-              <div className="h-2 rounded-full bg-muted">
-                <div
-                  className="h-2 rounded-full bg-primary"
-                  style={{ width: `${(mockOrg.memberCount / mockOrg.limits.maxMembers) * 100}%` }}
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Projects</span>
-                <span className="text-sm font-medium">
-                  {mockOrg.projectCount} / {mockOrg.limits.maxProjects}
-                </span>
-              </div>
-              <div className="h-2 rounded-full bg-muted">
-                <div
-                  className="h-2 rounded-full bg-primary"
-                  style={{ width: `${(mockOrg.projectCount / mockOrg.limits.maxProjects) * 100}%` }}
-                />
+              <div className="rounded-lg border p-4">
+                <p className="text-sm text-muted-foreground">Projects</p>
+                <p className="text-2xl font-bold">{projectCount}</p>
               </div>
             </div>
           </CardContent>
@@ -365,8 +285,8 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
 
         {/* Save Button */}
         <div className="flex justify-end">
-          <Button type="submit" disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          <Button type="submit" disabled={updateMutation.isPending}>
+            {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
           </Button>
         </div>
@@ -393,8 +313,12 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
             </div>
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button variant="destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
+                <Button variant="destructive" disabled={deleteMutation.isPending}>
+                  {deleteMutation.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="mr-2 h-4 w-4" />
+                  )}
                   Delete Organization
                 </Button>
               </AlertDialogTrigger>
@@ -403,7 +327,7 @@ export default function OrganizationSettingsPage({ params }: OrganizationSetting
                   <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This action cannot be undone. This will permanently delete the
-                    organization <strong>{mockOrg.name}</strong> and remove all associated
+                    organization <strong>{org.name}</strong> and remove all associated
                     data including projects, members, and settings.
                   </AlertDialogDescription>
                 </AlertDialogHeader>

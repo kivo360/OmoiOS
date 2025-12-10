@@ -26,7 +26,7 @@ import {
 export interface Project {
   id: string
   name: string
-  repo: string
+  repo?: string
   ticketCount: number
 }
 
@@ -66,7 +66,7 @@ export function RepoSelector({
   const filteredProjects = projects.filter(
     (p) =>
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.repo.toLowerCase().includes(searchQuery.toLowerCase())
+      (p.repo?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false)
   )
 
   const filteredRepos = repositories.filter((r) =>

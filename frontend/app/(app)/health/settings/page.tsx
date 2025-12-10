@@ -10,7 +10,8 @@ import { Slider } from "@/components/ui/slider"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { ArrowLeft, Info } from "lucide-react"
 
 export default function HealthSettingsPage() {
     const [alignmentThreshold, setAlignmentThreshold] = useState([70])
@@ -18,6 +19,13 @@ export default function HealthSettingsPage() {
     const [pollInterval, setPollInterval] = useState("60")
     const [notifyEmail, setNotifyEmail] = useState(true)
     const [notifySlack, setNotifySlack] = useState(true)
+    const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+    const handleSave = () => {
+        // Settings API not yet implemented - show message
+        setSaveMessage("Settings saved locally (backend persistence coming soon)")
+        setTimeout(() => setSaveMessage(null), 3000)
+    }
 
     return (
         <div className="container mx-auto p-6 space-y-6">
@@ -29,7 +37,13 @@ export default function HealthSettingsPage() {
                     </Link>
                 </Button>
                 <div className="text-right">
-                    <h1 className="text-2xl font-bold">Monitoring Settings</h1>
+                    <div className="flex items-center gap-2 justify-end">
+                        <h1 className="text-2xl font-bold">Monitoring Settings</h1>
+                        <Badge variant="secondary" className="text-xs">
+                            <Info className="h-3 w-3 mr-1" />
+                            Local Only
+                        </Badge>
+                    </div>
                     <p className="text-muted-foreground">Thresholds, cadence, and notifications</p>
                 </div>
             </div>
@@ -127,11 +141,16 @@ export default function HealthSettingsPage() {
 
             <Separator />
 
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
                 <Button variant="outline" asChild>
                     <Link href="/health">Cancel</Link>
                 </Button>
-                <Button>Save settings</Button>
+                <Button onClick={handleSave}>Save settings</Button>
+                {saveMessage && (
+                    <span className="text-sm text-muted-foreground animate-in fade-in">
+                        {saveMessage}
+                    </span>
+                )}
             </div>
         </div>
     )

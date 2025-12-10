@@ -8,50 +8,73 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Github, Mail, Loader2 } from "lucide-react"
+import { Github, Mail, Loader2, CheckCircle2, XCircle } from "lucide-react"
+import { register as apiRegister } from "@/lib/api/auth"
+import { ApiError } from "@/lib/api/client"
+
+// Password requirements
+const PASSWORD_REQUIREMENTS = [
+  { id: "length", label: "At least 8 characters", test: (p: string) => p.length >= 8 },
+  { id: "uppercase", label: "One uppercase letter", test: (p: string) => /[A-Z]/.test(p) },
+  { id: "lowercase", label: "One lowercase letter", test: (p: string) => /[a-z]/.test(p) },
+  { id: "number", label: "One number", test: (p: string) => /\d/.test(p) },
+]
 
 export default function RegisterPage() {
   const router = useRouter()
+  
   const [formData, setFormData] = useState({
-    name: "",
+    full_name: "",
     email: "",
     password: "",
     confirmPassword: "",
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
+  const [showPasswordRequirements, setShowPasswordRequirements] = useState(false)
+
+  // Check which password requirements are met
+  const passwordChecks = PASSWORD_REQUIREMENTS.map((req) => ({
+    ...req,
+    met: req.test(formData.password),
+  }))
+
+  const allPasswordRequirementsMet = passwordChecks.every((check) => check.met)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
 
+    // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords do not match")
       setIsLoading(false)
       return
     }
 
+    // Validate password strength
+    if (!allPasswordRequirementsMet) {
+      setError("Password does not meet all requirements")
+      setIsLoading(false)
+      return
+    }
+
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-      const res = await fetch(`${apiUrl}/api/v1/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.name,
-          email: formData.email,
-          password: formData.password,
-        }),
+      await apiRegister({
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.full_name || undefined,
       })
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.message || "Registration failed")
-      }
-
+      // Redirect to verify email page
       router.push("/verify-email?email=" + encodeURIComponent(formData.email))
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError("Registration failed. Please try again.")
+      }
     } finally {
       setIsLoading(false)
     }
@@ -60,6 +83,10 @@ export default function RegisterPage() {
   const handleOAuth = (provider: "github" | "google") => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
     window.location.href = `${apiUrl}/api/v1/auth/oauth/${provider}`
+  }
+
+  const updateFormData = (field: string, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
   return (
@@ -77,15 +104,15 @@ export default function RegisterPage() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="name">Full Name</Label>
+          <Label htmlFor="full_name">Full Name</Label>
           <Input
-            id="name"
+            id="full_name"
             type="text"
             placeholder="John Doe"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required
+            value={formData.full_name}
+            onChange={(e) => updateFormData("full_name", e.target.value)}
             disabled={isLoading}
+            autoComplete="name"
           />
         </div>
 
@@ -96,9 +123,10 @@ export default function RegisterPage() {
             type="email"
             placeholder="you@example.com"
             value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            onChange={(e) => updateFormData("email", e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="email"
           />
         </div>
 
@@ -107,13 +135,35 @@ export default function RegisterPage() {
           <Input
             id="password"
             type="password"
-            placeholder="At least 8 characters"
+            placeholder="Create a strong password"
             value={formData.password}
-            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+            onChange={(e) => updateFormData("password", e.target.value)}
+            onFocus={() => setShowPasswordRequirements(true)}
             required
-            minLength={8}
             disabled={isLoading}
+            autoComplete="new-password"
           />
+          
+          {/* Password requirements checklist */}
+          {showPasswordRequirements && formData.password && (
+            <div className="mt-2 space-y-1 text-xs">
+              {passwordChecks.map((check) => (
+                <div
+                  key={check.id}
+                  className={`flex items-center gap-2 ${
+                    check.met ? "text-green-600" : "text-muted-foreground"
+                  }`}
+                >
+                  {check.met ? (
+                    <CheckCircle2 className="h-3 w-3" />
+                  ) : (
+                    <XCircle className="h-3 w-3" />
+                  )}
+                  {check.label}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -123,13 +173,21 @@ export default function RegisterPage() {
             type="password"
             placeholder="Confirm your password"
             value={formData.confirmPassword}
-            onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+            onChange={(e) => updateFormData("confirmPassword", e.target.value)}
             required
             disabled={isLoading}
+            autoComplete="new-password"
           />
+          {formData.confirmPassword && formData.password !== formData.confirmPassword && (
+            <p className="text-xs text-destructive">Passwords do not match</p>
+          )}
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={isLoading || !allPasswordRequirementsMet}
+        >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           {isLoading ? "Creating account..." : "Create account"}
         </Button>

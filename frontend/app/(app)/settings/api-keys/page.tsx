@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -28,73 +29,64 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { ArrowLeft, Plus, Key, Copy, Trash2, Eye, EyeOff, Clock } from "lucide-react"
-
-// Mock API keys
-const mockApiKeys = [
-  {
-    id: "key-001",
-    name: "Production API",
-    prefix: "sk_prod_****",
-    lastUsed: "2 hours ago",
-    createdAt: "Jan 15, 2024",
-    status: "active",
-  },
-  {
-    id: "key-002",
-    name: "Development API",
-    prefix: "sk_dev_****",
-    lastUsed: "1 day ago",
-    createdAt: "Jan 10, 2024",
-    status: "active",
-  },
-  {
-    id: "key-003",
-    name: "CI/CD Pipeline",
-    prefix: "sk_ci_****",
-    lastUsed: "Never",
-    createdAt: "Jan 5, 2024",
-    status: "inactive",
-  },
-]
+import { ArrowLeft, Plus, Key, Copy, Trash2, Clock, AlertCircle, Loader2 } from "lucide-react"
+import { useApiKeys, useCreateApiKey, useRevokeApiKey } from "@/hooks/useApiKeys"
 
 export default function ApiKeysPage() {
-  const [apiKeys, setApiKeys] = useState(mockApiKeys)
-  const [isCreating, setIsCreating] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newKeyName, setNewKeyName] = useState("")
   const [showNewKey, setShowNewKey] = useState<string | null>(null)
 
+  const { data: apiKeys, isLoading, error } = useApiKeys()
+  const createMutation = useCreateApiKey()
+  const revokeMutation = useRevokeApiKey()
+
   const handleCreateKey = async () => {
-    setIsCreating(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      const newKey = {
-        id: `key-${Date.now()}`,
-        name: newKeyName,
-        prefix: "sk_new_****",
-        lastUsed: "Never",
-        createdAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-        status: "active" as const,
-      }
-      setApiKeys([newKey, ...apiKeys])
-      setShowNewKey("sk_new_" + Math.random().toString(36).substring(2, 15))
+      const result = await createMutation.mutateAsync({ name: newKeyName })
+      setShowNewKey(result.key)
       setNewKeyName("")
+      setIsDialogOpen(false)
       toast.success("API key created successfully!")
-    } catch (error) {
+    } catch (err) {
       toast.error("Failed to create API key")
-    } finally {
-      setIsCreating(false)
     }
   }
 
-  const handleDeleteKey = (keyId: string) => {
-    setApiKeys(apiKeys.filter((k) => k.id !== keyId))
-    toast.success("API key deleted")
+  const handleDeleteKey = async (keyId: string) => {
+    try {
+      await revokeMutation.mutateAsync(keyId)
+      toast.success("API key revoked")
+    } catch (err) {
+      toast.error("Failed to revoke API key")
+    }
   }
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     toast.success("Copied to clipboard")
+  }
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return "Never"
+    return new Date(dateStr).toLocaleDateString("en-US", { 
+      month: "short", 
+      day: "numeric", 
+      year: "numeric" 
+    })
+  }
+
+  const formatTimeAgo = (dateStr: string | null) => {
+    if (!dateStr) return "Never"
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / (1000 * 60))
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
   }
 
   return (
@@ -114,7 +106,7 @@ export default function ApiKeysPage() {
             Manage API keys for programmatic access
           </p>
         </div>
-        <Dialog>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button>
               <Plus className="mr-2 h-4 w-4" /> Create Key
@@ -139,8 +131,12 @@ export default function ApiKeysPage() {
               </div>
             </div>
             <DialogFooter>
-              <Button onClick={handleCreateKey} disabled={!newKeyName || isCreating}>
-                {isCreating ? "Creating..." : "Create Key"}
+              <Button 
+                onClick={handleCreateKey} 
+                disabled={!newKeyName || createMutation.isPending}
+              >
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {createMutation.isPending ? "Creating..." : "Create Key"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -177,64 +173,106 @@ export default function ApiKeysPage() {
         </Card>
       )}
 
-      {/* API Keys List */}
-      <div className="space-y-4">
-        {apiKeys.map((key) => (
-          <Card key={key.id}>
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                    <Key className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{key.name}</p>
-                      <Badge variant={key.status === "active" ? "default" : "secondary"}>
-                        {key.status}
-                      </Badge>
-                    </div>
-                    <code className="text-sm text-muted-foreground">{key.prefix}</code>
+      {/* Loading State */}
+      {isLoading && (
+        <div className="space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-4 w-24" />
                   </div>
                 </div>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete API Key</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to delete &quot;{key.name}&quot;? This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        onClick={() => handleDeleteKey(key.id)}
-                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      >
-                        Delete
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-              <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  Last used: {key.lastUsed}
-                </span>
-                <span>Created: {key.createdAt}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
-      {apiKeys.length === 0 && (
+      {/* Error State */}
+      {error && (
+        <Card className="border-destructive/50">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-destructive/50" />
+            <h3 className="mt-4 text-lg font-semibold">Failed to load API keys</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Please try refreshing the page.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* API Keys List */}
+      {!isLoading && !error && (
+        <div className="space-y-4">
+          {apiKeys?.map((key) => (
+            <Card key={key.id}>
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+                      <Key className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">{key.name}</p>
+                        <Badge variant={key.is_active ? "default" : "secondary"}>
+                          {key.is_active ? "active" : "inactive"}
+                        </Badge>
+                      </div>
+                      <code className="text-sm text-muted-foreground">{key.key_prefix}****</code>
+                    </div>
+                  </div>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-destructive"
+                        disabled={revokeMutation.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Revoke API Key</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Are you sure you want to revoke &quot;{key.name}&quot;? This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={() => handleDeleteKey(key.id)}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          Revoke
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+                <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    Last used: {formatTimeAgo(key.last_used_at)}
+                  </span>
+                  <span>Created: {formatDate(key.created_at)}</span>
+                  {key.expires_at && (
+                    <span>Expires: {formatDate(key.expires_at)}</span>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && !error && apiKeys?.length === 0 && (
         <Card className="p-12 text-center">
           <Key className="mx-auto h-12 w-12 text-muted-foreground" />
           <h3 className="mt-4 text-lg font-semibold">No API keys</h3>
