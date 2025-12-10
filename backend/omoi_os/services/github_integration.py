@@ -2,12 +2,11 @@
 
 import hmac
 import hashlib
-import json
-from typing import Optional, Dict, Any, List
-from urllib.parse import urljoin
+from typing import Optional, Dict, Any
 
 try:
     import httpx
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
@@ -42,7 +41,7 @@ class GitHubIntegrationService:
         self.github_token = github_token
         self.github_api_base = "https://api.github.com"
         self.github_api_headers = {}
-        
+
         if github_token:
             self.github_api_headers = {
                 "Authorization": f"token {github_token}",
@@ -65,13 +64,13 @@ class GitHubIntegrationService:
         """
         if not signature or not secret:
             return False
-        
+
         # GitHub sends signature as "sha256=<hash>"
         if not signature.startswith("sha256="):
             return False
-        
+
         expected_signature = signature[7:]  # Remove "sha256=" prefix
-        
+
         # Calculate HMAC
         mac = hmac.new(
             secret.encode("utf-8"),
@@ -79,7 +78,7 @@ class GitHubIntegrationService:
             digestmod=hashlib.sha256,
         )
         calculated_signature = mac.hexdigest()
-        
+
         # Constant-time comparison
         return hmac.compare_digest(expected_signature, calculated_signature)
 
@@ -99,9 +98,9 @@ class GitHubIntegrationService:
         """
         if not HTTPX_AVAILABLE or not self.github_token:
             return None
-        
+
         url = f"{self.github_api_base}/repos/{owner}/{repo}/commits/{commit_sha}"
-        
+
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(
@@ -138,7 +137,7 @@ class GitHubIntegrationService:
             # Note: payload should be raw bytes for signature verification
             # This is a simplified version - in practice, you'd pass raw_body
             pass
-        
+
         if event_type == "push":
             return await self._handle_push_event(payload)
         elif event_type == "pull_request":
@@ -154,10 +153,10 @@ class GitHubIntegrationService:
         owner = repository.get("owner", {}).get("login")
         repo = repository.get("name")
         commits = payload.get("commits", [])
-        
+
         if not owner or not repo:
             return {"success": False, "message": "Invalid repository data"}
-        
+
         # Find project by GitHub repo
         with self.db.get_session() as session:
             project = (
@@ -168,37 +167,42 @@ class GitHubIntegrationService:
                 )
                 .first()
             )
-            
+
             if not project:
                 return {
                     "success": False,
                     "message": f"Project not found for {owner}/{repo}",
                 }
-            
+
             linked_count = 0
-            
+
             # Process each commit
             for commit_data in commits:
                 commit_sha = commit_data.get("id")
                 commit_message = commit_data.get("message", "")
-                
+
                 if not commit_sha:
                     continue
-                
+
                 # Try to find ticket ID in commit message
                 # Pattern: "ticket-{id}" or "#{id}" or "TICKET-{id}"
                 ticket_id = self._extract_ticket_id_from_message(commit_message)
-                
+
                 if ticket_id:
                     # Link commit to ticket
                     result = await self._link_commit_to_ticket(
-                        session, project.id, ticket_id, commit_sha, commit_message, commit_data
+                        session,
+                        project.id,
+                        ticket_id,
+                        commit_sha,
+                        commit_message,
+                        commit_data,
                     )
                     if result:
                         linked_count += 1
-            
+
             session.commit()
-            
+
             return {
                 "success": True,
                 "message": f"Processed {len(commits)} commits, linked {linked_count}",
@@ -211,10 +215,10 @@ class GitHubIntegrationService:
         action = payload.get("action")
         pr = payload.get("pull_request", {})
         repository = payload.get("repository", {})
-        
+
         owner = repository.get("owner", {}).get("login")
         repo = repository.get("name")
-        
+
         if action == "opened":
             # Could create a ticket from PR
             pass
@@ -222,10 +226,10 @@ class GitHubIntegrationService:
             # PR merged - could mark task as completed
             pr_number = pr.get("number")
             merge_commit_sha = pr.get("merge_commit_sha")
-            
+
             # Try to find linked task/ticket from PR description or labels
             # This would need additional logic
-        
+
         return {"success": True, "message": f"PR event {action} processed"}
 
     async def _handle_issue_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -233,15 +237,15 @@ class GitHubIntegrationService:
         action = payload.get("action")
         issue = payload.get("issue", {})
         repository = payload.get("repository", {})
-        
+
         owner = repository.get("owner", {}).get("login")
         repo = repository.get("name")
-        
+
         if action == "opened":
             # Could create a ticket from issue
             # This would need additional logic
             pass
-        
+
         return {"success": True, "message": f"Issue event {action} processed"}
 
     def _extract_ticket_id_from_message(self, message: str) -> Optional[str]:
@@ -260,19 +264,19 @@ class GitHubIntegrationService:
             Ticket ID if found, None otherwise
         """
         import re
-        
+
         # Pattern 1: ticket-{uuid}
         pattern1 = r"ticket-([a-f0-9-]{36})"
         match = re.search(pattern1, message, re.IGNORECASE)
         if match:
             return f"ticket-{match.group(1)}"
-        
+
         # Pattern 2: # followed by ticket ID
         pattern2 = r"#(\w+-\w+)"
         match = re.search(pattern2, message, re.IGNORECASE)
         if match:
             return match.group(1)
-        
+
         return None
 
     async def _link_commit_to_ticket(
@@ -302,7 +306,7 @@ class GitHubIntegrationService:
         ticket = session.get(Ticket, ticket_id)
         if not ticket:
             return False
-        
+
         # Check if already linked
         existing = (
             session.query(TicketCommit)
@@ -312,16 +316,18 @@ class GitHubIntegrationService:
             )
             .first()
         )
-        
+
         if existing:
             return False
-        
+
         # Extract stats from commit data
         stats = commit_data.get("stats", {})
-        files_changed = len(commit_data.get("added", [])) + len(
-            commit_data.get("modified", [])
-        ) + len(commit_data.get("removed", []))
-        
+        files_changed = (
+            len(commit_data.get("added", []))
+            + len(commit_data.get("modified", []))
+            + len(commit_data.get("removed", []))
+        )
+
         # Build files_list
         files_list = {}
         for file in commit_data.get("added", []):
@@ -330,10 +336,10 @@ class GitHubIntegrationService:
             files_list[file] = {"status": "modified", "additions": 0, "deletions": 0}
         for file in commit_data.get("removed", []):
             files_list[file] = {"status": "removed", "additions": 0, "deletions": 0}
-        
+
         # Create commit record
         from uuid import uuid4
-        
+
         commit = TicketCommit(
             id=f"commit-{uuid4()}",
             ticket_id=ticket_id,
@@ -347,12 +353,12 @@ class GitHubIntegrationService:
             files_list=files_list,
             link_method="webhook",
         )
-        
+
         session.add(commit)
-        
+
         # Emit event
-        from omoi_os.models.event import SystemEvent
-        
+        from omoi_os.services.event_bus import SystemEvent
+
         self.event_bus.publish(
             SystemEvent(
                 event_type="COMMIT_LINKED",
@@ -366,11 +372,15 @@ class GitHubIntegrationService:
                 },
             )
         )
-        
+
         return True
 
     async def connect_repository(
-        self, project_id: str, owner: str, repo: str, webhook_secret: Optional[str] = None
+        self,
+        project_id: str,
+        owner: str,
+        repo: str,
+        webhook_secret: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Connect a GitHub repository to a project.
@@ -388,16 +398,15 @@ class GitHubIntegrationService:
             project = session.get(Project, project_id)
             if not project:
                 return {"success": False, "message": "Project not found"}
-            
+
             project.github_owner = owner
             project.github_repo = repo
             project.github_webhook_secret = webhook_secret
             project.github_connected = True
-            
+
             session.commit()
-            
+
             return {
                 "success": True,
                 "message": f"Repository {owner}/{repo} connected",
             }
-

@@ -95,7 +95,7 @@ async def get_commit(
             .filter(TicketCommit.commit_sha == commit_sha)
             .first()
         )
-        
+
         if not commit:
             # Try prefix match for short SHA
             commit = (
@@ -103,10 +103,10 @@ async def get_commit(
                 .filter(TicketCommit.commit_sha.startswith(commit_sha))
                 .first()
             )
-        
+
         if not commit:
             raise HTTPException(status_code=404, detail="Commit not found")
-        
+
         return CommitResponse.model_validate(commit)
 
 
@@ -134,7 +134,7 @@ async def get_ticket_commits(
         ticket = session.get(Ticket, ticket_id)
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         # Get commits
         commits = (
             session.query(TicketCommit)
@@ -144,13 +144,13 @@ async def get_ticket_commits(
             .offset(offset)
             .all()
         )
-        
+
         total = (
             session.query(TicketCommit)
             .filter(TicketCommit.ticket_id == ticket_id)
             .count()
         )
-        
+
         return CommitListResponse(
             commits=[CommitResponse.model_validate(c) for c in commits],
             total=total,
@@ -185,13 +185,13 @@ async def get_agent_commits(
             .offset(offset)
             .all()
         )
-        
+
         total = (
             session.query(TicketCommit)
             .filter(TicketCommit.agent_id == agent_id)
             .count()
         )
-        
+
         return CommitListResponse(
             commits=[CommitResponse.model_validate(c) for c in commits],
             total=total,
@@ -222,7 +222,7 @@ async def link_commit_to_ticket(
         ticket = session.get(Ticket, ticket_id)
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        
+
         # Check if commit already linked
         existing = (
             session.query(TicketCommit)
@@ -232,12 +232,12 @@ async def link_commit_to_ticket(
             )
             .first()
         )
-        
+
         if existing:
             raise HTTPException(
                 status_code=409, detail="Commit already linked to this ticket"
             )
-        
+
         # Create commit record
         commit = TicketCommit(
             id=f"commit-{uuid4()}",
@@ -252,13 +252,13 @@ async def link_commit_to_ticket(
             files_list=request.files_list,
             link_method=request.link_method,
         )
-        
+
         session.add(commit)
         session.commit()
-        
+
         # Emit event
-        from omoi_os.models.event import SystemEvent
-        
+        from omoi_os.services.event_bus import SystemEvent
+
         event_bus.publish(
             SystemEvent(
                 event_type="COMMIT_LINKED",
@@ -271,14 +271,16 @@ async def link_commit_to_ticket(
                 },
             )
         )
-        
+
         return CommitResponse.model_validate(commit)
 
 
 @router.get("/{commit_sha}/diff", response_model=CommitDiffResponse)
 async def get_commit_diff(
     commit_sha: str,
-    file_path: Optional[str] = Query(None, description="Specific file path to get diff for"),
+    file_path: Optional[str] = Query(
+        None, description="Specific file path to get diff for"
+    ),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
@@ -302,34 +304,34 @@ async def get_commit_diff(
             .filter(TicketCommit.commit_sha == commit_sha)
             .first()
         )
-        
+
         if not commit:
             commit = (
                 session.query(TicketCommit)
                 .filter(TicketCommit.commit_sha.startswith(commit_sha))
                 .first()
             )
-        
+
         if not commit:
             raise HTTPException(status_code=404, detail="Commit not found")
-        
+
         # Build file list from files_list JSONB field
         files = []
         if commit.files_list:
             for path, file_data in commit.files_list.items():
                 if file_path and path != file_path:
                     continue
-                
+
                 files.append(
                     FileDiff(
                         path=path,
                         additions=file_data.get("additions", 0),
                         deletions=file_data.get("deletions", 0),
-                        changes=file_data.get("additions", 0) + file_data.get("deletions", 0),
+                        changes=file_data.get("additions", 0)
+                        + file_data.get("deletions", 0),
                         status=file_data.get("status", "modified"),
                         patch=file_data.get("patch"),
                     )
                 )
-        
-        return CommitDiffResponse(commit_sha=commit.commit_sha, files=files)
 
+        return CommitDiffResponse(commit_sha=commit.commit_sha, files=files)
