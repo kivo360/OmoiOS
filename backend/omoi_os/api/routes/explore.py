@@ -6,12 +6,14 @@ AI-powered codebase Q&A and exploration for projects.
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel, ConfigDict
 
 from omoi_os.api.dependencies import get_db_service
+from omoi_os.models.explore import ExploreConversation, ExploreMessage
+from omoi_os.services.database import DatabaseService
+from omoi_os.utils.datetime import utc_now
 
 
 router = APIRouter(prefix="/explore", tags=["explore"])
@@ -28,21 +30,25 @@ class Message(BaseModel):
     content: str
     timestamp: datetime
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class Conversation(BaseModel):
     id: str
     project_id: str
     title: str
-    last_message: str
+    last_message: Optional[str] = None
     messages: list[Message]
     created_at: datetime
     updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ConversationSummary(BaseModel):
     id: str
     title: str
-    last_message: str
+    last_message: Optional[str] = None
     timestamp: str
 
 
@@ -82,16 +88,13 @@ class SuggestionsResponse(BaseModel):
 
 
 # ============================================================================
-# In-Memory Storage
+# Helper Functions
 # ============================================================================
-
-# Store conversations by project: {project_id: [conversation_dict, ...]}
-_conversations_store: dict[str, list[dict]] = {}
 
 
 def _format_time_ago(dt: datetime) -> str:
     """Format datetime as relative time."""
-    now = datetime.utcnow()
+    now = utc_now()
     diff = now - dt
     seconds = diff.total_seconds()
 
@@ -323,21 +326,43 @@ Based on your query, these files may be relevant:
 Would you like me to dive deeper into any specific aspect?"""
 
 
-def _get_initial_conversation(project_id: str) -> dict:
-    """Create initial conversation with welcome message."""
-    now = datetime.utcnow()
-    conv_id = f"conv-{uuid4().hex[:8]}"
+def _model_to_conversation(conv: ExploreConversation) -> Conversation:
+    """Convert database model to response."""
+    messages = [
+        Message(
+            id=m.id,
+            role=m.role,
+            content=m.content,
+            timestamp=m.timestamp,
+        )
+        for m in conv.messages
+    ]
 
-    return {
-        "id": conv_id,
-        "project_id": project_id,
-        "title": "Getting Started",
-        "last_message": "Welcome! Ask me anything about this codebase.",
-        "messages": [
-            {
-                "id": f"msg-{uuid4().hex[:8]}",
-                "role": "assistant",
-                "content": """## Welcome to AI Explore! 👋
+    return Conversation(
+        id=conv.id,
+        project_id=conv.project_id,
+        title=conv.title,
+        last_message=conv.last_message,
+        messages=messages,
+        created_at=conv.created_at,
+        updated_at=conv.updated_at,
+    )
+
+
+def _create_welcome_conversation(session, project_id: str) -> ExploreConversation:
+    """Create initial conversation with welcome message."""
+    conv = ExploreConversation(
+        project_id=project_id,
+        title="Getting Started",
+        last_message="Welcome! Ask me anything about this codebase.",
+    )
+    session.add(conv)
+    session.flush()  # Get the ID
+
+    welcome_msg = ExploreMessage(
+        conversation_id=conv.id,
+        role="assistant",
+        content="""## Welcome to AI Explore! 👋
 
 I can help you understand this codebase. Try asking:
 
@@ -348,39 +373,48 @@ I can help you understand this codebase. Try asking:
 - **"Suggest improvements"** - Get code review feedback
 
 What would you like to explore?""",
-                "timestamp": now,
-            }
-        ],
-        "created_at": now,
-        "updated_at": now,
-    }
+    )
+    session.add(welcome_msg)
+
+    return conv
 
 
-def _seed_conversations(project_id: str) -> list[dict]:
+def _seed_demo_conversations(session, project_id: str) -> list[ExploreConversation]:
     """Seed demo conversations for a project."""
-    now = datetime.utcnow()
+    from datetime import timedelta
 
-    conversations = [
-        _get_initial_conversation(project_id),
-        {
-            "id": f"conv-{uuid4().hex[:8]}",
-            "project_id": project_id,
-            "title": "Authentication flow analysis",
-            "last_message": "The auth module uses JWT tokens with refresh...",
-            "messages": [],
-            "created_at": datetime.fromtimestamp(now.timestamp() - 7200),
-            "updated_at": datetime.fromtimestamp(now.timestamp() - 7200),
-        },
-        {
-            "id": f"conv-{uuid4().hex[:8]}",
-            "project_id": project_id,
-            "title": "Database schema questions",
-            "last_message": "The user table has the following relations...",
-            "messages": [],
-            "created_at": datetime.fromtimestamp(now.timestamp() - 86400),
-            "updated_at": datetime.fromtimestamp(now.timestamp() - 86400),
-        },
-    ]
+    now = utc_now()
+    conversations = []
+
+    # First: Getting Started conversation
+    conv1 = _create_welcome_conversation(session, project_id)
+    conversations.append(conv1)
+
+    # Second: Auth analysis conversation
+    conv2 = ExploreConversation(
+        project_id=project_id,
+        title="Authentication flow analysis",
+        last_message="The auth module uses JWT tokens with refresh...",
+    )
+    conv2.created_at = now - timedelta(hours=2)
+    conv2.updated_at = now - timedelta(hours=2)
+    session.add(conv2)
+    conversations.append(conv2)
+
+    # Third: Database questions conversation
+    conv3 = ExploreConversation(
+        project_id=project_id,
+        title="Database schema questions",
+        last_message="The user table has the following relations...",
+    )
+    conv3.created_at = now - timedelta(days=1)
+    conv3.updated_at = now - timedelta(days=1)
+    session.add(conv3)
+    conversations.append(conv3)
+
+    session.commit()
+    for c in conversations:
+        session.refresh(c)
 
     return conversations
 
@@ -395,47 +429,65 @@ def _seed_conversations(project_id: str) -> list[dict]:
 )
 async def list_conversations(
     project_id: str,
-    limit: int = 10,
-    db=Depends(get_db_service),
+    limit: int = Query(10, ge=1, le=50),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """List conversations for a project."""
-    if project_id not in _conversations_store:
-        _conversations_store[project_id] = _seed_conversations(project_id)
-
-    conversations = _conversations_store[project_id]
-
-    # Sort by updated_at descending
-    sorted_convs = sorted(conversations, key=lambda x: x["updated_at"], reverse=True)
-
-    summaries = [
-        ConversationSummary(
-            id=c["id"],
-            title=c["title"],
-            last_message=c["last_message"],
-            timestamp=_format_time_ago(c["updated_at"]),
+    with db.get_session() as session:
+        # Check if any conversations exist
+        count = (
+            session.query(ExploreConversation)
+            .filter(ExploreConversation.project_id == project_id)
+            .count()
         )
-        for c in sorted_convs[:limit]
-    ]
 
-    return ConversationListResponse(
-        conversations=summaries,
-        total_count=len(conversations),
-    )
+        # Seed demo data if no conversations exist
+        if count == 0:
+            _seed_demo_conversations(session, project_id)
+
+        # Get conversations sorted by updated_at
+        conversations = (
+            session.query(ExploreConversation)
+            .filter(ExploreConversation.project_id == project_id)
+            .order_by(ExploreConversation.updated_at.desc())
+            .limit(limit)
+            .all()
+        )
+
+        total = (
+            session.query(ExploreConversation)
+            .filter(ExploreConversation.project_id == project_id)
+            .count()
+        )
+
+        summaries = [
+            ConversationSummary(
+                id=c.id,
+                title=c.title,
+                last_message=c.last_message,
+                timestamp=_format_time_ago(c.updated_at),
+            )
+            for c in conversations
+        ]
+
+        return ConversationListResponse(
+            conversations=summaries,
+            total_count=total,
+        )
 
 
 @router.post("/project/{project_id}/conversations", response_model=ConversationResponse)
 async def create_conversation(
     project_id: str,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Create a new conversation."""
-    if project_id not in _conversations_store:
-        _conversations_store[project_id] = []
+    with db.get_session() as session:
+        conv = _create_welcome_conversation(session, project_id)
+        session.commit()
+        session.refresh(conv)
 
-    conv = _get_initial_conversation(project_id)
-    _conversations_store[project_id].append(conv)
-
-    return ConversationResponse(conversation=Conversation(**conv))
+        return ConversationResponse(conversation=_model_to_conversation(conv))
 
 
 @router.get(
@@ -445,17 +497,23 @@ async def create_conversation(
 async def get_conversation(
     project_id: str,
     conversation_id: str,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Get a conversation with all messages."""
-    if project_id not in _conversations_store:
-        _conversations_store[project_id] = _seed_conversations(project_id)
+    with db.get_session() as session:
+        conv = (
+            session.query(ExploreConversation)
+            .filter(
+                ExploreConversation.id == conversation_id,
+                ExploreConversation.project_id == project_id,
+            )
+            .first()
+        )
 
-    for conv in _conversations_store[project_id]:
-        if conv["id"] == conversation_id:
-            return ConversationResponse(conversation=Conversation(**conv))
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
-    raise HTTPException(status_code=404, detail="Conversation not found")
+        return ConversationResponse(conversation=_model_to_conversation(conv))
 
 
 @router.post(
@@ -466,81 +524,109 @@ async def send_message(
     project_id: str,
     conversation_id: str,
     message: MessageCreate,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Send a message and get AI response."""
-    if project_id not in _conversations_store:
-        _conversations_store[project_id] = _seed_conversations(project_id)
-
-    conv = None
-    for c in _conversations_store[project_id]:
-        if c["id"] == conversation_id:
-            conv = c
-            break
-
-    if not conv:
-        raise HTTPException(status_code=404, detail="Conversation not found")
-
-    now = datetime.utcnow()
-
-    # Create user message
-    user_msg = {
-        "id": f"msg-{uuid4().hex[:8]}",
-        "role": "user",
-        "content": message.content,
-        "timestamp": now,
-    }
-    conv["messages"].append(user_msg)
-
-    # Generate AI response
-    ai_content = _generate_ai_response(message.content, project_id)
-    ai_msg = {
-        "id": f"msg-{uuid4().hex[:8]}",
-        "role": "assistant",
-        "content": ai_content,
-        "timestamp": now,
-    }
-    conv["messages"].append(ai_msg)
-
-    # Update conversation metadata
-    conv["updated_at"] = now
-    conv["last_message"] = (
-        ai_content[:100] + "..." if len(ai_content) > 100 else ai_content
-    )
-
-    # Update title if this is the first user message
-    if len([m for m in conv["messages"] if m["role"] == "user"]) == 1:
-        conv["title"] = (
-            message.content[:50] + "..."
-            if len(message.content) > 50
-            else message.content
+    with db.get_session() as session:
+        conv = (
+            session.query(ExploreConversation)
+            .filter(
+                ExploreConversation.id == conversation_id,
+                ExploreConversation.project_id == project_id,
+            )
+            .first()
         )
 
-    return MessageResponse(
-        user_message=Message(**user_msg),
-        assistant_message=Message(**ai_msg),
-    )
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+
+        now = utc_now()
+
+        # Create user message
+        user_msg = ExploreMessage(
+            conversation_id=conversation_id,
+            role="user",
+            content=message.content,
+        )
+        session.add(user_msg)
+        session.flush()
+
+        # Generate AI response
+        ai_content = _generate_ai_response(message.content, project_id)
+        ai_msg = ExploreMessage(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=ai_content,
+        )
+        session.add(ai_msg)
+        session.flush()
+
+        # Update conversation metadata
+        conv.last_message = (
+            ai_content[:100] + "..." if len(ai_content) > 100 else ai_content
+        )
+
+        # Update title if this is the first user message
+        user_message_count = (
+            session.query(ExploreMessage)
+            .filter(
+                ExploreMessage.conversation_id == conversation_id,
+                ExploreMessage.role == "user",
+            )
+            .count()
+        )
+
+        if user_message_count == 1:
+            conv.title = (
+                message.content[:50] + "..."
+                if len(message.content) > 50
+                else message.content
+            )
+
+        session.commit()
+        session.refresh(user_msg)
+        session.refresh(ai_msg)
+
+        return MessageResponse(
+            user_message=Message(
+                id=user_msg.id,
+                role=user_msg.role,
+                content=user_msg.content,
+                timestamp=user_msg.timestamp,
+            ),
+            assistant_message=Message(
+                id=ai_msg.id,
+                role=ai_msg.role,
+                content=ai_msg.content,
+                timestamp=ai_msg.timestamp,
+            ),
+        )
 
 
 @router.delete("/project/{project_id}/conversations/{conversation_id}")
 async def delete_conversation(
     project_id: str,
     conversation_id: str,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Delete a conversation."""
-    if project_id not in _conversations_store:
-        raise HTTPException(status_code=404, detail="Project not found")
+    with db.get_session() as session:
+        conv = (
+            session.query(ExploreConversation)
+            .filter(
+                ExploreConversation.id == conversation_id,
+                ExploreConversation.project_id == project_id,
+            )
+            .first()
+        )
 
-    original_len = len(_conversations_store[project_id])
-    _conversations_store[project_id] = [
-        c for c in _conversations_store[project_id] if c["id"] != conversation_id
-    ]
+        if not conv:
+            raise HTTPException(status_code=404, detail="Conversation not found")
 
-    if len(_conversations_store[project_id]) == original_len:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        session.delete(conv)
+        session.commit()
 
-    return {"message": "Conversation deleted successfully"}
+        return {"message": "Conversation deleted successfully"}
 
 
 # ============================================================================
@@ -551,7 +637,7 @@ async def delete_conversation(
 @router.get("/project/{project_id}/files", response_model=ProjectFilesResponse)
 async def list_project_files(
     project_id: str,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """List key files in a project for exploration."""
     # In a real implementation, this would scan the actual codebase
@@ -611,8 +697,8 @@ async def list_project_files(
 @router.get("/project/{project_id}/suggestions", response_model=SuggestionsResponse)
 async def get_suggestions(
     project_id: str,
-    context: Optional[str] = None,
-    db=Depends(get_db_service),
+    context: Optional[str] = Query(None, description="Context for suggestions"),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Get query suggestions for the explore interface."""
     base_suggestions = [

@@ -19,6 +19,7 @@ from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.reasoning_listener import log_reasoning_event
 from omoi_os.models.agent_log import AgentLog
 
 router = APIRouter()
@@ -35,18 +36,24 @@ def serialize_agent(agent: Agent) -> Dict:
         "capacity": agent.capacity,
         "health_status": agent.health_status,
         "tags": agent.tags or [],
-        "last_heartbeat": agent.last_heartbeat.isoformat() if agent.last_heartbeat else None,
+        "last_heartbeat": agent.last_heartbeat.isoformat()
+        if agent.last_heartbeat
+        else None,
         "created_at": agent.created_at.isoformat() if agent.created_at else None,
     }
 
 
 class AgentRegisterRequest(BaseModel):
     agent_type: str = Field(..., description="Type of agent (worker, monitor, etc.)")
-    phase_id: Optional[str] = Field(None, description="Phase assignment for worker agents")
+    phase_id: Optional[str] = Field(
+        None, description="Phase assignment for worker agents"
+    )
     capabilities: List[str] = Field(..., description="Declared capabilities")
     capacity: int = Field(1, ge=1, description="Concurrent tasks this agent can handle")
     status: str = Field("idle", description="Initial availability status")
-    tags: Optional[List[str]] = Field(default=None, description="Optional metadata tags")
+    tags: Optional[List[str]] = Field(
+        default=None, description="Optional metadata tags"
+    )
 
 
 class AgentUpdateRequest(BaseModel):
@@ -59,6 +66,7 @@ class AgentUpdateRequest(BaseModel):
 
 class AgentEventRequest(BaseModel):
     """Request model for agent events from sandbox workers."""
+
     task_id: str
     agent_id: str
     event_type: str
@@ -81,18 +89,22 @@ class AgentDTO(BaseModel):
     last_heartbeat: Optional[str] = None
     created_at: Optional[str] = None
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "agent_id": "uuid",
-        "agent_type": "worker",
-        "phase_id": "PHASE_IMPLEMENTATION",
-        "status": "idle",
-        "capabilities": ["analysis", "python"],
-        "capacity": 2,
-        "health_status": "healthy",
-        "tags": ["python"],
-        "last_heartbeat": "2025-11-16T23:10:00Z",
-        "created_at": "2025-11-16T23:00:00Z",
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "agent_id": "uuid",
+                "agent_type": "worker",
+                "phase_id": "PHASE_IMPLEMENTATION",
+                "status": "idle",
+                "capabilities": ["analysis", "python"],
+                "capacity": 2,
+                "health_status": "healthy",
+                "tags": ["python"],
+                "last_heartbeat": "2025-11-16T23:10:00Z",
+                "created_at": "2025-11-16T23:00:00Z",
+            }
+        }
+    )
 
 
 class AgentMatchResponse(BaseModel):
@@ -109,7 +121,7 @@ async def report_agent_event(
 ):
     """
     Receive agent events from sandbox workers for Guardian observation.
-    
+
     This endpoint allows sandboxed agents to stream their actions
     back to the server for real-time monitoring and trajectory analysis.
     """
@@ -145,6 +157,7 @@ async def report_agent_event(
 async def register_agent(
     request: AgentRegisterRequest,
     registry_service: AgentRegistryService = Depends(get_agent_registry_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Register a new agent with declared capabilities."""
     try:
@@ -156,9 +169,29 @@ async def register_agent(
             status=request.status,
             tags=request.tags,
         )
+
+        # Log reasoning event for agent registration
+        log_reasoning_event(
+            db=db,
+            entity_type="agent",
+            entity_id=agent.id,
+            event_type="agent_decision",
+            title="Agent Registered",
+            description=f"New {request.agent_type} agent registered",
+            agent=agent.id,
+            details={
+                "agent_type": request.agent_type,
+                "phase_id": request.phase_id,
+                "capabilities": request.capabilities,
+                "capacity": request.capacity,
+            },
+        )
+
         return AgentDTO(**serialize_agent(agent))
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to register agent: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to register agent: {exc}"
+        ) from exc
 
 
 @router.patch("/agents/{agent_id}", response_model=AgentDTO)
@@ -183,7 +216,9 @@ async def update_agent(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to update agent: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update agent: {exc}"
+        ) from exc
 
 
 @router.post("/agents/{agent_id}/availability", response_model=AgentDTO)
@@ -201,12 +236,16 @@ async def toggle_agent_availability(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to toggle availability: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to toggle availability: {exc}"
+        ) from exc
 
 
 @router.get("/agents/search", response_model=List[AgentMatchResponse])
 async def search_agents_endpoint(
-    capabilities: Optional[List[str]] = Query(None, description="Required capabilities"),
+    capabilities: Optional[List[str]] = Query(
+        None, description="Required capabilities"
+    ),
     phase_id: Optional[str] = Query(None, description="Limit to a specific phase"),
     agent_type: Optional[str] = Query(None, description="Filter by agent type"),
     limit: int = Query(5, ge=1, le=20),
@@ -229,12 +268,16 @@ async def search_agents_endpoint(
             for match in matches
         ]
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Agent search failed: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Agent search failed: {exc}"
+        ) from exc
 
 
 @router.get("/agents/best-fit", response_model=AgentMatchResponse)
 async def get_best_fit_agent(
-    capabilities: Optional[List[str]] = Query(None, description="Required capabilities"),
+    capabilities: Optional[List[str]] = Query(
+        None, description="Required capabilities"
+    ),
     phase_id: Optional[str] = Query(None),
     agent_type: Optional[str] = Query(None),
     registry_service: AgentRegistryService = Depends(get_agent_registry_service),
@@ -256,13 +299,17 @@ async def get_best_fit_agent(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Failed to find best-fit agent: {exc}") from exc
+        raise HTTPException(
+            status_code=500, detail=f"Failed to find best-fit agent: {exc}"
+        ) from exc
 
 
 @router.get("/agents/health", response_model=List[Dict])
 async def get_all_agents_health(
-    timeout_seconds: Optional[int] = Query(None, description="Timeout in seconds for stale detection (default: 90)"),
-    health_service: AgentHealthService = Depends(get_agent_health_service)
+    timeout_seconds: Optional[int] = Query(
+        None, description="Timeout in seconds for stale detection (default: 90)"
+    ),
+    health_service: AgentHealthService = Depends(get_agent_health_service),
 ):
     """
     Get health status for all agents.
@@ -277,12 +324,14 @@ async def get_all_agents_health(
     try:
         return health_service.get_all_agents_health(timeout_seconds)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get agents health: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get agents health: {str(e)}"
+        )
 
 
 @router.get("/agents/statistics", response_model=Dict)
 async def get_agent_statistics(
-    health_service: AgentHealthService = Depends(get_agent_health_service)
+    health_service: AgentHealthService = Depends(get_agent_health_service),
 ):
     """
     Get comprehensive statistics about all agents.
@@ -296,14 +345,18 @@ async def get_agent_statistics(
     try:
         return health_service.get_agent_statistics()
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get agent statistics: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get agent statistics: {str(e)}"
+        )
 
 
 @router.get("/agents/{agent_id}/health", response_model=Dict)
 async def get_agent_health(
     agent_id: str,
-    timeout_seconds: Optional[int] = Query(None, description="Timeout in seconds for stale detection (default: 90)"),
-    health_service: AgentHealthService = Depends(get_agent_health_service)
+    timeout_seconds: Optional[int] = Query(
+        None, description="Timeout in seconds for stale detection (default: 90)"
+    ),
+    health_service: AgentHealthService = Depends(get_agent_health_service),
 ):
     """
     Get health status for a specific agent.
@@ -324,14 +377,18 @@ async def get_agent_health(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get agent health: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get agent health: {str(e)}"
+        )
 
 
 @router.post("/agents/{agent_id}/heartbeat", response_model=HeartbeatAck)
 async def emit_agent_heartbeat(
     message: HeartbeatMessage,
     agent_id: str,
-    heartbeat_protocol: HeartbeatProtocolService = Depends(get_heartbeat_protocol_service),
+    heartbeat_protocol: HeartbeatProtocolService = Depends(
+        get_heartbeat_protocol_service
+    ),
 ):
     """
     Receive heartbeat message from agent per REQ-FT-HB-001.
@@ -365,20 +422,27 @@ async def emit_agent_heartbeat(
         if not ack.received:
             # Checksum validation failed or agent not found
             status_code = 404 if "not found" in (ack.message or "").lower() else 400
-            raise HTTPException(status_code=status_code, detail=ack.message or "Heartbeat processing failed")
+            raise HTTPException(
+                status_code=status_code,
+                detail=ack.message or "Heartbeat processing failed",
+            )
 
         return ack
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process heartbeat: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process heartbeat: {str(e)}"
+        )
 
 
 @router.get("/agents/stale", response_model=List[AgentDTO])
 async def get_stale_agents(
-    timeout_seconds: Optional[int] = Query(None, description="Timeout in seconds for stale detection (default: 90)"),
-    health_service: AgentHealthService = Depends(get_agent_health_service)
+    timeout_seconds: Optional[int] = Query(
+        None, description="Timeout in seconds for stale detection (default: 90)"
+    ),
+    health_service: AgentHealthService = Depends(get_agent_health_service),
 ):
     """
     Get list of stale agents.
@@ -394,14 +458,18 @@ async def get_stale_agents(
         stale_agents = health_service.detect_stale_agents(timeout_seconds)
         return [AgentDTO(**serialize_agent(agent)) for agent in stale_agents]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get stale agents: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get stale agents: {str(e)}"
+        )
 
 
 @router.post("/agents/cleanup-stale", response_model=Dict)
 async def cleanup_stale_agents(
-    timeout_seconds: Optional[int] = Query(None, description="Timeout in seconds for stale detection (default: 90)"),
+    timeout_seconds: Optional[int] = Query(
+        None, description="Timeout in seconds for stale detection (default: 90)"
+    ),
     mark_as: str = Query("timeout", description="Status to mark stale agents with"),
-    health_service: AgentHealthService = Depends(get_agent_health_service)
+    health_service: AgentHealthService = Depends(get_agent_health_service),
 ):
     """
     Mark stale agents with a specific status for cleanup tracking.
@@ -421,16 +489,16 @@ async def cleanup_stale_agents(
             "marked_count": count,
             "timeout_seconds": timeout_seconds or 90,
             "marked_as": mark_as,
-            "message": f"Marked {count} stale agents as '{mark_as}'"
+            "message": f"Marked {count} stale agents as '{mark_as}'",
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to cleanup stale agents: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to cleanup stale agents: {str(e)}"
+        )
 
 
 @router.get("/agents", response_model=List[AgentDTO])
-async def list_agents(
-    db: DatabaseService = Depends(get_db_service)
-):
+async def list_agents(db: DatabaseService = Depends(get_db_service)):
     """
     Get list of all registered agents.
 
@@ -451,10 +519,7 @@ async def list_agents(
 
 
 @router.get("/agents/{agent_id}", response_model=AgentDTO)
-async def get_agent(
-    agent_id: str,
-    db: DatabaseService = Depends(get_db_service)
-):
+async def get_agent(agent_id: str, db: DatabaseService = Depends(get_db_service)):
     """
     Get details of a specific agent.
 
@@ -471,7 +536,9 @@ async def get_agent(
         with db.get_session() as session:
             agent = session.query(Agent).filter(Agent.id == agent_id).first()
             if not agent:
-                raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
+                raise HTTPException(
+                    status_code=404, detail=f"Agent {agent_id} not found"
+                )
 
             return AgentDTO(**serialize_agent(agent))
     except HTTPException:

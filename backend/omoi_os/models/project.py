@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from omoi_os.models.organization import Organization
     from omoi_os.models.user import User
     from omoi_os.models.spec import Spec
+    from omoi_os.models.explore import ExploreConversation
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
@@ -84,6 +85,9 @@ class Project(Base):
     )
     specs: Mapped[list["Spec"]] = relationship(
         "Spec", back_populates="project", cascade="all, delete-orphan"
+    )
+    conversations: Mapped[list["ExploreConversation"]] = relationship(
+        "ExploreConversation", back_populates="project", cascade="all, delete-orphan"
     )
 
     __table_args__ = {

@@ -6,12 +6,14 @@ Tracks agent decisions, discoveries, and reasoning events for entities.
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Depends, Query
+from pydantic import BaseModel, ConfigDict
 
 from omoi_os.api.dependencies import get_db_service
+from omoi_os.models.reasoning import ReasoningEvent as ReasoningEventModel
+from omoi_os.services.database import DatabaseService
+from omoi_os.utils.datetime import utc_now
 
 
 router = APIRouter(prefix="/reasoning", tags=["reasoning"])
@@ -91,6 +93,8 @@ class ReasoningEvent(BaseModel):
     evidence: list[Evidence] = []
     decision: Optional[Decision] = None
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class ReasoningEventCreate(BaseModel):
     type: str
@@ -111,27 +115,49 @@ class ReasoningChainResponse(BaseModel):
 
 
 # ============================================================================
-# In-Memory Storage
+# Helper Functions
 # ============================================================================
 
-# Store events by entity key (e.g., "ticket:TICKET-001")
-_reasoning_store: dict[str, list[dict]] = {}
+
+def _model_to_response(model: ReasoningEventModel) -> ReasoningEvent:
+    """Convert database model to response."""
+    details = None
+    if model.details:
+        details = EventDetails(**model.details)
+
+    evidence = []
+    if model.evidence:
+        evidence = [Evidence(**e) for e in model.evidence]
+
+    decision = None
+    if model.decision:
+        decision = Decision(**model.decision)
+
+    return ReasoningEvent(
+        id=model.id,
+        timestamp=model.timestamp,
+        type=model.event_type,
+        title=model.title,
+        description=model.description,
+        agent=model.agent,
+        details=details,
+        evidence=evidence,
+        decision=decision,
+    )
 
 
-def _get_entity_key(entity_type: str, entity_id: str) -> str:
-    return f"{entity_type}:{entity_id}"
+def _seed_demo_events(
+    session, entity_type: str, entity_id: str
+) -> list[ReasoningEventModel]:
+    """Seed demo events for a new entity."""
+    now = utc_now()
+    from datetime import timedelta
 
-
-def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
-    """Generate demo events for a new entity."""
-    now = datetime.utcnow()
-    base_time = now.timestamp()
-
-    events = [
+    events_data = [
         {
-            "id": f"evt-{uuid4().hex[:8]}",
-            "timestamp": datetime.fromtimestamp(base_time - 3 * 24 * 60 * 60),
-            "type": "ticket_created",
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "event_type": "ticket_created",
             "title": "Ticket Created",
             "description": f"Created {entity_type} {entity_id}",
             "agent": None,
@@ -141,11 +167,12 @@ def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
             },
             "evidence": [],
             "decision": None,
+            "timestamp": now - timedelta(days=3),
         },
         {
-            "id": f"evt-{uuid4().hex[:8]}",
-            "timestamp": datetime.fromtimestamp(base_time - 2.5 * 24 * 60 * 60),
-            "type": "task_spawned",
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "event_type": "task_spawned",
             "title": "Tasks Auto-Generated",
             "description": "Implementation tasks created from requirements",
             "agent": "orchestrator",
@@ -160,11 +187,12 @@ def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
             },
             "evidence": [],
             "decision": None,
+            "timestamp": now - timedelta(days=2, hours=12),
         },
         {
-            "id": f"evt-{uuid4().hex[:8]}",
-            "timestamp": datetime.fromtimestamp(base_time - 2 * 24 * 60 * 60),
-            "type": "agent_decision",
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "event_type": "agent_decision",
             "title": "Implementation Strategy",
             "description": "Decided on implementation approach",
             "agent": "worker-1",
@@ -189,11 +217,12 @@ def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
                 "action": "Implement with incremental approach",
                 "reasoning": "Best balance of risk and completeness",
             },
+            "timestamp": now - timedelta(days=2),
         },
         {
-            "id": f"evt-{uuid4().hex[:8]}",
-            "timestamp": datetime.fromtimestamp(base_time - 1 * 24 * 60 * 60),
-            "type": "code_change",
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "event_type": "code_change",
             "title": "Initial Implementation",
             "description": "Core functionality implemented",
             "agent": "worker-1",
@@ -215,11 +244,12 @@ def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
                 "action": "Continue with remaining tests",
                 "reasoning": "Core functionality working, edge cases need coverage",
             },
+            "timestamp": now - timedelta(days=1),
         },
         {
-            "id": f"evt-{uuid4().hex[:8]}",
-            "timestamp": datetime.fromtimestamp(base_time - 6 * 60 * 60),
-            "type": "discovery",
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "event_type": "discovery",
             "title": "Edge Case Discovery",
             "description": "Found edge case requiring additional handling",
             "agent": "worker-1",
@@ -242,10 +272,21 @@ def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
                 "action": "Add input validation",
                 "reasoning": "Quick fix, improves robustness",
             },
+            "timestamp": now - timedelta(hours=6),
         },
     ]
 
-    return events
+    created_events = []
+    for data in events_data:
+        event = ReasoningEventModel(**data)
+        session.add(event)
+        created_events.append(event)
+
+    session.commit()
+    for event in created_events:
+        session.refresh(event)
+
+    return created_events
 
 
 # ============================================================================
@@ -257,50 +298,74 @@ def _seed_demo_events(entity_type: str, entity_id: str) -> list[dict]:
 async def get_reasoning_chain(
     entity_type: str,
     entity_id: str,
-    event_type: Optional[str] = None,
-    limit: int = 100,
-    db=Depends(get_db_service),
+    event_type: Optional[str] = Query(None, description="Filter by event type"),
+    limit: int = Query(100, ge=1, le=500),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Get reasoning chain for an entity."""
-    key = _get_entity_key(entity_type, entity_id)
+    with db.get_session() as session:
+        # Check if any events exist for this entity
+        count = (
+            session.query(ReasoningEventModel)
+            .filter(
+                ReasoningEventModel.entity_type == entity_type,
+                ReasoningEventModel.entity_id == entity_id,
+            )
+            .count()
+        )
 
-    # Initialize with demo data if not exists
-    if key not in _reasoning_store:
-        _reasoning_store[key] = _seed_demo_events(entity_type, entity_id)
+        # Seed demo data if no events exist
+        if count == 0:
+            _seed_demo_events(session, entity_type, entity_id)
 
-    events = _reasoning_store[key]
+        # Build query
+        query = session.query(ReasoningEventModel).filter(
+            ReasoningEventModel.entity_type == entity_type,
+            ReasoningEventModel.entity_id == entity_id,
+        )
 
-    # Filter by type if specified
-    if event_type and event_type != "all":
-        events = [e for e in events if e["type"] == event_type]
+        # Filter by event type if specified
+        if event_type and event_type != "all":
+            query = query.filter(ReasoningEventModel.event_type == event_type)
 
-    # Sort by timestamp descending (most recent first)
-    events = sorted(events, key=lambda x: x["timestamp"], reverse=True)
+        # Get total count for this filter
+        total_count = query.count()
 
-    # Apply limit
-    events = events[:limit]
+        # Get events sorted by timestamp (newest first)
+        events = query.order_by(ReasoningEventModel.timestamp.desc()).limit(limit).all()
 
-    # Calculate stats
-    all_events = _reasoning_store[key]
-    by_type: dict[str, int] = {}
-    for e in all_events:
-        by_type[e["type"]] = by_type.get(e["type"], 0) + 1
+        # Calculate stats from all events (not filtered)
+        all_events = (
+            session.query(ReasoningEventModel)
+            .filter(
+                ReasoningEventModel.entity_type == entity_type,
+                ReasoningEventModel.entity_id == entity_id,
+            )
+            .all()
+        )
 
-    stats = {
-        "total": len(all_events),
-        "decisions": sum(1 for e in all_events if e.get("decision")),
-        "discoveries": by_type.get("discovery", 0),
-        "errors": by_type.get("error", 0),
-        "by_type": by_type,
-    }
+        by_type: dict[str, int] = {}
+        decisions_count = 0
+        for e in all_events:
+            by_type[e.event_type] = by_type.get(e.event_type, 0) + 1
+            if e.decision:
+                decisions_count += 1
 
-    return ReasoningChainResponse(
-        entity_type=entity_type,
-        entity_id=entity_id,
-        events=[ReasoningEvent(**e) for e in events],
-        total_count=len(all_events),
-        stats=stats,
-    )
+        stats = {
+            "total": len(all_events),
+            "decisions": decisions_count,
+            "discoveries": by_type.get("discovery", 0),
+            "errors": by_type.get("error", 0),
+            "by_type": by_type,
+        }
+
+        return ReasoningChainResponse(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            events=[_model_to_response(e) for e in events],
+            total_count=total_count,
+            stats=stats,
+        )
 
 
 @router.post("/{entity_type}/{entity_id}/events", response_model=ReasoningEvent)
@@ -308,32 +373,27 @@ async def add_reasoning_event(
     entity_type: str,
     entity_id: str,
     event: ReasoningEventCreate,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Add a reasoning event to an entity's chain."""
-    key = _get_entity_key(entity_type, entity_id)
+    with db.get_session() as session:
+        new_event = ReasoningEventModel(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            event_type=event.type,
+            title=event.title,
+            description=event.description,
+            agent=event.agent,
+            details=event.details,
+            evidence=[e.model_dump() for e in event.evidence],
+            decision=event.decision.model_dump() if event.decision else None,
+        )
 
-    if key not in _reasoning_store:
-        _reasoning_store[key] = []
+        session.add(new_event)
+        session.commit()
+        session.refresh(new_event)
 
-    event_id = f"evt-{uuid4().hex[:8]}"
-    now = datetime.utcnow()
-
-    new_event = {
-        "id": event_id,
-        "timestamp": now,
-        "type": event.type,
-        "title": event.title,
-        "description": event.description,
-        "agent": event.agent,
-        "details": event.details,
-        "evidence": [e.model_dump() for e in event.evidence],
-        "decision": event.decision.model_dump() if event.decision else None,
-    }
-
-    _reasoning_store[key].append(new_event)
-
-    return ReasoningEvent(**new_event)
+        return _model_to_response(new_event)
 
 
 @router.get(
@@ -343,19 +403,24 @@ async def get_reasoning_event(
     entity_type: str,
     entity_id: str,
     event_id: str,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Get a specific reasoning event."""
-    key = _get_entity_key(entity_type, entity_id)
+    with db.get_session() as session:
+        event = (
+            session.query(ReasoningEventModel)
+            .filter(
+                ReasoningEventModel.id == event_id,
+                ReasoningEventModel.entity_type == entity_type,
+                ReasoningEventModel.entity_id == entity_id,
+            )
+            .first()
+        )
 
-    if key not in _reasoning_store:
-        raise HTTPException(status_code=404, detail="Entity not found")
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
 
-    for event in _reasoning_store[key]:
-        if event["id"] == event_id:
-            return ReasoningEvent(**event)
-
-    raise HTTPException(status_code=404, detail="Event not found")
+        return _model_to_response(event)
 
 
 @router.delete("/{entity_type}/{entity_id}/events/{event_id}")
@@ -363,21 +428,27 @@ async def delete_reasoning_event(
     entity_type: str,
     entity_id: str,
     event_id: str,
-    db=Depends(get_db_service),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """Delete a reasoning event."""
-    key = _get_entity_key(entity_type, entity_id)
+    with db.get_session() as session:
+        event = (
+            session.query(ReasoningEventModel)
+            .filter(
+                ReasoningEventModel.id == event_id,
+                ReasoningEventModel.entity_type == entity_type,
+                ReasoningEventModel.entity_id == entity_id,
+            )
+            .first()
+        )
 
-    if key not in _reasoning_store:
-        raise HTTPException(status_code=404, detail="Entity not found")
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
 
-    original_len = len(_reasoning_store[key])
-    _reasoning_store[key] = [e for e in _reasoning_store[key] if e["id"] != event_id]
+        session.delete(event)
+        session.commit()
 
-    if len(_reasoning_store[key]) == original_len:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    return {"message": "Event deleted successfully"}
+        return {"message": "Event deleted successfully"}
 
 
 @router.get("/types")
