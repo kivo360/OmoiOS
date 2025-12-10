@@ -89,6 +89,13 @@ embedding:
   provider: local
   openai_api_key: null
   model_name: intfloat/multilingual-e5-large
+  # Cache directory for model files (prevents re-downloading on each start)
+  # Defaults to ~/.cache/fastembed if null
+  cache_dir: ~/.cache/omoi_os/models
+  # Lazy loading defers model initialization until first embedding request
+  lazy_load: true
+  # Preload model in background thread at startup (only if lazy_load is true)
+  preload_in_background: true
 
 observability:
   enable_tracing: false

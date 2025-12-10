@@ -1,11 +1,19 @@
 """Embedding service for generating text embeddings."""
 
-from typing import List, Optional
+from typing import List, Optional, TYPE_CHECKING
 from enum import Enum
+import logging
+import threading
 
 import numpy as np
 
 from omoi_os.config import get_app_settings
+
+if TYPE_CHECKING:
+    from fastembed import TextEmbedding
+    from openai import OpenAI
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingProvider(str, Enum):
@@ -13,6 +21,117 @@ class EmbeddingProvider(str, Enum):
 
     OPENAI = "openai"
     LOCAL = "local"
+
+
+# Singleton for local FastEmbed model to avoid re-downloading/loading
+_local_model_instance: Optional["TextEmbedding"] = None
+_local_model_lock = threading.Lock()
+_local_model_loading = threading.Event()
+
+
+def _get_local_model(
+    model_name: str, cache_dir: Optional[str] = None
+) -> "TextEmbedding":
+    """
+    Get or create a singleton FastEmbed model instance.
+
+    This ensures the model is only loaded once and shared across all
+    EmbeddingService instances.
+
+    Args:
+        model_name: Name of the FastEmbed model.
+        cache_dir: Optional directory to cache downloaded models.
+
+    Returns:
+        The shared TextEmbedding instance.
+    """
+    global _local_model_instance
+
+    if _local_model_instance is not None:
+        return _local_model_instance
+
+    with _local_model_lock:
+        # Double-check after acquiring lock
+        if _local_model_instance is not None:
+            return _local_model_instance
+
+        try:
+            from fastembed import TextEmbedding
+            import os
+
+            # Expand ~ in cache_dir path
+            resolved_cache_dir = None
+            if cache_dir:
+                resolved_cache_dir = os.path.expanduser(cache_dir)
+                # Ensure cache directory exists
+                os.makedirs(resolved_cache_dir, exist_ok=True)
+
+            logger.info(
+                f"Loading FastEmbed model: {model_name} (cache_dir={resolved_cache_dir})"
+            )
+
+            # Build kwargs for TextEmbedding
+            kwargs = {"model_name": model_name}
+            if resolved_cache_dir:
+                kwargs["cache_dir"] = resolved_cache_dir
+
+            _local_model_instance = TextEmbedding(**kwargs)
+            _local_model_loading.set()  # Signal that loading is complete
+
+            logger.info(f"FastEmbed model loaded successfully: {model_name}")
+            return _local_model_instance
+
+        except ImportError:
+            raise ImportError("fastembed not installed. Run: uv add fastembed")
+
+
+def preload_embedding_model() -> None:
+    """
+    Preload the local embedding model in a background thread.
+
+    Call this at application startup if you want the model ready
+    immediately without blocking the main thread.
+    """
+    embedding_settings = get_app_settings().embedding
+
+    if embedding_settings.provider != "local":
+        return
+
+    if not embedding_settings.preload_in_background:
+        return
+
+    def _background_load():
+        try:
+            _get_local_model(
+                model_name=embedding_settings.model_name,
+                cache_dir=embedding_settings.cache_dir,
+            )
+        except Exception as e:
+            logger.error(f"Background model preload failed: {e}")
+
+    thread = threading.Thread(target=_background_load, daemon=True)
+    thread.start()
+    logger.info("Started background preload of embedding model")
+
+
+def wait_for_model_ready(timeout: Optional[float] = None) -> bool:
+    """
+    Wait for the embedding model to finish loading.
+
+    Useful for health checks or ensuring the model is ready before serving requests.
+
+    Args:
+        timeout: Maximum seconds to wait. None = wait indefinitely.
+
+    Returns:
+        True if model is ready, False if timeout occurred.
+    """
+    return _local_model_loading.wait(timeout=timeout)
+
+
+def is_model_loaded() -> bool:
+    """Check if the embedding model is already loaded."""
+    return _local_model_instance is not None
 
 
 class EmbeddingService:
@@ -25,11 +144,17 @@ class EmbeddingService:
 
     The service automatically pads local embeddings to 1536 dimensions for
     consistency with OpenAI embeddings.
-    
+
     Note: multilingual-e5-large requires prefixes for optimal performance:
     - Use "query: " prefix for queries
     - Use "passage: " prefix for passages/documents
     - For symmetric tasks, use "query: " prefix for all inputs
+
+    Performance optimizations:
+    - Models are cached in a configurable directory (embedding.cache_dir)
+    - Local models use a singleton pattern (loaded once, shared app-wide)
+    - Lazy loading defers model initialization until first use
+    - Optional background preloading (embedding.preload_in_background)
     """
 
     def __init__(
@@ -58,21 +183,36 @@ class EmbeddingService:
             else EmbeddingProvider(provider_value)
         )
         self.openai_api_key = openai_api_key or embedding_settings.openai_api_key
+        self._cache_dir = embedding_settings.cache_dir
+        self._lazy_load = embedding_settings.lazy_load
+
+        # Lazy-loaded clients (initialized on first use)
+        self._openai_client: Optional["OpenAI"] = None
+        self._local_model: Optional["TextEmbedding"] = None
 
         # Set model names
         if self.provider == EmbeddingProvider.OPENAI:
-            default_openai_model = embedding_settings.model_name or "text-embedding-3-small"
+            default_openai_model = (
+                embedding_settings.model_name or "text-embedding-3-small"
+            )
             self.model_name = model_name or default_openai_model
             self.dimensions = 1536
-            self._init_openai()
+            if not self._lazy_load:
+                self._init_openai()
         else:
-            default_local_model = embedding_settings.model_name or "intfloat/multilingual-e5-large"
+            default_local_model = (
+                embedding_settings.model_name or "intfloat/multilingual-e5-large"
+            )
             self.model_name = model_name or default_local_model
             self.dimensions = 1536  # Padded to match OpenAI
-            self._init_local()
+            if not self._lazy_load:
+                self._init_local()
 
     def _init_openai(self) -> None:
-        """Initialize OpenAI client."""
+        """Initialize OpenAI client (lazy)."""
+        if self._openai_client is not None:
+            return
+
         if not self.openai_api_key:
             raise ValueError(
                 "OpenAI API key required for OpenAI embeddings. "
@@ -81,19 +221,29 @@ class EmbeddingService:
         try:
             from openai import OpenAI
 
-            self.openai_client = OpenAI(api_key=self.openai_api_key)
+            self._openai_client = OpenAI(api_key=self.openai_api_key)
         except ImportError:
             raise ImportError("openai package not installed. Run: uv add openai")
 
-    def _init_local(self) -> None:
-        """Initialize local FastEmbed model."""
-        try:
-            from fastembed import TextEmbedding
+    @property
+    def openai_client(self) -> "OpenAI":
+        """Get OpenAI client, initializing lazily if needed."""
+        if self._openai_client is None:
+            self._init_openai()
+        return self._openai_client  # type: ignore
 
-            # FastEmbed uses model names directly (no sentence-transformers/ prefix needed)
-            self.local_model = TextEmbedding(model_name=self.model_name)
-        except ImportError:
-            raise ImportError("fastembed not installed. Run: uv add fastembed")
+    def _init_local(self) -> None:
+        """Initialize local FastEmbed model using singleton pattern."""
+        if self._local_model is not None:
+            return
+        self._local_model = _get_local_model(self.model_name, self._cache_dir)
+
+    @property
+    def local_model(self) -> "TextEmbedding":
+        """Get local model, initializing lazily if needed."""
+        if self._local_model is None:
+            self._init_local()
+        return self._local_model  # type: ignore
 
     def generate_embedding(self, text: str, is_query: bool = False) -> List[float]:
         """
@@ -123,7 +273,9 @@ class EmbeddingService:
         )
         return response.data[0].embedding
 
-    def _generate_local_embedding(self, text: str, is_query: bool = False) -> List[float]:
+    def _generate_local_embedding(
+        self, text: str, is_query: bool = False
+    ) -> List[float]:
         """Generate embedding using local FastEmbed model."""
         # multilingual-e5-large requires prefixes for optimal performance
         if "multilingual-e5" in self.model_name:
@@ -131,7 +283,7 @@ class EmbeddingService:
             prefixed_text = f"{prefix}{text}"
         else:
             prefixed_text = text
-        
+
         # FastEmbed returns an iterator, get first (and only) result
         embedding_iter = self.local_model.embed([prefixed_text])
         base_embedding = next(embedding_iter)
@@ -142,7 +294,9 @@ class EmbeddingService:
 
         return padded.tolist()
 
-    def batch_generate_embeddings(self, texts: List[str], is_query: bool = False) -> List[List[float]]:
+    def batch_generate_embeddings(
+        self, texts: List[str], is_query: bool = False
+    ) -> List[List[float]]:
         """
         Generate embeddings for multiple texts in batch.
 
@@ -170,7 +324,9 @@ class EmbeddingService:
         )
         return [item.embedding for item in response.data]
 
-    def _batch_generate_local_embeddings(self, texts: List[str], is_query: bool = False) -> List[List[float]]:
+    def _batch_generate_local_embeddings(
+        self, texts: List[str], is_query: bool = False
+    ) -> List[List[float]]:
         """Batch generate embeddings using local FastEmbed model."""
         # multilingual-e5-large requires prefixes for optimal performance
         if "multilingual-e5" in self.model_name:
@@ -178,7 +334,7 @@ class EmbeddingService:
             prefixed_texts = [f"{prefix}{text}" for text in texts]
         else:
             prefixed_texts = texts
-        
+
         # FastEmbed returns an iterator for batch embeddings
         embedding_iter = self.local_model.embed(prefixed_texts)
         base_embeddings = list(embedding_iter)

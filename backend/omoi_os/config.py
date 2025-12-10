@@ -456,6 +456,11 @@ class EmbeddingSettings(OmoiBaseSettings):
     openai_api_key: Optional[str] = None
     model_name: str = "intfloat/multilingual-e5-large"
 
+    # Model caching and loading optimization
+    cache_dir: Optional[str] = None  # Defaults to ~/.cache/fastembed if None
+    lazy_load: bool = True  # Defer model loading until first use
+    preload_in_background: bool = False  # Preload model in background thread at startup
+
 
 class ObservabilitySettings(OmoiBaseSettings):
     """

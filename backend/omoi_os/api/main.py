@@ -640,12 +640,17 @@ async def lifespan(app: FastAPI):
     from omoi_os.services.diagnostic import DiagnosticService
     from omoi_os.services.discovery import DiscoveryService
     from omoi_os.services.memory import MemoryService
-    from omoi_os.services.embedding import EmbeddingService
+    from omoi_os.services.embedding import EmbeddingService, preload_embedding_model
+
+    # Start background preload of embedding model (if configured)
+    # This allows the model to load while other services initialize
+    preload_embedding_model()
 
     phase_loader = PhaseLoader()
     result_submission_service = ResultSubmissionService(db, event_bus, phase_loader)
 
     # Initialize diagnostic service with dependencies
+    # Model will be ready immediately if preload finished, or lazy-loaded on first use
     embedding_service = EmbeddingService()
     memory_service = MemoryService(embedding_service, event_bus)
     discovery_service = DiscoveryService(event_bus)
