@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useMemo } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -39,77 +40,90 @@ import {
   Plus,
   Minus,
 } from "lucide-react"
-import { mockAgents } from "@/lib/mock"
+import { useAgent } from "@/hooks/useAgents"
+import { useAgentCommits } from "@/hooks/useCommits"
+import type { Commit } from "@/lib/api/types"
 
 interface WorkspacePageProps {
   params: Promise<{ agentId: string }>
 }
 
-// Mock commits data
-const mockCommits = [
-  {
-    id: "commit-1",
-    sha: "a1b2c3d",
-    message: "feat: Implement JWT authentication middleware",
-    author: "worker-1",
-    timestamp: "2 hours ago",
-    filesChanged: 3,
-    additions: 156,
-    deletions: 12,
-    files: [
-      { path: "src/middleware/auth.ts", additions: 89, deletions: 5, status: "modified" },
-      { path: "src/auth/jwt.ts", additions: 67, deletions: 0, status: "added" },
-      { path: "src/types/auth.ts", additions: 0, deletions: 7, status: "deleted" },
-    ],
-  },
-  {
-    id: "commit-2",
-    sha: "e4f5g6h",
-    message: "fix: Token validation edge case",
-    author: "worker-1",
-    timestamp: "3 hours ago",
-    filesChanged: 1,
-    additions: 23,
-    deletions: 8,
-    files: [
-      { path: "src/auth/jwt.ts", additions: 23, deletions: 8, status: "modified" },
-    ],
-  },
-  {
-    id: "commit-3",
-    sha: "i7j8k9l",
-    message: "test: Add unit tests for auth module",
-    author: "worker-1",
-    timestamp: "4 hours ago",
-    filesChanged: 2,
-    additions: 245,
-    deletions: 0,
-    files: [
-      { path: "tests/auth/jwt.test.ts", additions: 189, deletions: 0, status: "added" },
-      { path: "tests/middleware/auth.test.ts", additions: 56, deletions: 0, status: "added" },
-    ],
-  },
-]
+// Commit display type with computed fields
+interface CommitDisplay {
+  id: string
+  sha: string
+  message: string
+  author: string
+  timestamp: string
+  filesChanged: number
+  additions: number
+  deletions: number
+  files: Array<{
+    path: string
+    additions: number
+    deletions: number
+    status: string
+  }>
+}
 
-// Mock merge conflicts
-const mockConflicts = [
-  {
-    id: "conflict-1",
-    file: "src/config/database.ts",
-    status: "unresolved",
-    conflictType: "content",
-    description: "Conflicting changes in database configuration",
-    ourChanges: "connection pool size: 10",
-    theirChanges: "connection pool size: 20",
-  },
-]
+// Mock merge conflicts (no backend API for this yet)
+const mockConflicts: Array<{
+  id: string
+  file: string
+  status: string
+  conflictType: string
+  description: string
+  ourChanges: string
+  theirChanges: string
+}> = []
+
+function formatTimeAgo(dateStr: string | null | undefined): string {
+  if (!dateStr) return "unknown"
+  const date = new Date(dateStr)
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffHours < 1) return "just now"
+  if (diffHours < 24) return `${diffHours} hours ago`
+  if (diffDays < 7) return `${diffDays} days ago`
+  return `${Math.floor(diffDays / 7)} weeks ago`
+}
 
 export default function WorkspacePage({ params }: WorkspacePageProps) {
   const { agentId } = use(params)
-  const agent = mockAgents.find((a) => a.id === agentId)
-  const [selectedCommit, setSelectedCommit] = useState<typeof mockCommits[0] | null>(null)
+  const { data: agent, isLoading: agentLoading, error: agentError } = useAgent(agentId)
+  const { data: commitsData, isLoading: commitsLoading } = useAgentCommits(agentId)
+  const [selectedCommit, setSelectedCommit] = useState<CommitDisplay | null>(null)
 
-  if (!agent) {
+  // Transform commits to display format
+  const commits: CommitDisplay[] = useMemo(() => {
+    if (!commitsData?.commits) return []
+    return commitsData.commits.map((c) => ({
+      id: c.commit_sha,
+      sha: c.commit_sha.slice(0, 7),
+      message: c.commit_message,
+      author: c.agent_id?.slice(0, 8) || "unknown",
+      timestamp: formatTimeAgo(c.commit_timestamp),
+      filesChanged: c.files_changed || 0,
+      additions: c.insertions || 0,
+      deletions: c.deletions || 0,
+      files: [], // Would need additional API call to get file details
+    }))
+  }, [commitsData])
+
+  if (agentLoading) {
+    return (
+      <div className="container mx-auto max-w-5xl p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  if (agentError || !agent) {
     return (
       <div className="container mx-auto p-6 text-center">
         <h1 className="text-2xl font-bold">Agent not found</h1>
@@ -142,7 +156,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               Workspace
             </h1>
             <p className="text-muted-foreground mt-1">
-              {agent.repoName || "Agent workspace files and commits"}
+              {agent.phase_id?.replace("PHASE_", "") || "Agent workspace files and commits"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -161,7 +175,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Commits</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockCommits.length}</div>
+            <div className="text-2xl font-bold">{commits.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -171,10 +185,10 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
           <CardContent>
             <div className="flex items-center gap-3">
               <span className="text-2xl font-bold text-green-600">
-                +{mockCommits.reduce((sum, c) => sum + c.additions, 0)}
+                +{commits.reduce((sum, c) => sum + c.additions, 0)}
               </span>
               <span className="text-2xl font-bold text-red-500">
-                -{mockCommits.reduce((sum, c) => sum + c.deletions, 0)}
+                -{commits.reduce((sum, c) => sum + c.deletions, 0)}
               </span>
             </div>
           </CardContent>
@@ -223,8 +237,21 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {commitsLoading ? (
+                <div className="space-y-3">
+                  {[...Array(3)].map((_, i) => (
+                    <Skeleton key={i} className="h-24 w-full" />
+                  ))}
+                </div>
+              ) : commits.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  <GitCommit className="mx-auto h-12 w-12 text-muted-foreground/30" />
+                  <p className="mt-2">No commits yet</p>
+                  <p className="text-sm">This agent hasn't made any commits</p>
+                </div>
+              ) : (
               <div className="space-y-3">
-                {mockCommits.map((commit) => (
+                {commits.map((commit) => (
                   <div
                     key={commit.id}
                     className="flex items-start justify-between rounded-lg border p-4 hover:bg-accent/50 transition-colors"
@@ -303,6 +330,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   </div>
                 ))}
               </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -415,7 +443,7 @@ export default function WorkspacePage({ params }: WorkspacePageProps) {
                   </TableRow>
                   <TableRow>
                     <TableCell className="font-medium">Created</TableCell>
-                    <TableCell>{agent.timeAgo}</TableCell>
+                    <TableCell>{agent.created_at ? formatTimeAgo(agent.created_at) : "unknown"}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Loader2, Building2 } from "lucide-react"
+import { useCreateOrganization } from "@/hooks/useOrganizations"
 
 export default function NewOrganizationPage() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
+  const createMutation = useCreateOrganization()
   const [formData, setFormData] = useState({
     name: "",
     slug: "",
@@ -37,16 +38,17 @@ export default function NewOrganizationPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const result = await createMutation.mutateAsync({
+        name: formData.name,
+        slug: formData.slug,
+        description: formData.description || undefined,
+      })
       toast.success("Organization created successfully!")
-      router.push("/organizations")
+      router.push(`/organizations/${result.id}`)
     } catch (error) {
       toast.error("Failed to create organization")
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -122,8 +124,8 @@ export default function NewOrganizationPage() {
               <Button type="button" variant="outline" asChild>
                 <Link href="/organizations">Cancel</Link>
               </Button>
-              <Button type="submit" disabled={isLoading || !formData.name || !formData.slug}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={createMutation.isPending || !formData.name || !formData.slug}>
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Organization
               </Button>
             </div>

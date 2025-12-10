@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
   TooltipContent,
@@ -45,104 +46,26 @@ import {
   ExternalLink,
   ZoomIn,
   LayoutGrid,
+  Lightbulb,
 } from "lucide-react"
+import { useTicketDependencyGraph } from "@/hooks/useGraph"
+import { useTicket } from "@/hooks/useTickets"
+import type { GraphNode, GraphEdge } from "@/lib/api/types"
 
 interface TicketGraphPageProps {
   params: Promise<{ projectId: string; ticketId: string }>
 }
 
-// Mock ticket data - focused view on a specific ticket's dependencies
-const mockFocusTicket = {
-  id: "TICKET-005",
-  title: "Add password reset flow",
-  status: "pending",
-  priority: "low",
-  assignee: null,
-  description: "Implement a secure password reset flow with email verification",
-}
-
-// Tickets that block the focus ticket (upstream)
-const mockBlockers = [
-  {
-    id: "TICKET-002",
-    title: "Implement JWT token validation",
-    status: "in_progress",
-    priority: "high",
-    assignee: "worker-1",
-    depth: 1,
-  },
-  {
-    id: "TICKET-003",
-    title: "Add OAuth2 providers",
-    status: "pending",
-    priority: "medium",
-    assignee: null,
-    depth: 1,
-  },
-  {
-    id: "TICKET-001",
-    title: "Setup authentication flow",
-    status: "in_progress",
-    priority: "high",
-    assignee: "worker-1",
-    depth: 2,
-  },
-]
-
-// Tickets blocked by the focus ticket (downstream)
-const mockBlocked = [
-  {
-    id: "TICKET-010",
-    title: "Integration tests",
-    status: "blocked",
-    priority: "high",
-    assignee: null,
-    depth: 1,
-  },
-  {
-    id: "TICKET-012",
-    title: "Security audit",
-    status: "pending",
-    priority: "high",
-    assignee: null,
-    depth: 2,
-  },
-]
-
-// All related tickets including focus
-const allTickets = [
-  { ...mockFocusTicket, blockedBy: ["TICKET-002", "TICKET-003"] },
-  { ...mockBlockers[0], blockedBy: ["TICKET-001"] },
-  { ...mockBlockers[1], blockedBy: ["TICKET-001"] },
-  { ...mockBlockers[2], blockedBy: [] },
-  { ...mockBlocked[0], blockedBy: ["TICKET-005", "TICKET-007"] },
-  { ...mockBlocked[1], blockedBy: ["TICKET-010"] },
-]
-
-const discoveryEvents = [
-  {
-    id: "disc-022",
-    branch: "reset-flow",
-    summary: "Email template reuse discovered; reduces downstream effort",
-    ticketId: "TICKET-005",
-    type: "opportunity",
-    impact: "Refactor shared assets",
-  },
-  {
-    id: "disc-024",
-    branch: "login-hotfix",
-    summary: "Found auth middleware race causing redirect loop",
-    ticketId: "TICKET-007",
-    type: "bug",
-    impact: "Blocks integration tests until patched",
-  },
-]
-
-const ticketThread = {
-  ticketId: "TICKET-005",
-  thread: "reset-flow → integration-tests",
-  phases: ["Backlog", "Requirements", "Design", "Implementation"],
-  current: "Implementation",
+// Display node type
+interface DisplayNode {
+  id: string
+  title: string
+  status: string
+  priority: string
+  type: "task" | "discovery" | "ticket"
+  assignee: string | null
+  blockedBy: string[]
+  isFocus?: boolean
 }
 
 const statusConfig = {
@@ -312,8 +235,17 @@ function getLayoutedElements(nodes: Node[], edges: Edge[], direction: "TB" | "LR
   return { nodes: layoutedNodes, edges }
 }
 
-function ticketsToFlowElements(tickets: typeof allTickets, focusId: string) {
-  const nodes: Node[] = tickets.map((ticket) => ({
+interface FlowTicket {
+  id: string
+  title: string
+  status: string
+  priority: string
+  assignee: string | null
+  blockedBy: string[]
+}
+
+function ticketsToFlowElements(tickets: FlowTicket[], focusId: string) {
+  const nodes: Node[] = tickets.map((ticket: FlowTicket) => ({
     id: ticket.id,
     type: "ticket",
     position: { x: 0, y: 0 },
@@ -329,9 +261,9 @@ function ticketsToFlowElements(tickets: typeof allTickets, focusId: string) {
   }))
 
   const edges: Edge[] = []
-  tickets.forEach((ticket) => {
-    ticket.blockedBy.forEach((blockerId) => {
-      if (tickets.find((t) => t.id === blockerId)) {
+  tickets.forEach((ticket: FlowTicket) => {
+    ticket.blockedBy.forEach((blockerId: string) => {
+      if (tickets.find((t: FlowTicket) => t.id === blockerId)) {
         const isToFocus = ticket.id === focusId
         const isFromFocus = blockerId === focusId
         edges.push({
@@ -361,13 +293,70 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
   const [direction, setDirection] = useState<"TB" | "LR">("TB")
   const [showDiscoveries, setShowDiscoveries] = useState(true)
 
-  const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => ticketsToFlowElements(allTickets, ticketId),
-    [ticketId]
-  )
+  // Fetch real data
+  const { data: ticket, isLoading: ticketLoading } = useTicket(ticketId)
+  const { data: graphData, isLoading: graphLoading } = useTicketDependencyGraph(ticketId, {
+    includeResolved: true,
+    includeDiscoveries: showDiscoveries,
+  })
+
+  const isLoading = ticketLoading || graphLoading
+
+  // Transform API data to display format
+  const displayNodes: DisplayNode[] = useMemo(() => {
+    if (!graphData?.nodes) return []
+    return graphData.nodes.map((node) => ({
+      id: node.id,
+      title: node.label || node.description || node.id,
+      status: node.status || "pending",
+      priority: node.priority || "medium",
+      type: node.type,
+      assignee: null,
+      blockedBy: graphData.edges
+        .filter((e) => e.target === node.id)
+        .map((e) => e.source),
+      isFocus: node.id === ticketId,
+    }))
+  }, [graphData, ticketId])
+
+  // Build flow elements from API data
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
+    if (displayNodes.length === 0) {
+      return { nodes: [], edges: [] }
+    }
+    
+    // Convert to the format expected by ticketsToFlowElements
+    const tickets = displayNodes.map((n) => ({
+      id: n.id,
+      title: n.title,
+      status: n.status,
+      priority: n.priority,
+      assignee: n.assignee,
+      blockedBy: n.blockedBy,
+    }))
+    
+    return ticketsToFlowElements(tickets, ticketId)
+  }, [displayNodes, ticketId])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
+
+  // Update when data changes
+  useEffect(() => {
+    if (displayNodes.length > 0) {
+      const tickets = displayNodes.map((n) => ({
+        id: n.id,
+        title: n.title,
+        status: n.status,
+        priority: n.priority,
+        assignee: n.assignee,
+        blockedBy: n.blockedBy,
+      }))
+      const { nodes: newNodes, edges: newEdges } = ticketsToFlowElements(tickets, ticketId)
+      setNodes(newNodes)
+      setEdges(newEdges)
+    }
+  }, [displayNodes, ticketId, setNodes, setEdges])
 
   const onLayout = useCallback(
     (newDirection: "TB" | "LR") => {
@@ -391,6 +380,33 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
     },
     [projectId, ticketId]
   )
+
+  // Get focus ticket and related nodes
+  const focusNode = displayNodes.find((n) => n.id === ticketId)
+  const blockerNodes = displayNodes.filter((n) => 
+    n.blockedBy.length === 0 && n.id !== ticketId && 
+    displayNodes.some((other) => other.blockedBy.includes(n.id))
+  )
+  const blockedNodes = displayNodes.filter((n) => 
+    n.blockedBy.includes(ticketId)
+  )
+  const discoveryNodes = displayNodes.filter((n) => n.type === "discovery")
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)]">
+        <div className="w-80 border-r bg-background p-4 space-y-4">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <Skeleton className="h-96 w-full max-w-4xl" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)]">
@@ -420,14 +436,14 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
             <Card className="border-primary/50">
               <CardContent className="p-3">
                 <Badge variant="default" className="font-mono text-xs mb-2">
-                  {mockFocusTicket.id}
+                  {ticket?.id || ticketId}
                 </Badge>
-                <p className="text-sm font-medium">{mockFocusTicket.title}</p>
+                <p className="text-sm font-medium">{ticket?.title || focusNode?.title || ticketId}</p>
                 <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
                   <Badge variant="outline" className="text-xs">
-                    {statusConfig[mockFocusTicket.status as keyof typeof statusConfig].label}
+                    {statusConfig[(ticket?.status || focusNode?.status || "pending") as keyof typeof statusConfig]?.label || "Unknown"}
                   </Badge>
-                  <span className="capitalize">{mockFocusTicket.priority}</span>
+                  <span className="capitalize">{ticket?.priority || focusNode?.priority || "medium"}</span>
                 </div>
               </CardContent>
             </Card>
@@ -440,28 +456,31 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
             <div className="flex items-center gap-2 mb-2">
               <ArrowDownRight className="h-4 w-4 text-orange-500" />
               <h2 className="text-sm font-medium">
-                Blocked By ({mockBlockers.length})
+                Blocked By ({focusNode?.blockedBy.length || 0})
               </h2>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              These tickets must be completed first
+              These tasks must be completed first
             </p>
+            {focusNode?.blockedBy.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No blocking dependencies</p>
+            ) : (
             <div className="space-y-2">
-              {mockBlockers.map((ticket) => {
-                const status = statusConfig[ticket.status as keyof typeof statusConfig]
+              {displayNodes.filter((n) => focusNode?.blockedBy.includes(n.id)).map((node) => {
+                const status = statusConfig[node.status as keyof typeof statusConfig] || statusConfig.pending
                 const StatusIcon = status.icon
                 return (
                   <Card
-                    key={ticket.id}
+                    key={node.id}
                     className="cursor-pointer hover:border-primary/50 transition-colors"
-                    onClick={() => (window.location.href = `/board/${projectId}/${ticket.id}`)}
+                    onClick={() => (window.location.href = `/board/${projectId}/${node.id}`)}
                   >
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
                             <Badge variant="outline" className="font-mono text-[10px]">
-                              {ticket.id}
+                              {node.id.slice(0, 12)}
                             </Badge>
                             <div
                               className="flex h-4 w-4 items-center justify-center rounded-full"
@@ -469,25 +488,23 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
                             >
                               <StatusIcon
                                 className={`h-2.5 w-2.5 ${
-                                  ticket.status === "in_progress" ? "animate-spin" : ""
+                                  node.status === "in_progress" ? "animate-spin" : ""
                                 }`}
                                 style={{ color: status.color }}
                               />
                             </div>
-                            {ticket.depth > 1 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                (depth {ticket.depth})
-                              </span>
+                            {node.type === "discovery" && (
+                              <Lightbulb className="h-3 w-3 text-yellow-500" />
                             )}
                           </div>
-                          <p className="text-xs font-medium">{ticket.title}</p>
+                          <p className="text-xs font-medium">{node.title}</p>
                         </div>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </div>
-                      {ticket.assignee && (
+                      {node.assignee && (
                         <div className="flex items-center gap-1 mt-2 text-[10px] text-muted-foreground">
                           <Bot className="h-3 w-3" />
-                          <span>{ticket.assignee}</span>
+                          <span>{node.assignee}</span>
                         </div>
                       )}
                     </CardContent>
@@ -495,6 +512,7 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
                 )
               })}
             </div>
+            )}
           </div>
 
           <Separator className="mb-4" />
@@ -504,28 +522,31 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
             <div className="flex items-center gap-2 mb-2">
               <ArrowUpRight className="h-4 w-4 text-red-500" />
               <h2 className="text-sm font-medium">
-                Blocking ({mockBlocked.length})
+                Blocking ({blockedNodes.length})
               </h2>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              These tickets are waiting on this ticket
+              These tasks are waiting on this ticket
             </p>
+            {blockedNodes.length === 0 ? (
+              <p className="text-xs text-muted-foreground italic">No tasks blocked by this ticket</p>
+            ) : (
             <div className="space-y-2">
-              {mockBlocked.map((ticket) => {
-                const status = statusConfig[ticket.status as keyof typeof statusConfig]
+              {blockedNodes.map((node) => {
+                const status = statusConfig[node.status as keyof typeof statusConfig] || statusConfig.pending
                 const StatusIcon = status.icon
                 return (
                   <Card
-                    key={ticket.id}
+                    key={node.id}
                     className="cursor-pointer hover:border-primary/50 transition-colors"
-                    onClick={() => (window.location.href = `/board/${projectId}/${ticket.id}`)}
+                    onClick={() => (window.location.href = `/board/${projectId}/${node.id}`)}
                   >
                     <CardContent className="p-3">
                       <div className="flex items-start justify-between">
                         <div>
                           <div className="flex items-center gap-1.5 mb-1">
                             <Badge variant="outline" className="font-mono text-[10px]">
-                              {ticket.id}
+                              {node.id.slice(0, 12)}
                             </Badge>
                             <div
                               className="flex h-4 w-4 items-center justify-center rounded-full"
@@ -533,13 +554,11 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
                             >
                               <StatusIcon className="h-2.5 w-2.5" style={{ color: status.color }} />
                             </div>
-                            {ticket.depth > 1 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                (depth {ticket.depth})
-                              </span>
+                            {node.type === "discovery" && (
+                              <Lightbulb className="h-3 w-3 text-yellow-500" />
                             )}
                           </div>
-                          <p className="text-xs font-medium">{ticket.title}</p>
+                          <p className="text-xs font-medium">{node.title}</p>
                         </div>
                         <ExternalLink className="h-3 w-3 text-muted-foreground" />
                       </div>
@@ -548,6 +567,7 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
                 )
               })}
             </div>
+            )}
           </div>
         </ScrollArea>
 
@@ -620,7 +640,7 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-semibold">Discovery overlays</h3>
-                <p className="text-xs text-muted-foreground">Branching around this ticket</p>
+                <p className="text-xs text-muted-foreground">Related discoveries</p>
               </div>
               <Button size="sm" variant="outline" onClick={() => setShowDiscoveries((v) => !v)}>
                 {showDiscoveries ? "Hide" : "Show"}
@@ -629,24 +649,27 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
 
             {showDiscoveries && (
               <div className="space-y-3">
-                {discoveryEvents.map((d) => (
-                  <Card key={d.id}>
-                    <CardContent className="p-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Badge variant="secondary" className="font-mono text-[10px]">
-                          {d.id}
-                        </Badge>
-                        <Badge>{d.branch}</Badge>
-                      </div>
-                      <p className="text-sm font-medium">{d.summary}</p>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Ticket {d.ticketId}</span>
-                        <span className="capitalize">{d.type}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground">Impact: {d.impact}</p>
-                    </CardContent>
-                  </Card>
-                ))}
+                {discoveryNodes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">No discoveries found</p>
+                ) : (
+                  discoveryNodes.map((d) => (
+                    <Card key={d.id}>
+                      <CardContent className="p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Badge variant="secondary" className="font-mono text-[10px]">
+                            {d.id.slice(0, 12)}
+                          </Badge>
+                          <Lightbulb className="h-4 w-4 text-yellow-500" />
+                        </div>
+                        <p className="text-sm font-medium">{d.title}</p>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span className="capitalize">{d.status}</span>
+                          <span className="capitalize">{d.priority}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
               </div>
             )}
 
@@ -654,31 +677,25 @@ export default function TicketGraphPage({ params }: TicketGraphPageProps) {
 
             <div className="space-y-3">
               <div>
-                <h3 className="text-sm font-semibold">Ticket threading</h3>
-                <p className="text-xs text-muted-foreground">Phase path & linked branch</p>
+                <h3 className="text-sm font-semibold">Graph Summary</h3>
+                <p className="text-xs text-muted-foreground">Dependency statistics</p>
               </div>
               <Card>
                 <CardContent className="p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="font-mono text-[11px]">
-                      {ticketThread.ticketId}
+                      {ticket?.id || ticketId}
                     </Badge>
-                    <Badge variant="secondary">{ticketThread.current}</Badge>
+                    <Badge variant="secondary">{ticket?.status || focusNode?.status || "pending"}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">Thread: {ticketThread.thread}</p>
-                  <div className="flex flex-wrap gap-1">
-                    {ticketThread.phases.map((p) => (
-                      <Badge
-                        key={p}
-                        variant="outline"
-                        className={p === ticketThread.current ? "border-primary text-primary" : ""}
-                      >
-                        {p}
-                      </Badge>
-                    ))}
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p>Total nodes: {displayNodes.length}</p>
+                    <p>Blocked by: {focusNode?.blockedBy.length || 0}</p>
+                    <p>Blocking: {blockedNodes.length}</p>
+                    <p>Discoveries: {discoveryNodes.length}</p>
                   </div>
                   <Button variant="link" size="sm" className="px-0 text-xs" asChild>
-                    <Link href={`/board/${projectId}/${ticketThread.ticketId}`}>Open ticket</Link>
+                    <Link href={`/board/${projectId}/${ticketId}`}>Open ticket</Link>
                   </Button>
                 </CardContent>
               </Card>

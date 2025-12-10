@@ -65,9 +65,9 @@ export default function AgentsPage() {
         agent.agent_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
         agent.agent_type.toLowerCase().includes(searchQuery.toLowerCase()) ||
         agent.capabilities.some((c) => c.toLowerCase().includes(searchQuery.toLowerCase()))
-      const matchesStatus = statusFilter === "all" || agent.status === statusFilter
-      return matchesSearch && matchesStatus
-    })
+    const matchesStatus = statusFilter === "all" || agent.status === statusFilter
+    return matchesSearch && matchesStatus
+  })
   }, [agents, searchQuery, statusFilter])
 
   // Calculate metrics from statistics or fallback to counting
@@ -249,11 +249,11 @@ export default function AgentsPage() {
                   <div className="flex items-center gap-2">
                     <Bot className="h-5 w-5 text-muted-foreground" />
                     <div>
-                      <CardTitle className="text-base">
+                    <CardTitle className="text-base">
                         <Link href={`/agents/${agent.agent_id}`} className="hover:underline">
                           {agent.agent_type}
-                        </Link>
-                      </CardTitle>
+                      </Link>
+                    </CardTitle>
                       <CardDescription className="text-xs font-mono">
                         {agent.agent_id.slice(0, 12)}...
                       </CardDescription>
@@ -261,9 +261,9 @@ export default function AgentsPage() {
                   </div>
                   <div className="flex gap-1">
                     <Badge variant={config.color as "default" | "secondary" | "destructive" | "outline"}>
-                      <StatusIcon className={`mr-1 h-3 w-3 ${config.iconClass}`} />
-                      {agent.status}
-                    </Badge>
+                    <StatusIcon className={`mr-1 h-3 w-3 ${config.iconClass}`} />
+                    {agent.status}
+                  </Badge>
                   </div>
                 </div>
               </CardHeader>
@@ -292,7 +292,7 @@ export default function AgentsPage() {
                   </div>
                   {agent.phase_id && (
                     <span className="text-xs">{agent.phase_id}</span>
-                  )}
+                )}
                 </div>
 
                 <div className="flex items-center justify-between text-sm text-muted-foreground">

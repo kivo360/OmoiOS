@@ -312,6 +312,8 @@ export interface Ticket {
   phase_id: string
   approval_status: string | null
   created_at: string | null
+  updated_at?: string | null
+  project_id?: string
 }
 
 export interface TicketCreate {
@@ -567,6 +569,66 @@ export interface FileDiff {
 export interface CommitDiffResponse {
   commit_sha: string
   files: FileDiff[]
+}
+
+// ============================================================================
+// Dependency Graph Types
+// ============================================================================
+
+export interface GraphNode {
+  id: string
+  type: "task" | "discovery" | "ticket"
+  label: string
+  status: string
+  priority?: string
+  phase_id?: string
+  description?: string
+  data?: Record<string, unknown>
+}
+
+export interface GraphEdge {
+  source: string
+  target: string
+  type?: string
+  label?: string
+}
+
+export interface GraphMetadata {
+  total_nodes: number
+  total_edges: number
+  ticket_id?: string
+  project_id?: string
+}
+
+export interface DependencyGraphResponse {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  metadata: GraphMetadata
+}
+
+export interface BlockedTasksResponse {
+  task_id: string
+  blocked_tasks: Array<{
+    id: string
+    description: string
+    status: string
+    priority: string
+    phase_id: string
+  }>
+  blocked_count: number
+}
+
+export interface BlockingTasksResponse {
+  task_id: string
+  blocking_tasks: Array<{
+    id: string
+    description: string
+    status: string
+    priority: string
+    phase_id: string
+    is_complete: boolean
+  }>
+  all_dependencies_complete: boolean
 }
 
 // ============================================================================

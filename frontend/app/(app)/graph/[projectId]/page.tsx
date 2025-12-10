@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -56,95 +57,26 @@ import {
   CheckCircle,
   Clock,
   Loader2,
+  Lightbulb,
 } from "lucide-react"
+import { useProjectDependencyGraph } from "@/hooks/useGraph"
+import { useProject } from "@/hooks/useProjects"
+import type { GraphNode, GraphEdge } from "@/lib/api/types"
 
 interface GraphPageProps {
   params: Promise<{ projectId: string }>
 }
 
-// Mock ticket data for the graph
-const mockTickets = [
-  {
-    id: "TICKET-001",
-    title: "Setup authentication flow",
-    status: "in_progress",
-    priority: "high",
-    assignee: "worker-1",
-    blockedBy: [],
-  },
-  {
-    id: "TICKET-002",
-    title: "Implement JWT token validation",
-    status: "pending",
-    priority: "high",
-    assignee: null,
-    blockedBy: ["TICKET-001"],
-  },
-  {
-    id: "TICKET-003",
-    title: "Add OAuth2 providers",
-    status: "pending",
-    priority: "medium",
-    assignee: null,
-    blockedBy: ["TICKET-001"],
-  },
-  {
-    id: "TICKET-004",
-    title: "Create user profile endpoint",
-    status: "completed",
-    priority: "medium",
-    assignee: "worker-2",
-    blockedBy: [],
-  },
-  {
-    id: "TICKET-005",
-    title: "Add password reset flow",
-    status: "pending",
-    priority: "low",
-    assignee: null,
-    blockedBy: ["TICKET-002", "TICKET-003"],
-  },
-  {
-    id: "TICKET-006",
-    title: "Rate limiting middleware",
-    status: "completed",
-    priority: "high",
-    assignee: "worker-1",
-    blockedBy: [],
-  },
-  {
-    id: "TICKET-007",
-    title: "Fix login redirect bug",
-    status: "in_progress",
-    priority: "critical",
-    assignee: "worker-1",
-    blockedBy: ["TICKET-001"],
-  },
-  {
-    id: "TICKET-008",
-    title: "Optimize database queries",
-    status: "pending",
-    priority: "low",
-    assignee: null,
-    blockedBy: ["TICKET-004"],
-  },
-  {
-    id: "TICKET-009",
-    title: "API documentation",
-    status: "pending",
-    priority: "low",
-    assignee: null,
-    blockedBy: ["TICKET-002", "TICKET-004"],
-  },
-  {
-    id: "TICKET-010",
-    title: "Integration tests",
-    status: "blocked",
-    priority: "high",
-    assignee: null,
-    blockedBy: ["TICKET-005", "TICKET-007"],
-  },
-]
+// Display node type for the graph
+interface DisplayNode {
+  id: string
+  title: string
+  status: string
+  priority: string
+  type: "task" | "discovery" | "ticket"
+  assignee: string | null
+  blockedBy: string[]
+}
 
 const statusConfig = {
   pending: { label: "Pending", color: "#9ca3af", bgColor: "#f3f4f6", icon: Clock },
@@ -345,44 +277,50 @@ function getLayoutedElements(
   return { nodes: layoutedNodes, edges }
 }
 
-// Convert tickets to React Flow nodes and edges
-function ticketsToFlowElements(tickets: typeof mockTickets) {
-  const nodes: Node[] = tickets.map((ticket) => ({
-    id: ticket.id,
+// Convert API graph data to React Flow nodes and edges
+function graphToFlowElements(
+  apiNodes: GraphNode[],
+  apiEdges: GraphEdge[],
+  direction: "TB" | "LR" = "TB"
+) {
+  const nodes: Node[] = apiNodes.map((node) => ({
+    id: node.id,
     type: "ticket",
     position: { x: 0, y: 0 },
     data: {
-      id: ticket.id,
-      title: ticket.title,
-      status: ticket.status,
-      priority: ticket.priority,
-      assignee: ticket.assignee,
-      blockedBy: ticket.blockedBy,
+      id: node.id,
+      title: node.label || node.description || node.id,
+      status: node.status || "pending",
+      priority: node.priority || "medium",
+      assignee: null,
+      blockedBy: apiEdges
+        .filter((e) => e.target === node.id)
+        .map((e) => e.source),
+      nodeType: node.type, // task, discovery, or ticket
     },
   }))
 
-  const edges: Edge[] = []
-  tickets.forEach((ticket) => {
-    ticket.blockedBy.forEach((blockerId) => {
-      edges.push({
-        id: `${blockerId}-${ticket.id}`,
-        source: blockerId,
-        target: ticket.id,
-        type: "smoothstep",
-        animated: ticket.status === "blocked",
-        style: {
-          stroke: ticket.status === "blocked" ? "#ef4444" : "#9ca3af",
-          strokeWidth: 2,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: ticket.status === "blocked" ? "#ef4444" : "#9ca3af",
-        },
-      })
-    })
+  const edges: Edge[] = apiEdges.map((edge) => {
+    const targetNode = apiNodes.find((n) => n.id === edge.target)
+    const isBlocked = targetNode?.status === "blocked"
+    return {
+      id: `${edge.source}-${edge.target}`,
+      source: edge.source,
+      target: edge.target,
+      type: "smoothstep",
+      animated: isBlocked,
+      style: {
+        stroke: isBlocked ? "#ef4444" : "#9ca3af",
+        strokeWidth: 2,
+      },
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: isBlocked ? "#ef4444" : "#9ca3af",
+      },
+    }
   })
 
-  return getLayoutedElements(nodes, edges, "TB")
+  return getLayoutedElements(nodes, edges, direction)
 }
 
 export default function DependencyGraphPage({ params }: GraphPageProps) {
@@ -392,34 +330,86 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
   const [direction, setDirection] = useState<"TB" | "LR">("TB")
   const [showDiscoveries, setShowDiscoveries] = useState(true)
 
-  // Filter tickets
-  const filteredTickets = useMemo(() => {
-    return mockTickets.filter((ticket) => {
+  // Fetch real dependency graph data
+  const { data: project, isLoading: projectLoading } = useProject(projectId)
+  const { data: graphData, isLoading: graphLoading } = useProjectDependencyGraph(projectId, {
+    includeResolved: true,
+  })
+
+  const isLoading = projectLoading || graphLoading
+
+  // Transform and filter graph nodes
+  const displayNodes: DisplayNode[] = useMemo(() => {
+    if (!graphData?.nodes) return []
+    return graphData.nodes
+      .filter((node) => showDiscoveries || node.type !== "discovery")
+      .map((node) => ({
+        id: node.id,
+        title: node.label || node.description || node.id,
+        status: node.status || "pending",
+        priority: node.priority || "medium",
+        type: node.type,
+        assignee: null,
+        blockedBy: graphData.edges
+          .filter((e) => e.target === node.id)
+          .map((e) => e.source),
+      }))
+  }, [graphData, showDiscoveries])
+
+  // Filter nodes based on search and status
+  const filteredNodes = useMemo(() => {
+    return displayNodes.filter((node) => {
       const matchesSearch =
         searchQuery === "" ||
-        ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        ticket.id.toLowerCase().includes(searchQuery.toLowerCase())
+        node.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        node.id.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesStatus =
-        statusFilter === "all" || ticket.status === statusFilter
+        statusFilter === "all" || node.status === statusFilter
       return matchesSearch && matchesStatus
     })
-  }, [searchQuery, statusFilter])
+  }, [displayNodes, searchQuery, statusFilter])
 
-  // Generate initial layout
-  const { nodes: initialNodes, edges: initialEdges } = useMemo(
-    () => ticketsToFlowElements(filteredTickets),
-    [filteredTickets]
-  )
+  // Get filtered edges (only edges where both nodes are in filtered set)
+  const filteredEdges = useMemo(() => {
+    if (!graphData?.edges) return []
+    const nodeIds = new Set(filteredNodes.map((n) => n.id))
+    return graphData.edges.filter(
+      (e) => nodeIds.has(e.source) && nodeIds.has(e.target)
+    )
+  }, [graphData?.edges, filteredNodes])
+
+  // Generate initial layout from API data
+  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
+    const apiNodes: GraphNode[] = filteredNodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      label: n.title,
+      status: n.status,
+      priority: n.priority,
+    }))
+    return graphToFlowElements(apiNodes, filteredEdges, direction)
+  }, [filteredNodes, filteredEdges, direction])
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes)
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
 
   // Update nodes when filters change
   useEffect(() => {
-    const { nodes: newNodes, edges: newEdges } = ticketsToFlowElements(filteredTickets)
+    const apiNodes: GraphNode[] = filteredNodes.map((n) => ({
+      id: n.id,
+      type: n.type,
+      label: n.title,
+      status: n.status,
+      priority: n.priority,
+    }))
+    const { nodes: newNodes, edges: newEdges } = graphToFlowElements(
+      apiNodes,
+      filteredEdges,
+      direction
+    )
     setNodes(newNodes)
     setEdges(newEdges)
-  }, [filteredTickets, setNodes, setEdges])
+  }, [filteredNodes, filteredEdges, direction, setNodes, setEdges])
 
   // Re-layout with new direction
   const onLayout = useCallback(
@@ -447,12 +437,22 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
 
   // Stats
   const stats = useMemo(() => {
-    const total = filteredTickets.length
-    const completed = filteredTickets.filter((t) => t.status === "completed").length
-    const blocked = filteredTickets.filter((t) => t.status === "blocked").length
-    const inProgress = filteredTickets.filter((t) => t.status === "in_progress").length
-    return { total, completed, blocked, inProgress }
-  }, [filteredTickets])
+    const total = filteredNodes.length
+    const completed = filteredNodes.filter((n) => n.status === "completed").length
+    const blocked = filteredNodes.filter((n) => n.status === "blocked").length
+    const inProgress = filteredNodes.filter((n) => n.status === "in_progress").length
+    const discoveries = filteredNodes.filter((n) => n.type === "discovery").length
+    return { total, completed, blocked, inProgress, discoveries }
+  }, [filteredNodes])
+
+  if (isLoading) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col items-center justify-center">
+        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="h-96 w-full max-w-4xl" />
+      </div>
+    )
+  }
 
   return (
     <div className="flex h-[calc(100vh-3.5rem)] flex-col">
@@ -469,12 +469,18 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
             </Link>
             <h1 className="text-xl font-bold">Dependency Graph</h1>
             <div className="flex items-center gap-2">
-              <Badge variant="outline">{stats.total} tickets</Badge>
+              <Badge variant="outline">{stats.total} nodes</Badge>
               <Badge variant="outline" className="text-green-600">
                 {stats.completed} done
               </Badge>
               {stats.blocked > 0 && (
                 <Badge variant="destructive">{stats.blocked} blocked</Badge>
+              )}
+              {stats.discoveries > 0 && (
+                <Badge variant="secondary" className="gap-1">
+                  <Lightbulb className="h-3 w-3" />
+                  {stats.discoveries}
+                </Badge>
               )}
             </div>
           </div>
@@ -483,7 +489,7 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
             <div className="relative">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search tickets..."
+                placeholder="Search nodes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-[200px] pl-8"

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,7 +47,19 @@ export default function AppearanceSettingsPage() {
   const handleSave = async () => {
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      // Save to local storage (these are UI preferences)
+      localStorage.setItem("appearance-settings", JSON.stringify({
+        theme,
+        accentColor,
+        fontSize,
+        codeFont,
+        sidebarPosition,
+        compactMode,
+        animationsEnabled,
+        highContrastMode,
+        showLineNumbers,
+        wordWrap,
+      }))
       toast.success("Appearance settings saved!")
     } catch {
       toast.error("Failed to save settings")
@@ -55,6 +67,28 @@ export default function AppearanceSettingsPage() {
       setIsLoading(false)
     }
   }
+
+  // Load saved preferences on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("appearance-settings")
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (parsed.theme) setTheme(parsed.theme)
+        if (parsed.accentColor) setAccentColor(parsed.accentColor)
+        if (parsed.fontSize) setFontSize(parsed.fontSize)
+        if (parsed.codeFont) setCodeFont(parsed.codeFont)
+        if (parsed.sidebarPosition) setSidebarPosition(parsed.sidebarPosition)
+        if (parsed.compactMode !== undefined) setCompactMode(parsed.compactMode)
+        if (parsed.animationsEnabled !== undefined) setAnimationsEnabled(parsed.animationsEnabled)
+        if (parsed.highContrastMode !== undefined) setHighContrastMode(parsed.highContrastMode)
+        if (parsed.showLineNumbers !== undefined) setShowLineNumbers(parsed.showLineNumbers)
+        if (parsed.wordWrap !== undefined) setWordWrap(parsed.wordWrap)
+      } catch (e) {
+        console.error("Failed to parse appearance settings", e)
+      }
+    }
+  }, [])
 
   const accentColors = [
     { value: "blue", label: "Blue", color: "#3B82F6" },

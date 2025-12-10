@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -124,14 +124,38 @@ export default function NotificationsSettingsPage() {
   const handleSave = async () => {
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      toast.success("Notification preferences saved!")
+      // Save to local storage for now (backend notification API coming soon)
+      localStorage.setItem("notification-preferences", JSON.stringify({
+        notifications,
+        digestFrequency,
+        quietHoursEnabled,
+        quietHoursStart,
+        quietHoursEnd,
+      }))
+      toast.success("Notification preferences saved locally!")
     } catch {
       toast.error("Failed to save preferences")
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Load saved preferences on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("notification-preferences")
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        if (parsed.notifications) setNotifications(parsed.notifications)
+        if (parsed.digestFrequency) setDigestFrequency(parsed.digestFrequency)
+        if (parsed.quietHoursEnabled !== undefined) setQuietHoursEnabled(parsed.quietHoursEnabled)
+        if (parsed.quietHoursStart) setQuietHoursStart(parsed.quietHoursStart)
+        if (parsed.quietHoursEnd) setQuietHoursEnd(parsed.quietHoursEnd)
+      } catch (e) {
+        console.error("Failed to parse notification preferences", e)
+      }
+    }
+  }, [])
 
   const handleEnableAll = (channel: "inApp" | "email" | "slack") => {
     setNotifications(notifications.map((n) => ({ ...n, [channel]: true })))
