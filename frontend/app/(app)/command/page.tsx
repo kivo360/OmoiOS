@@ -1,46 +1,66 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { PromptInput, ModelSelector, RepoSelector, Project, Repository } from "@/components/command"
-
-// Mock data (will be replaced with real API calls)
-const mockProjects: Project[] = [
-  { id: "1", name: "Auth System", repo: "kivo360/auth-system", ticketCount: 12 },
-  { id: "2", name: "Payment Gateway", repo: "kivo360/payment-gateway", ticketCount: 8 },
-  { id: "3", name: "API Service", repo: "kivo360/api-service", ticketCount: 3 },
-]
-
-const mockRepositories: Repository[] = [
-  { fullName: "kivo360/frontend-app", isPrivate: false },
-  { fullName: "kivo360/mobile-app", isPrivate: true },
-  { fullName: "kivo360/senseii-games", isPrivate: false },
-]
+import { useProjects } from "@/hooks/useProjects"
+import { useConnectedRepositories } from "@/hooks/useGitHub"
+import { useRegisterAgent } from "@/hooks/useAgents"
 
 export default function CommandCenterPage() {
   const router = useRouter()
-  const [selectedProject, setSelectedProject] = useState<Project | null>(mockProjects[0])
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const [selectedModel, setSelectedModel] = useState("opus-4.5")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Fetch real data
+  const { data: projectsData } = useProjects({ status: "active" })
+  const { data: connectedRepos } = useConnectedRepositories()
+  const registerMutation = useRegisterAgent()
+
+  // Transform API projects to component format
+  const projects: Project[] = useMemo(() => {
+    if (!projectsData?.projects) return []
+    return projectsData.projects.map((p) => ({
+      id: p.id,
+      name: p.name,
+      repo: p.github_owner && p.github_repo ? `${p.github_owner}/${p.github_repo}` : undefined,
+      ticketCount: 0,
+    }))
+  }, [projectsData?.projects])
+
+  // Transform connected repos to component format
+  const repositories: Repository[] = useMemo(() => {
+    if (!connectedRepos) return []
+    return connectedRepos.map((r) => ({
+      fullName: `${r.owner}/${r.repo}`,
+      isPrivate: false,
+    }))
+  }, [connectedRepos])
+
+  // Set default project when data loads
+  useMemo(() => {
+    if (projects.length > 0 && !selectedProject) {
+      setSelectedProject(projects[0])
+    }
+  }, [projects, selectedProject])
 
   const handleSubmit = async (prompt: string) => {
-    setIsSubmitting(true)
-    
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-      
-      // Mock creating an agent
-      const mockAgentId = `agent-${Date.now()}`
+      // Register a new agent with the prompt context
+      const result = await registerMutation.mutateAsync({
+        agent_type: "worker",
+        phase_id: "PHASE_IMPLEMENTATION",
+        capabilities: ["code_generation", "testing", "debugging"],
+        capacity: 3,
+        tags: selectedProject ? [`project:${selectedProject.id}`, `prompt:${prompt.slice(0, 50)}`] : [],
+      })
       
       toast.success("Agent spawned successfully!")
-      router.push(`/agents/${mockAgentId}`)
+      router.push(`/agents/${result.agent_id}`)
     } catch (error) {
       toast.error("Failed to spawn agent. Please try again.")
-    } finally {
-      setIsSubmitting(false)
     }
   }
 
@@ -70,15 +90,15 @@ export default function CommandCenterPage() {
         {/* Main Input */}
         <PromptInput
           onSubmit={handleSubmit}
-          isLoading={isSubmitting}
+          isLoading={registerMutation.isPending}
           placeholder="Ask Cursor to build, fix bugs, explore"
         />
 
         {/* Controls Row */}
         <div className="flex items-center justify-between">
           <RepoSelector
-            projects={mockProjects}
-            repositories={mockRepositories}
+            projects={projects}
+            repositories={repositories}
             selectedProject={selectedProject}
             selectedRepo={selectedRepo}
             onProjectSelect={handleProjectSelect}

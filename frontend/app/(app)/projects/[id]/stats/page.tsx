@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Select,
@@ -34,86 +35,200 @@ import {
   FileCode,
   Download,
 } from "lucide-react"
+import { useProject, useProjectStats } from "@/hooks/useProjects"
+import { useAgents } from "@/hooks/useAgents"
+import { useTickets } from "@/hooks/useTickets"
+import { PHASES } from "@/lib/phases-config"
 
 interface StatsPageProps {
   params: Promise<{ id: string }>
 }
 
-// Mock statistics data
-const mockStats = {
-  overview: {
-    totalTickets: 45,
-    completedTickets: 32,
-    inProgress: 8,
-    blocked: 2,
-    pending: 3,
-    completionRate: 71,
-    avgCycleTime: "2.4 days",
-    velocityTrend: "+12%",
-  },
-  agents: {
-    total: 5,
-    active: 3,
-    idle: 2,
-    totalTasks: 89,
-    completedTasks: 76,
-    avgTaskTime: "45 min",
-    topPerformer: "worker-1",
-  },
-  code: {
-    totalCommits: 156,
-    linesAdded: 12450,
-    linesRemoved: 3200,
-    filesChanged: 89,
-    avgCommitsPerDay: 8.2,
-    testCoverage: 78,
-    prsMerged: 23,
-    prsOpen: 4,
-  },
-  cost: {
-    totalTokens: 2450000,
-    totalCost: 48.90,
-    avgCostPerTicket: 1.53,
-    costTrend: "-8%",
-    breakdown: {
-      analysis: 35,
-      implementation: 45,
-      testing: 15,
-      documentation: 5,
-    },
-  },
+// Phase colors for display
+const phaseColors: Record<string, string> = {
+  "PHASE_BACKLOG": "#6b7280",
+  "PHASE_REQUIREMENTS": "#8b5cf6",
+  "PHASE_DESIGN": "#3b82f6",
+  "PHASE_IMPLEMENTATION": "#22c55e",
+  "PHASE_TESTING": "#f59e0b",
+  "PHASE_REVIEW": "#ec4899",
+  "PHASE_DONE": "#10b981",
 }
-
-const ticketsByPhase = [
-  { phase: "Requirements", count: 5, color: "#8b5cf6" },
-  { phase: "Design", count: 3, color: "#3b82f6" },
-  { phase: "Implementation", count: 8, color: "#22c55e" },
-  { phase: "Testing", count: 4, color: "#f59e0b" },
-  { phase: "Review", count: 2, color: "#ec4899" },
-  { phase: "Done", count: 23, color: "#6b7280" },
-]
-
-const weeklyActivity = [
-  { day: "Mon", commits: 12, tasks: 8 },
-  { day: "Tue", commits: 18, tasks: 12 },
-  { day: "Wed", commits: 15, tasks: 10 },
-  { day: "Thu", commits: 22, tasks: 15 },
-  { day: "Fri", commits: 28, tasks: 18 },
-  { day: "Sat", commits: 8, tasks: 5 },
-  { day: "Sun", commits: 5, tasks: 3 },
-]
-
-const agentPerformance = [
-  { name: "worker-1", tasks: 32, avgTime: "38 min", success: 97 },
-  { name: "worker-2", tasks: 24, avgTime: "52 min", success: 92 },
-  { name: "worker-3", tasks: 20, avgTime: "45 min", success: 95 },
-]
 
 export default function StatsPage({ params }: StatsPageProps) {
   const { id: projectId } = use(params)
   const [timeRange, setTimeRange] = useState("7d")
 
-  const maxBarHeight = Math.max(...weeklyActivity.map((d) => d.commits))
+  const { data: project, isLoading: projectLoading, error: projectError } = useProject(projectId)
+  const { data: projectStats, isLoading: statsLoading } = useProjectStats(projectId)
+  const { data: agentsData } = useAgents()
+  const { data: ticketsData } = useTickets()
+
+  const isLoading = projectLoading || statsLoading
+
+  // Calculate stats from real data
+  const stats = useMemo(() => {
+    if (!projectStats) return null
+
+    const totalTickets = projectStats.total_tickets
+    const completedTickets = projectStats.tickets_by_status["done"] || 0
+    const inProgress = projectStats.tickets_by_status["in_progress"] || 0
+    const blocked = projectStats.tickets_by_status["blocked"] || 0
+    const pending = (projectStats.tickets_by_status["open"] || 0) + (projectStats.tickets_by_status["todo"] || 0)
+    const completionRate = totalTickets > 0 ? Math.round((completedTickets / totalTickets) * 100) : 0
+
+    return {
+      overview: {
+        totalTickets,
+        completedTickets,
+        inProgress,
+        blocked,
+        pending,
+        completionRate,
+        avgCycleTime: "N/A",
+        velocityTrend: "N/A",
+      },
+      agents: {
+        total: projectStats.active_agents || 0,
+        active: projectStats.active_agents || 0,
+        idle: 0,
+        totalTasks: 0,
+        completedTasks: 0,
+        avgTaskTime: "N/A",
+        topPerformer: "N/A",
+      },
+      code: {
+        totalCommits: projectStats.total_commits || 0,
+        linesAdded: 0,
+        linesRemoved: 0,
+        filesChanged: 0,
+        avgCommitsPerDay: 0,
+        testCoverage: 0,
+        prsMerged: 0,
+        prsOpen: 0,
+      },
+      cost: {
+        totalTokens: 0,
+        totalCost: 0,
+        avgCostPerTicket: 0,
+        costTrend: "N/A",
+        breakdown: {
+          analysis: 0,
+          implementation: 0,
+          testing: 0,
+          documentation: 0,
+        },
+      },
+    }
+  }, [projectStats])
+
+  // Calculate tickets by phase from real data
+  const ticketsByPhase = useMemo(() => {
+    if (!projectStats?.tickets_by_phase) return []
+    
+    return PHASES.map(phase => ({
+      phase: phase.name,
+      count: projectStats.tickets_by_phase[phase.id] || 0,
+      color: phaseColors[phase.id] || "#6b7280",
+    })).filter(p => p.count > 0 || PHASES.find(ph => ph.name === p.phase))
+  }, [projectStats])
+
+  // Get project-specific agents
+  const projectAgents = useMemo(() => {
+    if (!agentsData) return []
+    return agentsData.filter(a => a.tags?.includes(`project:${projectId}`))
+  }, [agentsData, projectId])
+
+  // Weekly activity placeholder (would need time-series API)
+  const weeklyActivity = [
+    { day: "Mon", commits: 0, tasks: 0 },
+    { day: "Tue", commits: 0, tasks: 0 },
+    { day: "Wed", commits: 0, tasks: 0 },
+    { day: "Thu", commits: 0, tasks: 0 },
+    { day: "Fri", commits: 0, tasks: 0 },
+    { day: "Sat", commits: 0, tasks: 0 },
+    { day: "Sun", commits: 0, tasks: 0 },
+  ]
+
+  const maxBarHeight = Math.max(...weeklyActivity.map((d) => d.commits), 1)
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto max-w-7xl p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-4 w-24" />
+            <div>
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-64 mt-2" />
+            </div>
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <Skeleton key={i} className="h-32 w-full" />
+          ))}
+        </div>
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  if (projectError || !project) {
+    return (
+      <div className="container mx-auto max-w-7xl p-6 text-center">
+        <h1 className="text-2xl font-bold">Project not found</h1>
+        <Button className="mt-4" asChild>
+          <Link href="/projects">Back to Projects</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  // Use fallback values if stats not loaded yet
+  const displayStats = stats || {
+    overview: {
+      totalTickets: 0,
+      completedTickets: 0,
+      inProgress: 0,
+      blocked: 0,
+      pending: 0,
+      completionRate: 0,
+      avgCycleTime: "N/A",
+      velocityTrend: "N/A",
+    },
+    agents: {
+      total: 0,
+      active: 0,
+      idle: 0,
+      totalTasks: 0,
+      completedTasks: 0,
+      avgTaskTime: "N/A",
+      topPerformer: "N/A",
+    },
+    code: {
+      totalCommits: 0,
+      linesAdded: 0,
+      linesRemoved: 0,
+      filesChanged: 0,
+      avgCommitsPerDay: 0,
+      testCoverage: 0,
+      prsMerged: 0,
+      prsOpen: 0,
+    },
+    cost: {
+      totalTokens: 0,
+      totalCost: 0,
+      avgCostPerTicket: 0,
+      costTrend: "N/A",
+      breakdown: {
+        analysis: 0,
+        implementation: 0,
+        testing: 0,
+        documentation: 0,
+      },
+    },
+  }
 
   return (
     <div className="container mx-auto max-w-7xl p-6 space-y-6">
@@ -127,7 +242,7 @@ export default function StatsPage({ params }: StatsPageProps) {
             Back to Project
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">Project Statistics</h1>
+            <h1 className="text-2xl font-bold">{project.name} Statistics</h1>
             <p className="text-muted-foreground">
               Performance metrics and insights for your project
             </p>
@@ -161,10 +276,10 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Target className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.overview.completionRate}%</div>
-            <Progress value={mockStats.overview.completionRate} className="mt-2 h-2" />
+            <div className="text-2xl font-bold">{displayStats.overview.completionRate}%</div>
+            <Progress value={displayStats.overview.completionRate} className="mt-2 h-2" />
             <p className="text-xs text-muted-foreground mt-2">
-              {mockStats.overview.completedTickets} of {mockStats.overview.totalTickets} tickets
+              {displayStats.overview.completedTickets} of {displayStats.overview.totalTickets} tickets
             </p>
           </CardContent>
         </Card>
@@ -175,7 +290,7 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Timer className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.overview.avgCycleTime}</div>
+            <div className="text-2xl font-bold">{displayStats.overview.avgCycleTime}</div>
             <div className="flex items-center gap-1 mt-2">
               <Badge variant="outline" className="text-green-600">
                 <TrendingDown className="mr-1 h-3 w-3" />
@@ -194,18 +309,18 @@ export default function StatsPage({ params }: StatsPageProps) {
             <Bot className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockStats.agents.active}</div>
+            <div className="text-2xl font-bold">{displayStats.agents.active}</div>
             <div className="flex items-center gap-2 mt-2">
               <span className="text-xs text-muted-foreground">
-                {mockStats.agents.idle} idle
+                {displayStats.agents.idle} idle
               </span>
               <span className="text-xs">•</span>
               <span className="text-xs text-muted-foreground">
-                {mockStats.agents.total} total
+                {displayStats.agents.total} total
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              {mockStats.agents.completedTasks} tasks completed
+              {displayStats.agents.completedTasks} tasks completed
             </p>
           </CardContent>
         </Card>
@@ -216,15 +331,15 @@ export default function StatsPage({ params }: StatsPageProps) {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${mockStats.cost.totalCost.toFixed(2)}</div>
+            <div className="text-2xl font-bold">${displayStats.cost.totalCost.toFixed(2)}</div>
             <div className="flex items-center gap-1 mt-2">
               <Badge variant="outline" className="text-green-600">
                 <TrendingDown className="mr-1 h-3 w-3" />
-                {mockStats.cost.costTrend}
+                {displayStats.cost.costTrend}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground mt-2">
-              ${mockStats.cost.avgCostPerTicket.toFixed(2)} avg per ticket
+              ${displayStats.cost.avgCostPerTicket.toFixed(2)} avg per ticket
             </p>
           </CardContent>
         </Card>
@@ -274,7 +389,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                           <span className="text-sm text-muted-foreground">{phase.count}</span>
                         </div>
                         <Progress
-                          value={(phase.count / mockStats.overview.totalTickets) * 100}
+                          value={displayStats.overview.totalTickets > 0 ? (phase.count / displayStats.overview.totalTickets) * 100 : 0}
                           className="h-2"
                           style={
                             {
@@ -304,7 +419,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                         <span className="text-sm">Completed</span>
                       </div>
                       <span className="font-bold text-green-600">
-                        {mockStats.overview.completedTickets}
+                        {displayStats.overview.completedTickets}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20">
@@ -313,7 +428,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                         <span className="text-sm">In Progress</span>
                       </div>
                       <span className="font-bold text-blue-600">
-                        {mockStats.overview.inProgress}
+                        {displayStats.overview.inProgress}
                       </span>
                     </div>
                   </div>
@@ -324,7 +439,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                         <span className="text-sm">Blocked</span>
                       </div>
                       <span className="font-bold text-red-600">
-                        {mockStats.overview.blocked}
+                        {displayStats.overview.blocked}
                       </span>
                     </div>
                     <div className="flex items-center justify-between p-3 rounded-lg bg-gray-50 dark:bg-gray-800/20">
@@ -333,7 +448,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                         <span className="text-sm">Pending</span>
                       </div>
                       <span className="font-bold text-gray-600">
-                        {mockStats.overview.pending}
+                        {displayStats.overview.pending}
                       </span>
                     </div>
                   </div>
@@ -343,7 +458,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                     <span className="text-muted-foreground">Velocity Trend</span>
                     <Badge variant="outline" className="text-green-600">
                       <TrendingUp className="mr-1 h-3 w-3" />
-                      {mockStats.overview.velocityTrend}
+                      {displayStats.overview.velocityTrend}
                     </Badge>
                   </div>
                 </div>
@@ -361,40 +476,47 @@ export default function StatsPage({ params }: StatsPageProps) {
                 <CardDescription>Task completion by agent</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {agentPerformance.map((agent, i) => (
-                    <div
-                      key={agent.name}
-                      className={`p-4 rounded-lg ${i === 0 ? "bg-primary/5 border border-primary/20" : "bg-muted/50"}`}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Bot className="h-4 w-4" />
-                          <span className="font-medium">{agent.name}</span>
-                          {i === 0 && (
-                            <Badge variant="default" className="text-xs">
-                              <Zap className="mr-1 h-3 w-3" />
-                              Top
-                            </Badge>
-                          )}
+                {projectAgents.length === 0 ? (
+                  <div className="py-6 text-center text-muted-foreground">
+                    <Bot className="mx-auto h-12 w-12 text-muted-foreground/30" />
+                    <p className="mt-2">No agents assigned to this project</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {projectAgents.map((agent, i) => (
+                      <div
+                        key={agent.agent_id}
+                        className={`p-4 rounded-lg ${i === 0 ? "bg-primary/5 border border-primary/20" : "bg-muted/50"}`}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <Bot className="h-4 w-4" />
+                            <span className="font-medium">{agent.agent_id.slice(0, 8)}</span>
+                            {i === 0 && (
+                              <Badge variant="default" className="text-xs">
+                                <Zap className="mr-1 h-3 w-3" />
+                                Top
+                              </Badge>
+                            )}
+                          </div>
+                          <Badge variant={agent.status === "active" ? "default" : "secondary"}>
+                            {agent.status}
+                          </Badge>
                         </div>
-                        <span className="text-sm text-muted-foreground">
-                          {agent.success}% success
-                        </span>
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Type: </span>
+                            <span className="font-medium">{agent.agent_type}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Phase: </span>
+                            <span className="font-medium">{agent.phase_id?.replace("PHASE_", "") || "N/A"}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <span className="text-muted-foreground">Tasks: </span>
-                          <span className="font-medium">{agent.tasks}</span>
-                        </div>
-                        <div>
-                          <span className="text-muted-foreground">Avg Time: </span>
-                          <span className="font-medium">{agent.avgTime}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -407,24 +529,24 @@ export default function StatsPage({ params }: StatsPageProps) {
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Total Tasks Completed</span>
-                    <span className="text-2xl font-bold">{mockStats.agents.completedTasks}</span>
+                    <span className="text-2xl font-bold">{displayStats.agents.completedTasks}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Average Task Duration</span>
-                    <span className="text-lg font-medium">{mockStats.agents.avgTaskTime}</span>
+                    <span className="text-lg font-medium">{displayStats.agents.avgTaskTime}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm">Tasks in Queue</span>
                     <span className="text-lg font-medium">
-                      {mockStats.agents.totalTasks - mockStats.agents.completedTasks}
+                      {displayStats.agents.totalTasks - displayStats.agents.completedTasks}
                     </span>
                   </div>
                   <Progress
-                    value={(mockStats.agents.completedTasks / mockStats.agents.totalTasks) * 100}
+                    value={displayStats.agents.totalTasks > 0 ? (displayStats.agents.completedTasks / displayStats.agents.totalTasks) * 100 : 0}
                     className="h-3"
                   />
                   <p className="text-xs text-muted-foreground text-center">
-                    {Math.round((mockStats.agents.completedTasks / mockStats.agents.totalTasks) * 100)}%
+                    {displayStats.agents.totalTasks > 0 ? Math.round((displayStats.agents.completedTasks / displayStats.agents.totalTasks) * 100) : 0}%
                     of tasks completed
                   </p>
                 </div>
@@ -474,34 +596,34 @@ export default function StatsPage({ params }: StatsPageProps) {
                       <GitCommit className="h-4 w-4" />
                       Total Commits
                     </div>
-                    <p className="text-2xl font-bold">{mockStats.code.totalCommits}</p>
+                    <p className="text-2xl font-bold">{displayStats.code.totalCommits}</p>
                   </div>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <FileCode className="h-4 w-4" />
                       Files Changed
                     </div>
-                    <p className="text-2xl font-bold">{mockStats.code.filesChanged}</p>
+                    <p className="text-2xl font-bold">{displayStats.code.filesChanged}</p>
                   </div>
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Lines Added</div>
                     <p className="text-xl font-bold text-green-600">
-                      +{mockStats.code.linesAdded.toLocaleString()}
+                      +{displayStats.code.linesAdded.toLocaleString()}
                     </p>
                   </div>
                   <div className="space-y-1">
                     <div className="text-sm text-muted-foreground">Lines Removed</div>
                     <p className="text-xl font-bold text-red-600">
-                      -{mockStats.code.linesRemoved.toLocaleString()}
+                      -{displayStats.code.linesRemoved.toLocaleString()}
                     </p>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm">Test Coverage</span>
-                    <span className="font-medium">{mockStats.code.testCoverage}%</span>
+                    <span className="font-medium">{displayStats.code.testCoverage}%</span>
                   </div>
-                  <Progress value={mockStats.code.testCoverage} className="h-2" />
+                  <Progress value={displayStats.code.testCoverage} className="h-2" />
                 </div>
               </CardContent>
             </Card>
@@ -518,7 +640,7 @@ export default function StatsPage({ params }: StatsPageProps) {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {Object.entries(mockStats.cost.breakdown).map(([key, value]) => (
+                  {Object.entries(displayStats.cost.breakdown).map(([key, value]) => (
                     <div key={key} className="flex items-center gap-3">
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
@@ -543,18 +665,18 @@ export default function StatsPage({ params }: StatsPageProps) {
                   <div className="p-4 rounded-lg bg-muted/50">
                     <div className="text-sm text-muted-foreground">Total Tokens Used</div>
                     <p className="text-2xl font-bold">
-                      {(mockStats.cost.totalTokens / 1000000).toFixed(2)}M
+                      {(displayStats.cost.totalTokens / 1000000).toFixed(2)}M
                     </p>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-lg bg-muted/50">
                       <div className="text-sm text-muted-foreground">Total Cost</div>
-                      <p className="text-xl font-bold">${mockStats.cost.totalCost.toFixed(2)}</p>
+                      <p className="text-xl font-bold">${displayStats.cost.totalCost.toFixed(2)}</p>
                     </div>
                     <div className="p-4 rounded-lg bg-muted/50">
                       <div className="text-sm text-muted-foreground">Cost/Ticket</div>
                       <p className="text-xl font-bold">
-                        ${mockStats.cost.avgCostPerTicket.toFixed(2)}
+                        ${displayStats.cost.avgCostPerTicket.toFixed(2)}
                       </p>
                     </div>
                   </div>
@@ -562,7 +684,7 @@ export default function StatsPage({ params }: StatsPageProps) {
                     <span className="text-sm text-muted-foreground">Cost Trend (vs last period)</span>
                     <Badge variant="outline" className="text-green-600">
                       <TrendingDown className="mr-1 h-3 w-3" />
-                      {mockStats.cost.costTrend}
+                      {displayStats.cost.costTrend}
                     </Badge>
                   </div>
                 </div>

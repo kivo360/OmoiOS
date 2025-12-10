@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -26,6 +27,8 @@ import {
   Moon,
   Monitor,
 } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { updateCurrentUser } from "@/lib/api/auth"
 
 const timezones = [
   { value: "UTC", label: "UTC (Coordinated Universal Time)" },
@@ -50,31 +53,86 @@ const languages = [
 ]
 
 export default function ProfileSettingsPage() {
+  const { user, isLoading: authLoading, refreshUser } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
-    name: "John Doe",
-    email: "john@example.com",
-    bio: "Senior Engineer passionate about AI and automation",
-    company: "Acme Inc",
-    location: "San Francisco, CA",
-    website: "https://johndoe.dev",
+    name: "",
+    email: "",
+    bio: "",
+    company: "",
+    location: "",
+    website: "",
     timezone: "America/Los_Angeles",
     language: "en",
     theme: "system",
   })
+
+  // Initialize form with user data
+  useEffect(() => {
+    if (user) {
+      const attrs = user.attributes || {}
+      setFormData({
+        name: user.full_name || "",
+        email: user.email,
+        bio: (attrs.bio as string) || "",
+        company: (attrs.company as string) || "",
+        location: (attrs.location as string) || "",
+        website: (attrs.website as string) || "",
+        timezone: (attrs.timezone as string) || "America/Los_Angeles",
+        language: (attrs.language as string) || "en",
+        theme: (attrs.theme as string) || "system",
+      })
+    }
+  }, [user])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await updateCurrentUser({
+        full_name: formData.name,
+        attributes: {
+          bio: formData.bio,
+          company: formData.company,
+          location: formData.location,
+          website: formData.website,
+          timezone: formData.timezone,
+          language: formData.language,
+          theme: formData.theme,
+        },
+      })
+      await refreshUser()
       toast.success("Profile updated successfully!")
     } catch {
       toast.error("Failed to update profile")
     } finally {
       setIsLoading(false)
     }
+  }
+
+  // Get user initials for avatar fallback
+  const getInitials = () => {
+    if (!formData.name) return "U"
+    return formData.name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2)
+  }
+
+  if (authLoading) {
+    return (
+      <div className="container mx-auto max-w-2xl p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <div>
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-4 w-64 mt-2" />
+        </div>
+        <Skeleton className="h-96 w-full" />
+      </div>
+    )
   }
 
   return (
@@ -103,8 +161,8 @@ export default function ProfileSettingsPage() {
                 {/* Avatar */}
                 <div className="flex items-center gap-4">
                   <Avatar className="h-20 w-20">
-                    <AvatarImage src="/avatars/user.png" />
-                    <AvatarFallback className="text-lg">JD</AvatarFallback>
+                    <AvatarImage src={user?.avatar_url || "/avatars/user.png"} />
+                    <AvatarFallback className="text-lg">{getInitials()}</AvatarFallback>
                   </Avatar>
                   <div>
                     <Button type="button" variant="outline" size="sm">
