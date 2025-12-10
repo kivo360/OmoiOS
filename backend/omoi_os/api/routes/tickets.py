@@ -22,6 +22,7 @@ from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.approval import ApprovalService, InvalidApprovalStateError
+from omoi_os.services.reasoning_listener import log_reasoning_event
 
 
 router = APIRouter()
@@ -150,6 +151,24 @@ async def create_ticket(
 
         session.commit()
         session.refresh(ticket)
+
+        # Log reasoning event for ticket creation
+        log_reasoning_event(
+            db=db,
+            entity_type="ticket",
+            entity_id=str(ticket.id),
+            event_type="ticket_created",
+            title="Ticket Created",
+            description=f"Created ticket: {ticket.title}",
+            agent=requested_by_agent_id,
+            details={
+                "context": ticket.description,
+                "created_by": requested_by_agent_id or "user",
+                "phase": ticket.phase_id,
+                "priority": ticket.priority,
+            },
+        )
+
         return TicketResponse.model_validate(ticket)
 
 
@@ -241,6 +260,12 @@ async def transition_ticket_status(
         Updated ticket
     """
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
+
+    # Get old status for logging
+    with db.get_session() as session:
+        old_ticket = session.get(Ticket, ticket_id)
+        old_status = old_ticket.status if old_ticket else "unknown"
+
     ticket = orchestrator.transition_status(
         str(ticket_id),
         request.to_status,
@@ -248,6 +273,28 @@ async def transition_ticket_status(
         reason=request.reason,
         force=request.force,
     )
+
+    # Log reasoning event for status transition
+    log_reasoning_event(
+        db=db,
+        entity_type="ticket",
+        entity_id=str(ticket_id),
+        event_type="agent_decision",
+        title=f"Status Transition: {old_status} → {request.to_status}",
+        description=request.reason or f"Ticket transitioned to {request.to_status}",
+        details={
+            "from_status": old_status,
+            "to_status": request.to_status,
+            "reason": request.reason,
+            "forced": request.force,
+        },
+        decision={
+            "type": "transition",
+            "action": f"Move to {request.to_status}",
+            "reasoning": request.reason or "Status transition requested",
+        },
+    )
+
     return TicketResponse.model_validate(ticket)
 
 
@@ -283,6 +330,22 @@ async def block_ticket(
         suggested_remediation=suggested_remediation,
         initiated_by="api",
     )
+
+    # Log reasoning event for blocking
+    log_reasoning_event(
+        db=db,
+        entity_type="ticket",
+        entity_id=str(ticket_id),
+        event_type="blocking_added",
+        title=f"Ticket Blocked: {blocker_type}",
+        description=f"Ticket blocked due to {blocker_type}",
+        details={
+            "blocker_type": blocker_type,
+            "suggested_remediation": suggested_remediation,
+        },
+        evidence=[{"type": "blocker", "content": blocker_type}] if blocker_type else [],
+    )
+
     return TicketResponse.model_validate(ticket)
 
 
@@ -309,6 +372,23 @@ async def unblock_ticket(
     """
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
     ticket = orchestrator.unblock_ticket(str(ticket_id), initiated_by="api")
+
+    # Log reasoning event for unblocking
+    log_reasoning_event(
+        db=db,
+        entity_type="ticket",
+        entity_id=str(ticket_id),
+        event_type="blocking_added",  # reuse type, content distinguishes
+        title="Ticket Unblocked",
+        description="Blocker resolved, ticket unblocked",
+        details={"action": "unblock"},
+        decision={
+            "type": "proceed",
+            "action": "Resume work",
+            "reasoning": "Blocker has been resolved",
+        },
+    )
+
     return TicketResponse.model_validate(ticket)
 
 

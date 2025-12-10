@@ -5,37 +5,47 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends, Body
 from pydantic import BaseModel
 
-from omoi_os.api.dependencies import get_db_service, get_task_queue, get_event_bus_service
+from omoi_os.api.dependencies import (
+    get_db_service,
+    get_task_queue,
+    get_event_bus_service,
+)
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.reasoning_listener import log_reasoning_event
 
 router = APIRouter()
 
 
 class CancelTaskRequest(BaseModel):
     """Request model for task cancellation."""
+
     reason: str = "cancelled_by_request"
 
 
 class TaskTimeoutRequest(BaseModel):
     """Request model for setting task timeout."""
+
     timeout_seconds: int
 
 
 class AddDependenciesRequest(BaseModel):
     """Request model for adding dependencies."""
+
     depends_on: List[str]
 
 
 class SetDependenciesRequest(BaseModel):
     """Request model for setting all dependencies."""
+
     depends_on: List[str]
 
 
 class RegisterConversationRequest(BaseModel):
     """Request model for registering a conversation from sandbox."""
+
     conversation_id: str
     sandbox_id: str = ""
     persistence_dir: str = ""
@@ -43,6 +53,7 @@ class RegisterConversationRequest(BaseModel):
 
 class AgentEventRequest(BaseModel):
     """Request model for agent event from sandbox."""
+
     task_id: str
     agent_id: str
     event_type: str
@@ -80,7 +91,11 @@ async def register_conversation(
             )
         )
 
-        return {"success": True, "task_id": task_id, "conversation_id": request.conversation_id}
+        return {
+            "success": True,
+            "task_id": task_id,
+            "conversation_id": request.conversation_id,
+        }
 
 
 @router.get("/{task_id}", response_model=dict)
@@ -121,7 +136,9 @@ async def get_task(
             "max_retries": task.max_retries,
             "created_at": task.created_at.isoformat(),
             "started_at": task.started_at.isoformat() if task.started_at else None,
-            "completed_at": task.completed_at.isoformat() if task.completed_at else None,
+            "completed_at": task.completed_at.isoformat()
+            if task.completed_at
+            else None,
         }
 
 
@@ -187,22 +204,25 @@ async def get_task_dependencies(
         task = session.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         depends_on = []
         if task.dependencies:
             depends_on = task.dependencies.get("depends_on", [])
-        
+
         # Get blocked tasks (tasks that depend on this one)
         blocked_tasks = queue.get_blocked_tasks(task_id)
-        
+
         # Check if dependencies are complete
         dependencies_complete = queue.check_dependencies_complete(task_id)
-        
+
         return {
             "task_id": task_id,
             "depends_on": depends_on,
             "dependencies_complete": dependencies_complete,
-            "blocked_tasks": [{"id": t.id, "description": t.description, "status": t.status} for t in blocked_tasks],
+            "blocked_tasks": [
+                {"id": t.id, "description": t.description, "status": t.status}
+                for t in blocked_tasks
+            ],
         }
 
 
@@ -224,13 +244,13 @@ async def check_circular_dependencies(
         Information about circular dependencies if found
     """
     cycle = queue.detect_circular_dependencies(task_id, depends_on)
-    
+
     if cycle:
         return {
             "has_circular_dependency": True,
             "cycle": cycle,
         }
-    
+
     return {
         "has_circular_dependency": False,
         "cycle": None,
@@ -262,23 +282,23 @@ async def add_task_dependencies(
         task = session.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         # Get current dependencies
         current_deps = task.dependencies or {}
         current_depends_on = set(current_deps.get("depends_on", []))
-        
+
         # Add new dependencies
         new_depends_on = set(request.depends_on)
         combined_depends_on = list(current_depends_on | new_depends_on)
-        
+
         # Check for circular dependencies
         cycle = queue.detect_circular_dependencies(task_id, combined_depends_on)
         if cycle:
             raise HTTPException(
                 status_code=400,
-                detail=f"Circular dependency detected: {' -> '.join(cycle)}"
+                detail=f"Circular dependency detected: {' -> '.join(cycle)}",
             )
-        
+
         # Verify all dependency tasks exist
         dependency_tasks = session.query(Task).filter(Task.id.in_(new_depends_on)).all()
         if len(dependency_tasks) != len(new_depends_on):
@@ -286,14 +306,14 @@ async def add_task_dependencies(
             missing = new_depends_on - found_ids
             raise HTTPException(
                 status_code=404,
-                detail=f"Dependency tasks not found: {', '.join(missing)}"
+                detail=f"Dependency tasks not found: {', '.join(missing)}",
             )
-        
+
         # Update dependencies
         task.dependencies = {"depends_on": combined_depends_on}
         session.commit()
         session.refresh(task)
-        
+
         # Publish event
         event_bus.publish(
             SystemEvent(
@@ -303,10 +323,10 @@ async def add_task_dependencies(
                 payload={
                     "depends_on": combined_depends_on,
                     "added": list(new_depends_on),
-                }
+                },
             )
         )
-        
+
         return {
             "task_id": task_id,
             "depends_on": combined_depends_on,
@@ -339,40 +359,42 @@ async def set_task_dependencies(
         task = session.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         # Check for circular dependencies
         cycle = queue.detect_circular_dependencies(task_id, request.depends_on)
         if cycle:
             raise HTTPException(
                 status_code=400,
-                detail=f"Circular dependency detected: {' -> '.join(cycle)}"
+                detail=f"Circular dependency detected: {' -> '.join(cycle)}",
             )
-        
+
         # Verify all dependency tasks exist
         if request.depends_on:
-            dependency_tasks = session.query(Task).filter(Task.id.in_(request.depends_on)).all()
+            dependency_tasks = (
+                session.query(Task).filter(Task.id.in_(request.depends_on)).all()
+            )
             if len(dependency_tasks) != len(request.depends_on):
                 found_ids = {t.id for t in dependency_tasks}
                 missing = set(request.depends_on) - found_ids
                 raise HTTPException(
                     status_code=404,
-                    detail=f"Dependency tasks not found: {', '.join(missing)}"
+                    detail=f"Dependency tasks not found: {', '.join(missing)}",
                 )
-        
+
         # Get old dependencies for event
         old_depends_on = []
         if task.dependencies:
             old_depends_on = task.dependencies.get("depends_on", [])
-        
+
         # Update dependencies
         if request.depends_on:
             task.dependencies = {"depends_on": request.depends_on}
         else:
             task.dependencies = None
-        
+
         session.commit()
         session.refresh(task)
-        
+
         # Publish event
         event_bus.publish(
             SystemEvent(
@@ -382,10 +404,10 @@ async def set_task_dependencies(
                 payload={
                     "depends_on": request.depends_on,
                     "old_depends_on": old_depends_on,
-                }
+                },
             )
         )
-        
+
         return {
             "task_id": task_id,
             "depends_on": request.depends_on,
@@ -418,28 +440,30 @@ async def remove_task_dependency(
         task = session.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         if not task.dependencies:
             raise HTTPException(status_code=400, detail="Task has no dependencies")
-        
+
         depends_on = task.dependencies.get("depends_on", [])
         if depends_on_task_id not in depends_on:
             raise HTTPException(
                 status_code=404,
-                detail=f"Task {depends_on_task_id} is not a dependency of {task_id}"
+                detail=f"Task {depends_on_task_id} is not a dependency of {task_id}",
             )
-        
+
         # Remove the dependency
-        updated_depends_on = [dep_id for dep_id in depends_on if dep_id != depends_on_task_id]
-        
+        updated_depends_on = [
+            dep_id for dep_id in depends_on if dep_id != depends_on_task_id
+        ]
+
         if updated_depends_on:
             task.dependencies = {"depends_on": updated_depends_on}
         else:
             task.dependencies = None
-        
+
         session.commit()
         session.refresh(task)
-        
+
         # Publish event
         event_bus.publish(
             SystemEvent(
@@ -449,10 +473,10 @@ async def remove_task_dependency(
                 payload={
                     "depends_on": updated_depends_on,
                     "removed": [depends_on_task_id],
-                }
+                },
             )
         )
-        
+
         return {
             "task_id": task_id,
             "depends_on": updated_depends_on,
@@ -484,6 +508,22 @@ async def cancel_task(
 
     if not success:
         raise HTTPException(status_code=404, detail="Task not found or not cancellable")
+
+    # Log reasoning event for task cancellation
+    log_reasoning_event(
+        db=queue.db,
+        entity_type="task",
+        entity_id=task_id,
+        event_type="error",
+        title="Task Cancelled",
+        description=f"Task cancelled: {request.reason}",
+        details={"reason": request.reason, "cancelled_by": "api"},
+        decision={
+            "type": "cancel",
+            "action": "Stop task execution",
+            "reasoning": request.reason,
+        },
+    )
 
     return {
         "task_id": task_id,
@@ -637,7 +677,7 @@ async def set_task_timeout(
         if task.status not in ["pending", "assigned", "running"]:
             raise HTTPException(
                 status_code=400,
-                detail="Cannot set timeout for completed or failed tasks"
+                detail="Cannot set timeout for completed or failed tasks",
             )
 
         task.timeout_seconds = request.timeout_seconds
