@@ -6,6 +6,8 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Mail, CheckCircle, Loader2, ArrowLeft } from "lucide-react"
+import { verifyEmail as apiVerifyEmail } from "@/lib/api/auth"
+import { ApiError } from "@/lib/api/client"
 
 function VerifyEmailContent() {
   const router = useRouter()
@@ -21,33 +23,26 @@ function VerifyEmailContent() {
   // If token is present, verify automatically
   useEffect(() => {
     if (token) {
-      verifyEmail(token)
+      handleVerifyEmail(token)
     }
   }, [token])
 
-  const verifyEmail = async (verifyToken: string) => {
+  const handleVerifyEmail = async (verifyToken: string) => {
     setIsVerifying(true)
     setError("")
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-      const res = await fetch(`${apiUrl}/api/v1/auth/verify-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: verifyToken }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.message || "Verification failed")
-      }
-
+      await apiVerifyEmail(verifyToken)
       setIsVerified(true)
       setTimeout(() => {
         router.push("/onboarding")
       }, 2000)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message)
+      } else {
+        setError("Verification failed. Please try again.")
+      }
     } finally {
       setIsVerifying(false)
     }
@@ -59,6 +54,7 @@ function VerifyEmailContent() {
     setError("")
 
     try {
+      // Note: resend-verification endpoint would need to be added to backend
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
       const res = await fetch(`${apiUrl}/api/v1/auth/resend-verification`, {
         method: "POST",
@@ -68,10 +64,11 @@ function VerifyEmailContent() {
 
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.message || "Failed to resend email")
+        throw new Error(data.detail || "Failed to resend email")
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to resend email"
+      setError(message)
     } finally {
       setIsResending(false)
     }
@@ -94,8 +91,8 @@ function VerifyEmailContent() {
   if (isVerified) {
     return (
       <div className="space-y-6 text-center">
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/10">
-          <CheckCircle className="h-6 w-6 text-success" />
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-green-500/10">
+          <CheckCircle className="h-6 w-6 text-green-600" />
         </div>
         <div>
           <CardTitle className="text-2xl">Email verified!</CardTitle>

@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useMemo, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -51,145 +52,59 @@ import {
   AlertCircle,
   ArrowRight,
   X,
+  Info,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { getPhaseById, ALL_PHASE_IDS, type PhaseConfig } from "@/lib/phases-config"
+import { useTasks } from "@/hooks/useTasks"
+import { useAgents } from "@/hooks/useAgents"
 
 interface PhaseDetailPageProps {
   params: Promise<{ phaseId: string }>
 }
 
-// Mock phase data
-const mockPhaseData: Record<string, {
-  id: string
-  name: string
-  description: string
-  order: number
-  isTerminal: boolean
-  isSystem: boolean
-  transitions: string[]
-  doneCriteria: string[]
-  expectedOutputs: { type: string; pattern: string; required: boolean }[]
-  phasePrompt: string
-  config: {
-    timeout: number
-    maxRetries: number
-    retryStrategy: string
-    wipLimit: number
-  }
-  taskStats: { total: number; done: number; active: number; pending: number }
-  activeAgents: number
-  color: string
-}> = {
-  "PHASE_BACKLOG": {
-    id: "PHASE_BACKLOG",
-    name: "Backlog",
-    description: "Initial collection point for new work items",
-    order: 0,
-    isTerminal: false,
-    isSystem: true,
-    transitions: ["PHASE_REQUIREMENTS", "PHASE_BLOCKED"],
-    doneCriteria: [],
-    expectedOutputs: [],
-    phasePrompt: "",
-    config: { timeout: 0, maxRetries: 3, retryStrategy: "exponential", wipLimit: 0 },
-    taskStats: { total: 45, done: 0, active: 0, pending: 45 },
-    activeAgents: 0,
-    color: "#6B7280",
-  },
-  "PHASE_IMPLEMENTATION": {
-    id: "PHASE_IMPLEMENTATION",
-    name: "Implementation",
-    description: "Developing and implementing features. Agents work on coding tasks, writing tests, and creating the actual implementation based on specifications.",
-    order: 3,
-    isTerminal: false,
-    isSystem: true,
-    transitions: ["PHASE_TESTING", "PHASE_BLOCKED"],
-    doneCriteria: [
-      "All code files created",
-      "Minimum 3 test cases passing",
-      "Code follows project style guidelines",
-      "No critical linter errors",
-    ],
-    expectedOutputs: [
-      { type: "file", pattern: "src/**/*.py", required: true },
-      { type: "file", pattern: "tests/**/*.py", required: true },
-      { type: "file", pattern: "docs/**/*.md", required: false },
-    ],
-    phasePrompt: `Focus on implementing core functionality first.
-Write tests alongside code using TDD principles.
-Follow existing code patterns and project conventions.
-Document any significant architectural decisions.
-If blocked, move to PHASE_BLOCKED with clear explanation.`,
-    config: { timeout: 3600, maxRetries: 3, retryStrategy: "exponential", wipLimit: 5 },
-    taskStats: { total: 52, done: 38, active: 5, pending: 9 },
-    activeAgents: 5,
-    color: "#F59E0B",
-  },
-  "PHASE_TESTING": {
-    id: "PHASE_TESTING",
-    name: "Testing",
-    description: "Comprehensive testing and quality assurance",
-    order: 4,
-    isTerminal: false,
-    isSystem: true,
-    transitions: ["PHASE_DEPLOYMENT", "PHASE_IMPLEMENTATION", "PHASE_BLOCKED"],
-    doneCriteria: [
-      "All tests passing",
-      "Code coverage above 80%",
-      "No critical bugs",
-    ],
-    expectedOutputs: [
-      { type: "file", pattern: "tests/**/*.py", required: true },
-      { type: "report", pattern: "coverage.xml", required: true },
-    ],
-    phasePrompt: `Run comprehensive test suites.
-Verify edge cases and error handling.
-Check code coverage meets minimum requirements.`,
-    config: { timeout: 1800, maxRetries: 2, retryStrategy: "linear", wipLimit: 3 },
-    taskStats: { total: 24, done: 20, active: 2, pending: 2 },
-    activeAgents: 2,
-    color: "#10B981",
-  },
-  "PHASE_DONE": {
-    id: "PHASE_DONE",
-    name: "Done",
-    description: "Completed and delivered work items",
-    order: 6,
-    isTerminal: true,
-    isSystem: true,
-    transitions: [],
-    doneCriteria: [],
-    expectedOutputs: [],
-    phasePrompt: "",
-    config: { timeout: 0, maxRetries: 0, retryStrategy: "none", wipLimit: 0 },
-    taskStats: { total: 120, done: 120, active: 0, pending: 0 },
-    activeAgents: 0,
-    color: "#059669",
-  },
-}
-
-const allPhases = [
-  "PHASE_BACKLOG",
-  "PHASE_REQUIREMENTS",
-  "PHASE_DESIGN",
-  "PHASE_IMPLEMENTATION",
-  "PHASE_TESTING",
-  "PHASE_DEPLOYMENT",
-  "PHASE_DONE",
-  "PHASE_BLOCKED",
-]
-
 export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
   const { phaseId } = use(params)
-  const phase = mockPhaseData[phaseId] || mockPhaseData["PHASE_IMPLEMENTATION"]
+  const phase = getPhaseById(phaseId)
+  
+  // Fetch real data
+  const { data: tasks, isLoading: tasksLoading } = useTasks()
+  const { data: agents, isLoading: agentsLoading } = useAgents()
+  
+  const isLoading = tasksLoading || agentsLoading
+
+  // Compute task stats for this phase
+  const taskStats = useMemo(() => {
+    const stats = { total: 0, done: 0, active: 0, pending: 0 }
+    
+    tasks?.forEach((task) => {
+      if (task.phase_id === phaseId) {
+        stats.total++
+        if (task.status === "completed") {
+          stats.done++
+        } else if (task.status === "in_progress") {
+          stats.active++
+        } else {
+          stats.pending++
+        }
+      }
+    })
+
+    return stats
+  }, [tasks, phaseId])
+
+  // Count active agents (simplified)
+  const activeAgents = useMemo(() => {
+    return agents?.filter((a) => a.status === "active" || a.status === "busy").length ?? 0
+  }, [agents])
   
   const [isEditing, setIsEditing] = useState(false)
-  const [name, setName] = useState(phase.name)
-  const [description, setDescription] = useState(phase.description)
-  const [order, setOrder] = useState(phase.order)
-  const [isTerminal, setIsTerminal] = useState(phase.isTerminal)
-  const [transitions, setTransitions] = useState<string[]>(phase.transitions)
-  const [phasePrompt, setPhasePrompt] = useState(phase.phasePrompt)
+  const [name, setName] = useState(phase?.name ?? "")
+  const [description, setDescription] = useState(phase?.description ?? "")
+  const [order, setOrder] = useState(phase?.order ?? 0)
+  const [isTerminal, setIsTerminal] = useState(phase?.isTerminal ?? false)
+  const [transitions, setTransitions] = useState<string[]>(phase?.transitions ?? [])
+  const [phasePrompt, setPhasePrompt] = useState(phase?.phasePrompt ?? "")
 
   const handleToggleTransition = (phaseTransition: string) => {
     if (transitions.includes(phaseTransition)) {
@@ -197,6 +112,33 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
     } else {
       setTransitions([...transitions, phaseTransition])
     }
+  }
+
+  // Handle unknown phase
+  if (!phase) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <Link
+          href="/phases"
+          className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
+          Back to Phases
+        </Link>
+        <Card className="py-12">
+          <CardContent className="text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground/50" />
+            <h3 className="mt-4 font-semibold">Phase Not Found</h3>
+            <p className="text-sm text-muted-foreground">
+              The phase &quot;{phaseId}&quot; does not exist.
+            </p>
+            <Button asChild className="mt-4">
+              <Link href="/phases">View All Phases</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -233,21 +175,19 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs">
+            <Info className="h-3 w-3 mr-1" />
+            System Phase
+          </Badge>
           {!isEditing ? (
-            <Button onClick={() => setIsEditing(true)}>
+            <Button variant="outline" onClick={() => setIsEditing(true)}>
               <Pencil className="mr-2 h-4 w-4" />
-              Edit Phase
+              View Config
             </Button>
           ) : (
-            <>
-              <Button variant="outline" onClick={() => setIsEditing(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => setIsEditing(false)}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </Button>
-            </>
+            <Button variant="outline" onClick={() => setIsEditing(false)}>
+              Done
+            </Button>
           )}
         </div>
       </div>
@@ -259,7 +199,11 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
             <div className="flex items-center gap-3">
               <CheckCircle2 className="h-5 w-5 text-green-500" />
               <div>
-                <p className="text-2xl font-bold">{phase.taskStats.done}</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{taskStats.done}</p>
+                )}
                 <p className="text-sm text-muted-foreground">Completed</p>
               </div>
             </div>
@@ -270,7 +214,11 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
             <div className="flex items-center gap-3">
               <Clock className="h-5 w-5 text-blue-500" />
               <div>
-                <p className="text-2xl font-bold">{phase.taskStats.active}</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{taskStats.active}</p>
+                )}
                 <p className="text-sm text-muted-foreground">Active</p>
               </div>
             </div>
@@ -281,7 +229,11 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
             <div className="flex items-center gap-3">
               <AlertCircle className="h-5 w-5 text-orange-500" />
               <div>
-                <p className="text-2xl font-bold">{phase.taskStats.pending}</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{taskStats.pending}</p>
+                )}
                 <p className="text-sm text-muted-foreground">Pending</p>
               </div>
             </div>
@@ -292,8 +244,12 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
             <div className="flex items-center gap-3">
               <Bot className="h-5 w-5 text-primary" />
               <div>
-                <p className="text-2xl font-bold">{phase.activeAgents}</p>
-                <p className="text-sm text-muted-foreground">Agents Working</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{activeAgents}</p>
+                )}
+                <p className="text-sm text-muted-foreground">Active Agents</p>
               </div>
             </div>
           </CardContent>
@@ -559,7 +515,7 @@ export default function PhaseDetailPage({ params }: PhaseDetailPageProps) {
                 </div>
               ) : (
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {allPhases.filter(p => p !== phase.id).map((phaseOption) => (
+                  {ALL_PHASE_IDS.filter(p => p !== phase.id).map((phaseOption) => (
                     <div
                       key={phaseOption}
                       className={cn(

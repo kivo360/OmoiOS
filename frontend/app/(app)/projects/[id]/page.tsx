@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft,
@@ -18,8 +19,9 @@ import {
   BarChart3,
   ExternalLink,
   Play,
+  AlertCircle,
 } from "lucide-react"
-import { mockProjects, mockAgents } from "@/lib/mock"
+import { useProject, useProjectStats } from "@/hooks/useProjects"
 
 interface ProjectPageProps {
   params: Promise<{ id: string }>
@@ -27,8 +29,48 @@ interface ProjectPageProps {
 
 export default function ProjectPage({ params }: ProjectPageProps) {
   const { id } = use(params)
-  const project = mockProjects.find((p) => p.id === id)
-  const projectAgents = mockAgents.filter((a) => a.projectId === id)
+  
+  // Fetch project and stats from API
+  const { data: project, isLoading, error } = useProject(id)
+  const { data: stats } = useProjectStats(id)
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-96" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-16 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="container mx-auto p-6 text-center">
+        <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+        <h1 className="mt-4 text-2xl font-bold">Failed to load project</h1>
+        <p className="mt-2 text-muted-foreground">
+          {error instanceof Error ? error.message : "An error occurred"}
+        </p>
+        <Button className="mt-4" asChild>
+          <Link href="/projects">Back to Projects</Link>
+        </Button>
+      </div>
+    )
+  }
 
   if (!project) {
     return (
@@ -40,6 +82,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       </div>
     )
   }
+
+  const repoUrl = project.github_owner && project.github_repo 
+    ? `${project.github_owner}/${project.github_repo}` 
+    : null
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -61,19 +107,23 @@ export default function ProjectPage({ params }: ProjectPageProps) {
               {project.status}
             </Badge>
           </div>
-          <p className="mt-1 text-muted-foreground">{project.description}</p>
-          <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
-            <GitBranch className="h-4 w-4" />
-            <a
-              href={`https://github.com/${project.repo}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hover:text-foreground hover:underline"
-            >
-              {project.repo}
-              <ExternalLink className="ml-1 inline h-3 w-3" />
-            </a>
-          </div>
+          {project.description && (
+            <p className="mt-1 text-muted-foreground">{project.description}</p>
+          )}
+          {repoUrl && (
+            <div className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
+              <GitBranch className="h-4 w-4" />
+              <a
+                href={`https://github.com/${repoUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground hover:underline"
+              >
+                {repoUrl}
+                <ExternalLink className="ml-1 inline h-3 w-3" />
+              </a>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" asChild>
@@ -98,7 +148,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <Ticket className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{project.ticketCount}</p>
+                <p className="text-2xl font-bold">{stats?.total_tickets ?? 0}</p>
                 <p className="text-sm text-muted-foreground">Tickets</p>
               </div>
             </div>
@@ -111,7 +161,7 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <Bot className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{project.activeAgents}</p>
+                <p className="text-2xl font-bold">{stats?.active_agents ?? 0}</p>
                 <p className="text-sm text-muted-foreground">Active Agents</p>
               </div>
             </div>
@@ -121,11 +171,11 @@ export default function ProjectPage({ params }: ProjectPageProps) {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <FileText className="h-5 w-5 text-primary" />
+                <GitBranch className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">3</p>
-                <p className="text-sm text-muted-foreground">Specs</p>
+                <p className="text-2xl font-bold">{stats?.total_commits ?? 0}</p>
+                <p className="text-sm text-muted-foreground">Commits</p>
               </div>
             </div>
           </CardContent>
@@ -137,8 +187,10 @@ export default function ProjectPage({ params }: ProjectPageProps) {
                 <Activity className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">85%</p>
-                <p className="text-sm text-muted-foreground">Completion</p>
+                <p className="text-2xl font-bold">
+                  {project.github_connected ? "Yes" : "No"}
+                </p>
+                <p className="text-sm text-muted-foreground">GitHub Connected</p>
               </div>
             </div>
           </CardContent>
@@ -173,103 +225,81 @@ export default function ProjectPage({ params }: ProjectPageProps) {
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="agents">Agents ({projectAgents.length})</TabsTrigger>
-          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="tickets">Tickets by Status</TabsTrigger>
+          <TabsTrigger value="phases">Tickets by Phase</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Project Progress</CardTitle>
-              <CardDescription>Overall completion status</CardDescription>
+              <CardTitle>Project Details</CardTitle>
+              <CardDescription>Project configuration and settings</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Requirements</span>
-                  <span className="text-muted-foreground">100%</span>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Default Phase</p>
+                  <p className="text-sm">{project.default_phase_id}</p>
                 </div>
-                <Progress value={100} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Design</span>
-                  <span className="text-muted-foreground">90%</span>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Status</p>
+                  <p className="text-sm capitalize">{project.status}</p>
                 </div>
-                <Progress value={90} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Implementation</span>
-                  <span className="text-muted-foreground">75%</span>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Created</p>
+                  <p className="text-sm">{new Date(project.created_at).toLocaleDateString()}</p>
                 </div>
-                <Progress value={75} />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Testing</span>
-                  <span className="text-muted-foreground">50%</span>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
+                  <p className="text-sm">{new Date(project.updated_at).toLocaleDateString()}</p>
                 </div>
-                <Progress value={50} />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="agents" className="space-y-4">
+        <TabsContent value="tickets" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Project Agents</CardTitle>
-              <CardDescription>Agents working on this project</CardDescription>
+              <CardTitle>Tickets by Status</CardTitle>
+              <CardDescription>Distribution of tickets across statuses</CardDescription>
             </CardHeader>
             <CardContent>
-              {projectAgents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No agents have worked on this project yet.</p>
-              ) : (
+              {stats?.tickets_by_status && Object.keys(stats.tickets_by_status).length > 0 ? (
                 <div className="space-y-3">
-                  {projectAgents.map((agent) => (
-                    <div key={agent.id} className="flex items-center justify-between rounded-lg border p-3">
-                      <div>
-                        <p className="font-medium">{agent.taskName}</p>
-                        <p className="text-sm text-muted-foreground">{agent.timeAgo}</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={agent.status === "completed" ? "default" : "secondary"}>
-                          {agent.status}
-                        </Badge>
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/agents/${agent.id}`}>View</Link>
-                        </Button>
-                      </div>
+                  {Object.entries(stats.tickets_by_status).map(([status, count]) => (
+                    <div key={status} className="flex items-center justify-between">
+                      <span className="text-sm capitalize">{status.replace(/_/g, " ")}</span>
+                      <Badge variant="outline">{count}</Badge>
                     </div>
                   ))}
                 </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No ticket data available yet.</p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="activity" className="space-y-4">
+        <TabsContent value="phases" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-              <CardDescription>Latest events in this project</CardDescription>
+              <CardTitle>Tickets by Phase</CardTitle>
+              <CardDescription>Distribution of tickets across phases</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {[
-                  { message: "Agent completed authentication implementation", time: "2 hours ago" },
-                  { message: "New ticket created: Add OAuth2 support", time: "4 hours ago" },
-                  { message: "Spec requirements approved", time: "1 day ago" },
-                  { message: "Project created", time: "2 days ago" },
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-4">
-                    <div className="h-2 w-2 rounded-full bg-primary" />
-                    <p className="flex-1 text-sm">{item.message}</p>
-                    <span className="text-sm text-muted-foreground">{item.time}</span>
-                  </div>
-                ))}
-              </div>
+              {stats?.tickets_by_phase && Object.keys(stats.tickets_by_phase).length > 0 ? (
+                <div className="space-y-3">
+                  {Object.entries(stats.tickets_by_phase).map(([phase, count]) => (
+                    <div key={phase} className="flex items-center justify-between">
+                      <span className="text-sm">{phase}</span>
+                      <Badge variant="outline">{count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">No phase data available yet.</p>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

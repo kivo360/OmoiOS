@@ -6,6 +6,7 @@ import { QueryProvider } from "@/providers/QueryProvider"
 import { WebSocketProvider } from "@/providers/WebSocketProvider"
 import { StoreProvider } from "@/providers/StoreProvider"
 import { ThemeProvider } from "@/providers/ThemeProvider"
+import { AuthProvider } from "@/providers/AuthProvider"
 import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -29,12 +30,14 @@ export default function RootLayout({
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           <QueryProvider>
-            <WebSocketProvider>
-              <StoreProvider>
-                {children}
-                <Toaster />
-              </StoreProvider>
-            </WebSocketProvider>
+            <AuthProvider>
+              <WebSocketProvider>
+                <StoreProvider>
+                  {children}
+                  <Toaster />
+                </StoreProvider>
+              </WebSocketProvider>
+            </AuthProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

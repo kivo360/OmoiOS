@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -35,144 +36,107 @@ import {
   Clock,
   Bot,
   FileCode,
-  GitCommit,
-  ChevronRight,
   Check,
   X,
   Eye,
+  Info,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTickets } from "@/hooks/useTickets"
+import { useValidateGate } from "@/hooks/usePhases"
+import { getPhaseById } from "@/lib/phases-config"
 
-// Mock pending approvals
-const mockPendingApprovals = [
-  {
-    id: "gate-001",
-    ticketId: "TICKET-042",
-    ticketTitle: "Add OAuth2 Authentication",
-    currentPhase: "PHASE_IMPLEMENTATION",
-    requestedPhase: "PHASE_TESTING",
-    requestedBy: "worker-agent-5",
-    requestedAt: "2 hours ago",
-    gateCriteria: [
-      { name: "All code files created", status: "passed" },
-      { name: "Minimum 3 test cases passing", status: "passed" },
-      { name: "All tasks completed", status: "passed" },
-      { name: "Code follows style guidelines", status: "passed" },
-    ],
-    artifacts: [
-      { name: "Source files", pattern: "src/auth/*.py", found: 3, expected: "1+", status: "passed" },
-      { name: "Test files", pattern: "tests/test_auth/*.py", found: 5, expected: "3+", status: "passed" },
-    ],
-    overallStatus: "passed",
-    comments: [],
-  },
-  {
-    id: "gate-002",
-    ticketId: "TICKET-038",
-    ticketTitle: "Setup Database Schema",
-    currentPhase: "PHASE_IMPLEMENTATION",
-    requestedPhase: "PHASE_TESTING",
-    requestedBy: "worker-agent-3",
-    requestedAt: "4 hours ago",
-    gateCriteria: [
-      { name: "All code files created", status: "passed" },
-      { name: "Minimum 3 test cases passing", status: "failed" },
-      { name: "All tasks completed", status: "passed" },
-      { name: "Code follows style guidelines", status: "warning" },
-    ],
-    artifacts: [
-      { name: "Source files", pattern: "src/db/*.py", found: 2, expected: "1+", status: "passed" },
-      { name: "Test files", pattern: "tests/test_db/*.py", found: 2, expected: "3+", status: "failed" },
-    ],
-    overallStatus: "failed",
-    missing: ["Need at least 1 more passing test case"],
-    comments: [],
-  },
-  {
-    id: "gate-003",
-    ticketId: "TICKET-045",
-    ticketTitle: "Implement User Profile API",
-    currentPhase: "PHASE_TESTING",
-    requestedPhase: "PHASE_DEPLOYMENT",
-    requestedBy: "worker-agent-2",
-    requestedAt: "30 minutes ago",
-    gateCriteria: [
-      { name: "All tests passing", status: "passed" },
-      { name: "Code coverage above 80%", status: "passed" },
-      { name: "No critical bugs", status: "passed" },
-    ],
-    artifacts: [
-      { name: "Coverage report", pattern: "coverage.xml", found: 1, expected: "1", status: "passed" },
-    ],
-    overallStatus: "passed",
-    comments: [],
-  },
-]
-
-// Mock recent approvals
-const mockRecentApprovals = [
-  {
-    id: "gate-hist-001",
-    ticketId: "TICKET-035",
-    ticketTitle: "Add API Keys Management",
-    fromPhase: "PHASE_IMPLEMENTATION",
-    toPhase: "PHASE_TESTING",
-    decision: "approved",
-    decidedBy: "john@example.com",
-    decidedAt: "Oct 30, 2025 11:30",
-    comment: "All criteria met, good work!",
-  },
-  {
-    id: "gate-hist-002",
-    ticketId: "TICKET-032",
-    ticketTitle: "Setup Database Connection",
-    fromPhase: "PHASE_BACKLOG",
-    toPhase: "PHASE_REQUIREMENTS",
-    decision: "auto-approved",
-    decidedBy: "system",
-    decidedAt: "Oct 30, 2025 10:15",
-    comment: null,
-  },
-  {
-    id: "gate-hist-003",
-    ticketId: "TICKET-028",
-    ticketTitle: "Implement Session Storage",
-    fromPhase: "PHASE_IMPLEMENTATION",
-    toPhase: "PHASE_TESTING",
-    decision: "rejected",
-    decidedBy: "jane@example.com",
-    decidedAt: "Oct 29, 2025 16:45",
-    comment: "Insufficient test coverage, please add more unit tests",
-  },
-]
+// Type for approval items derived from tickets
+interface ApprovalItem {
+  id: string
+  ticketId: string
+  ticketTitle: string
+  currentPhase: string
+  requestedPhase: string
+  status: string
+  priority: string
+  createdAt: string | null
+}
 
 export default function PhaseGatesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
-  const [selectedApproval, setSelectedApproval] = useState<typeof mockPendingApprovals[0] | null>(null)
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
   const [rejectComment, setRejectComment] = useState("")
 
-  const filteredApprovals = mockPendingApprovals.filter((approval) => {
+  // Fetch tickets that could need gate validation
+  const { data: ticketsData, isLoading } = useTickets()
+  const validateGateMutation = useValidateGate()
+
+  // Build list of tickets that are in intermediate phases (not done/blocked)
+  const pendingApprovals = useMemo(() => {
+    if (!ticketsData?.tickets) return []
+    
+    return ticketsData.tickets
+      .filter((ticket) => {
+        // Only show tickets that could transition
+        const phase = getPhaseById(ticket.phase_id)
+        return phase && !phase.isTerminal && ticket.phase_id !== "PHASE_BLOCKED"
+      })
+      .map((ticket): ApprovalItem => {
+        const phase = getPhaseById(ticket.phase_id)
+        const nextPhase = phase?.transitions[0] || "PHASE_DONE"
+        
+        return {
+          id: ticket.id,
+          ticketId: ticket.id.slice(0, 8).toUpperCase(),
+          ticketTitle: ticket.title,
+          currentPhase: ticket.phase_id,
+          requestedPhase: nextPhase,
+          status: ticket.status,
+          priority: ticket.priority,
+          createdAt: ticket.created_at,
+        }
+      })
+  }, [ticketsData])
+
+  const filteredApprovals = pendingApprovals.filter((approval) => {
     const matchesSearch = approval.ticketTitle.toLowerCase().includes(searchQuery.toLowerCase()) ||
       approval.ticketId.toLowerCase().includes(searchQuery.toLowerCase())
     
     if (filterStatus === "all") return matchesSearch
-    if (filterStatus === "passed") return matchesSearch && approval.overallStatus === "passed"
-    if (filterStatus === "failed") return matchesSearch && approval.overallStatus === "failed"
+    if (filterStatus === "in_progress") return matchesSearch && approval.status === "in_progress"
+    if (filterStatus === "pending") return matchesSearch && approval.status === "pending"
     return matchesSearch
   })
 
+  const selectedApproval = pendingApprovals.find((a) => a.id === selectedTicketId)
+
   const getStatusIcon = (status: string) => {
     switch (status) {
+      case "completed":
       case "passed":
         return <CheckCircle2 className="h-4 w-4 text-green-500" />
       case "failed":
+      case "blocked":
         return <XCircle className="h-4 w-4 text-red-500" />
-      case "warning":
-        return <AlertCircle className="h-4 w-4 text-yellow-500" />
+      case "in_progress":
+        return <Clock className="h-4 w-4 text-blue-500" />
       default:
-        return <Clock className="h-4 w-4 text-muted-foreground" />
+        return <AlertCircle className="h-4 w-4 text-yellow-500" />
     }
+  }
+
+  const formatTimeAgo = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "N/A"
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / (1000 * 60))
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
+  }
+
+  const handleValidateGate = (ticketId: string, phaseId: string) => {
+    validateGateMutation.mutate({ ticketId, phaseId })
   }
 
   return (
@@ -203,8 +167,12 @@ export default function PhaseGatesPage() {
                 <Clock className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockPendingApprovals.length}</p>
-                <p className="text-sm text-muted-foreground">Pending Approvals</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{pendingApprovals.length}</p>
+                )}
+                <p className="text-sm text-muted-foreground">Tickets in Workflow</p>
               </div>
             </div>
           </CardContent>
@@ -212,14 +180,18 @@ export default function PhaseGatesPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10">
-                <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                <Clock className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockPendingApprovals.filter(a => a.overallStatus === "passed").length}
-                </p>
-                <p className="text-sm text-muted-foreground">Ready to Approve</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">
+                    {pendingApprovals.filter(a => a.status === "in_progress").length}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">In Progress</p>
               </div>
             </div>
           </CardContent>
@@ -227,14 +199,18 @@ export default function PhaseGatesPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-500/10">
-                <XCircle className="h-5 w-5 text-red-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10">
+                <AlertCircle className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockPendingApprovals.filter(a => a.overallStatus === "failed").length}
-                </p>
-                <p className="text-sm text-muted-foreground">Failed Validation</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">
+                    {pendingApprovals.filter(a => a.status === "pending").length}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">Pending</p>
               </div>
             </div>
           </CardContent>
@@ -245,12 +221,12 @@ export default function PhaseGatesPage() {
       <Tabs defaultValue="pending" className="space-y-4">
         <TabsList>
           <TabsTrigger value="pending">
-            Pending Approvals
+            Tickets in Workflow
             <Badge variant="secondary" className="ml-2">
-              {mockPendingApprovals.length}
+              {pendingApprovals.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="recent">Recent Decisions</TabsTrigger>
+          <TabsTrigger value="about">About Phase Gates</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pending" className="space-y-4">
@@ -271,229 +247,179 @@ export default function PhaseGatesPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Pending</SelectItem>
-                <SelectItem value="passed">Validation Passed</SelectItem>
-                <SelectItem value="failed">Validation Failed</SelectItem>
+                <SelectItem value="all">All Tickets</SelectItem>
+                <SelectItem value="in_progress">In Progress</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
               </SelectContent>
             </Select>
           </div>
 
-          {/* Approval Cards */}
-          <div className="space-y-4">
-            {filteredApprovals.map((approval) => (
-              <Card key={approval.id} className="overflow-hidden">
-                <div
-                  className={cn(
-                    "h-1",
-                    approval.overallStatus === "passed" && "bg-green-500",
-                    approval.overallStatus === "failed" && "bg-red-500"
-                  )}
-                />
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-mono">
-                          {approval.ticketId}
-                        </Badge>
-                        <CardTitle className="text-base">{approval.ticketTitle}</CardTitle>
-                      </div>
-                      <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Bot className="h-4 w-4" />
-                          {approval.requestedBy}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-4 w-4" />
-                          {approval.requestedAt}
-                        </span>
-                      </div>
+          {/* Ticket Cards */}
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Card key={i}>
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-6 w-24" />
+                      <Skeleton className="h-5 w-48" />
                     </div>
-                    <Badge
-                      variant={approval.overallStatus === "passed" ? "default" : "destructive"}
-                    >
-                      {approval.overallStatus === "passed" ? "Validation Passed" : "Validation Failed"}
-                    </Badge>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Phase Transition */}
-                  <div className="flex items-center gap-2 text-sm">
-                    <Badge variant="secondary" className="font-mono">
-                      {approval.currentPhase.replace("PHASE_", "")}
-                    </Badge>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                    <Badge variant="outline" className="font-mono">
-                      {approval.requestedPhase.replace("PHASE_", "")}
-                    </Badge>
-                  </div>
-
-                  {/* Gate Criteria */}
-                  <div className="rounded-lg border p-3 space-y-2">
-                    <p className="text-sm font-medium">Gate Criteria</p>
-                    <div className="grid gap-1 sm:grid-cols-2">
-                      {approval.gateCriteria.map((criterion, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          {getStatusIcon(criterion.status)}
-                          <span className={cn(
-                            criterion.status === "failed" && "text-red-600",
-                            criterion.status === "warning" && "text-yellow-600"
-                          )}>
-                            {criterion.name}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Artifacts */}
-                  <div className="rounded-lg border p-3 space-y-2">
-                    <p className="text-sm font-medium">Artifacts</p>
-                    <div className="space-y-1">
-                      {approval.artifacts.map((artifact, i) => (
-                        <div key={i} className="flex items-center justify-between text-sm">
-                          <div className="flex items-center gap-2">
-                            {getStatusIcon(artifact.status)}
-                            <span>{artifact.name}</span>
-                            <span className="font-mono text-muted-foreground">
-                              {artifact.pattern}
-                            </span>
-                          </div>
-                          <span className={cn(
-                            artifact.status === "passed" && "text-green-600",
-                            artifact.status === "failed" && "text-red-600"
-                          )}>
-                            Found: {artifact.found} (expected: {artifact.expected})
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Missing items */}
-                  {approval.missing && approval.missing.length > 0 && (
-                    <div className="rounded-lg bg-red-50 border border-red-200 p-3">
-                      <p className="text-sm font-medium text-red-800">Missing Requirements:</p>
-                      <ul className="mt-1 space-y-1">
-                        {approval.missing.map((item, i) => (
-                          <li key={i} className="flex items-center gap-2 text-sm text-red-700">
-                            <XCircle className="h-3 w-3" />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex items-center justify-end gap-2 pt-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedApproval(approval)}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      Review Details
-                    </Button>
-                    {approval.overallStatus === "failed" && (
-                      <Button variant="secondary" size="sm">
-                        Approve Anyway
-                      </Button>
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-20 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredApprovals.map((approval) => (
+                <Card key={approval.id} className="overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-1",
+                      approval.status === "in_progress" && "bg-blue-500",
+                      approval.status === "completed" && "bg-green-500",
+                      approval.status === "blocked" && "bg-red-500",
+                      approval.status === "pending" && "bg-yellow-500"
                     )}
-                    <Button variant="outline" size="sm" className="text-destructive">
-                      <X className="mr-2 h-4 w-4" />
-                      Reject
-                    </Button>
-                    <Button size="sm">
-                      <Check className="mr-2 h-4 w-4" />
-                      Approve
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  />
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="font-mono">
+                            {approval.ticketId}
+                          </Badge>
+                          <CardTitle className="text-base">{approval.ticketTitle}</CardTitle>
+                        </div>
+                        <div className="mt-2 flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            Created {formatTimeAgo(approval.createdAt)}
+                          </span>
+                          <span className="flex items-center gap-1">
+                            Priority: {approval.priority}
+                          </span>
+                        </div>
+                      </div>
+                      <Badge
+                        variant={
+                          approval.status === "in_progress" ? "default" :
+                          approval.status === "completed" ? "secondary" : "outline"
+                        }
+                      >
+                        {approval.status}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Phase Transition */}
+                    <div className="flex items-center gap-2 text-sm">
+                      <Badge variant="secondary" className="font-mono">
+                        {approval.currentPhase.replace("PHASE_", "")}
+                      </Badge>
+                      <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                      <Badge variant="outline" className="font-mono">
+                        {approval.requestedPhase.replace("PHASE_", "")}
+                      </Badge>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <Link href={`/board/${approval.id}/${approval.id}`}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          View Ticket
+                        </Link>
+                      </Button>
+                      <Button 
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleValidateGate(approval.id, approval.currentPhase)}
+                        disabled={validateGateMutation.isPending}
+                      >
+                        <Check className="mr-2 h-4 w-4" />
+                        Validate Gate
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
 
           {/* Empty State */}
-          {filteredApprovals.length === 0 && (
+          {!isLoading && filteredApprovals.length === 0 && (
             <Card className="py-12">
               <CardContent className="text-center">
                 <CheckCircle2 className="mx-auto h-12 w-12 text-muted-foreground/50" />
-                <h3 className="mt-4 font-semibold">No pending approvals</h3>
+                <h3 className="mt-4 font-semibold">No tickets in workflow</h3>
                 <p className="text-sm text-muted-foreground">
-                  All phase gate requests have been processed
+                  {searchQuery ? "Try adjusting your search criteria" : "All tickets have been processed"}
                 </p>
               </CardContent>
             </Card>
           )}
         </TabsContent>
 
-        <TabsContent value="recent" className="space-y-4">
-          {/* Recent Approvals */}
+        <TabsContent value="about" className="space-y-4">
+          {/* About Phase Gates */}
           <Card>
             <CardHeader>
-              <CardTitle>Recent Decisions</CardTitle>
-              <CardDescription>History of phase gate approvals and rejections</CardDescription>
+              <CardTitle>About Phase Gates</CardTitle>
+              <CardDescription>Understanding the phase gate validation system</CardDescription>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {mockRecentApprovals.map((approval) => (
-                  <div
-                    key={approval.id}
-                    className="flex items-start gap-4 rounded-lg border p-4"
-                  >
-                    <div className={cn(
-                      "mt-1 flex h-8 w-8 items-center justify-center rounded-full",
-                      approval.decision === "approved" && "bg-green-100",
-                      approval.decision === "auto-approved" && "bg-blue-100",
-                      approval.decision === "rejected" && "bg-red-100"
-                    )}>
-                      {approval.decision === "rejected" ? (
-                        <XCircle className="h-4 w-4 text-red-600" />
-                      ) : (
-                        <CheckCircle2 className={cn(
-                          "h-4 w-4",
-                          approval.decision === "approved" && "text-green-600",
-                          approval.decision === "auto-approved" && "text-blue-600"
-                        )} />
-                      )}
-                    </div>
-                    <div className="flex-1 space-y-1">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="outline" className="font-mono text-xs">
-                          {approval.ticketId}
-                        </Badge>
-                        <span className="font-medium">{approval.ticketTitle}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          {approval.fromPhase.replace("PHASE_", "")}
-                        </Badge>
-                        <ArrowRight className="h-3 w-3" />
-                        <Badge variant="secondary" className="font-mono text-xs">
-                          {approval.toPhase.replace("PHASE_", "")}
-                        </Badge>
-                      </div>
-                      {approval.comment && (
-                        <p className="text-sm text-muted-foreground italic">
-                          &quot;{approval.comment}&quot;
-                        </p>
-                      )}
-                      <p className="text-xs text-muted-foreground">
-                        {approval.decision === "auto-approved" ? "Auto-approved by system" : `By ${approval.decidedBy}`}
-                        {" · "}{approval.decidedAt}
-                      </p>
-                    </div>
-                    <Badge
-                      variant={
-                        approval.decision === "rejected" ? "destructive" :
-                        approval.decision === "auto-approved" ? "secondary" : "default"
-                      }
-                    >
-                      {approval.decision === "auto-approved" ? "Auto" : approval.decision}
-                    </Badge>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg bg-muted p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium">What are Phase Gates?</p>
+                    <p className="text-sm text-muted-foreground">
+                      Phase gates are checkpoints between workflow phases that validate 
+                      whether tickets meet the required criteria before advancing.
+                    </p>
                   </div>
-                ))}
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <p className="font-medium">Gate Validation Checks:</p>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span>Done criteria for the current phase are met</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span>Required artifacts (files, reports) exist</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span>All subtasks are completed</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span>No blocking issues exist</span>
+                  </li>
+                </ul>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <p className="font-medium">How to Use:</p>
+                <ol className="space-y-2 text-sm text-muted-foreground list-decimal list-inside">
+                  <li>Browse tickets currently in the workflow</li>
+                  <li>Click &quot;Validate Gate&quot; to check if a ticket can advance</li>
+                  <li>Review any blocking reasons if validation fails</li>
+                  <li>Ticket phases are updated via the board or ticket detail pages</li>
+                </ol>
               </div>
             </CardContent>
           </Card>
@@ -501,10 +427,10 @@ export default function PhaseGatesPage() {
       </Tabs>
 
       {/* Review Dialog */}
-      <Dialog open={!!selectedApproval} onOpenChange={() => setSelectedApproval(null)}>
+      <Dialog open={!!selectedTicketId} onOpenChange={() => setSelectedTicketId(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Review Phase Gate Request</DialogTitle>
+            <DialogTitle>Validate Phase Gate</DialogTitle>
             <DialogDescription>
               {selectedApproval?.ticketId}: {selectedApproval?.ticketTitle}
             </DialogDescription>
@@ -521,76 +447,66 @@ export default function PhaseGatesPage() {
                     {selectedApproval.requestedPhase.replace("PHASE_", "")}
                   </Badge>
                 </div>
-                <Badge
-                  variant={selectedApproval.overallStatus === "passed" ? "default" : "destructive"}
-                >
-                  {selectedApproval.overallStatus === "passed" ? "Validation Passed" : "Validation Failed"}
+                <Badge variant="outline">
+                  {selectedApproval.status}
                 </Badge>
               </div>
 
               <Separator />
 
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Gate Criteria</p>
-                {selectedApproval.gateCriteria.map((criterion, i) => (
-                  <div key={i} className="flex items-center gap-2 text-sm">
-                    {getStatusIcon(criterion.status)}
-                    <span>{criterion.name}</span>
+              <div className="rounded-lg bg-muted p-4">
+                <p className="text-sm">
+                  Click &quot;Validate Gate&quot; to check if this ticket meets all the 
+                  requirements to transition from{" "}
+                  <span className="font-mono font-medium">
+                    {selectedApproval.currentPhase.replace("PHASE_", "")}
+                  </span>
+                  {" "}to{" "}
+                  <span className="font-mono font-medium">
+                    {selectedApproval.requestedPhase.replace("PHASE_", "")}
+                  </span>.
+                </p>
+              </div>
+
+              {validateGateMutation.data && (
+                <div className="rounded-lg border p-4 space-y-2">
+                  <p className="font-medium">Validation Result:</p>
+                  <div className="flex items-center gap-2">
+                    {validateGateMutation.data.requirements_met ? (
+                      <CheckCircle2 className="h-5 w-5 text-green-500" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-500" />
+                    )}
+                    <span>
+                      {validateGateMutation.data.requirements_met 
+                        ? "All requirements met - ready to advance" 
+                        : "Some requirements not met"}
+                    </span>
                   </div>
-                ))}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Artifacts</p>
-                {selectedApproval.artifacts.map((artifact, i) => (
-                  <div key={i} className="flex items-center justify-between text-sm rounded-lg border p-2">
-                    <div className="flex items-center gap-2">
-                      <FileCode className="h-4 w-4 text-muted-foreground" />
-                      <span>{artifact.name}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {artifact.pattern}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {getStatusIcon(artifact.status)}
-                      <span>
-                        {artifact.found}/{artifact.expected}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <p className="text-sm font-medium">Decision Comment (optional)</p>
-                <Textarea
-                  placeholder="Add a comment for the decision..."
-                  value={rejectComment}
-                  onChange={(e) => setRejectComment(e.target.value)}
-                  rows={3}
-                />
-              </div>
+                  {validateGateMutation.data.blocking_reasons?.length > 0 && (
+                    <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+                      {validateGateMutation.data.blocking_reasons.map((reason: string, i: number) => (
+                        <li key={i} className="flex items-center gap-2">
+                          <XCircle className="h-3 w-3 text-red-500" />
+                          {reason}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedApproval(null)}>
-              Cancel
+            <Button variant="outline" onClick={() => setSelectedTicketId(null)}>
+              Close
             </Button>
-            <Button
-              variant="outline"
-              className="text-destructive"
-              onClick={() => setSelectedApproval(null)}
+            <Button 
+              onClick={() => selectedApproval && handleValidateGate(selectedApproval.id, selectedApproval.currentPhase)}
+              disabled={validateGateMutation.isPending}
             >
-              <X className="mr-2 h-4 w-4" />
-              Reject
-            </Button>
-            <Button onClick={() => setSelectedApproval(null)}>
               <Check className="mr-2 h-4 w-4" />
-              Approve Transition
+              Validate Gate
             </Button>
           </DialogFooter>
         </DialogContent>

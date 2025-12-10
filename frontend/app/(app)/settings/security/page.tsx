@@ -11,22 +11,6 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -41,67 +25,20 @@ import {
   ArrowLeft,
   Loader2,
   Shield,
-  Monitor,
-  Smartphone,
-  Globe,
-  LogOut,
-  Trash2,
   Eye,
   EyeOff,
   Check,
+  Info,
+  Key,
+  Trash2,
 } from "lucide-react"
-import { cn } from "@/lib/utils"
-
-// Mock session data
-const mockSessions = [
-  {
-    id: "sess-001",
-    device: "Chrome on macOS",
-    deviceType: "desktop",
-    location: "San Francisco, CA",
-    ip: "192.168.1.1",
-    lastActive: "Active now",
-    isCurrent: true,
-    createdAt: "Dec 1, 2025",
-  },
-  {
-    id: "sess-002",
-    device: "Safari on iPhone",
-    deviceType: "mobile",
-    location: "San Francisco, CA",
-    ip: "192.168.1.2",
-    lastActive: "2 hours ago",
-    isCurrent: false,
-    createdAt: "Nov 28, 2025",
-  },
-  {
-    id: "sess-003",
-    device: "Firefox on Windows",
-    deviceType: "desktop",
-    location: "New York, NY",
-    ip: "10.0.0.45",
-    lastActive: "1 day ago",
-    isCurrent: false,
-    createdAt: "Nov 25, 2025",
-  },
-  {
-    id: "sess-004",
-    device: "Chrome on Android",
-    deviceType: "mobile",
-    location: "Chicago, IL",
-    ip: "172.16.0.100",
-    lastActive: "3 days ago",
-    isCurrent: false,
-    createdAt: "Nov 20, 2025",
-  },
-]
+import { useChangePassword } from "@/hooks/useApiKeys"
+import { useAuth } from "@/hooks/useAuth"
 
 export default function SecuritySettingsPage() {
-  const [isLoading, setIsLoading] = useState(false)
+  const { logout } = useAuth()
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
-  const [sessions, setSessions] = useState(mockSessions)
-  const [selectedSession, setSelectedSession] = useState<typeof mockSessions[0] | null>(null)
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: "",
     newPassword: "",
@@ -109,53 +46,27 @@ export default function SecuritySettingsPage() {
   })
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(false)
 
+  const changePasswordMutation = useChangePassword()
+
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault()
     if (passwordForm.newPassword !== passwordForm.confirmPassword) {
       toast.error("Passwords do not match")
       return
     }
-    setIsLoading(true)
+    if (passwordForm.newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters")
+      return
+    }
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await changePasswordMutation.mutateAsync({
+        current_password: passwordForm.currentPassword,
+        new_password: passwordForm.newPassword,
+      })
       toast.success("Password updated successfully!")
       setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" })
-    } catch {
-      toast.error("Failed to update password")
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleRevokeSession = async (sessionId: string) => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setSessions(sessions.filter((s) => s.id !== sessionId))
-      toast.success("Session revoked successfully")
-      setSelectedSession(null)
-    } catch {
-      toast.error("Failed to revoke session")
-    }
-  }
-
-  const handleRevokeAllSessions = async () => {
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      setSessions(sessions.filter((s) => s.isCurrent))
-      toast.success("All other sessions revoked")
-    } catch {
-      toast.error("Failed to revoke sessions")
-    }
-  }
-
-  const getDeviceIcon = (deviceType: string) => {
-    switch (deviceType) {
-      case "mobile":
-        return <Smartphone className="h-4 w-4" />
-      case "desktop":
-        return <Monitor className="h-4 w-4" />
-      default:
-        return <Globe className="h-4 w-4" />
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update password")
     }
   }
 
@@ -252,8 +163,8 @@ export default function SecuritySettingsPage() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit" disabled={isLoading}>
-                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <Button type="submit" disabled={changePasswordMutation.isPending}>
+                    {changePasswordMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Update Password
                   </Button>
                 </div>
@@ -304,122 +215,70 @@ export default function SecuritySettingsPage() {
             </CardContent>
           </Card>
 
-          {/* Active Sessions Card */}
+          {/* Authentication Info Card */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Active Sessions</CardTitle>
-                <CardDescription>Manage your logged-in devices</CardDescription>
-              </div>
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" disabled={sessions.length <= 1}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Revoke All Others
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Revoke All Other Sessions?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      This will sign out all devices except your current session. You will need
-                      to sign in again on those devices.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleRevokeAllSessions}>
-                      Revoke All
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+            <CardHeader>
+              <CardTitle>Authentication</CardTitle>
+              <CardDescription>How your account access is managed</CardDescription>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Device</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Last Active</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sessions.map((session) => (
-                    <TableRow key={session.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getDeviceIcon(session.deviceType)}
-                          <div>
-                            <p className="font-medium">{session.device}</p>
-                            <p className="text-xs text-muted-foreground font-mono">
-                              {session.ip}
-                            </p>
-                          </div>
-                          {session.isCurrent && (
-                            <Badge variant="secondary" className="text-xs">
-                              Current
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{session.location}</TableCell>
-                      <TableCell>
-                        <span
-                          className={cn(
-                            session.isCurrent && "text-green-600 font-medium"
-                          )}
-                        >
-                          {session.lastActive}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setSelectedSession(session)}
-                          >
-                            View
-                          </Button>
-                          {!session.isCurrent && (
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-destructive hover:text-destructive"
-                                >
-                                  Revoke
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Revoke Session?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This will sign out the session on {session.device}. The
-                                    user will need to sign in again.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => handleRevokeSession(session.id)}
-                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                  >
-                                    Revoke Session
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg bg-muted p-4">
+                <div className="flex items-start gap-3">
+                  <Info className="h-5 w-5 text-primary mt-0.5" />
+                  <div>
+                    <p className="font-medium">JWT-Based Authentication</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Your sessions are managed using secure JSON Web Tokens (JWT). 
+                      Access tokens expire after 15 minutes, and refresh tokens last for 7 days.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="flex items-center gap-3">
+                  <Key className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">API Keys</p>
+                    <p className="text-sm text-muted-foreground">
+                      Manage your programmatic access keys
+                    </p>
+                  </div>
+                </div>
+                <Button variant="outline" asChild>
+                  <Link href="/settings/api-keys">
+                    Manage Keys
+                  </Link>
+                </Button>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div>
+                  <p className="font-medium">Sign out everywhere</p>
+                  <p className="text-sm text-muted-foreground">
+                    Clear all tokens and sign out of this session
+                  </p>
+                </div>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline">Sign Out</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Sign Out?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        You will be signed out and need to log in again.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={logout}>
+                        Sign Out
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             </CardContent>
           </Card>
 
@@ -465,64 +324,6 @@ export default function SecuritySettingsPage() {
         </Card>
       </div>
 
-      {/* Session Detail Dialog */}
-      <Dialog open={!!selectedSession} onOpenChange={() => setSelectedSession(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Session Details</DialogTitle>
-            <DialogDescription>
-              Information about this login session
-            </DialogDescription>
-          </DialogHeader>
-          {selectedSession && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                {getDeviceIcon(selectedSession.deviceType)}
-                <div>
-                  <p className="font-medium">{selectedSession.device}</p>
-                  {selectedSession.isCurrent && (
-                    <Badge variant="default" className="text-xs mt-1">
-                      Current Session
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <Separator />
-              <div className="grid gap-3">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Location</span>
-                  <span>{selectedSession.location}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">IP Address</span>
-                  <span className="font-mono">{selectedSession.ip}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Last Active</span>
-                  <span>{selectedSession.lastActive}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Signed In</span>
-                  <span>{selectedSession.createdAt}</span>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedSession(null)}>
-              Close
-            </Button>
-            {selectedSession && !selectedSession.isCurrent && (
-              <Button
-                variant="destructive"
-                onClick={() => handleRevokeSession(selectedSession.id)}
-              >
-                Revoke Session
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

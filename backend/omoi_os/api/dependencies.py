@@ -379,6 +379,8 @@ async def get_current_user(
     """
     Get current authenticated user from JWT token.
 
+    Uses local JWT auth (not Supabase).
+
     Args:
         credentials: HTTP Bearer token credentials
         db: Database service
@@ -389,30 +391,44 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
-    supabase_auth = get_supabase_auth_service()
-
+    from omoi_os.services.auth_service import AuthService
+    from omoi_os.config import settings
     from omoi_os.models.user import User
 
     token = credentials.credentials
 
-    # Verify JWT token
-    user_info = supabase_auth.verify_jwt_token(token)
-    if not user_info:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication token",
-            headers={"WWW-Authenticate": "Bearer"},
+    # Create auth service with a sync session
+    with db.get_session() as session:
+        auth_service = AuthService(
+            db=session,
+            jwt_secret=settings.jwt_secret_key,
+            jwt_algorithm=settings.jwt_algorithm,
+            access_token_expire_minutes=settings.access_token_expire_minutes,
+            refresh_token_expire_days=settings.refresh_token_expire_days,
         )
 
-    # Load user from public.users
-    with db.get_session() as session:
-        user = session.get(User, user_info["id"])
+        # Verify JWT token
+        token_data = auth_service.verify_token(token, token_type="access")
+        if not token_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        # Load user from database
+        user = session.get(User, token_data.user_id)
         if not user or user.deleted_at:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+        # Eagerly load all attributes before session closes
+        # This prevents DetachedInstanceError when serializing
+        session.refresh(user)
+        session.expunge(user)
 
         return user
 
@@ -431,8 +447,6 @@ async def get_current_user_optional(
     """
     if credentials is None:
         return None
-
-        supabase_auth = get_supabase_auth_service()
 
     try:
         return await get_current_user(credentials, db)

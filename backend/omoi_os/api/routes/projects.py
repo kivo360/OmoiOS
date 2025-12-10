@@ -1,7 +1,7 @@
 """Projects API routes for multi-project management."""
 
+from datetime import datetime
 from typing import Optional
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
@@ -52,8 +52,8 @@ class ProjectResponse(BaseModel):
     default_phase_id: str
     status: str
     settings: Optional[dict] = None
-    created_at: str
-    updated_at: str
+    created_at: datetime
+    updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -96,15 +96,13 @@ async def create_project(
     with db.get_session() as session:
         # Check if project with same name exists
         existing = (
-            session.query(Project)
-            .filter(Project.name == project_data.name)
-            .first()
+            session.query(Project).filter(Project.name == project_data.name).first()
         )
         if existing:
             raise HTTPException(
                 status_code=409, detail="Project with this name already exists"
             )
-        
+
         project = Project(
             name=project_data.name,
             description=project_data.description,
@@ -115,13 +113,13 @@ async def create_project(
             status="active",
             settings=project_data.settings or {},
         )
-        
+
         session.add(project)
         session.commit()
-        
+
         # Emit event
         from omoi_os.models.event import SystemEvent
-        
+
         event_bus.publish(
             SystemEvent(
                 event_type="PROJECT_CREATED",
@@ -134,13 +132,15 @@ async def create_project(
                 },
             )
         )
-        
+
         return ProjectResponse.model_validate(project)
 
 
 @router.get("", response_model=ProjectListResponse)
 async def list_projects(
-    status: Optional[str] = Query(None, description="Filter by status (active, archived, completed)"),
+    status: Optional[str] = Query(
+        None, description="Filter by status (active, archived, completed)"
+    ),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     db: DatabaseService = Depends(get_db_service),
@@ -159,19 +159,16 @@ async def list_projects(
     """
     with db.get_session() as session:
         query = session.query(Project)
-        
+
         if status:
             query = query.filter(Project.status == status)
-        
+
         total = query.count()
-        
+
         projects = (
-            query.order_by(Project.created_at.desc())
-            .limit(limit)
-            .offset(offset)
-            .all()
+            query.order_by(Project.created_at.desc()).limit(limit).offset(offset).all()
         )
-        
+
         return ProjectListResponse(
             projects=[ProjectResponse.model_validate(p) for p in projects],
             total=total,
@@ -197,7 +194,7 @@ async def get_project(
         project = session.get(Project, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         return ProjectResponse.model_validate(project)
 
 
@@ -224,7 +221,7 @@ async def update_project(
         project = session.get(Project, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         # Update fields
         if project_data.name is not None:
             project.name = project_data.name
@@ -242,14 +239,14 @@ async def update_project(
             project.github_connected = project_data.github_connected
         if project_data.settings is not None:
             project.settings = project_data.settings
-        
+
         project.updated_at = utc_now()
-        
+
         session.commit()
-        
+
         # Emit event
         from omoi_os.models.event import SystemEvent
-        
+
         event_bus.publish(
             SystemEvent(
                 event_type="PROJECT_UPDATED",
@@ -258,7 +255,7 @@ async def update_project(
                 payload={"changes": project_data.model_dump(exclude_unset=True)},
             )
         )
-        
+
         return ProjectResponse.model_validate(project)
 
 
@@ -283,16 +280,16 @@ async def delete_project(
         project = session.get(Project, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         # Soft delete - set status to archived
         project.status = "archived"
         project.updated_at = utc_now()
-        
+
         session.commit()
-        
+
         # Emit event
         from omoi_os.models.event import SystemEvent
-        
+
         event_bus.publish(
             SystemEvent(
                 event_type="PROJECT_ARCHIVED",
@@ -300,7 +297,7 @@ async def delete_project(
                 entity_id=project.id,
             )
         )
-        
+
         return {"success": True, "message": "Project archived"}
 
 
@@ -323,29 +320,30 @@ async def get_project_stats(
         project = session.get(Project, project_id)
         if not project:
             raise HTTPException(status_code=404, detail="Project not found")
-        
+
         # Get tickets for this project
         # Note: This assumes tickets will have project_id field in the future
         # For now, we'll return basic stats
         from sqlalchemy import func
         from omoi_os.ticketing.models import TicketCommit
-        
+
         # Count tickets (when project_id is added to Ticket model)
         # For now, return placeholder stats
         total_tickets = 0
         tickets_by_status = {}
         tickets_by_phase = {}
-        
+
         # Count commits (if we can link via tickets)
         total_commits = (
             session.query(func.count(TicketCommit.id))
             .join(Ticket, TicketCommit.ticket_id == Ticket.id)
-            .scalar() or 0
+            .scalar()
+            or 0
         )
-        
+
         # Count active agents (placeholder - would need project_id on Agent)
         active_agents = 0
-        
+
         return ProjectStatsResponse(
             project_id=project_id,
             total_tickets=total_tickets,
@@ -354,4 +352,3 @@ async def get_project_stats(
             active_agents=active_agents,
             total_commits=total_commits,
         )
-

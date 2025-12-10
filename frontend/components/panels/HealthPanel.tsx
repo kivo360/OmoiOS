@@ -4,7 +4,9 @@ import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
+import { useSystemHealth, useDashboardSummary } from "@/hooks/useMonitor"
 
 const shortcuts = [
   { label: "Overview", href: "/health" },
@@ -13,14 +15,24 @@ const shortcuts = [
   { label: "Settings", href: "/health/settings" },
 ]
 
-const mockSummary = {
-  alignment: "86%",
-  activeAgents: 7,
-  openAlerts: 3,
-  interventions24h: 12,
-}
-
 export function HealthPanel() {
+  const { data: health, isLoading: healthLoading } = useSystemHealth()
+  const { data: dashboard, isLoading: dashboardLoading } = useDashboardSummary()
+  
+  const isLoading = healthLoading || dashboardLoading
+  
+  // Compute summary values from API data
+  const activeAgents = dashboard?.active_agents ?? 0
+  const openAlerts = dashboard?.recent_anomalies ?? 0
+  const healthStatus = health?.overall_status ?? "unknown"
+  
+  // Get status color
+  const statusVariant = healthStatus === "healthy" 
+    ? "secondary" 
+    : healthStatus === "degraded" 
+      ? "outline" 
+      : "destructive"
+
   return (
     <div className="flex h-full flex-col">
       <div className="p-4 pb-2">
@@ -31,22 +43,36 @@ export function HealthPanel() {
       <div className="px-4 pb-3">
         <Card>
           <CardContent className="p-3 space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Avg alignment</span>
-              <Badge variant="secondary">{mockSummary.alignment}</Badge>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Active agents</span>
-              <span className="font-medium">{mockSummary.activeAgents}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Interventions (24h)</span>
-              <span className="font-medium">{mockSummary.interventions24h}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Open alerts</span>
-              <Badge variant="destructive">{mockSummary.openAlerts}</Badge>
-            </div>
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-full" />
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Status</span>
+                  <Badge variant={statusVariant} className="capitalize">
+                    {healthStatus}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Active agents</span>
+                  <span className="font-medium">{activeAgents}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Tasks pending</span>
+                  <span className="font-medium">{dashboard?.total_tasks_pending ?? 0}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Open alerts</span>
+                  <Badge variant={openAlerts > 0 ? "destructive" : "secondary"}>
+                    {openAlerts}
+                  </Badge>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -3,6 +3,7 @@
 import { use, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -37,9 +39,11 @@ import {
   Pencil,
   Trash2,
   Save,
+  Info,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { mockProjects } from "@/lib/mock"
+import { useProject } from "@/hooks/useProjects"
+import { PHASES } from "@/lib/phases-config"
 
 interface BoardSettingsPageProps {
   params: Promise<{ id: string }>
@@ -52,8 +56,8 @@ const settingsNav = [
   { href: "/github", label: "GitHub", icon: GitBranch },
 ]
 
-// Mock board columns data
-const mockColumns = [
+// Default board columns (these are tied to phases)
+const defaultColumns = [
   { id: "backlog", name: "Backlog", phaseMapping: "PHASE_BACKLOG", wipLimit: 0, color: "#6B7280" },
   { id: "todo", name: "To Do", phaseMapping: "PHASE_REQUIREMENTS", wipLimit: 10, color: "#3B82F6" },
   { id: "in-progress", name: "In Progress", phaseMapping: "PHASE_IMPLEMENTATION", wipLimit: 5, color: "#F59E0B" },
@@ -61,33 +65,38 @@ const mockColumns = [
   { id: "done", name: "Done", phaseMapping: "PHASE_DONE", wipLimit: 0, color: "#10B981" },
 ]
 
-const mockTicketTypes = [
+// Default ticket types
+const defaultTicketTypes = [
   { id: "feature", name: "Feature", color: "#3B82F6", icon: "✨" },
   { id: "bug", name: "Bug", color: "#EF4444", icon: "🐛" },
   { id: "task", name: "Task", color: "#6B7280", icon: "📋" },
   { id: "improvement", name: "Improvement", color: "#10B981", icon: "⬆️" },
 ]
 
-const phases = [
-  "PHASE_BACKLOG",
-  "PHASE_REQUIREMENTS",
-  "PHASE_DESIGN",
-  "PHASE_IMPLEMENTATION",
-  "PHASE_TESTING",
-  "PHASE_DEPLOYMENT",
-  "PHASE_DONE",
-]
-
 export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
   const { id } = use(params)
   const pathname = usePathname()
-  const project = mockProjects.find((p) => p.id === id)
-  const [columns, setColumns] = useState(mockColumns)
-  const [ticketTypes, setTicketTypes] = useState(mockTicketTypes)
+  
+  const { data: project, isLoading, error } = useProject(id)
+  const [columns, setColumns] = useState(defaultColumns)
+  const [ticketTypes, setTicketTypes] = useState(defaultTicketTypes)
   const [isAddColumnOpen, setIsAddColumnOpen] = useState(false)
   const [isAddTypeOpen, setIsAddTypeOpen] = useState(false)
 
-  if (!project) {
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-8 w-64" />
+        <div className="flex gap-6">
+          <Skeleton className="h-64 w-48" />
+          <Skeleton className="h-64 flex-1" />
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !project) {
     return (
       <div className="container mx-auto p-6 text-center">
         <h1 className="text-2xl font-bold">Project not found</h1>
@@ -96,6 +105,10 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
         </Button>
       </div>
     )
+  }
+
+  const handleSave = () => {
+    toast.success("Board settings saved locally. Note: Backend API for board configuration coming soon.")
   }
 
   return (
@@ -140,6 +153,17 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
 
         {/* Main Content */}
         <div className="flex-1 space-y-6">
+          {/* Info Banner */}
+          <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+            <div>
+              <p className="font-medium text-blue-900">Board Configuration</p>
+              <p className="text-sm text-blue-700">
+                Board columns are currently managed as a local configuration. Changes are previewed here but the backend API for persisting board settings is coming soon.
+              </p>
+            </div>
+          </div>
+
           {/* Board Columns */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -173,9 +197,9 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
                           <SelectValue placeholder="Select phase" />
                         </SelectTrigger>
                         <SelectContent>
-                          {phases.map((phase) => (
-                            <SelectItem key={phase} value={phase}>
-                              {phase.replace("PHASE_", "").replace(/_/g, " ")}
+                          {PHASES.map((phase) => (
+                            <SelectItem key={phase.id} value={phase.id}>
+                              {phase.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
@@ -396,7 +420,7 @@ export default function BoardSettingsPage({ params }: BoardSettingsPageProps) {
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <Button>
+            <Button onClick={handleSave}>
               <Save className="mr-2 h-4 w-4" />
               Save Changes
             </Button>

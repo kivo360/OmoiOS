@@ -6,44 +6,19 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Separator } from "@/components/ui/separator"
-import { Plus, Users, Check, Settings, UserPlus, Building2 } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Plus, Users, Check, Settings, Building2, AlertCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-const mockOrganizations = [
-  {
-    id: "org-001",
-    name: "Acme Inc",
-    slug: "acme-inc",
-    role: "owner",
-    memberCount: 12,
-    isActive: true,
-  },
-  {
-    id: "org-002",
-    name: "Personal",
-    slug: "personal",
-    role: "owner",
-    memberCount: 1,
-    isActive: false,
-  },
-  {
-    id: "org-003",
-    name: "Open Source Collective",
-    slug: "oss-collective",
-    role: "member",
-    memberCount: 48,
-    isActive: false,
-  },
-]
+import { useOrganizations } from "@/hooks/useOrganizations"
 
 export function OrganizationsPanel() {
   const pathname = usePathname()
-  const activeOrg = mockOrganizations.find((org) => org.isActive)
+  const { data: organizations, isLoading, error } = useOrganizations()
 
   // Extract org ID from path if viewing a specific org
   const orgIdMatch = pathname.match(/\/organizations\/([^/]+)/)
-  const currentOrgId = orgIdMatch ? orgIdMatch[1] : activeOrg?.id
+  const firstOrg = organizations?.[0]
+  const currentOrgId = orgIdMatch ? orgIdMatch[1] : firstOrg?.id
 
   const quickLinks = currentOrgId
     ? [
@@ -101,40 +76,55 @@ export function OrganizationsPanel() {
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
             All Organizations
           </p>
-          {mockOrganizations.map((org) => {
-            const isCurrentOrg = org.id === currentOrgId
-            return (
-              <Link
-                key={org.id}
-                href={`/organizations/${org.id}`}
-                className={cn(
-                  "flex items-center gap-3 rounded-md p-2 transition-colors",
-                  isCurrentOrg ? "bg-accent" : "hover:bg-accent"
-                )}
-              >
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                    {org.name.charAt(0).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium truncate">{org.name}</span>
-                    {org.isActive && (
-                      <Check className="h-3 w-3 text-success shrink-0" />
-                    )}
+          {isLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full rounded-md" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">
+              <AlertCircle className="h-6 w-6 mx-auto mb-2 opacity-50" />
+              Failed to load
+            </div>
+          ) : organizations?.length === 0 ? (
+            <div className="py-4 text-center text-sm text-muted-foreground">
+              No organizations
+            </div>
+          ) : (
+            organizations?.map((org) => {
+              const isCurrentOrg = org.id === currentOrgId
+              return (
+                <Link
+                  key={org.id}
+                  href={`/organizations/${org.id}`}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md p-2 transition-colors",
+                    isCurrentOrg ? "bg-accent" : "hover:bg-accent"
+                  )}
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="bg-primary/10 text-primary text-xs">
+                      {org.name.charAt(0).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{org.name}</span>
+                      {isCurrentOrg && (
+                        <Check className="h-3 w-3 text-success shrink-0" />
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Badge variant="secondary" className="text-[10px] h-4">
+                        {org.role}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <Users className="h-3 w-3" />
-                    <span>{org.memberCount}</span>
-                    <Badge variant="secondary" className="text-[10px] h-4">
-                      {org.role}
-                    </Badge>
-                  </div>
-                </div>
-              </Link>
-            )
-          })}
+                </Link>
+              )
+            })
+          )}
         </div>
       </ScrollArea>
 

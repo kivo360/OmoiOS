@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -32,124 +33,86 @@ import {
   Search,
   Ticket,
   Bot,
-  Sparkles,
   ChevronRight,
   CheckCircle2,
   Clock,
-  AlertCircle,
   ArrowRight,
   Filter,
+  Info,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-
-// Mock phase data
-const mockPhases = [
-  {
-    id: "PHASE_BACKLOG",
-    name: "Backlog",
-    description: "Initial collection point for new work items",
-    order: 0,
-    isTerminal: false,
-    taskStats: { total: 45, done: 0, active: 0, pending: 45 },
-    activeAgents: 0,
-    discoveries: 0,
-    transitions: ["PHASE_REQUIREMENTS", "PHASE_BLOCKED"],
-    color: "#6B7280",
-  },
-  {
-    id: "PHASE_REQUIREMENTS",
-    name: "Requirements Analysis",
-    description: "Gathering and documenting detailed requirements",
-    order: 1,
-    isTerminal: false,
-    taskStats: { total: 28, done: 22, active: 2, pending: 4 },
-    activeAgents: 2,
-    discoveries: 3,
-    transitions: ["PHASE_DESIGN", "PHASE_BLOCKED"],
-    color: "#3B82F6",
-  },
-  {
-    id: "PHASE_DESIGN",
-    name: "Design",
-    description: "Architecture and solution design phase",
-    order: 2,
-    isTerminal: false,
-    taskStats: { total: 18, done: 15, active: 1, pending: 2 },
-    activeAgents: 1,
-    discoveries: 1,
-    transitions: ["PHASE_IMPLEMENTATION", "PHASE_BLOCKED"],
-    color: "#8B5CF6",
-  },
-  {
-    id: "PHASE_IMPLEMENTATION",
-    name: "Implementation",
-    description: "Developing and implementing features",
-    order: 3,
-    isTerminal: false,
-    taskStats: { total: 52, done: 38, active: 5, pending: 9 },
-    activeAgents: 5,
-    discoveries: 8,
-    doneCriteria: ["All code files created", "Minimum 3 test cases passing"],
-    expectedOutputs: ["src/**/*.py", "tests/**/*.py"],
-    transitions: ["PHASE_TESTING", "PHASE_BLOCKED"],
-    color: "#F59E0B",
-  },
-  {
-    id: "PHASE_TESTING",
-    name: "Testing",
-    description: "Comprehensive testing and quality assurance",
-    order: 4,
-    isTerminal: false,
-    taskStats: { total: 24, done: 20, active: 2, pending: 2 },
-    activeAgents: 2,
-    discoveries: 2,
-    transitions: ["PHASE_DEPLOYMENT", "PHASE_IMPLEMENTATION", "PHASE_BLOCKED"],
-    color: "#10B981",
-  },
-  {
-    id: "PHASE_DEPLOYMENT",
-    name: "Deployment",
-    description: "Release and deployment to production",
-    order: 5,
-    isTerminal: false,
-    taskStats: { total: 12, done: 10, active: 1, pending: 1 },
-    activeAgents: 1,
-    discoveries: 0,
-    transitions: ["PHASE_DONE"],
-    color: "#EC4899",
-  },
-  {
-    id: "PHASE_DONE",
-    name: "Done",
-    description: "Completed and delivered work items",
-    order: 6,
-    isTerminal: true,
-    taskStats: { total: 120, done: 120, active: 0, pending: 0 },
-    activeAgents: 0,
-    discoveries: 0,
-    transitions: [],
-    color: "#059669",
-  },
-  {
-    id: "PHASE_BLOCKED",
-    name: "Blocked",
-    description: "Items blocked by dependencies or issues",
-    order: 99,
-    isTerminal: false,
-    taskStats: { total: 8, done: 0, active: 0, pending: 8 },
-    activeAgents: 0,
-    discoveries: 0,
-    transitions: ["PHASE_BACKLOG", "PHASE_REQUIREMENTS", "PHASE_DESIGN", "PHASE_IMPLEMENTATION", "PHASE_TESTING"],
-    color: "#EF4444",
-  },
-]
+import { PHASES, getPhasesSorted } from "@/lib/phases-config"
+import { useTasks } from "@/hooks/useTasks"
+import { useAgents } from "@/hooks/useAgents"
 
 export default function PhasesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [isCreateOpen, setIsCreateOpen] = useState(false)
 
-  const filteredPhases = mockPhases.filter((phase) => {
+  // Fetch real data
+  const { data: tasks, isLoading: tasksLoading } = useTasks()
+  const { data: agents, isLoading: agentsLoading } = useAgents()
+
+  const isLoading = tasksLoading || agentsLoading
+
+  // Compute task stats per phase from real data
+  const phaseStats = useMemo(() => {
+    const stats: Record<string, { total: number; done: number; active: number; pending: number }> = {}
+    
+    // Initialize stats for all phases
+    PHASES.forEach((phase) => {
+      stats[phase.id] = { total: 0, done: 0, active: 0, pending: 0 }
+    })
+
+    // Count tasks by phase
+    tasks?.forEach((task) => {
+      const phaseId = task.phase_id || "PHASE_BACKLOG"
+      if (!stats[phaseId]) {
+        stats[phaseId] = { total: 0, done: 0, active: 0, pending: 0 }
+      }
+      stats[phaseId].total++
+      
+      if (task.status === "completed") {
+        stats[phaseId].done++
+      } else if (task.status === "in_progress") {
+        stats[phaseId].active++
+      } else {
+        stats[phaseId].pending++
+      }
+    })
+
+    return stats
+  }, [tasks])
+
+  // Count active agents per phase (simplified - counts agents by phase_id if available)
+  const agentsByPhase = useMemo(() => {
+    const counts: Record<string, number> = {}
+    PHASES.forEach((phase) => {
+      counts[phase.id] = 0
+    })
+
+    agents?.forEach((agent) => {
+      if (agent.status === "active" || agent.status === "busy") {
+        // Agents don't have phase_id in our data model, so count all active agents
+        // This is a simplification - in a real system you might track agent phase assignments
+        counts["PHASE_IMPLEMENTATION"] = (counts["PHASE_IMPLEMENTATION"] || 0) + 1
+      }
+    })
+
+    return counts
+  }, [agents])
+
+  // Build enriched phases with real stats
+  const enrichedPhases = useMemo(() => {
+    return getPhasesSorted().map((phase) => ({
+      ...phase,
+      taskStats: phaseStats[phase.id] || { total: 0, done: 0, active: 0, pending: 0 },
+      activeAgents: agentsByPhase[phase.id] || 0,
+    }))
+  }, [phaseStats, agentsByPhase])
+
+  const filteredPhases = enrichedPhases.filter((phase) => {
     const matchesSearch = phase.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       phase.description.toLowerCase().includes(searchQuery.toLowerCase())
     
@@ -160,10 +123,14 @@ export default function PhasesPage() {
     return matchesSearch
   })
 
-  const getCompletionPercent = (stats: typeof mockPhases[0]["taskStats"]) => {
+  const getCompletionPercent = (stats: { total: number; done: number }) => {
     if (stats.total === 0) return 0
     return Math.round((stats.done / stats.total) * 100)
   }
+
+  // Calculate totals
+  const totalTasks = Object.values(phaseStats).reduce((sum, s) => sum + s.total, 0)
+  const activeAgentsCount = agents?.filter((a) => a.status === "active" || a.status === "busy").length ?? 0
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -177,58 +144,48 @@ export default function PhasesPage() {
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Custom Phase
+            <Button variant="outline">
+              <Info className="mr-2 h-4 w-4" />
+              About Phases
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Create Custom Phase</DialogTitle>
+              <DialogTitle>Workflow Phases</DialogTitle>
               <DialogDescription>
-                Define a new phase for your workflow. Custom phases extend the default workflow.
+                Phases define the workflow stages that tickets move through.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="phaseId">Phase ID</Label>
-                  <Input id="phaseId" placeholder="PHASE_" className="font-mono" />
-                  <p className="text-xs text-muted-foreground">
-                    Must start with &quot;PHASE_&quot;
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phaseName">Display Name</Label>
-                  <Input id="phaseName" placeholder="e.g., Code Review" />
-                </div>
+              <div className="rounded-lg bg-muted p-4">
+                <p className="text-sm">
+                  Phases are system-defined workflow stages. Each phase has:
+                </p>
+                <ul className="mt-2 text-sm text-muted-foreground list-disc list-inside space-y-1">
+                  <li>Done criteria that must be met to proceed</li>
+                  <li>Expected outputs (files, reports, etc.)</li>
+                  <li>Allowed transitions to other phases</li>
+                  <li>Phase-specific prompts for agents</li>
+                </ul>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="phaseDesc">Description</Label>
-                <Textarea
-                  id="phaseDesc"
-                  placeholder="Describe what happens in this phase..."
-                  rows={2}
-                />
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="order">Sequence Order</Label>
-                  <Input id="order" type="number" min="0" defaultValue="5" />
-                </div>
-                <div className="flex items-center space-x-2 pt-6">
-                  <Checkbox id="terminal" />
-                  <Label htmlFor="terminal" className="font-normal">
-                    Terminal phase (no further transitions)
-                  </Label>
+              <div className="grid gap-2">
+                <p className="text-sm font-medium">Standard Workflow:</p>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  {PHASES.filter(p => p.id !== "PHASE_BLOCKED").sort((a, b) => a.order - b.order).map((phase, i, arr) => (
+                    <span key={phase.id} className="flex items-center gap-1">
+                      <Badge variant="secondary" style={{ borderLeftColor: phase.color, borderLeftWidth: 3 }}>
+                        {phase.name}
+                      </Badge>
+                      {i < arr.length - 1 && <ArrowRight className="h-3 w-3 text-muted-foreground" />}
+                    </span>
+                  ))}
                 </div>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                Cancel
+                Close
               </Button>
-              <Button onClick={() => setIsCreateOpen(false)}>Create Phase</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -243,7 +200,7 @@ export default function PhasesPage() {
                 <Workflow className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockPhases.length}</p>
+                <p className="text-2xl font-bold">{PHASES.length}</p>
                 <p className="text-sm text-muted-foreground">Total Phases</p>
               </div>
             </div>
@@ -256,9 +213,11 @@ export default function PhasesPage() {
                 <Bot className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockPhases.reduce((sum, p) => sum + p.activeAgents, 0)}
-                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{activeAgentsCount}</p>
+                )}
                 <p className="text-sm text-muted-foreground">Active Agents</p>
               </div>
             </div>
@@ -267,14 +226,18 @@ export default function PhasesPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10">
-                <Sparkles className="h-5 w-5 text-purple-600" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10">
+                <Clock className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockPhases.reduce((sum, p) => sum + p.discoveries, 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">Discoveries</p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">
+                    {Object.values(phaseStats).reduce((sum, s) => sum + s.active, 0)}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">In Progress</p>
               </div>
             </div>
           </CardContent>
@@ -286,9 +249,11 @@ export default function PhasesPage() {
                 <Ticket className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">
-                  {mockPhases.reduce((sum, p) => sum + p.taskStats.total, 0)}
-                </p>
+                {isLoading ? (
+                  <Skeleton className="h-8 w-12" />
+                ) : (
+                  <p className="text-2xl font-bold">{totalTasks}</p>
+                )}
                 <p className="text-sm text-muted-foreground">Total Tasks</p>
               </div>
             </div>
@@ -329,95 +294,111 @@ export default function PhasesPage() {
 
       {/* Phase Cards Grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {filteredPhases.map((phase) => {
-          const completionPercent = getCompletionPercent(phase.taskStats)
-          
-          return (
-            <Link key={phase.id} href={`/phases/${phase.id}`}>
-              <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 cursor-pointer">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold text-sm"
-                        style={{ backgroundColor: phase.color }}
-                      >
-                        {phase.order}
-                      </div>
-                      <div>
-                        <CardTitle className="text-base">{phase.name}</CardTitle>
-                        <p className="text-xs text-muted-foreground font-mono">
-                          {phase.id}
-                        </p>
-                      </div>
-                    </div>
-                    {phase.isTerminal && (
-                      <Badge variant="outline" className="text-xs">Terminal</Badge>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {phase.description}
-                  </p>
-
-                  {/* Task Stats */}
+        {isLoading ? (
+          // Loading skeletons
+          Array.from({ length: 6 }).map((_, i) => (
+            <Card key={i} className="h-full">
+              <CardHeader className="pb-3">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span>Tasks</span>
-                      <span className="font-medium">
-                        {phase.taskStats.done}/{phase.taskStats.total}
-                      </span>
-                    </div>
-                    <Progress value={completionPercent} className="h-2" />
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <Skeleton className="h-5 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-2 w-full" />
+                <Skeleton className="h-4 w-24" />
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          filteredPhases.map((phase) => {
+            const completionPercent = getCompletionPercent(phase.taskStats)
+            
+            return (
+              <Link key={phase.id} href={`/phases/${phase.id}`}>
+                <Card className="h-full transition-all hover:shadow-md hover:border-primary/30 cursor-pointer">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="flex items-center gap-1">
-                          <CheckCircle2 className="h-3 w-3 text-green-500" />
-                          {phase.taskStats.done} done
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3 text-blue-500" />
-                          {phase.taskStats.active} active
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-lg text-white font-bold text-sm"
+                          style={{ backgroundColor: phase.color }}
+                        >
+                          {phase.order}
+                        </div>
+                        <div>
+                          <CardTitle className="text-base">{phase.name}</CardTitle>
+                          <p className="text-xs text-muted-foreground font-mono">
+                            {phase.id}
+                          </p>
+                        </div>
+                      </div>
+                      {phase.isTerminal && (
+                        <Badge variant="outline" className="text-xs">Terminal</Badge>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {phase.description}
+                    </p>
+
+                    {/* Task Stats */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span>Tasks</span>
+                        <span className="font-medium">
+                          {phase.taskStats.done}/{phase.taskStats.total}
                         </span>
                       </div>
-                      <span>{completionPercent}%</span>
+                      <Progress value={completionPercent} className="h-2" />
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            {phase.taskStats.done} done
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3 text-blue-500" />
+                            {phase.taskStats.active} active
+                          </span>
+                        </div>
+                        <span>{completionPercent}%</span>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Active Agents & Discoveries */}
-                  <div className="flex items-center justify-between text-sm">
-                    {phase.activeAgents > 0 ? (
-                      <span className="flex items-center gap-1 text-green-600">
-                        <Bot className="h-4 w-4" />
-                        {phase.activeAgents} agents working
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">No active agents</span>
-                    )}
-                    {phase.discoveries > 0 && (
-                      <span className="flex items-center gap-1 text-purple-600">
-                        <Sparkles className="h-4 w-4" />
-                        {phase.discoveries} discoveries
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Transitions */}
-                  {phase.transitions.length > 0 && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <ArrowRight className="h-3 w-3" />
-                      <span className="truncate">
-                        {phase.transitions.slice(0, 2).map(t => t.replace("PHASE_", "")).join(", ")}
-                        {phase.transitions.length > 2 && ` +${phase.transitions.length - 2}`}
-                      </span>
+                    {/* Active Agents */}
+                    <div className="flex items-center justify-between text-sm">
+                      {phase.activeAgents > 0 ? (
+                        <span className="flex items-center gap-1 text-green-600">
+                          <Bot className="h-4 w-4" />
+                          {phase.activeAgents} agents working
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">No active agents</span>
+                      )}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            </Link>
-          )
-        })}
+
+                    {/* Transitions */}
+                    {phase.transitions.length > 0 && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <ArrowRight className="h-3 w-3" />
+                        <span className="truncate">
+                          {phase.transitions.slice(0, 2).map(t => t.replace("PHASE_", "")).join(", ")}
+                          {phase.transitions.length > 2 && ` +${phase.transitions.length - 2}`}
+                        </span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })
+        )}
       </div>
 
       {/* Empty State */}

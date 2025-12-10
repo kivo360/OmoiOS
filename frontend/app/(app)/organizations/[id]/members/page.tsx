@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useMemo } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -59,114 +60,100 @@ import {
   Shield,
   ShieldCheck,
   Crown,
-  Mail,
-  Clock,
+  AlertCircle,
   Loader2,
-  Check,
   X,
+  Bot,
+  User,
 } from "lucide-react"
+import { useMembers, useRoles, useAddMember, useUpdateMember, useRemoveMember } from "@/hooks/useOrganizations"
 
 interface OrganizationMembersPageProps {
   params: Promise<{ id: string }>
 }
 
-// Mock members data
-const mockMembers = [
-  {
-    id: "1",
-    name: "John Doe",
-    email: "john@acme.com",
-    role: "owner",
-    avatar: null,
-    joinedAt: "Jan 15, 2024",
-    lastActive: "2 hours ago",
-  },
-  {
-    id: "2",
-    name: "Jane Smith",
-    email: "jane@acme.com",
-    role: "admin",
-    avatar: null,
-    joinedAt: "Feb 1, 2024",
-    lastActive: "1 day ago",
-  },
-  {
-    id: "3",
-    name: "Bob Wilson",
-    email: "bob@acme.com",
-    role: "member",
-    avatar: null,
-    joinedAt: "Mar 10, 2024",
-    lastActive: "5 hours ago",
-  },
-  {
-    id: "4",
-    name: "Alice Johnson",
-    email: "alice@acme.com",
-    role: "member",
-    avatar: null,
-    joinedAt: "Mar 15, 2024",
-    lastActive: "Just now",
-  },
-  {
-    id: "5",
-    name: "Charlie Brown",
-    email: "charlie@acme.com",
-    role: "member",
-    avatar: null,
-    joinedAt: "Apr 1, 2024",
-    lastActive: "3 days ago",
-  },
-]
+const roleIcons: Record<string, typeof Shield> = {
+  owner: Crown,
+  admin: ShieldCheck,
+  member: Shield,
+}
 
-// Mock pending invites
-const mockInvites = [
-  { id: "inv-1", email: "newuser@example.com", role: "member", sentAt: "2 days ago", expiresIn: "5 days" },
-  { id: "inv-2", email: "developer@company.com", role: "admin", sentAt: "1 week ago", expiresIn: "Expired" },
-]
-
-const roleConfig = {
-  owner: { icon: Crown, color: "text-amber-500", label: "Owner", description: "Full access to all resources" },
-  admin: { icon: ShieldCheck, color: "text-blue-500", label: "Admin", description: "Can manage members and settings" },
-  member: { icon: Shield, color: "text-gray-500", label: "Member", description: "Can access projects and resources" },
+const roleColors: Record<string, string> = {
+  owner: "text-amber-500",
+  admin: "text-blue-500",
+  member: "text-gray-500",
 }
 
 export default function OrganizationMembersPage({ params }: OrganizationMembersPageProps) {
   const { id } = use(params)
   const [searchQuery, setSearchQuery] = useState("")
   const [isInviteOpen, setIsInviteOpen] = useState(false)
-  const [isInviting, setIsInviting] = useState(false)
-  const [inviteData, setInviteData] = useState({ email: "", role: "member" })
+  const [inviteData, setInviteData] = useState({ userId: "", roleId: "" })
 
-  const filteredMembers = mockMembers.filter(
-    (member) =>
-      member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      member.email.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const { data: members, isLoading: membersLoading, error: membersError } = useMembers(id)
+  const { data: roles, isLoading: rolesLoading } = useRoles(id)
+  const addMemberMutation = useAddMember()
+  const updateMemberMutation = useUpdateMember()
+  const removeMemberMutation = useRemoveMember()
 
-  const handleInvite = async () => {
-    setIsInviting(true)
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsInviting(false)
-    setIsInviteOpen(false)
-    setInviteData({ email: "", role: "member" })
-    toast.success(`Invitation sent to ${inviteData.email}`)
+  // Filter members based on search
+  const filteredMembers = useMemo(() => {
+    if (!members) return []
+    if (!searchQuery) return members
+    return members.filter(
+      (member) =>
+        member.role_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (member.user_id && member.user_id.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (member.agent_id && member.agent_id.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+  }, [members, searchQuery])
+
+  const handleAddMember = async () => {
+    if (!inviteData.roleId) {
+      toast.error("Please select a role")
+      return
+    }
+    try {
+      await addMemberMutation.mutateAsync({
+        orgId: id,
+        data: { user_id: inviteData.userId || undefined, role_id: inviteData.roleId },
+      })
+      setIsInviteOpen(false)
+      setInviteData({ userId: "", roleId: "" })
+      toast.success("Member added successfully")
+    } catch (err) {
+      toast.error("Failed to add member")
+    }
   }
 
-  const handleRoleChange = (memberId: string, newRole: string) => {
-    toast.success("Member role updated")
+  const handleRoleChange = async (memberId: string, newRoleId: string) => {
+    try {
+      await updateMemberMutation.mutateAsync({
+        orgId: id,
+        memberId,
+        roleId: newRoleId,
+      })
+      toast.success("Member role updated")
+    } catch (err) {
+      toast.error("Failed to update role")
+    }
   }
 
-  const handleRemoveMember = (memberId: string) => {
-    toast.success("Member removed from organization")
+  const handleRemoveMember = async (memberId: string) => {
+    try {
+      await removeMemberMutation.mutateAsync({ orgId: id, memberId })
+      toast.success("Member removed from organization")
+    } catch (err) {
+      toast.error("Failed to remove member")
+    }
   }
 
-  const handleCancelInvite = (inviteId: string) => {
-    toast.success("Invitation cancelled")
-  }
-
-  const handleResendInvite = (inviteId: string) => {
-    toast.success("Invitation resent")
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    })
   }
 
   return (
@@ -190,55 +177,44 @@ export default function OrganizationMembersPage({ params }: OrganizationMembersP
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="mr-2 h-4 w-4" />
-              Invite Member
+              Add Member
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Invite Member</DialogTitle>
+              <DialogTitle>Add Member</DialogTitle>
               <DialogDescription>
-                Send an invitation to join your organization
+                Add a new member to this organization
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="userId">User ID</Label>
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="colleague@company.com"
-                  value={inviteData.email}
-                  onChange={(e) => setInviteData({ ...inviteData, email: e.target.value })}
+                  id="userId"
+                  placeholder="Enter user ID"
+                  value={inviteData.userId}
+                  onChange={(e) => setInviteData({ ...inviteData, userId: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
                 <Label>Role</Label>
                 <Select
-                  value={inviteData.role}
-                  onValueChange={(value) => setInviteData({ ...inviteData, role: value })}
+                  value={inviteData.roleId}
+                  onValueChange={(value) => setInviteData({ ...inviteData, roleId: value })}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Select a role" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="member">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-gray-500" />
-                        <div>
-                          <p>Member</p>
-                          <p className="text-xs text-muted-foreground">Can access projects and resources</p>
+                    {roles?.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-4 w-4" />
+                          <span>{role.name}</span>
                         </div>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="admin">
-                      <div className="flex items-center gap-2">
-                        <ShieldCheck className="h-4 w-4 text-blue-500" />
-                        <div>
-                          <p>Admin</p>
-                          <p className="text-xs text-muted-foreground">Can manage members and settings</p>
-                        </div>
-                      </div>
-                    </SelectItem>
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -247,9 +223,12 @@ export default function OrganizationMembersPage({ params }: OrganizationMembersP
               <Button variant="outline" onClick={() => setIsInviteOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleInvite} disabled={!inviteData.email || isInviting}>
-                {isInviting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Send Invitation
+              <Button 
+                onClick={handleAddMember} 
+                disabled={!inviteData.roleId || addMemberMutation.isPending}
+              >
+                {addMemberMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add Member
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -267,54 +246,94 @@ export default function OrganizationMembersPage({ params }: OrganizationMembersP
         />
       </div>
 
-      {/* Members Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Team Members</CardTitle>
-          <CardDescription>{mockMembers.length} members in this organization</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead>Last Active</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredMembers.map((member) => {
-                const config = roleConfig[member.role as keyof typeof roleConfig]
-                const RoleIcon = config.icon
+      {/* Loading State */}
+      {membersLoading && (
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-32" />
+            <Skeleton className="h-4 w-48 mt-1" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <Skeleton className="h-10 w-10 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-                return (
-                  <TableRow key={member.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar>
-                          <AvatarImage src={member.avatar || undefined} />
-                          <AvatarFallback>
-                            {member.name.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-medium">{member.name}</p>
-                          <p className="text-sm text-muted-foreground">{member.email}</p>
+      {/* Error State */}
+      {membersError && (
+        <Card className="border-destructive/50">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-destructive/50" />
+            <h3 className="mt-4 text-lg font-semibold">Failed to load members</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Please try refreshing the page.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Members Table */}
+      {!membersLoading && !membersError && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Team Members</CardTitle>
+            <CardDescription>{members?.length || 0} members in this organization</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Joined</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMembers.map((member) => {
+                  const roleName = member.role_name.toLowerCase()
+                  const RoleIcon = roleIcons[roleName] || Shield
+                  const roleColor = roleColors[roleName] || "text-gray-500"
+                  const isAgent = !!member.agent_id
+                  const displayId = member.user_id || member.agent_id || "Unknown"
+
+                  return (
+                    <TableRow key={member.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar>
+                            <AvatarFallback>
+                              {isAgent ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-medium font-mono text-sm">{displayId.slice(0, 8)}...</p>
+                            <p className="text-xs text-muted-foreground">
+                              {isAgent ? "Agent" : "User"}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="gap-1">
-                        <RoleIcon className={`h-3 w-3 ${config.color}`} />
-                        {config.label}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">{member.joinedAt}</TableCell>
-                    <TableCell className="text-muted-foreground">{member.lastActive}</TableCell>
-                    <TableCell>
-                      {member.role !== "owner" && (
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="gap-1">
+                          <RoleIcon className={`h-3 w-3 ${roleColor}`} />
+                          {member.role_name}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(member.joined_at)}
+                      </TableCell>
+                      <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon">
@@ -322,14 +341,15 @@ export default function OrganizationMembersPage({ params }: OrganizationMembersP
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleRoleChange(member.id, "admin")}>
-                              <ShieldCheck className="mr-2 h-4 w-4" />
-                              Make Admin
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleRoleChange(member.id, "member")}>
-                              <Shield className="mr-2 h-4 w-4" />
-                              Make Member
-                            </DropdownMenuItem>
+                            {roles?.filter(r => r.id !== member.role_id).map((role) => (
+                              <DropdownMenuItem 
+                                key={role.id}
+                                onClick={() => handleRoleChange(member.id, role.id)}
+                              >
+                                <Shield className="mr-2 h-4 w-4" />
+                                Change to {role.name}
+                              </DropdownMenuItem>
+                            ))}
                             <DropdownMenuSeparator />
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
@@ -345,7 +365,7 @@ export default function OrganizationMembersPage({ params }: OrganizationMembersP
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Remove Member</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Are you sure you want to remove {member.name} from this
+                                    Are you sure you want to remove this member from the
                                     organization? They will lose access to all projects and
                                     resources.
                                   </AlertDialogDescription>
@@ -363,112 +383,68 @@ export default function OrganizationMembersPage({ params }: OrganizationMembersP
                             </AlertDialog>
                           </DropdownMenuContent>
                         </DropdownMenu>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                )
-              })}
-            </TableBody>
-          </Table>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
 
-          {filteredMembers.length === 0 && (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No members found matching your search
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Pending Invitations */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Mail className="h-5 w-5" />
-            Pending Invitations
-          </CardTitle>
-          <CardDescription>
-            {mockInvites.length} pending invitations
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {mockInvites.length === 0 ? (
-            <p className="py-4 text-center text-sm text-muted-foreground">
-              No pending invitations
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {mockInvites.map((invite) => (
-                <div
-                  key={invite.id}
-                  className="flex items-center justify-between rounded-lg border p-4"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarFallback>
-                        {invite.email.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{invite.email}</p>
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        <span>Sent {invite.sentAt}</span>
-                        <span>•</span>
-                        <span className={invite.expiresIn === "Expired" ? "text-destructive" : ""}>
-                          {invite.expiresIn === "Expired" ? "Expired" : `Expires in ${invite.expiresIn}`}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="capitalize">
-                      {invite.role}
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleResendInvite(invite.id)}
-                    >
-                      Resend
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleCancelInvite(invite.id)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {filteredMembers.length === 0 && (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                {searchQuery ? "No members found matching your search" : "No members yet"}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Role Legend */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Role Permissions</CardTitle>
-          <CardDescription>Understanding member roles and their capabilities</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            {Object.entries(roleConfig).map(([key, config]) => {
-              const Icon = config.icon
-              return (
-                <div key={key} className="rounded-lg border p-4">
-                  <div className="flex items-center gap-2">
-                    <Icon className={`h-5 w-5 ${config.color}`} />
-                    <span className="font-medium">{config.label}</span>
+      {!rolesLoading && roles && roles.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Available Roles</CardTitle>
+            <CardDescription>Roles defined for this organization</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              {roles.map((role) => {
+                const roleName = role.name.toLowerCase()
+                const Icon = roleIcons[roleName] || Shield
+                const color = roleColors[roleName] || "text-gray-500"
+                return (
+                  <div key={role.id} className="rounded-lg border p-4">
+                    <div className="flex items-center gap-2">
+                      <Icon className={`h-5 w-5 ${color}`} />
+                      <span className="font-medium">{role.name}</span>
+                      {role.is_system && (
+                        <Badge variant="secondary" className="text-xs">System</Badge>
+                      )}
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      {role.description || "No description"}
+                    </p>
+                    {role.permissions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {role.permissions.slice(0, 3).map((perm) => (
+                          <Badge key={perm} variant="outline" className="text-xs">
+                            {perm}
+                          </Badge>
+                        ))}
+                        {role.permissions.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{role.permissions.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <p className="mt-2 text-sm text-muted-foreground">{config.description}</p>
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

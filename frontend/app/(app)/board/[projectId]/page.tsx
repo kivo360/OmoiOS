@@ -1,12 +1,13 @@
 "use client"
 
-import { use, useState, useCallback } from "react"
+import { use, useState, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -46,178 +47,56 @@ import {
   Search,
   Filter,
   MoreHorizontal,
-  User,
   AlertCircle,
   Bot,
-  GitBranch,
   GripVertical,
   BarChart3,
   ListFilter,
   X,
 } from "lucide-react"
+import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
+import type { Ticket as ApiTicket, BoardColumn } from "@/lib/api/types"
 
 interface BoardPageProps {
   params: Promise<{ projectId: string }>
 }
 
-interface Ticket {
+// Local ticket type for board display (maps API ticket to board format)
+interface BoardTicket {
   id: string
   title: string
   columnId: string
   priority: "critical" | "high" | "medium" | "low"
-  type: "feature" | "bug" | "task" | "optimization"
+  status: string
   phase: string
-  assignee: string | null
-  labels: string[]
-  blockers: number
-  linesAdded: number
-  linesRemoved: number
-  commitCount: number
+  description: string | null
+  approval_status: string | null
 }
 
 interface Column {
   id: string
   title: string
-  wipLimit: number
+  wipLimit: number | null
+  phase_mappings: string[]
 }
 
-// Mock columns with WIP limits
-const initialColumns: Column[] = [
-  { id: "backlog", title: "Backlog", wipLimit: 0 },
-  { id: "requirements", title: "Requirements", wipLimit: 5 },
-  { id: "implementation", title: "Implementation", wipLimit: 3 },
-  { id: "review", title: "Review", wipLimit: 3 },
-  { id: "done", title: "Done", wipLimit: 0 },
-]
-
-// Mock tickets with more details
-const initialTickets: Ticket[] = [
-  {
-    id: "TICKET-001",
-    title: "Setup authentication flow",
-    columnId: "implementation",
-    priority: "high",
-    type: "feature",
-    phase: "IMPLEMENTATION",
-    assignee: "worker-1",
-    labels: ["auth"],
-    blockers: 0,
-    linesAdded: 1255,
-    linesRemoved: 42,
-    commitCount: 5,
-  },
-  {
-    id: "TICKET-002",
-    title: "Implement JWT token validation",
-    columnId: "requirements",
-    priority: "high",
-    type: "feature",
-    phase: "REQUIREMENTS",
-    assignee: null,
-    labels: ["auth", "security"],
-    blockers: 1,
-    linesAdded: 0,
-    linesRemoved: 0,
-    commitCount: 0,
-  },
-  {
-    id: "TICKET-003",
-    title: "Add OAuth2 providers (Google, GitHub)",
-    columnId: "backlog",
-    priority: "medium",
-    type: "feature",
-    phase: "BACKLOG",
-    assignee: null,
-    labels: ["auth", "oauth"],
-    blockers: 0,
-    linesAdded: 0,
-    linesRemoved: 0,
-    commitCount: 0,
-  },
-  {
-    id: "TICKET-004",
-    title: "Create user profile endpoint",
-    columnId: "review",
-    priority: "medium",
-    type: "feature",
-    phase: "REVIEW",
-    assignee: "worker-2",
-    labels: ["api", "user"],
-    blockers: 0,
-    linesAdded: 450,
-    linesRemoved: 12,
-    commitCount: 3,
-  },
-  {
-    id: "TICKET-005",
-    title: "Add password reset flow",
-    columnId: "requirements",
-    priority: "low",
-    type: "feature",
-    phase: "REQUIREMENTS",
-    assignee: null,
-    labels: ["auth"],
-    blockers: 2,
-    linesAdded: 0,
-    linesRemoved: 0,
-    commitCount: 0,
-  },
-  {
-    id: "TICKET-006",
-    title: "Rate limiting middleware",
-    columnId: "done",
-    priority: "high",
-    type: "feature",
-    phase: "DONE",
-    assignee: "worker-1",
-    labels: ["security", "middleware"],
-    blockers: 0,
-    linesAdded: 320,
-    linesRemoved: 0,
-    commitCount: 2,
-  },
-  {
-    id: "TICKET-007",
-    title: "Fix login redirect bug",
-    columnId: "implementation",
-    priority: "critical",
-    type: "bug",
-    phase: "IMPLEMENTATION",
-    assignee: "worker-1",
-    labels: ["bug", "auth"],
-    blockers: 0,
-    linesAdded: 45,
-    linesRemoved: 23,
-    commitCount: 1,
-  },
-  {
-    id: "TICKET-008",
-    title: "Optimize database queries",
-    columnId: "backlog",
-    priority: "low",
-    type: "optimization",
-    phase: "BACKLOG",
-    assignee: null,
-    labels: ["performance", "database"],
-    blockers: 0,
-    linesAdded: 0,
-    linesRemoved: 0,
-    commitCount: 0,
-  },
-]
-
-const priorityConfig = {
+const priorityConfig: Record<string, { label: string; color: string }> = {
+  CRITICAL: { label: "Critical", color: "destructive" },
+  HIGH: { label: "High", color: "destructive" },
+  MEDIUM: { label: "Medium", color: "secondary" },
+  LOW: { label: "Low", color: "outline" },
   critical: { label: "Critical", color: "destructive" },
   high: { label: "High", color: "destructive" },
   medium: { label: "Medium", color: "secondary" },
   low: { label: "Low", color: "outline" },
 }
 
-const typeConfig = {
-  feature: { label: "Feature", color: "default" },
-  bug: { label: "Bug", color: "destructive" },
-  task: { label: "Task", color: "secondary" },
-  optimization: { label: "Optimization", color: "outline" },
+const statusConfig: Record<string, { label: string; color: string }> = {
+  backlog: { label: "Backlog", color: "outline" },
+  in_progress: { label: "In Progress", color: "default" },
+  review: { label: "Review", color: "secondary" },
+  done: { label: "Done", color: "default" },
+  blocked: { label: "Blocked", color: "destructive" },
 }
 
 // Sortable Ticket Card Component
@@ -225,7 +104,7 @@ function SortableTicketCard({
   ticket,
   projectId,
 }: {
-  ticket: Ticket
+  ticket: BoardTicket
   projectId: string
 }) {
   const {
@@ -261,13 +140,13 @@ function TicketCard({
   dragHandleProps,
   isOverlay = false,
 }: {
-  ticket: Ticket
+  ticket: BoardTicket
   projectId: string
-  dragHandleProps?: any
+  dragHandleProps?: Record<string, unknown>
   isOverlay?: boolean
 }) {
-  const priorityCfg = priorityConfig[ticket.priority]
-  const typeCfg = typeConfig[ticket.type]
+  const priorityCfg = priorityConfig[ticket.priority] || { label: ticket.priority, color: "outline" }
+  const statusCfg = statusConfig[ticket.status] || { label: ticket.status, color: "outline" }
 
   const content = (
     <Card
@@ -290,7 +169,7 @@ function TicketCard({
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-1">
                 <Badge variant="outline" className="font-mono text-xs">
-                  {ticket.id}
+                  {ticket.id.slice(0, 8)}
                 </Badge>
                 <p className="text-sm font-medium leading-tight line-clamp-2">
                   {ticket.title}
@@ -302,46 +181,28 @@ function TicketCard({
 
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">
-          <Badge variant={priorityCfg.color as any} className="text-xs">
+          <Badge variant={priorityCfg.color as "default" | "destructive" | "secondary" | "outline"} className="text-xs">
             {priorityCfg.label}
           </Badge>
-          <Badge variant={typeCfg.color as any} className="text-xs">
-            {typeCfg.label}
+          <Badge variant={statusCfg.color as "default" | "destructive" | "secondary" | "outline"} className="text-xs">
+            {statusCfg.label}
           </Badge>
-          {ticket.labels.slice(0, 2).map((label) => (
-            <Badge key={label} variant="outline" className="text-xs">
-              {label}
+          {ticket.approval_status && ticket.approval_status !== "approved" && (
+            <Badge variant="secondary" className="text-xs">
+              {ticket.approval_status}
             </Badge>
-          ))}
+          )}
         </div>
 
-        {/* Footer with assignee and stats */}
+        {/* Footer with phase */}
         <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
-          <div className="flex items-center gap-2">
-            {ticket.assignee ? (
-              <span className="flex items-center gap-1">
-                <Bot className="h-3 w-3" />
-                {ticket.assignee}
-              </span>
-            ) : (
-              <span className="text-muted-foreground/50">Unassigned</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {(ticket.linesAdded > 0 || ticket.linesRemoved > 0) && (
-              <span className="font-mono">
-                <span className="text-green-600">+{ticket.linesAdded}</span>
-                {" "}
-                <span className="text-red-600">-{ticket.linesRemoved}</span>
-              </span>
-            )}
-            {ticket.blockers > 0 && (
-              <span className="flex items-center gap-1 text-orange-500">
-                <AlertCircle className="h-3 w-3" />
-                {ticket.blockers}
-              </span>
-            )}
-          </div>
+          <span className="capitalize">{ticket.phase.toLowerCase().replace(/_/g, " ")}</span>
+          {ticket.status === "blocked" && (
+            <span className="flex items-center gap-1 text-orange-500">
+              <AlertCircle className="h-3 w-3" />
+              Blocked
+            </span>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -366,11 +227,11 @@ function KanbanColumn({
   isOver,
 }: {
   column: Column
-  tickets: Ticket[]
+  tickets: BoardTicket[]
   projectId: string
   isOver?: boolean
 }) {
-  const isOverWipLimit = column.wipLimit > 0 && tickets.length > column.wipLimit
+  const isOverWipLimit = column.wipLimit !== null && column.wipLimit > 0 && tickets.length > column.wipLimit
 
   return (
     <div
@@ -387,7 +248,7 @@ function KanbanColumn({
             className="rounded-full"
           >
             {tickets.length}
-            {column.wipLimit > 0 && `/${column.wipLimit}`}
+            {column.wipLimit !== null && column.wipLimit > 0 && `/${column.wipLimit}`}
           </Badge>
           {isOverWipLimit && (
             <span className="text-xs text-destructive">WIP exceeded</span>
@@ -447,13 +308,15 @@ function KanbanColumn({
 
 export default function BoardPage({ params }: BoardPageProps) {
   const { projectId } = use(params)
-  const [tickets, setTickets] = useState<Ticket[]>(initialTickets)
-  const [columns] = useState<Column[]>(initialColumns)
   const [searchQuery, setSearchQuery] = useState("")
-  const [filterType, setFilterType] = useState<string>("all")
+  const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterPriority, setFilterPriority] = useState<string>("all")
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+
+  // Fetch board data from API
+  const { data: boardData, isLoading, error } = useBoardView(projectId === "all" ? undefined : projectId)
+  const moveTicket = useMoveTicket()
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -466,37 +329,65 @@ export default function BoardPage({ params }: BoardPageProps) {
     })
   )
 
+  // Transform API data to local format
+  const columns: Column[] = useMemo(() => {
+    if (!boardData?.columns) return []
+    return boardData.columns.map((col) => ({
+      id: col.id,
+      title: col.name,
+      wipLimit: col.wip_limit,
+      phase_mappings: col.phase_mappings,
+    }))
+  }, [boardData])
+
+  // Transform tickets from columns
+  const allTickets: BoardTicket[] = useMemo(() => {
+    if (!boardData?.columns) return []
+    return boardData.columns.flatMap((col) =>
+      col.tickets.map((t: ApiTicket) => ({
+        id: t.id,
+        title: t.title,
+        columnId: col.id,
+        priority: (t.priority?.toLowerCase() || "medium") as "critical" | "high" | "medium" | "low",
+        status: t.status,
+        phase: t.phase_id,
+        description: t.description,
+        approval_status: t.approval_status,
+      }))
+    )
+  }, [boardData])
+
   // Filter tickets
-  const filteredTickets = tickets.filter((ticket) => {
+  const filteredTickets = allTickets.filter((ticket) => {
     const matchesSearch =
       searchQuery === "" ||
       ticket.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       ticket.id.toLowerCase().includes(searchQuery.toLowerCase())
-    const matchesType = filterType === "all" || ticket.type === filterType
+    const matchesStatus = filterStatus === "all" || ticket.status === filterStatus
     const matchesPriority =
-      filterPriority === "all" || ticket.priority === filterPriority
-    return matchesSearch && matchesType && matchesPriority
+      filterPriority === "all" || ticket.priority === filterPriority.toLowerCase()
+    return matchesSearch && matchesStatus && matchesPriority
   })
 
   // Group tickets by column
   const ticketsByColumn = columns.reduce((acc, column) => {
     acc[column.id] = filteredTickets.filter((t) => t.columnId === column.id)
     return acc
-  }, {} as Record<string, Ticket[]>)
+  }, {} as Record<string, BoardTicket[]>)
 
   // Get active ticket for drag overlay
   const activeTicket = activeId
-    ? tickets.find((t) => t.id === activeId)
+    ? allTickets.find((t) => t.id === activeId)
     : null
 
   // Find which column a ticket belongs to
-  const findColumn = (id: string) => {
-    const ticket = tickets.find((t) => t.id === id)
+  const findColumn = useCallback((id: string) => {
+    const ticket = allTickets.find((t) => t.id === id)
     if (ticket) return ticket.columnId
     // Check if id is a column id
     if (columns.find((c) => c.id === id)) return id
     return null
-  }
+  }, [allTickets, columns])
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string)
@@ -515,37 +406,77 @@ export default function BoardPage({ params }: BoardPageProps) {
 
     if (!over) return
 
-    const activeId = active.id as string
-    const overId = over.id as string
+    const draggedId = active.id as string
+    const droppedId = over.id as string
 
-    const activeColumn = findColumn(activeId)
-    let overColumn = findColumn(overId)
+    const activeColumn = findColumn(draggedId)
+    let overColumn = findColumn(droppedId)
 
     // If dropping on a column directly
-    if (columns.find((c) => c.id === overId)) {
-      overColumn = overId
+    if (columns.find((c) => c.id === droppedId)) {
+      overColumn = droppedId
     }
 
     if (!activeColumn || !overColumn) return
     if (activeColumn === overColumn) return
 
-    // Move ticket to new column
-    setTickets((prev) =>
-      prev.map((ticket) =>
-        ticket.id === activeId
-          ? { ...ticket, columnId: overColumn!, phase: overColumn!.toUpperCase() }
-          : ticket
-      )
-    )
-  }, [columns])
+    // Move ticket via API
+    moveTicket.mutate({
+      ticket_id: draggedId,
+      target_column_id: overColumn,
+    })
+  }, [columns, findColumn, moveTicket])
 
   const clearFilters = () => {
     setSearchQuery("")
-    setFilterType("all")
+    setFilterStatus("all")
     setFilterPriority("all")
   }
 
-  const hasFilters = searchQuery || filterType !== "all" || filterPriority !== "all"
+  const hasFilters = searchQuery || filterStatus !== "all" || filterPriority !== "all"
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+        <div className="flex-shrink-0 border-b bg-background px-4 py-3">
+          <div className="flex items-center gap-4">
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-8 w-40" />
+          </div>
+        </div>
+        <div className="flex gap-4 p-4">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="w-[320px] shrink-0 rounded-lg bg-muted/30 p-3">
+              <Skeleton className="h-6 w-32 mb-4" />
+              <div className="space-y-2">
+                <Skeleton className="h-24 w-full" />
+                <Skeleton className="h-24 w-full" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+          <h2 className="mt-4 text-lg font-semibold">Failed to load board</h2>
+          <p className="text-muted-foreground">
+            {error instanceof Error ? error.message : "An error occurred"}
+          </p>
+          <Button className="mt-4" asChild>
+            <Link href={`/projects/${projectId}`}>Back to Project</Link>
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <DndContext
@@ -584,18 +515,19 @@ export default function BoardPage({ params }: BoardPageProps) {
                 />
               </div>
 
-              {/* Type Filter */}
-              <Select value={filterType} onValueChange={setFilterType}>
+              {/* Status Filter */}
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
                 <SelectTrigger className="w-[130px]">
                   <ListFilter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Type" />
+                  <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="feature">Feature</SelectItem>
-                  <SelectItem value="bug">Bug</SelectItem>
-                  <SelectItem value="task">Task</SelectItem>
-                  <SelectItem value="optimization">Optimization</SelectItem>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="backlog">Backlog</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="review">Review</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
                 </SelectContent>
               </Select>
 

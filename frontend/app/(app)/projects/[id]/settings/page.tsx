@@ -1,14 +1,15 @@
 "use client"
 
-import { use } from "react"
+import { use, useState, useEffect } from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import {
@@ -37,9 +38,11 @@ import {
   Workflow,
   Trash2,
   Save,
+  Loader2,
+  AlertCircle,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { mockProjects } from "@/lib/mock"
+import { useProject, useUpdateProject, useDeleteProject } from "@/hooks/useProjects"
 
 interface ProjectSettingsPageProps {
   params: Promise<{ id: string }>
@@ -55,15 +58,91 @@ const settingsNav = [
 export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps) {
   const { id } = use(params)
   const pathname = usePathname()
-  const project = mockProjects.find((p) => p.id === id)
+  const router = useRouter()
+  
+  const { data: project, isLoading, error } = useProject(id)
+  const updateMutation = useUpdateProject()
+  const deleteMutation = useDeleteProject()
+  
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    status: "active" as "active" | "paused" | "archived" | "completed",
+  })
+  const [notifications, setNotifications] = useState({
+    agentCompletions: true,
+    agentErrors: true,
+    phaseTransitions: false,
+    dailyDigest: false,
+  })
 
-  if (!project) {
+  useEffect(() => {
+    if (project) {
+      setFormData({
+        name: project.name || "",
+        description: project.description || "",
+        status: project.status,
+      })
+    }
+  }, [project])
+
+  const handleSave = async () => {
+    try {
+      await updateMutation.mutateAsync({
+        projectId: id,
+        data: {
+          name: formData.name,
+          description: formData.description || undefined,
+          // Note: status and settings would need to match backend schema
+        },
+      })
+      toast.success("Project settings updated")
+    } catch (err) {
+      toast.error("Failed to update project")
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      await deleteMutation.mutateAsync(id)
+      toast.success("Project deleted")
+      router.push("/projects")
+    } catch (err) {
+      toast.error("Failed to delete project")
+    }
+  }
+
+  if (isLoading) {
     return (
-      <div className="container mx-auto p-6 text-center">
-        <h1 className="text-2xl font-bold">Project not found</h1>
-        <Button className="mt-4" asChild>
-          <Link href="/projects">Back to Projects</Link>
-        </Button>
+      <div className="container mx-auto p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <Skeleton className="h-8 w-64" />
+        <div className="flex gap-6">
+          <Skeleton className="h-40 w-48" />
+          <div className="flex-1 space-y-4">
+            <Skeleton className="h-60 w-full" />
+            <Skeleton className="h-40 w-full" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !project) {
+    return (
+      <div className="container mx-auto p-6">
+        <Card className="border-destructive/50">
+          <CardContent className="p-6 text-center">
+            <AlertCircle className="mx-auto h-12 w-12 text-destructive/50" />
+            <h3 className="mt-4 text-lg font-semibold">Project not found</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              The project may not exist or you don&apos;t have access.
+            </p>
+            <Button className="mt-4" asChild>
+              <Link href="/projects">Back to Projects</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -120,11 +199,20 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="name">Project Name</Label>
-                  <Input id="name" defaultValue={project.name} />
+                  <Input 
+                    id="name" 
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="status">Status</Label>
-                  <Select defaultValue={project.status}>
+                  <Select 
+                    value={formData.status}
+                    onValueChange={(value: "active" | "paused" | "archived" | "completed") => 
+                      setFormData({ ...formData, status: value })
+                    }
+                  >
                     <SelectTrigger id="status">
                       <SelectValue />
                     </SelectTrigger>
@@ -132,6 +220,7 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                       <SelectItem value="active">Active</SelectItem>
                       <SelectItem value="paused">Paused</SelectItem>
                       <SelectItem value="archived">Archived</SelectItem>
+                      <SelectItem value="completed">Completed</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -140,17 +229,22 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                 <Label htmlFor="description">Description</Label>
                 <Textarea
                   id="description"
-                  defaultValue={project.description}
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   rows={3}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="repo">Repository</Label>
-                <Input id="repo" defaultValue={project.repo} disabled />
-                <p className="text-xs text-muted-foreground">
-                  Repository cannot be changed after project creation
-                </p>
-              </div>
+              {project.github_repo && (
+                <div className="space-y-2">
+                  <Label>Repository</Label>
+                  <div className="flex items-center h-10 px-3 rounded-md border bg-muted text-sm">
+                    {project.github_owner}/{project.github_repo}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Repository cannot be changed after project creation
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -168,7 +262,12 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                     Notify when agents complete tasks
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notifications.agentCompletions}
+                  onCheckedChange={(checked) => 
+                    setNotifications({ ...notifications, agentCompletions: checked })
+                  }
+                />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
@@ -178,7 +277,12 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                     Notify when agents encounter errors
                   </p>
                 </div>
-                <Switch defaultChecked />
+                <Switch 
+                  checked={notifications.agentErrors}
+                  onCheckedChange={(checked) => 
+                    setNotifications({ ...notifications, agentErrors: checked })
+                  }
+                />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
@@ -188,7 +292,12 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                     Notify when tickets change phases
                   </p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={notifications.phaseTransitions}
+                  onCheckedChange={(checked) => 
+                    setNotifications({ ...notifications, phaseTransitions: checked })
+                  }
+                />
               </div>
               <Separator />
               <div className="flex items-center justify-between">
@@ -198,8 +307,16 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                     Receive a daily summary of project activity
                   </p>
                 </div>
-                <Switch />
+                <Switch 
+                  checked={notifications.dailyDigest}
+                  onCheckedChange={(checked) => 
+                    setNotifications({ ...notifications, dailyDigest: checked })
+                  }
+                />
               </div>
+              <p className="text-xs text-muted-foreground pt-2">
+                Note: Notification settings are stored locally. Backend support coming soon.
+              </p>
             </CardContent>
           </Card>
 
@@ -245,8 +362,12 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <Button>
-              <Save className="mr-2 h-4 w-4" />
+            <Button onClick={handleSave} disabled={updateMutation.isPending}>
+              {updateMutation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
               Save Changes
             </Button>
           </div>
@@ -265,7 +386,15 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                     Archive this project and stop all agents
                   </p>
                 </div>
-                <Button variant="outline">Archive</Button>
+                <Button 
+                  variant="outline"
+                  onClick={() => {
+                    setFormData({ ...formData, status: "archived" })
+                    toast.info("Status set to archived. Click Save to confirm.")
+                  }}
+                >
+                  Archive
+                </Button>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
@@ -277,8 +406,12 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                 </div>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive">
-                      <Trash2 className="mr-2 h-4 w-4" />
+                    <Button variant="destructive" disabled={deleteMutation.isPending}>
+                      {deleteMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="mr-2 h-4 w-4" />
+                      )}
                       Delete
                     </Button>
                   </AlertDialogTrigger>
@@ -293,7 +426,10 @@ export default function ProjectSettingsPage({ params }: ProjectSettingsPageProps
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                      <AlertDialogAction 
+                        onClick={handleDelete}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
                         Delete Project
                       </AlertDialogAction>
                     </AlertDialogFooter>

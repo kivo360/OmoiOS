@@ -1,68 +1,68 @@
 "use client"
 
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ArrowLeft } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
+import { ArrowLeft, AlertCircle, CheckCircle } from "lucide-react"
+import { useAnomalies, useAcknowledgeAnomaly } from "@/hooks/useMonitor"
 
-const stats = [
-    { label: "Total (24h)", value: 12 },
-    { label: "Success", value: 9 },
-    { label: "Warnings", value: 2 },
-    { label: "Failed", value: 1 },
-]
-
-const interventions = [
-    {
-        id: "int-142",
-        agent: "worker-5",
-        type: "idle",
-        result: "success",
-        message: "Prompted agent to update task status and proceed",
-        time: "6m ago",
-    },
-    {
-        id: "int-139",
-        agent: "worker-2",
-        type: "constraint_violation",
-        result: "success",
-        message: "Blocked external package install, suggested built-in crypto",
-        time: "42m ago",
-    },
-    {
-        id: "int-134",
-        agent: "worker-3",
-        type: "drifting",
-        result: "warning",
-        message: "Agent working on unrelated files; asked to refocus on ticket",
-        time: "1h ago",
-    },
-    {
-        id: "int-129",
-        agent: "worker-1",
-        type: "missed_steps",
-        result: "failed",
-        message: "Mandatory validation not performed; human review requested",
-        time: "3h ago",
-    },
-]
-
-const resultColor = (status: string) => {
-    if (status === "success") return "bg-emerald-100 text-emerald-700"
-    if (status === "warning") return "bg-amber-100 text-amber-700"
+const resultColor = (severity: string, acknowledged: boolean) => {
+    if (acknowledged) return "bg-emerald-100 text-emerald-700"
+    if (severity === "low") return "bg-emerald-100 text-emerald-700"
+    if (severity === "medium") return "bg-amber-100 text-amber-700"
     return "bg-rose-100 text-rose-700"
 }
 
-const typeLabel: Record<string, string> = {
-    idle: "Idle",
-    constraint_violation: "Constraint",
-    drifting: "Drifting",
-    missed_steps: "Missed Steps",
+const formatTimeAgo = (dateStr: string | null | undefined) => {
+    if (!dateStr) return "N/A"
+    const date = new Date(dateStr)
+    const now = new Date()
+    const diff = now.getTime() - date.getTime()
+    const minutes = Math.floor(diff / (1000 * 60))
+    if (minutes < 60) return `${minutes}m ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours}h ago`
+    const days = Math.floor(hours / 24)
+    return `${days}d ago`
 }
 
 export default function InterventionsPage() {
+    const [tab, setTab] = useState("all")
+    const { data: anomalies, isLoading } = useAnomalies({ hours: 24 })
+    const acknowledgeMutation = useAcknowledgeAnomaly()
+
+    // Calculate stats
+    const stats = useMemo(() => {
+        if (!anomalies) return [
+            { label: "Total (24h)", value: 0 },
+            { label: "High", value: 0 },
+            { label: "Medium", value: 0 },
+            { label: "Low", value: 0 },
+        ]
+        return [
+            { label: "Total (24h)", value: anomalies.length },
+            { label: "High", value: anomalies.filter((a) => a.severity === "high").length },
+            { label: "Medium", value: anomalies.filter((a) => a.severity === "medium").length },
+            { label: "Low", value: anomalies.filter((a) => a.severity === "low").length },
+        ]
+    }, [anomalies])
+
+    // Filter anomalies by tab
+    const filteredAnomalies = useMemo(() => {
+        if (!anomalies) return []
+        if (tab === "all") return anomalies
+        if (tab === "acknowledged") return anomalies.filter((a) => a.acknowledged_at)
+        if (tab === "pending") return anomalies.filter((a) => !a.acknowledged_at)
+        return anomalies.filter((a) => a.severity === tab)
+    }, [anomalies, tab])
+
+    const handleAcknowledge = (anomalyId: string) => {
+        acknowledgeMutation.mutate(anomalyId)
+    }
     return (
         <div className="container mx-auto p-6 space-y-6">
             <div className="flex items-center justify-between">
@@ -83,7 +83,11 @@ export default function InterventionsPage() {
                     <Card key={s.label}>
                         <CardContent className="p-4">
                             <p className="text-sm text-muted-foreground">{s.label}</p>
-                            <p className="text-2xl font-bold">{s.value}</p>
+                            {isLoading ? (
+                                <Skeleton className="h-8 w-12 mt-1" />
+                            ) : (
+                                <p className="text-2xl font-bold">{s.value}</p>
+                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -91,114 +95,73 @@ export default function InterventionsPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle>Recent interventions</CardTitle>
-                    <CardDescription>Root cause categorization and results</CardDescription>
+                    <CardTitle>System Anomalies</CardTitle>
+                    <CardDescription>Detected anomalies and interventions</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <Tabs defaultValue="all">
+                    <Tabs value={tab} onValueChange={setTab}>
                         <TabsList>
                             <TabsTrigger value="all">All</TabsTrigger>
-                            <TabsTrigger value="success">Success</TabsTrigger>
-                            <TabsTrigger value="warning">Warnings</TabsTrigger>
-                            <TabsTrigger value="failed">Failed</TabsTrigger>
+                            <TabsTrigger value="pending">Pending</TabsTrigger>
+                            <TabsTrigger value="acknowledged">Acknowledged</TabsTrigger>
+                            <TabsTrigger value="high">High</TabsTrigger>
                         </TabsList>
-                        <TabsContent value="all" className="space-y-3">
-                            {interventions.map((item) => (
-                                <div key={item.id} className="rounded-lg border p-4">
-                                    <div className="flex flex-wrap items-center justify-between gap-3">
-                                        <div className="flex flex-col">
-                                            <div className="flex items-center gap-2">
-                                                <span className="font-semibold">{item.agent}</span>
-                                                <Badge variant="secondary" className="capitalize">
-                                                    {typeLabel[item.type] ?? item.type}
-                                                </Badge>
-                                            </div>
-                                            <p className="text-sm text-muted-foreground">{item.message}</p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            <Badge className={resultColor(item.result)} variant="outline">
-                                                {item.result}
-                                            </Badge>
-                                            <span className="text-sm text-muted-foreground">{item.time}</span>
-                                        </div>
-                                    </div>
+                        <TabsContent value={tab} className="space-y-3 mt-4">
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3, 4].map((i) => (
+                                        <Skeleton key={i} className="h-20 w-full" />
+                                    ))}
                                 </div>
-                            ))}
-                        </TabsContent>
-                        <TabsContent value="success" className="space-y-3">
-                            {interventions
-                                .filter((i) => i.result === "success")
-                                .map((item) => (
-                                    <div key={item.id} className="rounded-lg border p-4">
+                            ) : filteredAnomalies.length === 0 ? (
+                                <div className="py-8 text-center text-muted-foreground">
+                                    <AlertCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                                    <p>No anomalies in this category</p>
+                                </div>
+                            ) : (
+                                filteredAnomalies.map((anomaly) => (
+                                    <div key={anomaly.anomaly_id} className="rounded-lg border p-4">
                                         <div className="flex flex-wrap items-center justify-between gap-3">
-                                            <div className="flex flex-col">
+                                            <div className="flex flex-col flex-1">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-semibold">{item.agent}</span>
+                                                    <span className="font-semibold">{anomaly.metric_name}</span>
                                                     <Badge variant="secondary" className="capitalize">
-                                                        {typeLabel[item.type] ?? item.type}
+                                                        {anomaly.anomaly_type}
                                                     </Badge>
                                                 </div>
-                                                <p className="text-sm text-muted-foreground">{item.message}</p>
+                                                <p className="text-sm text-muted-foreground mt-1">{anomaly.description}</p>
+                                                <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
+                                                    <span>Baseline: {anomaly.baseline_value.toFixed(2)}</span>
+                                                    <span>Observed: {anomaly.observed_value.toFixed(2)}</span>
+                                                    <span>Deviation: {anomaly.deviation_percent.toFixed(1)}%</span>
+                                                </div>
                                             </div>
                                             <div className="flex items-center gap-3">
-                                                <Badge className={resultColor(item.result)} variant="outline">
-                                                    {item.result}
+                                                <Badge 
+                                                    className={resultColor(anomaly.severity, !!anomaly.acknowledged_at)} 
+                                                    variant="outline"
+                                                >
+                                                    {anomaly.acknowledged_at ? "Acknowledged" : anomaly.severity}
                                                 </Badge>
-                                                <span className="text-sm text-muted-foreground">{item.time}</span>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {formatTimeAgo(anomaly.detected_at)}
+                                                </span>
+                                                {!anomaly.acknowledged_at && (
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="outline"
+                                                        onClick={() => handleAcknowledge(anomaly.anomaly_id)}
+                                                        disabled={acknowledgeMutation.isPending}
+                                                    >
+                                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                                        Ack
+                                                    </Button>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
-                                ))}
-                        </TabsContent>
-                        <TabsContent value="warning" className="space-y-3">
-                            {interventions
-                                .filter((i) => i.result === "warning")
-                                .map((item) => (
-                                    <div key={item.id} className="rounded-lg border p-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-3">
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-semibold">{item.agent}</span>
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {typeLabel[item.type] ?? item.type}
-                                                    </Badge>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">{item.message}</p>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <Badge className={resultColor(item.result)} variant="outline">
-                                                    {item.result}
-                                                </Badge>
-                                                <span className="text-sm text-muted-foreground">{item.time}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                        </TabsContent>
-                        <TabsContent value="failed" className="space-y-3">
-                            {interventions
-                                .filter((i) => i.result === "failed")
-                                .map((item) => (
-                                    <div key={item.id} className="rounded-lg border p-4">
-                                        <div className="flex flex-wrap items-center justify-between gap-3">
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-2">
-                                                    <span className="font-semibold">{item.agent}</span>
-                                                    <Badge variant="secondary" className="capitalize">
-                                                        {typeLabel[item.type] ?? item.type}
-                                                    </Badge>
-                                                </div>
-                                                <p className="text-sm text-muted-foreground">{item.message}</p>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <Badge className={resultColor(item.result)} variant="outline">
-                                                    {item.result}
-                                                </Badge>
-                                                <span className="text-sm text-muted-foreground">{item.time}</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
+                                ))
+                            )}
                         </TabsContent>
                     </Tabs>
                 </CardContent>

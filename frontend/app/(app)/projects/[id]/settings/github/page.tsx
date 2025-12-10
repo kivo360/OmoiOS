@@ -3,6 +3,7 @@
 import { use, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -47,7 +48,8 @@ import {
   Activity,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { mockProjects } from "@/lib/mock"
+import { useProject } from "@/hooks/useProjects"
+import { useConnectedRepositories, useConnectRepository, useSyncRepository } from "@/hooks/useGitHub"
 
 interface GitHubSettingsPageProps {
   params: Promise<{ id: string }>
@@ -60,41 +62,53 @@ const settingsNav = [
   { href: "/github", label: "GitHub", icon: GitBranch },
 ]
 
-// Mock GitHub data
-const mockGitHubConnection = {
-  isConnected: true,
-  username: "kevinhill",
-  avatar: "https://github.com/kevinhill.png",
-  organization: "omoi-os",
-  selectedRepo: "omoi-os/omoios-core",
-  webhookStatus: "active",
-  webhookUrl: "https://api.omoios.com/webhooks/github/abc123",
-  lastSync: "2 minutes ago",
-  syncSettings: {
+export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) {
+  const { id } = use(params)
+  const pathname = usePathname()
+  
+  const { data: project, isLoading: projectLoading, error: projectError } = useProject(id)
+  const { data: connectedRepos } = useConnectedRepositories()
+  const syncMutation = useSyncRepository()
+  const connectMutation = useConnectRepository()
+  
+  const [isSyncing, setIsSyncing] = useState(false)
+  const [syncSettings, setSyncSettings] = useState({
     issues: true,
     commits: true,
     pullRequests: true,
     workflowRuns: false,
-  },
-}
+  })
 
-const mockRepositories = [
-  { id: "1", fullName: "omoi-os/omoios-core", private: false },
-  { id: "2", fullName: "omoi-os/omoios-frontend", private: false },
-  { id: "3", fullName: "omoi-os/omoios-agents", private: true },
-  { id: "4", fullName: "kevinhill/personal-project", private: true },
-]
+  // Check if project is connected to GitHub
+  const isConnected = Boolean(project?.github_owner && project?.github_repo)
+  const selectedRepo = isConnected ? `${project?.github_owner}/${project?.github_repo}` : null
 
-export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) {
-  const { id } = use(params)
-  const pathname = usePathname()
-  const project = mockProjects.find((p) => p.id === id)
-  const [isConnected, setIsConnected] = useState(mockGitHubConnection.isConnected)
-  const [isTesting, setIsTesting] = useState(false)
-  const [testResult, setTestResult] = useState<"success" | "error" | null>(null)
-  const [syncSettings, setSyncSettings] = useState(mockGitHubConnection.syncSettings)
+  const handleSync = async () => {
+    setIsSyncing(true)
+    try {
+      await syncMutation.mutateAsync(id)
+      toast.success("Sync completed successfully!")
+    } catch (error) {
+      toast.error("Sync failed. Please try again.")
+    } finally {
+      setIsSyncing(false)
+    }
+  }
 
-  if (!project) {
+  if (projectLoading) {
+    return (
+      <div className="container mx-auto p-6 space-y-6">
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-8 w-64" />
+        <div className="flex gap-6">
+          <Skeleton className="h-64 w-48" />
+          <Skeleton className="h-64 flex-1" />
+        </div>
+      </div>
+    )
+  }
+
+  if (projectError || !project) {
     return (
       <div className="container mx-auto p-6 text-center">
         <h1 className="text-2xl font-bold">Project not found</h1>
@@ -103,15 +117,6 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
         </Button>
       </div>
     )
-  }
-
-  const handleTestWebhook = () => {
-    setIsTesting(true)
-    setTestResult(null)
-    setTimeout(() => {
-      setIsTesting(false)
-      setTestResult("success")
-    }, 2000)
   }
 
   return (
@@ -168,7 +173,7 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {isConnected ? (
+              {isConnected && selectedRepo ? (
                 <>
                   <div className="flex items-center justify-between rounded-lg border bg-green-50 p-4">
                     <div className="flex items-center gap-3">
@@ -178,7 +183,7 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                       <div>
                         <p className="font-medium text-green-900">Connected</p>
                         <p className="text-sm text-green-700">
-                          Authenticated as @{mockGitHubConnection.username}
+                          Repository: {selectedRepo}
                         </p>
                       </div>
                     </div>
@@ -189,25 +194,32 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
 
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">GitHub Account</Label>
+                      <Label className="text-muted-foreground">GitHub Repository</Label>
                       <div className="flex items-center gap-2">
-                        <img
-                          src={mockGitHubConnection.avatar}
-                          alt={mockGitHubConnection.username}
-                          className="h-6 w-6 rounded-full"
-                        />
-                        <span className="font-medium">@{mockGitHubConnection.username}</span>
-                        {mockGitHubConnection.organization && (
-                          <Badge variant="secondary">{mockGitHubConnection.organization}</Badge>
-                        )}
+                        <GitBranch className="h-4 w-4" />
+                        <span className="font-medium font-mono text-sm">{selectedRepo}</span>
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label className="text-muted-foreground">Last Sync</Label>
-                      <p className="flex items-center gap-2 text-sm">
-                        <Activity className="h-4 w-4 text-green-500" />
-                        {mockGitHubConnection.lastSync}
-                      </p>
+                      <Label className="text-muted-foreground">Actions</Label>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSync}
+                        disabled={isSyncing}
+                      >
+                        {isSyncing ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Syncing...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4" />
+                            Sync Now
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 </>
@@ -216,11 +228,16 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                   <Github className="h-12 w-12 text-muted-foreground/50" />
                   <p className="mt-4 font-medium">Not Connected</p>
                   <p className="text-sm text-muted-foreground">
-                    Connect your GitHub account to enable sync features
+                    Connect a GitHub repository to enable sync features
                   </p>
-                  <Button className="mt-4" onClick={() => setIsConnected(true)}>
-                    <Github className="mr-2 h-4 w-4" />
-                    Authorize GitHub
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Edit the project settings to connect a repository
+                  </p>
+                  <Button className="mt-4" asChild>
+                    <Link href={`/projects/${id}/settings`}>
+                      <Settings className="mr-2 h-4 w-4" />
+                      Edit Project Settings
+                    </Link>
                   </Button>
                 </div>
               )}
@@ -229,45 +246,24 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
 
           {isConnected && (
             <>
-              {/* Repository Selection */}
+              {/* Repository Details */}
               <Card>
                 <CardHeader>
                   <CardTitle>Repository</CardTitle>
                   <CardDescription>
-                    Select the GitHub repository to link with this project
+                    Connected GitHub repository for this project
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="repo">Select Repository</Label>
-                    <Select defaultValue={mockGitHubConnection.selectedRepo}>
-                      <SelectTrigger id="repo">
-                        <SelectValue placeholder="Select a repository" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {mockRepositories.map((repo) => (
-                          <SelectItem key={repo.id} value={repo.fullName}>
-                            <span className="flex items-center gap-2">
-                              {repo.fullName}
-                              {repo.private && (
-                                <Badge variant="outline" className="text-xs">Private</Badge>
-                              )}
-                            </span>
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {mockGitHubConnection.selectedRepo && (
+                  {selectedRepo && (
                     <div className="rounded-lg border p-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <GitBranch className="h-4 w-4 text-muted-foreground" />
-                          <span className="font-mono text-sm">{mockGitHubConnection.selectedRepo}</span>
+                          <span className="font-mono text-sm">{selectedRepo}</span>
                         </div>
                         <a
-                          href={`https://github.com/${mockGitHubConnection.selectedRepo}`}
+                          href={`https://github.com/${selectedRepo}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-sm text-muted-foreground hover:text-foreground"
@@ -277,10 +273,14 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                       </div>
                     </div>
                   )}
+                  
+                  <p className="text-xs text-muted-foreground">
+                    To change the connected repository, edit the project settings on the General tab.
+                  </p>
                 </CardContent>
               </Card>
 
-              {/* Webhook Configuration */}
+              {/* Webhook Info */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -288,88 +288,25 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                     Webhook Configuration
                   </CardTitle>
                   <CardDescription>
-                    Configure the webhook that receives events from GitHub
+                    Webhooks are automatically configured when a repository is connected
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Webhook URL</Label>
-                    <div className="flex gap-2">
-                      <Input
-                        value={mockGitHubConnection.webhookUrl}
-                        readOnly
-                        className="font-mono text-sm"
-                      />
-                      <Button variant="outline" size="icon">
-                        <Link2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      This URL is automatically configured in your GitHub repository
-                    </p>
-                  </div>
-
                   <div className="flex items-center justify-between rounded-lg border p-3">
                     <div className="flex items-center gap-3">
-                      <div
-                        className={cn(
-                          "h-3 w-3 rounded-full",
-                          mockGitHubConnection.webhookStatus === "active"
-                            ? "bg-green-500"
-                            : "bg-red-500"
-                        )}
-                      />
+                      <div className="h-3 w-3 rounded-full bg-green-500" />
                       <div>
-                        <p className="font-medium">
-                          {mockGitHubConnection.webhookStatus === "active" ? "Active" : "Inactive"}
-                        </p>
+                        <p className="font-medium">Configured</p>
                         <p className="text-xs text-muted-foreground">
-                          Webhook status
+                          Webhook is automatically managed
                         </p>
                       </div>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleTestWebhook}
-                      disabled={isTesting}
-                    >
-                      {isTesting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Testing...
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Test Webhook
-                        </>
-                      )}
-                    </Button>
                   </div>
-
-                  {testResult && (
-                    <div
-                      className={cn(
-                        "flex items-center gap-2 rounded-lg p-3",
-                        testResult === "success"
-                          ? "bg-green-50 text-green-700"
-                          : "bg-red-50 text-red-700"
-                      )}
-                    >
-                      {testResult === "success" ? (
-                        <>
-                          <Check className="h-4 w-4" />
-                          <span className="text-sm">Webhook test successful!</span>
-                        </>
-                      ) : (
-                        <>
-                          <AlertCircle className="h-4 w-4" />
-                          <span className="text-sm">Webhook test failed. Please check your configuration.</span>
-                        </>
-                      )}
-                    </div>
-                  )}
+                  
+                  <p className="text-xs text-muted-foreground">
+                    The webhook is set up automatically to receive push events, pull requests, and issue updates from GitHub.
+                  </p>
                 </CardContent>
               </Card>
 
@@ -455,52 +392,21 @@ export default function GitHubSettingsPage({ params }: GitHubSettingsPageProps) 
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
-                      <p className="font-medium">Reauthorize GitHub</p>
-                      <p className="text-sm text-muted-foreground">
-                        Refresh your GitHub permissions and token
-                      </p>
-                    </div>
-                    <Button variant="outline">
-                      <RefreshCw className="mr-2 h-4 w-4" />
-                      Reauthorize
-                    </Button>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <div className="space-y-0.5">
                       <p className="font-medium">Disconnect GitHub</p>
                       <p className="text-sm text-muted-foreground">
                         Remove the GitHub connection from this project
                       </p>
                     </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="destructive">
-                          <Unlink className="mr-2 h-4 w-4" />
-                          Disconnect
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Disconnect GitHub?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will remove the GitHub connection from this project.
-                            Synced data will be preserved, but no new data will be synced.
-                            You can reconnect at any time.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                            onClick={() => setIsConnected(false)}
-                          >
-                            Disconnect
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                    <Button variant="outline" asChild>
+                      <Link href={`/projects/${id}/settings`}>
+                        <Settings className="mr-2 h-4 w-4" />
+                        Edit Project
+                      </Link>
+                    </Button>
                   </div>
+                  <p className="text-xs text-muted-foreground">
+                    To disconnect the repository, edit the project settings and clear the GitHub repository field.
+                  </p>
                 </CardContent>
               </Card>
             </>

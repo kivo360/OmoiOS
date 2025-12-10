@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ArrowLeft,
@@ -15,6 +16,8 @@ import {
   Building2,
   UserPlus,
   MoreHorizontal,
+  AlertCircle,
+  Bot,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -22,33 +25,72 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { mockProjects } from "@/lib/mock"
+import { useOrganization, useMembers, useRoles } from "@/hooks/useOrganizations"
+import { useProjects } from "@/hooks/useProjects"
 
 interface OrganizationPageProps {
   params: Promise<{ id: string }>
 }
 
-// Mock organization data
-const mockOrg = {
-  id: "org-001",
-  name: "Acme Inc",
-  slug: "acme-inc",
-  description: "Building the future of automation",
-  avatar: null,
-  plan: "pro",
-  memberCount: 12,
-  projectCount: 5,
-}
-
-// Mock members
-const mockMembers = [
-  { id: "1", name: "John Doe", email: "john@acme.com", role: "owner", avatar: null },
-  { id: "2", name: "Jane Smith", email: "jane@acme.com", role: "admin", avatar: null },
-  { id: "3", name: "Bob Wilson", email: "bob@acme.com", role: "member", avatar: null },
-]
-
 export default function OrganizationPage({ params }: OrganizationPageProps) {
   const { id } = use(params)
+  
+  // Fetch organization data from API
+  const { data: org, isLoading: orgLoading, error: orgError } = useOrganization(id)
+  const { data: members, isLoading: membersLoading } = useMembers(id)
+  const { data: projects } = useProjects()
+  
+  // Loading state
+  if (orgLoading) {
+    return (
+      <div className="container mx-auto max-w-5xl p-6 space-y-6">
+        <Skeleton className="h-4 w-32" />
+        <div className="flex items-center gap-4">
+          <Skeleton className="h-16 w-16 rounded-full" />
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-32" />
+          </div>
+        </div>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i}>
+              <CardContent className="p-4">
+                <Skeleton className="h-16 w-full" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (orgError) {
+    return (
+      <div className="container mx-auto max-w-5xl p-6 text-center">
+        <AlertCircle className="mx-auto h-12 w-12 text-destructive" />
+        <h1 className="mt-4 text-2xl font-bold">Failed to load organization</h1>
+        <p className="mt-2 text-muted-foreground">
+          {orgError instanceof Error ? orgError.message : "An error occurred"}
+        </p>
+        <Button className="mt-4" asChild>
+          <Link href="/organizations">Back to Organizations</Link>
+        </Button>
+      </div>
+    )
+  }
+
+  if (!org) {
+    return (
+      <div className="container mx-auto max-w-5xl p-6 text-center">
+        <h1 className="text-2xl font-bold">Organization not found</h1>
+        <Button className="mt-4" asChild>
+          <Link href="/organizations">Back to Organizations</Link>
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className="container mx-auto max-w-5xl p-6 space-y-6">
@@ -64,21 +106,20 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16">
-            <AvatarImage src={mockOrg.avatar || undefined} />
             <AvatarFallback className="bg-primary/10 text-primary text-xl">
-              {mockOrg.name.charAt(0).toUpperCase()}
+              {org.name.charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{mockOrg.name}</h1>
-              <Badge variant="outline" className="capitalize">
-                {mockOrg.plan}
+              <h1 className="text-2xl font-bold">{org.name}</h1>
+              <Badge variant={org.is_active ? "default" : "secondary"}>
+                {org.is_active ? "Active" : "Inactive"}
               </Badge>
             </div>
-            <p className="text-muted-foreground">@{mockOrg.slug}</p>
-            {mockOrg.description && (
-              <p className="mt-1 text-sm text-muted-foreground">{mockOrg.description}</p>
+            <p className="text-muted-foreground">@{org.slug}</p>
+            {org.description && (
+              <p className="mt-1 text-sm text-muted-foreground">{org.description}</p>
             )}
           </div>
         </div>
@@ -98,7 +139,7 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                 <Users className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockOrg.memberCount}</p>
+                <p className="text-2xl font-bold">{members?.length ?? 0}</p>
                 <p className="text-sm text-muted-foreground">Members</p>
               </div>
             </div>
@@ -108,11 +149,11 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
-                <FolderGit2 className="h-5 w-5 text-primary" />
+                <Bot className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{mockOrg.projectCount}</p>
-                <p className="text-sm text-muted-foreground">Projects</p>
+                <p className="text-2xl font-bold">{org.max_concurrent_agents}</p>
+                <p className="text-sm text-muted-foreground">Max Agents</p>
               </div>
             </div>
           </CardContent>
@@ -124,8 +165,8 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
                 <Building2 className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold capitalize">{mockOrg.plan}</p>
-                <p className="text-sm text-muted-foreground">Plan</p>
+                <p className="text-2xl font-bold">{org.max_agent_runtime_hours}h</p>
+                <p className="text-sm text-muted-foreground">Max Runtime</p>
               </div>
             </div>
           </CardContent>
@@ -135,8 +176,9 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
       {/* Tabs */}
       <Tabs defaultValue="members" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="members">Members</TabsTrigger>
-          <TabsTrigger value="projects">Projects</TabsTrigger>
+          <TabsTrigger value="members">Members ({members?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="projects">Projects ({projects?.projects?.length ?? 0})</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
         </TabsList>
 
         <TabsContent value="members" className="space-y-4">
@@ -147,44 +189,61 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
             </Button>
           </div>
 
-          <div className="space-y-2">
-            {mockMembers.map((member) => (
-              <Card key={member.id}>
-                <CardContent className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarImage src={member.avatar || undefined} />
-                      <AvatarFallback>
-                        {member.name.charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium">{member.name}</p>
-                      <p className="text-sm text-muted-foreground">{member.email}</p>
+          {membersLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Card key={i}>
+                  <CardContent className="p-4">
+                    <Skeleton className="h-12 w-full" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : members && members.length > 0 ? (
+            <div className="space-y-2">
+              {members.map((member) => (
+                <Card key={member.id}>
+                  <CardContent className="flex items-center justify-between p-4">
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarFallback>
+                          {member.user_id ? "U" : "A"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="font-medium font-mono text-sm">
+                          {member.user_id || member.agent_id}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {member.user_id ? "User" : "Agent"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={member.role === "owner" ? "default" : "secondary"}>
-                      {member.role}
-                    </Badge>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>Change Role</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          Remove Member
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={member.role_name === "owner" ? "default" : "secondary"}>
+                        {member.role_name}
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>Change Role</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive">
+                            Remove Member
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No members found.</p>
+          )}
         </TabsContent>
 
         <TabsContent value="projects" className="space-y-4">
@@ -197,28 +256,65 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {mockProjects.slice(0, 4).map((project) => (
-              <Card key={project.id}>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">
-                    <Link href={`/projects/${project.id}`} className="hover:underline">
-                      {project.name}
-                    </Link>
-                  </CardTitle>
-                  <CardDescription>{project.repo}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>{project.ticketCount} tickets</span>
-                    <Badge variant={project.status === "active" ? "default" : "secondary"}>
-                      {project.status}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+          {projects?.projects && projects.projects.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              {projects.projects.slice(0, 4).map((project) => (
+                <Card key={project.id}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">
+                      <Link href={`/projects/${project.id}`} className="hover:underline">
+                        {project.name}
+                      </Link>
+                    </CardTitle>
+                    {project.github_repo && (
+                      <CardDescription>
+                        {project.github_owner}/{project.github_repo}
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <span>Phase: {project.default_phase_id}</span>
+                      <Badge variant={project.status === "active" ? "default" : "secondary"}>
+                        {project.status}
+                      </Badge>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No projects found.</p>
+          )}
+        </TabsContent>
+
+        <TabsContent value="details" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization Details</CardTitle>
+              <CardDescription>Configuration and billing information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Billing Email</p>
+                  <p className="text-sm">{org.billing_email || "Not set"}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Created</p>
+                  <p className="text-sm">{new Date(org.created_at).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Last Updated</p>
+                  <p className="text-sm">{new Date(org.updated_at).toLocaleDateString()}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Owner ID</p>
+                  <p className="text-sm font-mono">{org.owner_id}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

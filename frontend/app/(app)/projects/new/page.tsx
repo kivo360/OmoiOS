@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { toast } from "sonner"
@@ -17,34 +17,56 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ArrowLeft, Loader2, FolderGit2 } from "lucide-react"
-import { mockRepositories } from "@/lib/mock"
+import { useCreateProject, useProjects } from "@/hooks/useProjects"
+import { useConnectedRepositories } from "@/hooks/useGitHub"
 
 export default function NewProjectPage() {
   const router = useRouter()
-  const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     repository: "",
-    organizationId: "org-001", // Default org
   })
 
-  const unconnectedRepos = mockRepositories.filter((r) => !r.isConnected)
+  const createMutation = useCreateProject()
+  const { data: projectsData } = useProjects()
+  const { data: connectedRepos } = useConnectedRepositories()
+
+  // Get repos that are not already connected to projects
+  const availableRepos = useMemo(() => {
+    if (!connectedRepos) return []
+    
+    // Get list of repos already connected to projects
+    const connectedRepoNames = new Set(
+      projectsData?.projects
+        ?.filter((p) => p.github_owner && p.github_repo)
+        .map((p) => `${p.github_owner}/${p.github_repo}`) || []
+    )
+    
+    // Filter out already connected repos
+    return connectedRepos.filter(
+      (r) => !connectedRepoNames.has(`${r.owner}/${r.repo}`)
+    )
+  }, [connectedRepos, projectsData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
+
+    // Parse owner/repo from selection
+    const [github_owner, github_repo] = formData.repository.split("/")
 
     try {
-      // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      await createMutation.mutateAsync({
+        name: formData.name,
+        description: formData.description || undefined,
+        github_owner,
+        github_repo,
+      })
 
       toast.success("Project created successfully!")
       router.push("/projects")
     } catch (error) {
       toast.error("Failed to create project")
-    } finally {
-      setIsLoading(false)
     }
   }
 
@@ -75,15 +97,16 @@ export default function NewProjectPage() {
               <Select
                 value={formData.repository}
                 onValueChange={(value) => {
-                  setFormData({ ...formData, repository: value })
                   // Auto-fill name from repo
-                  const repo = mockRepositories.find((r) => r.fullName === value)
-                  if (repo && !formData.name) {
-                    setFormData((prev) => ({
-                      ...prev,
+                  const repoName = value.split("/")[1] || ""
+                  if (!formData.name) {
+                    setFormData({
+                      ...formData,
                       repository: value,
-                      name: repo.name.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-                    }))
+                      name: repoName.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+                    })
+                  } else {
+                    setFormData({ ...formData, repository: value })
                   }
                 }}
               >
@@ -91,17 +114,20 @@ export default function NewProjectPage() {
                   <SelectValue placeholder="Select a repository" />
                 </SelectTrigger>
                 <SelectContent>
-                  {unconnectedRepos.map((repo) => (
-                    <SelectItem key={repo.id} value={repo.fullName}>
-                      <div className="flex items-center gap-2">
-                        <FolderGit2 className="h-4 w-4" />
-                        <span>{repo.fullName}</span>
-                        {repo.isPrivate && (
-                          <span className="text-xs text-muted-foreground">(private)</span>
-                        )}
-                      </div>
+                  {availableRepos.length === 0 ? (
+                    <SelectItem value="" disabled>
+                      No available repositories
                     </SelectItem>
-                  ))}
+                  ) : (
+                    availableRepos.map((repo) => (
+                      <SelectItem key={`${repo.owner}/${repo.repo}`} value={`${repo.owner}/${repo.repo}`}>
+                        <div className="flex items-center gap-2">
+                          <FolderGit2 className="h-4 w-4" />
+                          <span>{repo.owner}/{repo.repo}</span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
@@ -138,8 +164,8 @@ export default function NewProjectPage() {
               <Button type="button" variant="outline" asChild>
                 <Link href="/projects">Cancel</Link>
               </Button>
-              <Button type="submit" disabled={isLoading || !formData.name || !formData.repository}>
-                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Button type="submit" disabled={createMutation.isPending || !formData.name}>
+                {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Project
               </Button>
             </div>
