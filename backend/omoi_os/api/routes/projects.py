@@ -118,7 +118,7 @@ async def create_project(
         session.commit()
 
         # Emit event
-        from omoi_os.models.event import SystemEvent
+        from omoi_os.services.event_bus import SystemEvent
 
         event_bus.publish(
             SystemEvent(
@@ -245,7 +245,7 @@ async def update_project(
         session.commit()
 
         # Emit event
-        from omoi_os.models.event import SystemEvent
+        from omoi_os.services.event_bus import SystemEvent
 
         event_bus.publish(
             SystemEvent(
@@ -288,7 +288,7 @@ async def delete_project(
         session.commit()
 
         # Emit event
-        from omoi_os.models.event import SystemEvent
+        from omoi_os.services.event_bus import SystemEvent
 
         event_bus.publish(
             SystemEvent(
