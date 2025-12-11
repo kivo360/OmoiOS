@@ -1,8 +1,9 @@
 """Ticket API routes."""
 
+from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, ConfigDict
 
 from omoi_os.api.dependencies import (
@@ -44,19 +45,37 @@ class TicketListResponse(BaseModel):
 async def list_tickets(
     limit: int = 10,
     offset: int = 0,
+    status: Optional[str] = Query(None, description="Filter by status"),
+    priority: Optional[str] = Query(None, description="Filter by priority"),
+    phase_id: Optional[str] = Query(None, description="Filter by phase"),
+    search: Optional[str] = Query(None, description="Search in title and description"),
     db: DatabaseService = Depends(get_db_service),
 ):
-    """List tickets with pagination."""
-    from sqlalchemy import func
+    """List tickets with pagination and optional filters."""
+    from sqlalchemy import or_
 
     with db.get_session() as session:
-        total = session.query(func.count(Ticket.id)).scalar()
+        query = session.query(Ticket)
+
+        # Apply filters
+        if status:
+            query = query.filter(Ticket.status == status)
+        if priority:
+            query = query.filter(Ticket.priority == priority)
+        if phase_id:
+            query = query.filter(Ticket.phase_id == phase_id)
+        if search:
+            search_term = f"%{search}%"
+            query = query.filter(
+                or_(
+                    Ticket.title.ilike(search_term),
+                    Ticket.description.ilike(search_term),
+                )
+            )
+
+        total = query.count()
         tickets = (
-            session.query(Ticket)
-            .order_by(Ticket.created_at.desc())
-            .offset(offset)
-            .limit(limit)
-            .all()
+            query.order_by(Ticket.created_at.desc()).offset(offset).limit(limit).all()
         )
         return TicketListResponse(
             tickets=[
@@ -282,7 +301,9 @@ async def check_duplicates(
 
     return DuplicateCheckResponse(
         is_duplicate=result.is_duplicate,
-        message=f"Found {len(result.candidates)} similar ticket(s)" if result.is_duplicate else "No duplicates found",
+        message=f"Found {len(result.candidates)} similar ticket(s)"
+        if result.is_duplicate
+        else "No duplicates found",
         candidates=[
             DuplicateCandidateResponse(
                 ticket_id=c.ticket_id,

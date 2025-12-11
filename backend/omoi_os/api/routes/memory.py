@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from omoi_os.api.dependencies import get_sync_db_session
+from omoi_os.api.dependencies import get_sync_db_session, get_embedding_service
 from omoi_os.services.memory import MemoryService
-from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
+from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.ace_engine import ACEEngine
 
@@ -146,33 +146,36 @@ class CompleteTaskResponse(BaseModel):
 
 # Dependency: Get MemoryService
 def get_memory_service(
-    db: Session = Depends(get_sync_db_session),
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
 ) -> MemoryService:
-    """Get memory service with dependencies."""
-    embedding_service = EmbeddingService(provider=EmbeddingProvider.LOCAL)
+    """Get memory service with dependencies.
+
+    Uses the configured embedding provider (Fireworks by default).
+    """
     event_bus = EventBusService()
     return MemoryService(embedding_service=embedding_service, event_bus=event_bus)
 
 
 # Dependency: Get ACEEngine
-def get_ace_engine() -> ACEEngine:
-    """Get ACE engine with dependencies."""
-    from omoi_os.api.main import db, event_bus
+def get_ace_engine(
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+) -> ACEEngine:
+    """Get ACE engine with dependencies.
+
+    Uses the configured embedding provider (Fireworks by default).
+    """
+    from omoi_os.api.main import db, event_bus as main_event_bus
 
     if db is None:
         raise RuntimeError("Database service not initialized")
-    if event_bus is None:
-        event_bus = EventBusService()
 
-    embedding_service = EmbeddingService(provider=EmbeddingProvider.LOCAL)
-    memory_service = MemoryService(
-        embedding_service=embedding_service, event_bus=event_bus
-    )
+    bus = main_event_bus if main_event_bus is not None else EventBusService()
+    memory_service = MemoryService(embedding_service=embedding_service, event_bus=bus)
     return ACEEngine(
         db=db,
         memory_service=memory_service,
         embedding_service=embedding_service,
-        event_bus=event_bus,
+        event_bus=bus,
     )
 
 
