@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 
 from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
@@ -70,6 +71,12 @@ class Ticket(Base):
     )
     context: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Embedding for semantic search and duplicate detection
+    # Dimension must match EmbeddingSettings.dimensions (default 1536)
+    embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
+        Vector(1536), nullable=True
+    )
 
     # Approval fields (REQ-THA-005)
     approval_status: Mapped[str] = mapped_column(

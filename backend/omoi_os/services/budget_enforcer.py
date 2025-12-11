@@ -1,6 +1,7 @@
 """Budget enforcement service for cost control."""
 
-from typing import Optional
+from sqlalchemy.engine.result import Result
+from typing import Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -266,8 +267,8 @@ class BudgetEnforcerService:
 
             query = query.order_by(Budget.created_at.desc())
 
-            result = sess.execute(query)
-            budgets = list(result.scalars().all())
+            result: Result[Tuple[Budget]] = sess.execute(query)
+            budgets: list[Budget] = list[Budget](result.scalars().all())
 
             # Expunge objects so they can be used after session closes
             for budget in budgets:

@@ -595,3 +595,39 @@ def require_permission(permission: str, organization_id: UUID):
         return details
 
     return permission_checker
+
+
+# Singleton instances for embedding and deduplication services
+_embedding_service_instance = None
+_ticket_dedup_service_instance = None
+
+
+def get_embedding_service():
+    """Get embedding service instance with lazy initialization."""
+    global _embedding_service_instance
+
+    if _embedding_service_instance is not None:
+        return _embedding_service_instance
+
+    from omoi_os.services.embedding import EmbeddingService
+
+    _embedding_service_instance = EmbeddingService()
+    return _embedding_service_instance
+
+
+def get_ticket_dedup_service():
+    """Get ticket deduplication service with lazy initialization."""
+    global _ticket_dedup_service_instance
+
+    if _ticket_dedup_service_instance is not None:
+        return _ticket_dedup_service_instance
+
+    from omoi_os.services.ticket_dedup import TicketDeduplicationService
+
+    db = get_db_service()
+    embedding_service = get_embedding_service()
+    _ticket_dedup_service_instance = TicketDeduplicationService(
+        db=db,
+        embedding_service=embedding_service,
+    )
+    return _ticket_dedup_service_instance
