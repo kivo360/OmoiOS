@@ -94,7 +94,7 @@ export async function triggerEmergencyAnalysis(
     "/api/v1/monitor/intelligent/emergency",
     {
       method: "POST",
-      body: JSON.stringify(agentIds),
+      body: agentIds,
     }
   )
 }

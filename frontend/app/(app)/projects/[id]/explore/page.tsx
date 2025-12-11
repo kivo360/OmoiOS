@@ -203,7 +203,7 @@ export default function ExplorePage({ params }: ExplorePageProps) {
         </div>
         <Badge variant="outline" className="gap-1">
           <GitBranch className="h-3 w-3" />
-          {project.repo}
+          {project.github_repo || "No repo"}
         </Badge>
       </div>
 

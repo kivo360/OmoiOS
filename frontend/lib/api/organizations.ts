@@ -41,7 +41,7 @@ export async function createOrganization(
 ): Promise<Organization> {
   return apiRequest<Organization>("/api/v1/organizations", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -54,7 +54,7 @@ export async function updateOrganization(
 ): Promise<Organization> {
   return apiRequest<Organization>(`/api/v1/organizations/${orgId}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -87,7 +87,7 @@ export async function addMember(
 ): Promise<Membership> {
   return apiRequest<Membership>(`/api/v1/organizations/${orgId}/members`, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -103,7 +103,7 @@ export async function updateMember(
     `/api/v1/organizations/${orgId}/members/${memberId}`,
     {
       method: "PATCH",
-      body: JSON.stringify({ role_id: roleId }),
+      body: { role_id: roleId },
     }
   )
 }
@@ -145,7 +145,7 @@ export async function createRole(
 ): Promise<Role> {
   return apiRequest<Role>(`/api/v1/organizations/${orgId}/roles`, {
     method: "POST",
-    body: JSON.stringify({ ...data, organization_id: orgId }),
+    body: { ...data, organization_id: orgId },
   })
 }
 
@@ -159,7 +159,7 @@ export async function updateRole(
 ): Promise<Role> {
   return apiRequest<Role>(`/api/v1/organizations/${orgId}/roles/${roleId}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 

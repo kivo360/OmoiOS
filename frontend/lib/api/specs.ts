@@ -127,7 +127,7 @@ export async function listProjectSpecs(
   }
   const query = searchParams.toString()
   return apiRequest<SpecListResponse>(
-    `/specs/project/${projectId}${query ? `?${query}` : ""}`
+    `/api/v1/specs/project/${projectId}${query ? `?${query}` : ""}`
   )
 }
 
@@ -135,9 +135,9 @@ export async function listProjectSpecs(
  * Create a new spec
  */
 export async function createSpec(data: SpecCreate): Promise<Spec> {
-  return apiRequest<Spec>("/specs", {
+  return apiRequest<Spec>("/api/v1/specs", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -145,16 +145,16 @@ export async function createSpec(data: SpecCreate): Promise<Spec> {
  * Get a spec by ID
  */
 export async function getSpec(specId: string): Promise<Spec> {
-  return apiRequest<Spec>(`/specs/${specId}`)
+  return apiRequest<Spec>(`/api/v1/specs/${specId}`)
 }
 
 /**
  * Update a spec
  */
 export async function updateSpec(specId: string, data: SpecUpdate): Promise<Spec> {
-  return apiRequest<Spec>(`/specs/${specId}`, {
+  return apiRequest<Spec>(`/api/v1/specs/${specId}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -162,7 +162,7 @@ export async function updateSpec(specId: string, data: SpecUpdate): Promise<Spec
  * Delete a spec
  */
 export async function deleteSpec(specId: string): Promise<void> {
-  return apiRequest<void>(`/specs/${specId}`, {
+  return apiRequest<void>(`/api/v1/specs/${specId}`, {
     method: "DELETE",
   })
 }
@@ -176,9 +176,9 @@ export async function addRequirement(
   specId: string,
   data: RequirementCreate
 ): Promise<Requirement> {
-  return apiRequest<Requirement>(`/specs/${specId}/requirements`, {
+  return apiRequest<Requirement>(`/api/v1/specs/${specId}/requirements`, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -190,9 +190,9 @@ export async function updateRequirement(
   reqId: string,
   data: RequirementUpdate
 ): Promise<Requirement> {
-  return apiRequest<Requirement>(`/specs/${specId}/requirements/${reqId}`, {
+  return apiRequest<Requirement>(`/api/v1/specs/${specId}/requirements/${reqId}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -203,7 +203,7 @@ export async function deleteRequirement(
   specId: string,
   reqId: string
 ): Promise<void> {
-  return apiRequest<void>(`/specs/${specId}/requirements/${reqId}`, {
+  return apiRequest<void>(`/api/v1/specs/${specId}/requirements/${reqId}`, {
     method: "DELETE",
   })
 }
@@ -219,10 +219,10 @@ export async function addCriterion(
   data: CriterionCreate
 ): Promise<AcceptanceCriterion> {
   return apiRequest<AcceptanceCriterion>(
-    `/specs/${specId}/requirements/${reqId}/criteria`,
+    `/api/v1/specs/${specId}/requirements/${reqId}/criteria`,
     {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data,
     }
   )
 }
@@ -237,10 +237,10 @@ export async function updateCriterion(
   data: CriterionUpdate
 ): Promise<AcceptanceCriterion> {
   return apiRequest<AcceptanceCriterion>(
-    `/specs/${specId}/requirements/${reqId}/criteria/${criterionId}`,
+    `/api/v1/specs/${specId}/requirements/${reqId}/criteria/${criterionId}`,
     {
       method: "PATCH",
-      body: JSON.stringify(data),
+      body: data,
     }
   )
 }
@@ -254,9 +254,9 @@ export async function updateDesign(
   specId: string,
   design: DesignArtifact
 ): Promise<DesignArtifact> {
-  return apiRequest<DesignArtifact>(`/specs/${specId}/design`, {
+  return apiRequest<DesignArtifact>(`/api/v1/specs/${specId}/design`, {
     method: "PUT",
-    body: JSON.stringify(design),
+    body: design,
   })
 }
 
@@ -266,7 +266,7 @@ export async function updateDesign(
  * Approve requirements and move to design phase
  */
 export async function approveRequirements(specId: string): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>(`/specs/${specId}/approve-requirements`, {
+  return apiRequest<{ message: string }>(`/api/v1/specs/${specId}/approve-requirements`, {
     method: "POST",
   })
 }
@@ -275,7 +275,7 @@ export async function approveRequirements(specId: string): Promise<{ message: st
  * Approve design and move to execution phase
  */
 export async function approveDesign(specId: string): Promise<{ message: string }> {
-  return apiRequest<{ message: string }>(`/specs/${specId}/approve-design`, {
+  return apiRequest<{ message: string }>(`/api/v1/specs/${specId}/approve-design`, {
     method: "POST",
   })
 }

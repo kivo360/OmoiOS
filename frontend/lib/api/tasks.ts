@@ -49,7 +49,7 @@ export async function addTaskDependencies(
 ): Promise<TaskDependencies> {
   return apiRequest<TaskDependencies>(`/api/v1/tasks/${taskId}/dependencies`, {
     method: "POST",
-    body: JSON.stringify({ depends_on: dependsOn }),
+    body: { depends_on: dependsOn },
   })
 }
 
@@ -62,7 +62,7 @@ export async function setTaskDependencies(
 ): Promise<TaskDependencies> {
   return apiRequest<TaskDependencies>(`/api/v1/tasks/${taskId}/dependencies`, {
     method: "PUT",
-    body: JSON.stringify({ depends_on: dependsOn }),
+    body: { depends_on: dependsOn },
   })
 }
 
@@ -90,7 +90,7 @@ export async function checkCircularDependencies(
     `/api/v1/tasks/${taskId}/check-circular`,
     {
       method: "POST",
-      body: JSON.stringify(dependsOn),
+      body: dependsOn,
     }
   )
 }
@@ -106,7 +106,7 @@ export async function cancelTask(
     `/api/v1/tasks/${taskId}/cancel`,
     {
       method: "POST",
-      body: JSON.stringify({ reason }),
+      body: { reason },
     }
   )
 }
@@ -166,7 +166,7 @@ export async function setTaskTimeout(
     `/api/v1/tasks/${taskId}/set-timeout`,
     {
       method: "POST",
-      body: JSON.stringify({ timeout_seconds: timeoutSeconds }),
+      body: { timeout_seconds: timeoutSeconds },
     }
   )
 }
@@ -184,11 +184,11 @@ export async function registerConversation(
     `/api/v1/tasks/${taskId}/register-conversation`,
     {
       method: "POST",
-      body: JSON.stringify({
+      body: {
         conversation_id: conversationId,
         sandbox_id: sandboxId || "",
         persistence_dir: persistenceDir || "",
-      }),
+      },
     }
   )
 }
