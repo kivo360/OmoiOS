@@ -58,6 +58,10 @@ auth:
   gitlab_base_url: https://gitlab.com
 
   # OAuth redirect URI (frontend callback URL)
+  # This is where the frontend receives the OAuth callback after authentication
+  # The backend converts this to: http://localhost:18000/api/v1/auth/oauth/{provider}/callback
+  # for the actual OAuth provider callback URL
+  # Can be overridden with AUTH_OAUTH_REDIRECT_URI environment variable
   oauth_redirect_uri: http://localhost:3000/auth/callback
 
 workspace:

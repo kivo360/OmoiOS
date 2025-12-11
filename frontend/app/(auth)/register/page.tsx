@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Github, Mail, Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { register as apiRegister } from "@/lib/api/auth"
 import { ApiError } from "@/lib/api/client"
+import { startOAuthFlow } from "@/lib/api/oauth"
 
 // Password requirements
 const PASSWORD_REQUIREMENTS = [
@@ -81,8 +82,12 @@ export default function RegisterPage() {
   }
 
   const handleOAuth = (provider: "github" | "google") => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-    window.location.href = `${apiUrl}/api/v1/auth/oauth/${provider}`
+    try {
+      startOAuthFlow(provider)
+    } catch (error) {
+      console.error(`Failed to start OAuth flow for ${provider}:`, error)
+      setError(`Failed to start ${provider} authentication. Please try again.`)
+    }
   }
 
   const updateFormData = (field: string, value: string) => {
@@ -208,7 +213,11 @@ export default function RegisterPage() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => handleOAuth("github")}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleOAuth("github")
+          }}
           disabled={isLoading}
         >
           <Github className="mr-2 h-4 w-4" />
@@ -217,7 +226,11 @@ export default function RegisterPage() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => handleOAuth("google")}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleOAuth("google")
+          }}
           disabled={isLoading}
         >
           <Mail className="mr-2 h-4 w-4" />

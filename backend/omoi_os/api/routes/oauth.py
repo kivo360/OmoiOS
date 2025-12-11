@@ -63,6 +63,15 @@ class DisconnectResponse(BaseModel):
     message: str
 
 
+class RedirectUriDiagnostic(BaseModel):
+    """OAuth redirect URI diagnostic information."""
+
+    base_redirect_uri: str
+    provider: str
+    calculated_redirect_uri: str
+    message: str
+
+
 # ============================================================================
 # Dependencies
 # ============================================================================
@@ -105,6 +114,37 @@ async def list_oauth_providers(
     return ProvidersResponse(providers=[ProviderInfo(**p) for p in providers])
 
 
+@router.get("/oauth/{provider}/redirect-uri", response_model=RedirectUriDiagnostic)
+async def get_redirect_uri_diagnostic(
+    provider: str,
+    oauth_service: OAuthService = Depends(get_oauth_service),
+):
+    """
+    Get the redirect URI that will be used for a specific OAuth provider.
+
+    This endpoint helps debug OAuth redirect URI configuration issues.
+    Use this to verify what redirect URI your app is sending to the OAuth provider.
+    """
+    settings = get_app_settings().auth
+    base_uri = settings.oauth_redirect_uri
+
+    # Build the redirect URI using the same logic as the service
+    redirect_uri = oauth_service._build_redirect_uri(provider)
+
+    message = (
+        f"This is the redirect URI that will be sent to {provider}. "
+        f"Make sure this EXACTLY matches what's registered in your {provider} OAuth app settings. "
+        f"See docs/troubleshooting/oauth_redirect_uri_fix.md for help."
+    )
+
+    return RedirectUriDiagnostic(
+        base_redirect_uri=base_uri,
+        provider=provider,
+        calculated_redirect_uri=redirect_uri,
+        message=message,
+    )
+
+
 @router.get("/oauth/{provider}/url", response_model=AuthUrlResponse)
 async def get_oauth_url(
     provider: str,
@@ -112,7 +152,7 @@ async def get_oauth_url(
 ):
     """
     Get OAuth authorization URL for a provider.
-    
+
     Use this to get the URL to redirect the user to for OAuth login.
     The response includes a state parameter that will be verified on callback.
     """
@@ -177,7 +217,7 @@ async def oauth_callback(
 
     # Generate JWT tokens using a sync session
     from omoi_os.config import settings as auth_settings
-    
+
     with db.get_session() as session:
         auth_service = AuthService(
             db=session,
@@ -186,7 +226,7 @@ async def oauth_callback(
             access_token_expire_minutes=auth_settings.access_token_expire_minutes,
             refresh_token_expire_days=auth_settings.refresh_token_expire_days,
         )
-        
+
         access_token = auth_service.create_access_token(user.id)
         refresh_token = auth_service.create_refresh_token(user.id)
 
@@ -235,7 +275,7 @@ async def connect_provider(
 ):
     """
     Start OAuth flow to connect a provider to the current user's account.
-    
+
     Returns the authorization URL - the frontend should redirect the user to this URL.
     """
     try:
@@ -255,7 +295,7 @@ async def disconnect_provider(
     # Check if user has a password set (can't disconnect if it's the only auth method)
     attrs = current_user.attributes or {}
     has_password = current_user.hashed_password is not None
-    
+
     connected_providers = sum(
         1 for p in ["github", "google", "gitlab"] if attrs.get(f"{p}_user_id")
     )
@@ -268,6 +308,8 @@ async def disconnect_provider(
 
     success = oauth_service.disconnect_provider(current_user.id, provider)
     if success:
-        return DisconnectResponse(success=True, message=f"{provider} disconnected successfully")
+        return DisconnectResponse(
+            success=True, message=f"{provider} disconnected successfully"
+        )
     else:
         raise HTTPException(status_code=404, detail="User not found")
