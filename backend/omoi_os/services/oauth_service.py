@@ -279,6 +279,10 @@ class OAuthService:
             session.commit()
             session.refresh(user)
 
+            # Expunge user from session to prevent detached instance errors
+            # when user object is used outside this session context
+            session.expunge(user)
+
             return user
 
     def get_user_oauth_token(self, user_id: UUID, provider: str) -> Optional[str]:

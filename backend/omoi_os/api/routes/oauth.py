@@ -5,6 +5,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from omoi_os.api.dependencies import get_db_service, get_current_user
 from omoi_os.config import get_app_settings
@@ -212,13 +213,74 @@ async def oauth_callback(
     if not oauth_info:
         return RedirectResponse(url=f"{frontend_url}?error=oauth_failed")
 
-    # Get or create user
-    user = oauth_service.get_or_create_user(oauth_info)
-
-    # Generate JWT tokens using a sync session
+    # Get or create user and generate tokens in the same session
+    # This ensures the user object stays attached to the session
     from omoi_os.config import settings as auth_settings
 
     with db.get_session() as session:
+        # Get or create user within this session
+        provider_key = f"{oauth_info.provider}_user_id"
+
+        # Try to find by provider user ID
+        users = (
+            session.execute(select(User).where(User.email == oauth_info.email))
+            .scalars()
+            .all()
+        )
+
+        user = None
+        for u in users:
+            attrs = u.attributes or {}
+            if attrs.get(provider_key) == oauth_info.provider_user_id:
+                user = u
+                break
+
+        # If no user with OAuth ID, try by email
+        if not user and oauth_info.email:
+            user = session.execute(
+                select(User).where(User.email == oauth_info.email)
+            ).scalar_one_or_none()
+
+        if user:
+            # Update existing user
+            attrs = user.attributes or {}
+            attrs[f"{oauth_info.provider}_user_id"] = oauth_info.provider_user_id
+            attrs[f"{oauth_info.provider}_access_token"] = oauth_info.access_token
+            if oauth_info.refresh_token:
+                attrs[f"{oauth_info.provider}_refresh_token"] = oauth_info.refresh_token
+            if oauth_info.raw_data.get("login"):
+                attrs[f"{oauth_info.provider}_username"] = oauth_info.raw_data["login"]
+            user.attributes = attrs
+
+            # Update profile if empty
+            if not user.full_name and oauth_info.name:
+                user.full_name = oauth_info.name
+            if not user.avatar_url and oauth_info.avatar_url:
+                user.avatar_url = oauth_info.avatar_url
+        else:
+            # Create new user
+            user = User(
+                email=oauth_info.email,
+                full_name=oauth_info.name,
+                avatar_url=oauth_info.avatar_url,
+                is_active=True,
+                is_verified=True,  # OAuth emails are verified
+                attributes={
+                    f"{oauth_info.provider}_user_id": oauth_info.provider_user_id,
+                    f"{oauth_info.provider}_access_token": oauth_info.access_token,
+                    f"{oauth_info.provider}_refresh_token": oauth_info.refresh_token,
+                    f"{oauth_info.provider}_username": oauth_info.raw_data.get("login"),
+                },
+            )
+            session.add(user)
+
+        session.commit()
+        session.refresh(user)
+
+        # Get user ID while still in session (before it becomes detached)
+        user_id = user.id
+
+        # Generate JWT tokens
         auth_service = AuthService(
             db=session,
             jwt_secret=auth_settings.jwt_secret_key,
@@ -227,8 +289,11 @@ async def oauth_callback(
             refresh_token_expire_days=auth_settings.refresh_token_expire_days,
         )
 
-        access_token = auth_service.create_access_token(user.id)
-        refresh_token = auth_service.create_refresh_token(user.id)
+        access_token = auth_service.create_access_token(user_id)
+        refresh_token = auth_service.create_refresh_token(user_id)
+
+        # Expunge user from session to prevent detached instance errors
+        session.expunge(user)
 
     # Redirect to frontend with tokens
     redirect_url = (
