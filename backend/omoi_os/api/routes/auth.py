@@ -77,9 +77,12 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
 
+    # Extract user ID before session might close (prevent detached instance error)
+    user_id = user.id
+
     # Create tokens
-    access_token = auth_service.create_access_token(user.id)
-    refresh_token = auth_service.create_refresh_token(user.id)
+    access_token = auth_service.create_access_token(user_id)
+    refresh_token = auth_service.create_refresh_token(user_id)
 
     return TokenResponse(
         access_token=access_token,
@@ -114,9 +117,12 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
+    # Extract user ID before session might close (prevent detached instance error)
+    user_id = user.id
+
     # Create new tokens
-    access_token = auth_service.create_access_token(user.id)
-    new_refresh_token = auth_service.create_refresh_token(user.id)
+    access_token = auth_service.create_access_token(user_id)
+    new_refresh_token = auth_service.create_refresh_token(user_id)
 
     return TokenResponse(
         access_token=access_token,
@@ -216,8 +222,11 @@ async def forgot_password(
     user = await auth_service.get_user_by_email(request.email)
 
     if user:
+        # Extract user ID before session might close (prevent detached instance error)
+        user_id = user.id
+
         # Generate reset token
-        reset_token = auth_service.create_reset_token(user.id)
+        reset_token = auth_service.create_reset_token(user_id)
 
         # TODO: Send email with reset link
         # In production, this token should be sent via email, not returned

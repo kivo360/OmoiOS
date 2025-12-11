@@ -22,16 +22,30 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient()
   
   useEffect(() => {
+    let isMounted = true
+    let reconnectAttempts = 0
+    const MAX_RECONNECT_ATTEMPTS = 5
+    const RECONNECT_DELAY = 3000
+    
     const connect = () => {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:18000/ws'
+      // Use the correct WebSocket endpoint
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18000'
+      const wsUrl = apiUrl.replace('http://', 'ws://').replace('https://', 'wss://') + '/api/v1/ws/events'
+      
       const ws = new WebSocket(wsUrl)
       
       ws.onopen = () => {
+        if (!isMounted) {
+          ws.close()
+          return
+        }
         setIsConnected(true)
+        reconnectAttempts = 0 // Reset on successful connection
         console.log('WebSocket connected')
       }
       
       ws.onmessage = (event) => {
+        if (!isMounted) return
         try {
           const data = JSON.parse(event.data)
           if (data.type && data.payload) {
@@ -48,13 +62,38 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
         }
       }
       
-      ws.onclose = () => {
+      ws.onclose = (event) => {
+        if (!isMounted) return
+        
         setIsConnected(false)
-        console.log('WebSocket disconnected, reconnecting...')
-        reconnectTimeoutRef.current = setTimeout(connect, 3000)
+        
+        // Don't reconnect if:
+        // 1. Close code is 1008 (policy violation) or 1003 (forbidden) - likely auth issue
+        // 2. We've exceeded max reconnect attempts
+        // 3. Close code is 1000 (normal closure)
+        const shouldReconnect = 
+          event.code !== 1008 && 
+          event.code !== 1003 && 
+          event.code !== 1000 &&
+          reconnectAttempts < MAX_RECONNECT_ATTEMPTS
+        
+        if (shouldReconnect) {
+          reconnectAttempts++
+          console.log(`WebSocket disconnected (code: ${event.code}), reconnecting in ${RECONNECT_DELAY}ms... (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`)
+          reconnectTimeoutRef.current = setTimeout(connect, RECONNECT_DELAY)
+        } else {
+          if (event.code === 1008 || event.code === 1003) {
+            console.warn('WebSocket connection rejected (403/1008). Authentication may be required.')
+          } else if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+            console.error('WebSocket: Max reconnect attempts reached. Stopping reconnection.')
+          } else {
+            console.log('WebSocket closed normally')
+          }
+        }
       }
       
       ws.onerror = (error) => {
+        if (!isMounted) return
         console.error('WebSocket error:', error)
       }
       
@@ -64,6 +103,7 @@ export function WebSocketProvider({ children }: { children: React.ReactNode }) {
     connect()
     
     return () => {
+      isMounted = false
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }
