@@ -48,6 +48,18 @@ auth:
   login_attempt_window_minutes: 15
   session_expire_days: 30
 
+  # OAuth provider credentials (set via env vars: AUTH_GITHUB_CLIENT_ID, etc.)
+  github_client_id: null
+  github_client_secret: null
+  google_client_id: null
+  google_client_secret: null
+  gitlab_client_id: null
+  gitlab_client_secret: null
+  gitlab_base_url: https://gitlab.com
+
+  # OAuth redirect URI (frontend callback URL)
+  oauth_redirect_uri: http://localhost:3000/auth/callback
+
 workspace:
   root: ./workspaces
   worker_dir: /tmp/omoi_os_workspaces
