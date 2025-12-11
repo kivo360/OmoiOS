@@ -115,9 +115,9 @@ export default function NewProjectPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {availableRepos.length === 0 ? (
-                    <SelectItem value="" disabled>
+                    <div className="py-6 text-center text-sm text-muted-foreground">
                       No available repositories
-                    </SelectItem>
+                    </div>
                   ) : (
                     availableRepos.map((repo) => (
                       <SelectItem key={`${repo.owner}/${repo.repo}`} value={`${repo.owner}/${repo.repo}`}>
