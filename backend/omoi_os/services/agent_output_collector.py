@@ -9,8 +9,6 @@ various sources since we're not using tmux sessions:
 """
 
 import logging
-import os
-import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 from pathlib import Path

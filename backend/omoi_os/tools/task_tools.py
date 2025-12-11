@@ -7,7 +7,7 @@ for work breakdown and progress tracking.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Any, Optional, List, TYPE_CHECKING
+from typing import Optional, List, TYPE_CHECKING
 
 from pydantic import Field
 from rich.text import Text

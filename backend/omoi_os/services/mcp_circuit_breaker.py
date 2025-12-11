@@ -1,6 +1,6 @@
 """MCP Circuit Breaker for failure protection per server+tool."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Optional
 
@@ -159,7 +159,7 @@ class MCPCircuitBreaker:
             self._on_success()
             return result
 
-        except Exception as e:
+        except Exception:
             self._on_failure()
             raise
 

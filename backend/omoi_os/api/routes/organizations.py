@@ -10,7 +10,6 @@ from omoi_os.api.dependencies import (
     get_db_session,
     get_current_user,
     get_authorization_service,
-    require_permission,
 )
 from omoi_os.models.user import User
 from omoi_os.models.organization import Organization, OrganizationMembership, Role
@@ -25,7 +24,6 @@ from omoi_os.schemas.organization import (
     MembershipCreate,
     MembershipResponse,
     MembershipUpdate,
-    InviteMemberRequest,
 )
 from omoi_os.services.authorization_service import AuthorizationService, ActorType
 

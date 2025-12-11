@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.validation_analysis import ValidationResult

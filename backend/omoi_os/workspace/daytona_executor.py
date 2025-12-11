@@ -9,7 +9,6 @@ in Daytona cloud sandboxes.
 """
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from openhands.sdk.tool import ToolExecutor

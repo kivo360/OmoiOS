@@ -1,9 +1,9 @@
 """Template service for generating text using Jinja2 templates."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
-from jinja2 import Environment, FileSystemLoader, TemplateNotFound
+from jinja2 import Environment, FileSystemLoader
 
 
 class TemplateService:

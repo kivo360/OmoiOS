@@ -12,13 +12,11 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any, Callable
+from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 
-from omoi_os.models.agent import Agent
 from omoi_os.models.trajectory_analysis import (
     SystemHealthResponse,
-    SystemCoherenceResponse,
     TrajectoryAnalysisResponse,
 )
 from omoi_os.services.database import DatabaseService

@@ -1,6 +1,5 @@
 """Cost tracking service for LLM API usage monitoring."""
 
-import os
 from pathlib import Path
 from typing import Optional
 

@@ -10,7 +10,7 @@ import os
 import fnmatch
 import re
 from collections.abc import Sequence
-from typing import Optional, List, TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 
 from pydantic import Field
 from rich.text import Text

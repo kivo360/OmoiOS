@@ -3,11 +3,10 @@
 from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from omoi_os.api.dependencies import get_monitor_service, get_monitoring_loop
 from omoi_os.services.monitor import MonitorService
-from omoi_os.telemetry import MetricSample
 
 router = APIRouter()
 

@@ -120,7 +120,7 @@ class MCPRetryManager:
                 else:
                     break
 
-            except PermanentError as e:
+            except PermanentError:
                 # Don't retry permanent errors
                 raise
 

@@ -1,7 +1,7 @@
 """Memory service for task pattern learning and similarity search."""
 
 import re
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
 
 from sqlalchemy import select, text, func
@@ -13,7 +13,6 @@ from omoi_os.models.memory_type import MemoryType
 from omoi_os.models.task import Task
 from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
-from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.memory_analysis import MemoryClassification, PatternExtraction
 from omoi_os.utils.datetime import utc_now
 

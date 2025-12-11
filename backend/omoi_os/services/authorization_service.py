@@ -9,7 +9,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from omoi_os.models.user import User
-from omoi_os.models.agent import Agent
 from omoi_os.models.organization import Organization, OrganizationMembership, Role
 
 

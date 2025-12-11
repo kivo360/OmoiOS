@@ -1,8 +1,11 @@
 """OAuth service for managing authentication flows."""
 
+import logging
+from functools import lru_cache
 from typing import Optional
 from uuid import UUID
 
+import redis
 from sqlalchemy import select
 
 from omoi_os.config import get_app_settings
@@ -11,26 +14,44 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.oauth import get_provider, list_providers, OAuthUserInfo
 
 
-# In-memory state storage (use Redis in production)
-_oauth_states: dict[str, str] = {}
+logger = logging.getLogger(__name__)
+
+# Redis key prefix for OAuth state storage
+OAUTH_STATE_PREFIX = "oauth_state:"
+# OAuth state TTL in seconds (10 minutes - enough time to complete OAuth flow)
+OAUTH_STATE_TTL = 600
+
+
+@lru_cache(maxsize=1)
+def get_oauth_redis_client() -> redis.Redis:
+    """Get cached Redis client for OAuth state storage."""
+    redis_url = get_app_settings().redis_url
+    return redis.from_url(redis_url, decode_responses=True)
 
 
 class OAuthService:
     """Service for OAuth authentication flows."""
 
-    def __init__(self, db: DatabaseService):
+    def __init__(self, db: DatabaseService, redis_client: Optional[redis.Redis] = None):
         self.db = db
         self.settings = get_app_settings().auth
+
+        # Use provided Redis client or get cached one
+        self._redis = (
+            redis_client if redis_client is not None else get_oauth_redis_client()
+        )
 
     def get_available_providers(self) -> list[dict]:
         """Get list of configured OAuth providers."""
         providers = []
         for name in list_providers():
             config = self.settings.get_provider_config(name)
-            providers.append({
-                "name": name,
-                "enabled": config is not None,
-            })
+            providers.append(
+                {
+                    "name": name,
+                    "enabled": config is not None,
+                }
+            )
         return providers
 
     def _build_redirect_uri(self, provider_name: str) -> str:
@@ -41,11 +62,11 @@ class OAuthService:
         # We need to use the backend URL for the actual OAuth callback
         # Assuming the backend and frontend are on the same origin in development
         # In production, this should be configured properly
-        
+
         # For now, we'll use a pattern where the backend handles the callback
         # and then redirects to the frontend
         # The redirect_uri should point to the backend's callback endpoint
-        
+
         # Extract the origin from the oauth_redirect_uri (frontend URL)
         # and construct the backend callback URL
         if "localhost:3000" in base_uri:
@@ -54,7 +75,7 @@ class OAuthService:
         else:
             # Production: assume same origin
             backend_base = base_uri.rsplit("/", 1)[0]
-        
+
         return f"{backend_base}/api/v1/auth/oauth/{provider_name}/callback"
 
     def get_auth_url(self, provider_name: str) -> tuple[str, str]:
@@ -81,7 +102,11 @@ class OAuthService:
             client_id=config["client_id"],
             client_secret=config["client_secret"],
             redirect_uri=redirect_uri,
-            **{k: v for k, v in config.items() if k not in ("client_id", "client_secret")},
+            **{
+                k: v
+                for k, v in config.items()
+                if k not in ("client_id", "client_secret")
+            },
         )
 
         if not provider:
@@ -89,15 +114,41 @@ class OAuthService:
 
         auth_url, state = provider.get_auth_url()
 
-        # Store state for verification
-        _oauth_states[state] = provider_name
+        # Store state in Redis with TTL for verification
+        state_key = f"{OAUTH_STATE_PREFIX}{state}"
+        try:
+            self._redis.setex(state_key, OAUTH_STATE_TTL, provider_name)
+            logger.debug(f"Stored OAuth state for provider {provider_name}")
+        except redis.RedisError as e:
+            logger.error(f"Failed to store OAuth state in Redis: {e}")
+            raise ValueError("Failed to initialize OAuth flow. Please try again.")
 
         return auth_url, state
 
     def verify_state(self, state: str, provider_name: str) -> bool:
-        """Verify OAuth state parameter."""
-        stored_provider = _oauth_states.pop(state, None)
-        return stored_provider == provider_name
+        """Verify OAuth state parameter and remove it (one-time use)."""
+        state_key = f"{OAUTH_STATE_PREFIX}{state}"
+        try:
+            # Get and delete atomically using pipeline
+            pipe = self._redis.pipeline()
+            pipe.get(state_key)
+            pipe.delete(state_key)
+            results = pipe.execute()
+            stored_provider = results[0]
+
+            if stored_provider is None:
+                logger.warning(f"OAuth state not found or expired: {state[:8]}...")
+                return False
+
+            is_valid = stored_provider == provider_name
+            if not is_valid:
+                logger.warning(
+                    f"OAuth state provider mismatch: expected {provider_name}, got {stored_provider}"
+                )
+            return is_valid
+        except redis.RedisError as e:
+            logger.error(f"Failed to verify OAuth state in Redis: {e}")
+            return False
 
     async def handle_callback(
         self,
@@ -125,7 +176,11 @@ class OAuthService:
             client_id=config["client_id"],
             client_secret=config["client_secret"],
             redirect_uri=redirect_uri,
-            **{k: v for k, v in config.items() if k not in ("client_id", "client_secret")},
+            **{
+                k: v
+                for k, v in config.items()
+                if k not in ("client_id", "client_secret")
+            },
         )
 
         if not provider:
@@ -150,9 +205,11 @@ class OAuthService:
             provider_key = f"{oauth_info.provider}_user_id"
 
             # First check if user exists with this OAuth ID
-            users = session.execute(
-                select(User).where(User.email == oauth_info.email)
-            ).scalars().all()
+            users = (
+                session.execute(select(User).where(User.email == oauth_info.email))
+                .scalars()
+                .all()
+            )
 
             user = None
             for u in users:
@@ -173,9 +230,13 @@ class OAuthService:
                 attrs[f"{oauth_info.provider}_user_id"] = oauth_info.provider_user_id
                 attrs[f"{oauth_info.provider}_access_token"] = oauth_info.access_token
                 if oauth_info.refresh_token:
-                    attrs[f"{oauth_info.provider}_refresh_token"] = oauth_info.refresh_token
+                    attrs[f"{oauth_info.provider}_refresh_token"] = (
+                        oauth_info.refresh_token
+                    )
                 if oauth_info.raw_data.get("login"):
-                    attrs[f"{oauth_info.provider}_username"] = oauth_info.raw_data["login"]
+                    attrs[f"{oauth_info.provider}_username"] = oauth_info.raw_data[
+                        "login"
+                    ]
                 user.attributes = attrs
 
                 # Update profile if empty
@@ -195,7 +256,9 @@ class OAuthService:
                         f"{oauth_info.provider}_user_id": oauth_info.provider_user_id,
                         f"{oauth_info.provider}_access_token": oauth_info.access_token,
                         f"{oauth_info.provider}_refresh_token": oauth_info.refresh_token,
-                        f"{oauth_info.provider}_username": oauth_info.raw_data.get("login"),
+                        f"{oauth_info.provider}_username": oauth_info.raw_data.get(
+                            "login"
+                        ),
                     },
                 )
                 session.add(user)
@@ -274,7 +337,7 @@ class OAuthService:
                 return False
 
             attrs = user.attributes or {}
-            
+
             # Remove all provider-related attributes
             keys_to_remove = [
                 f"{provider}_user_id",
@@ -282,10 +345,10 @@ class OAuthService:
                 f"{provider}_refresh_token",
                 f"{provider}_username",
             ]
-            
+
             for key in keys_to_remove:
                 attrs.pop(key, None)
-            
+
             user.attributes = attrs
             session.commit()
             return True

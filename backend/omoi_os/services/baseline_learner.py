@@ -1,6 +1,5 @@
 """Baseline learning service for anomaly detection."""
 
-from datetime import datetime
 from typing import Dict, Optional
 
 from omoi_os.models.agent_baseline import AgentBaseline

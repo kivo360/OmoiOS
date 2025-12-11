@@ -739,8 +739,8 @@ class ValidationOrchestrator:
                                     # Don't await in sync context - fire and forget
                                     diagnostic_run = None
                                     print(
-                                        f"🔍 DIAGNOSIS SPAWNED for validation timeout "
-                                        f"(diagnostic task created)"
+                                        "🔍 DIAGNOSIS SPAWNED for validation timeout "
+                                        "(diagnostic task created)"
                                     )
                                 except RuntimeError:
                                     # No event loop, use asyncio.run()

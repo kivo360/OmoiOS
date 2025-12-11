@@ -1,6 +1,6 @@
 """Authentication service for user management and token generation."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Optional, Tuple
 from uuid import UUID
 import secrets
@@ -10,7 +10,7 @@ from passlib.context import CryptContext
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 from omoi_os.models.user import User
 from omoi_os.models.auth import Session, APIKey

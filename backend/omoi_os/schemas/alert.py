@@ -1,7 +1,6 @@
 """Alert schemas for API requests and responses."""
 
 from typing import List, Optional
-from uuid import UUID
 
 from pydantic import BaseModel, Field
 

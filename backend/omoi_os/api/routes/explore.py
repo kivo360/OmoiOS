@@ -540,8 +540,6 @@ async def send_message(
         if not conv:
             raise HTTPException(status_code=404, detail="Conversation not found")
 
-        now = utc_now()
-
         # Create user message
         user_msg = ExploreMessage(
             conversation_id=conversation_id,

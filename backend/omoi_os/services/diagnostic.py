@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from sqlalchemy import desc
@@ -247,7 +246,7 @@ class DiagnosticService:
                     elif "implement" in rec_desc or "build" in rec_desc:
                         suggested_phase = "PHASE_IMPLEMENTATION"
                 
-            except Exception as e:
+            except Exception:
                 # If hypothesis generation fails, use fallback
                 diagnosis_text = f"Diagnostic triggered: Workflow stuck for {context.get('time_stuck_seconds', 0)} seconds. All tasks completed but no validated result."
                 suggested_phase = "PHASE_IMPLEMENTATION"
