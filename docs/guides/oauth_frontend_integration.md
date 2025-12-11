@@ -490,19 +490,19 @@ function RepositoryList() {
 ### Common Issues
 
 1. **"Provider not configured"**
-   - Ensure `AUTH_{PROVIDER}_CLIENT_ID` and `AUTH_{PROVIDER}_CLIENT_SECRET` are set
+    - Ensure `AUTH_{PROVIDER}_CLIENT_ID` and `AUTH_{PROVIDER}_CLIENT_SECRET` are set
 
 2. **"Invalid state"**
-   - The OAuth state expired or was tampered with
-   - Try the login flow again
+    - The OAuth state expired or was tampered with
+    - Try the login flow again
 
 3. **"GitHub not connected"**
-   - User needs to authenticate with GitHub first
-   - Check if `github_access_token` exists in user attributes
+    - User needs to authenticate with GitHub first
+    - Check if `github_access_token` exists in user attributes
 
 4. **Callback redirect fails**
-   - Verify `AUTH_OAUTH_REDIRECT_URI` matches your frontend URL
-   - Check CORS settings if frontend and backend are on different origins
+    - Verify `AUTH_OAUTH_REDIRECT_URI` matches your frontend URL
+    - Check CORS settings if frontend and backend are on different origins
 
 ### Debug Mode
 
