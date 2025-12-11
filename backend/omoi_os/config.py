@@ -315,6 +315,40 @@ class AuthSettings(OmoiBaseSettings):
     # Session settings
     session_expire_days: int = 30
 
+    # OAuth provider credentials
+    github_client_id: Optional[str] = None
+    github_client_secret: Optional[str] = None
+    google_client_id: Optional[str] = None
+    google_client_secret: Optional[str] = None
+    gitlab_client_id: Optional[str] = None
+    gitlab_client_secret: Optional[str] = None
+    gitlab_base_url: str = "https://gitlab.com"
+
+    # OAuth redirect URI
+    oauth_redirect_uri: str = "http://localhost:3000/auth/callback"
+
+    def get_provider_config(self, provider: str) -> Optional[Dict[str, Any]]:
+        """Get OAuth config for a provider."""
+        configs: Dict[str, Dict[str, Any]] = {
+            "github": {
+                "client_id": self.github_client_id,
+                "client_secret": self.github_client_secret,
+            },
+            "google": {
+                "client_id": self.google_client_id,
+                "client_secret": self.google_client_secret,
+            },
+            "gitlab": {
+                "client_id": self.gitlab_client_id,
+                "client_secret": self.gitlab_client_secret,
+                "base_url": self.gitlab_base_url,
+            },
+        }
+        config = configs.get(provider.lower())
+        if config and config.get("client_id") and config.get("client_secret"):
+            return config
+        return None
+
 
 class WorkspaceSettings(OmoiBaseSettings):
     """
