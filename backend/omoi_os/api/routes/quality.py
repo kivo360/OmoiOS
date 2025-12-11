@@ -6,11 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from omoi_os.api.dependencies import get_sync_db_session
+from omoi_os.api.dependencies import get_sync_db_session, get_embedding_service
 from omoi_os.services.quality_checker import QualityCheckerService
 from omoi_os.services.quality_predictor import QualityPredictorService
 from omoi_os.services.memory import MemoryService
-from omoi_os.services.embedding import EmbeddingService, EmbeddingProvider
+from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService
 
 router = APIRouter(prefix="/quality", tags=["quality"])
@@ -53,9 +53,13 @@ def get_quality_checker() -> QualityCheckerService:
     return QualityCheckerService(event_bus=event_bus)
 
 
-def get_quality_predictor() -> QualityPredictorService:
-    """Get quality predictor service."""
-    embedding_service = EmbeddingService(provider=EmbeddingProvider.LOCAL)
+def get_quality_predictor(
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+) -> QualityPredictorService:
+    """Get quality predictor service.
+
+    Uses the configured embedding provider (Fireworks by default).
+    """
     event_bus = EventBusService()
     memory_service = MemoryService(
         embedding_service=embedding_service, event_bus=event_bus
