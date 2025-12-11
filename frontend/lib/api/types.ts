@@ -659,6 +659,152 @@ export interface BlockingTasksResponse {
 }
 
 // ============================================================================
+// OAuth Types
+// ============================================================================
+
+export interface OAuthProvider {
+  name: string
+  enabled: boolean
+}
+
+export interface OAuthProvidersResponse {
+  providers: OAuthProvider[]
+}
+
+export interface OAuthAuthUrlResponse {
+  auth_url: string
+  state: string
+}
+
+export interface ConnectedProvider {
+  provider: string
+  username: string | null
+  connected: boolean
+}
+
+export interface ConnectedProvidersResponse {
+  providers: ConnectedProvider[]
+}
+
+export interface DisconnectResponse {
+  success: boolean
+  message: string
+}
+
+// ============================================================================
+// GitHub Repository Types (OAuth-based)
+// ============================================================================
+
+export interface GitHubRepo {
+  id: number
+  name: string
+  full_name: string
+  owner: string
+  description: string | null
+  private: boolean
+  html_url: string
+  clone_url: string
+  default_branch: string
+  language: string | null
+  stargazers_count: number
+  forks_count: number
+}
+
+export interface GitHubBranch {
+  name: string
+  sha: string
+  protected: boolean
+}
+
+export interface GitHubFile {
+  name: string
+  path: string
+  sha: string
+  size: number
+  type: string
+  content: string | null
+}
+
+export interface GitHubCommitInfo {
+  sha: string
+  message: string
+  author_name: string | null
+  author_email: string | null
+  date: string | null
+  html_url: string | null
+}
+
+export interface GitHubPullRequest {
+  number: number
+  title: string
+  state: string
+  html_url: string
+  head_branch: string
+  base_branch: string
+  body: string | null
+  merged: boolean
+  mergeable: boolean | null
+  draft: boolean
+}
+
+export interface DirectoryItem {
+  name: string
+  path: string
+  type: string
+  size: number
+  sha: string
+}
+
+export interface TreeItem {
+  path: string
+  type: string
+  sha: string
+  size: number | null
+}
+
+export interface FileOperationResult {
+  success: boolean
+  message: string
+  commit_sha: string | null
+  content_sha: string | null
+  error: string | null
+}
+
+export interface BranchCreateResult {
+  success: boolean
+  ref: string | null
+  sha: string | null
+  error: string | null
+}
+
+export interface PullRequestCreateResult {
+  success: boolean
+  number: number | null
+  html_url: string | null
+  state: string | null
+  error: string | null
+}
+
+export interface CreateFileRequest {
+  content: string
+  message: string
+  branch?: string
+}
+
+export interface CreateBranchRequest {
+  branch_name: string
+  from_sha: string
+}
+
+export interface CreatePullRequestRequest {
+  title: string
+  head: string
+  base: string
+  body?: string
+  draft?: boolean
+}
+
+// ============================================================================
 // Generic Response Types
 // ============================================================================
 
