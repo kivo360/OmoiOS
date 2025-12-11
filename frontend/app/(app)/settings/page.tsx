@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { User, Key, Shield, Palette, Bell, Globe, ChevronRight } from "lucide-react"
 
 const settingsLinks = [
@@ -41,7 +40,6 @@ const settingsLinks = [
     icon: Globe,
     title: "Integrations",
     description: "Connect third-party services like GitHub and Slack",
-    disabled: true,
   },
 ]
 
@@ -55,12 +53,8 @@ export default function SettingsPage() {
 
       <div className="grid gap-4 md:grid-cols-2">
         {settingsLinks.map((item) => (
-          <Link
-            key={item.href}
-            href={item.disabled ? "#" : item.href}
-            className={item.disabled ? "pointer-events-none" : ""}
-          >
-            <Card className={`h-full transition-all hover:border-primary/50 hover:shadow-sm ${item.disabled ? "opacity-60" : ""}`}>
+          <Link key={item.href} href={item.href}>
+            <Card className="h-full transition-all hover:border-primary/50 hover:shadow-sm">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
@@ -69,16 +63,9 @@ export default function SettingsPage() {
                     </div>
                     <div>
                       <CardTitle className="text-base">{item.title}</CardTitle>
-                      {item.disabled && (
-                        <Badge variant="secondary" className="text-xs mt-1">
-                          Coming soon
-                        </Badge>
-                      )}
                     </div>
                   </div>
-                  {!item.disabled && (
-                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                  )}
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
                 </div>
               </CardHeader>
               <CardContent>
