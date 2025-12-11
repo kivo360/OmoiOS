@@ -23,10 +23,12 @@ from omoi_os.api.routes import (
     events,
     explore,
     github,
+    github_repos,
     graph,
     guardian,
     memory,
     mcp,
+    oauth,
     organizations,
     phases,
     projects,
@@ -854,6 +856,13 @@ app.include_router(github.router, prefix="/api/v1/github", tags=["github"])
 
 # Authentication routes
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+
+# OAuth routes
+app.include_router(oauth.router, prefix="/api/v1/auth", tags=["OAuth"])
+
+# GitHub Repository routes (authenticated)
+app.include_router(github_repos.router, prefix="/api/v1/github", tags=["GitHub Repos"])
+
 app.include_router(
     organizations.router, prefix="/api/v1/organizations", tags=["organizations"]
 )
