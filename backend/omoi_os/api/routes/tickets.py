@@ -11,7 +11,9 @@ from omoi_os.api.dependencies import (
     get_phase_gate_service,
     get_event_bus_service,
     get_approval_service,
+    get_ticket_dedup_service,
 )
+from omoi_os.services.ticket_dedup import TicketDeduplicationService
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.ticket_status import TicketStatus
 from omoi_os.models.approval_status import ApprovalStatus
@@ -81,6 +83,28 @@ class TicketCreate(BaseModel):
     description: str | None = None
     phase_id: str = "PHASE_REQUIREMENTS"
     priority: str = "MEDIUM"
+    check_duplicates: bool = True  # Enable duplicate checking by default
+    similarity_threshold: float = 0.85  # Threshold for considering duplicates
+    force_create: bool = False  # Create even if duplicates found
+
+
+class DuplicateCandidateResponse(BaseModel):
+    """Response model for duplicate candidate."""
+
+    ticket_id: str
+    title: str
+    description: str
+    status: str
+    similarity_score: float
+
+
+class DuplicateCheckResponse(BaseModel):
+    """Response when duplicates are found."""
+
+    is_duplicate: bool
+    message: str
+    candidates: list[DuplicateCandidateResponse]
+    highest_similarity: float
 
 
 class TicketResponse(BaseModel):
@@ -97,16 +121,21 @@ class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-@router.post("", response_model=TicketResponse)
+@router.post("", response_model=TicketResponse | DuplicateCheckResponse)
 async def create_ticket(
     ticket_data: TicketCreate,
     requested_by_agent_id: str | None = None,
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
     approval_service: ApprovalService = Depends(get_approval_service),
+    dedup_service: TicketDeduplicationService = Depends(get_ticket_dedup_service),
 ):
     """
     Create a new ticket and enqueue initial tasks (with approval gate if enabled).
+
+    Performs duplicate detection using pgvector embedding similarity before creation.
+    If duplicates are found and force_create is False, returns duplicate candidates
+    instead of creating a new ticket.
 
     Args:
         ticket_data: Ticket creation data
@@ -114,10 +143,41 @@ async def create_ticket(
         db: Database service
         queue: Task queue service
         approval_service: Approval service for human-in-the-loop approval
+        dedup_service: Ticket deduplication service
 
     Returns:
-        Created ticket
+        Created ticket, or DuplicateCheckResponse if duplicates found
     """
+    # Check for duplicates if enabled
+    embedding = None
+    if ticket_data.check_duplicates and not ticket_data.force_create:
+        dedup_result = dedup_service.check_duplicate(
+            title=ticket_data.title,
+            description=ticket_data.description,
+            threshold=ticket_data.similarity_threshold,
+            exclude_statuses=["done", "cancelled"],  # Don't match closed tickets
+        )
+
+        if dedup_result.is_duplicate:
+            return DuplicateCheckResponse(
+                is_duplicate=True,
+                message=f"Found {len(dedup_result.candidates)} similar ticket(s). Set force_create=true to create anyway.",
+                candidates=[
+                    DuplicateCandidateResponse(
+                        ticket_id=c.ticket_id,
+                        title=c.title,
+                        description=c.description,
+                        status=c.status,
+                        similarity_score=c.similarity_score,
+                    )
+                    for c in dedup_result.candidates
+                ],
+                highest_similarity=dedup_result.highest_similarity,
+            )
+
+        # Store the embedding for later use
+        embedding = dedup_result.embedding
+
     with db.get_session() as session:
         ticket = Ticket(
             title=ticket_data.title,
@@ -126,6 +186,11 @@ async def create_ticket(
             status=TicketStatus.BACKLOG.value,  # Start in backlog per REQ-TKT-SM-001
             priority=ticket_data.priority,
         )
+
+        # Store embedding if we generated one during dedup check
+        if embedding:
+            ticket.embedding_vector = embedding
+
         session.add(ticket)
         session.flush()
 
@@ -136,6 +201,11 @@ async def create_ticket(
 
         # Flush to get ticket.id before emitting event
         session.flush()
+
+        # If we didn't have an embedding yet (force_create or check_duplicates=false),
+        # generate and store one now for future dedup checks
+        if not embedding and ticket_data.check_duplicates:
+            dedup_service.generate_and_store_embedding(ticket, session=session)
 
         # Emit pending event if approval is enabled (REQ-THA-010)
         if ApprovalStatus.is_pending(ticket.approval_status):
@@ -173,6 +243,58 @@ async def create_ticket(
         )
 
         return TicketResponse.model_validate(ticket)
+
+
+class DuplicateCheckRequest(BaseModel):
+    """Request model for duplicate check."""
+
+    title: str
+    description: str | None = None
+    similarity_threshold: float = 0.85
+    top_k: int = 5
+
+
+@router.post("/check-duplicates", response_model=DuplicateCheckResponse)
+async def check_duplicates(
+    request: DuplicateCheckRequest,
+    dedup_service: TicketDeduplicationService = Depends(get_ticket_dedup_service),
+):
+    """
+    Check if a ticket with similar content already exists.
+
+    Uses pgvector embedding similarity to find potential duplicates.
+    This endpoint does not create a ticket, just checks for duplicates.
+
+    Args:
+        request: Duplicate check request with title and description
+        dedup_service: Ticket deduplication service
+
+    Returns:
+        DuplicateCheckResponse with duplicate status and candidates
+    """
+    result = dedup_service.check_duplicate(
+        title=request.title,
+        description=request.description,
+        threshold=request.similarity_threshold,
+        top_k=request.top_k,
+        exclude_statuses=["done", "cancelled"],
+    )
+
+    return DuplicateCheckResponse(
+        is_duplicate=result.is_duplicate,
+        message=f"Found {len(result.candidates)} similar ticket(s)" if result.is_duplicate else "No duplicates found",
+        candidates=[
+            DuplicateCandidateResponse(
+                ticket_id=c.ticket_id,
+                title=c.title,
+                description=c.description,
+                status=c.status,
+                similarity_score=c.similarity_score,
+            )
+            for c in result.candidates
+        ],
+        highest_similarity=result.highest_similarity,
+    )
 
 
 @router.get("/{ticket_id}", response_model=TicketResponse)

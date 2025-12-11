@@ -78,6 +78,7 @@ def test_workspace_monitoring_and_related_sections(monkeypatch, tmp_path):
         "WORKER_CONCURRENCY",
         "MONITORING_MAX_CONCURRENT_ANALYSES",
         "MONITORING_AUTO_STEERING_ENABLED",
+        "EMBEDDING_PROVIDER",  # Clear env var set by conftest.py
     ):
         monkeypatch.delenv(key, raising=False)
     _write_yaml(
@@ -142,4 +143,3 @@ def test_load_yaml_section_handles_missing_section(monkeypatch, tmp_path):
     config._load_yaml_config.cache_clear()
     data = config.load_yaml_section("nonexistent")
     assert data == {}
-
