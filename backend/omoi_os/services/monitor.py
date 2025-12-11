@@ -491,7 +491,6 @@ class MonitorService:
         # heartbeat messages stored in database or real-time metrics collection
         # For now, we'll compute basic metrics from task data
         
-        from sqlalchemy import func
         from datetime import timedelta
         
         one_hour_ago = utc_now() - timedelta(hours=1)

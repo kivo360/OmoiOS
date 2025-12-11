@@ -5,7 +5,7 @@ from uuid import UUID
 import base64
 
 import httpx
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService

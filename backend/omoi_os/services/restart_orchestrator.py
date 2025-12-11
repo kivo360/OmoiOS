@@ -5,7 +5,7 @@ from typing import List, Optional
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_status import AgentStatus
-from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
+from omoi_os.models.guardian_action import AuthorityLevel
 from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.database import DatabaseService

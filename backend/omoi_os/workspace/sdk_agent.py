@@ -24,11 +24,6 @@ from typing import Optional
 from pydantic import SecretStr
 
 # Register tools by importing them
-from openhands.tools.terminal import TerminalTool
-from openhands.tools.file_editor import FileEditorTool
-from openhands.tools.grep import GrepTool
-from openhands.tools.glob import GlobTool
-from openhands.tools.task_tracker import TaskTrackerTool
 
 from openhands.sdk import LLM, Agent, Conversation, Tool
 from openhands.sdk.tool.registry import list_registered_tools

@@ -6,13 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from omoi_os.models.watchdog_action import WatchdogAction
-from omoi_os.services.database import DatabaseService
-from omoi_os.services.agent_registry import AgentRegistryService
-from omoi_os.services.restart_orchestrator import RestartOrchestrator
-from omoi_os.services.guardian import GuardianService
 from omoi_os.services.watchdog import WatchdogService
-from omoi_os.services.event_bus import EventBusService
-from omoi_os.services.agent_status_manager import AgentStatusManager
 
 router = APIRouter()
 

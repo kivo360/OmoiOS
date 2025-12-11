@@ -9,7 +9,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from omoi_os.models.base import Base
-from omoi_os.models.guardian_action import AuthorityLevel
 from omoi_os.utils.datetime import utc_now
 
 

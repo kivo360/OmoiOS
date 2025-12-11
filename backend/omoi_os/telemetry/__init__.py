@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Optional
 
 
 class MetricType(str, Enum):
@@ -160,4 +160,3 @@ __all__ = [
     "MetricType",
     "STANDARD_METRICS",
 ]
-

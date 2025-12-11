@@ -1,10 +1,9 @@
 """Dependency graph building service for visualization."""
 
-from typing import Dict, List, Set, Optional, Any
+from typing import Dict, List, Optional, Any
 from collections import defaultdict, deque
 
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket

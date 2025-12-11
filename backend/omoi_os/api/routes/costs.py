@@ -7,13 +7,9 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from omoi_os.api.dependencies import (
-    get_db_service,
-    get_event_bus,
     get_cost_tracking_service,
     get_budget_enforcer_service,
 )
-from omoi_os.services.database import DatabaseService
-from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.budget_enforcer import BudgetEnforcerService
 

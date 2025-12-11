@@ -6,7 +6,7 @@ Each template defines what tools an agent has access to and how it should behave
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any, Dict, List, Optional
 
 
 class AgentType(str, Enum):

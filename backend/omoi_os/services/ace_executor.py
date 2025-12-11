@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from omoi_os.models.task import Task
 from omoi_os.models.task_memory import TaskMemory
-from omoi_os.models.memory_type import MemoryType
 from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.memory import MemoryService
 from omoi_os.utils.datetime import utc_now

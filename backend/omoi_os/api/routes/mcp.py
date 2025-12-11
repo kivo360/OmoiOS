@@ -7,22 +7,19 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from omoi_os.models.mcp_server import MCPServer, MCPTool
 from omoi_os.api.dependencies import (
     get_db_service,
     get_event_bus_service,
 )
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
-from omoi_os.services.mcp_authorization import MCPAuthorizationService, PolicyGrant
+from omoi_os.services.mcp_authorization import MCPAuthorizationService
 from omoi_os.services.mcp_integration import (
     MCPIntegrationService,
     MCPInvocationRequest,
-    MCPInvocationResult,
 )
 from omoi_os.services.mcp_registry import MCPRegistryService
 from omoi_os.services.mcp_retry import MCPRetryManager
-from omoi_os.utils.datetime import utc_now
 
 router = APIRouter(prefix="/api/mcp", tags=["MCP"])
 

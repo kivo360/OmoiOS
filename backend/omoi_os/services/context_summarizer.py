@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.context_analysis import ContextSummary

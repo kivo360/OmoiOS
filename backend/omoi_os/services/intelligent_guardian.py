@@ -759,8 +759,8 @@ class IntelligentGuardian:
             try:
                 self._publish_intervention_event(intervention)
                 self._log_intervention(intervention)
-            except:
-                pass
+            except Exception:
+                pass  # Best-effort logging, don't fail on logging errors
             return False
 
     def _publish_intervention_event(self, intervention: SteeringIntervention) -> None:

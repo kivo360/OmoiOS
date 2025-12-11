@@ -29,15 +29,17 @@ router = APIRouter()
 security = HTTPBearer()
 
 
-@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
+)
 async def register(
     request: UserCreate,
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Register a new user account.
-    
+
     Creates a new user with email/password authentication.
     User will need to verify email before full access.
     """
@@ -46,38 +48,33 @@ async def register(
             email=request.email,
             password=request.password,
             full_name=request.full_name,
-            department=request.department
+            department=request.department,
         )
 
         return UserResponse.model_validate(user)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/login", response_model=TokenResponse)
 async def login(
     request: LoginRequest,
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Authenticate user and return JWT tokens.
-    
+
     Returns access token (15min) and refresh token (7d).
     """
     user = await auth_service.authenticate_user(
-        email=request.email,
-        password=request.password
+        email=request.email, password=request.password
     )
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         )
 
     # Create tokens
@@ -87,7 +84,7 @@ async def login(
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
-        expires_in=auth_service.access_token_expire_minutes * 60
+        expires_in=auth_service.access_token_expire_minutes * 60,
     )
 
 
@@ -95,31 +92,26 @@ async def login(
 async def refresh_token(
     request: RefreshTokenRequest,
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Refresh access token using refresh token.
-    
+
     Returns new access token and refresh token.
     """
     # Verify refresh token
-    token_data = auth_service.verify_token(
-        request.refresh_token,
-        token_type="refresh"
-    )
+    token_data = auth_service.verify_token(request.refresh_token, token_type="refresh")
 
     if not token_data:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token"
         )
 
     # Verify user still exists and is active
     user = await auth_service.get_user_by_id(token_data.user_id)
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
         )
 
     # Create new tokens
@@ -129,7 +121,7 @@ async def refresh_token(
     return TokenResponse(
         access_token=access_token,
         refresh_token=new_refresh_token,
-        expires_in=auth_service.access_token_expire_minutes * 60
+        expires_in=auth_service.access_token_expire_minutes * 60,
     )
 
 
@@ -137,11 +129,11 @@ async def refresh_token(
 async def logout(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Logout current user.
-    
+
     Invalidates current session (if using session-based auth).
     For JWT, client should discard tokens.
     """
@@ -150,9 +142,7 @@ async def logout(
 
 
 @router.get("/me", response_model=UserResponse)
-async def get_current_user_info(
-    current_user: User = Depends(get_current_user)
-):
+async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """Get current authenticated user information."""
     return UserResponse.model_validate(current_user)
 
@@ -161,7 +151,7 @@ async def get_current_user_info(
 async def update_current_user(
     request: UserUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """Update current user profile."""
     from sqlalchemy import update
@@ -198,7 +188,7 @@ async def update_current_user(
 async def verify_email(
     request: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """Verify user email using verification token."""
     success = await auth_service.verify_email(request.token)
@@ -206,7 +196,7 @@ async def verify_email(
     if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification token"
+            detail="Invalid or expired verification token",
         )
 
     return {"message": "Email verified successfully"}
@@ -216,11 +206,11 @@ async def verify_email(
 async def forgot_password(
     request: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Request password reset.
-    
+
     Sends reset token via email (email sending not implemented yet).
     """
     user = await auth_service.get_user_by_email(request.email)
@@ -230,42 +220,41 @@ async def forgot_password(
         reset_token = auth_service.create_reset_token(user.id)
 
         # TODO: Send email with reset link
-        # For now, return token (ONLY FOR DEVELOPMENT!)
-        return {
-            "message": "Password reset email sent",
-            "reset_token": reset_token  # Remove in production!
-        }
+        # In production, this token should be sent via email, not returned
+        # For development/testing, log the token (check server logs)
+        import logging
+
+        logging.getLogger(__name__).info(
+            f"Password reset requested for {request.email}. "
+            f"Token (DEV ONLY - remove in production): {reset_token}"
+        )
 
     # Always return success to prevent email enumeration
-    return {"message": "Password reset email sent"}
+    return {
+        "message": "If an account with that email exists, a password reset link has been sent."
+    }
 
 
 @router.post("/reset-password")
 async def reset_password(
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """Reset password using reset token."""
     try:
-        success = await auth_service.reset_password(
-            request.token,
-            request.new_password
-        )
+        success = await auth_service.reset_password(request.token, request.new_password)
 
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid or expired reset token"
+                detail="Invalid or expired reset token",
             )
 
         return {"message": "Password reset successfully"}
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 @router.post("/change-password")
@@ -273,23 +262,22 @@ async def change_password(
     request: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """Change password for authenticated user."""
     # Verify current password
-    if not auth_service.verify_password(request.current_password, current_user.hashed_password):
+    if not auth_service.verify_password(
+        request.current_password, current_user.hashed_password
+    ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect"
+            detail="Current password is incorrect",
         )
 
     # Validate new password
     is_valid, error_msg = auth_service.validate_password_strength(request.new_password)
     if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=error_msg)
 
     # Update password
     from sqlalchemy import update
@@ -307,16 +295,19 @@ async def change_password(
 
 # API Key endpoints
 
-@router.post("/api-keys", response_model=APIKeyWithSecret, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/api-keys", response_model=APIKeyWithSecret, status_code=status.HTTP_201_CREATED
+)
 async def create_api_key(
     request: APIKeyCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """
     Create API key for programmatic access.
-    
+
     Returns the full key ONLY ONCE - save it securely!
     """
     api_key, full_key = await auth_service.create_api_key(
@@ -324,7 +315,7 @@ async def create_api_key(
         name=request.name,
         scopes=request.scopes,
         organization_id=request.organization_id,
-        expires_in_days=request.expires_in_days
+        expires_in_days=request.expires_in_days,
     )
 
     response = APIKeyWithSecret.model_validate(api_key)
@@ -336,15 +327,13 @@ async def create_api_key(
 @router.get("/api-keys", response_model=List[APIKeyResponse])
 async def list_api_keys(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """List user's API keys."""
     from sqlalchemy import select
     from omoi_os.models.auth import APIKey
 
-    result = await db.execute(
-        select(APIKey).where(APIKey.user_id == current_user.id)
-    )
+    result = await db.execute(select(APIKey).where(APIKey.user_id == current_user.id))
     api_keys = result.scalars().all()
 
     return [APIKeyResponse.model_validate(key) for key in api_keys]
@@ -355,7 +344,7 @@ async def revoke_api_key(
     key_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthService = Depends(get_auth_service)
+    auth_service: AuthService = Depends(get_auth_service),
 ):
     """Revoke an API key."""
     from uuid import UUID
@@ -365,16 +354,14 @@ async def revoke_api_key(
     # Verify key belongs to user
     result = await db.execute(
         select(APIKey).where(
-            APIKey.id == UUID(key_id),
-            APIKey.user_id == current_user.id
+            APIKey.id == UUID(key_id), APIKey.user_id == current_user.id
         )
     )
     api_key = result.scalar_one_or_none()
 
     if not api_key:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="API key not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
         )
 
     await auth_service.revoke_api_key(UUID(key_id))

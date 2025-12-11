@@ -44,6 +44,7 @@ __all__ = [
     "DatabaseService",
     "EventBusService",
     "HeartbeatProtocolService",
+    "LLMService",
     "PhaseGateService",
     "ResourceLockService",
     "RestartOrchestrator",
@@ -52,4 +53,5 @@ __all__ = [
     "TaskScorer",
     "TicketWorkflowOrchestrator",
     "ValidationAgent",
+    "get_llm_service",
 ]

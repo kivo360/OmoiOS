@@ -1,9 +1,7 @@
 """MCP Tool Registry Service for server discovery and tool registration."""
 
-import json
 from typing import Any, Dict, List, Optional
 
-import jsonschema
 from jsonschema import Draft7Validator, ValidationError
 
 from omoi_os.models.mcp_server import MCPServer, MCPTool
