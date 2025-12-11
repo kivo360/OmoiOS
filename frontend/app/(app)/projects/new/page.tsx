@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -16,9 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ArrowLeft, Loader2, FolderGit2 } from "lucide-react"
+import { ArrowLeft, Loader2, FolderGit2, Github, Lock, Globe } from "lucide-react"
 import { useCreateProject, useProjects } from "@/hooks/useProjects"
-import { useConnectedRepositories } from "@/hooks/useGitHub"
+import { useGitHubRepos } from "@/hooks/useGitHubRepos"
+import { useIsProviderConnected } from "@/hooks/useOAuth"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -30,11 +32,12 @@ export default function NewProjectPage() {
 
   const createMutation = useCreateProject()
   const { data: projectsData } = useProjects()
-  const { data: connectedRepos } = useConnectedRepositories()
+  const { data: repos, isLoading: reposLoading } = useGitHubRepos({ sort: "updated" })
+  const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } = useIsProviderConnected("github")
 
   // Get repos that are not already connected to projects
   const availableRepos = useMemo(() => {
-    if (!connectedRepos) return []
+    if (!repos) return []
     
     // Get list of repos already connected to projects
     const connectedRepoNames = new Set(
@@ -44,10 +47,10 @@ export default function NewProjectPage() {
     )
     
     // Filter out already connected repos
-    return connectedRepos.filter(
-      (r) => !connectedRepoNames.has(`${r.owner}/${r.repo}`)
+    return repos.filter(
+      (r) => !connectedRepoNames.has(r.full_name)
     )
-  }, [connectedRepos, projectsData])
+  }, [repos, projectsData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -94,45 +97,74 @@ export default function NewProjectPage() {
             {/* Repository Selection */}
             <div className="space-y-2">
               <Label htmlFor="repository">GitHub Repository</Label>
-              <Select
-                value={formData.repository}
-                onValueChange={(value) => {
-                  // Auto-fill name from repo
-                  const repoName = value.split("/")[1] || ""
-                  if (!formData.name) {
-                    setFormData({
-                      ...formData,
-                      repository: value,
-                      name: repoName.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-                    })
-                  } else {
-                    setFormData({ ...formData, repository: value })
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a repository" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableRepos.length === 0 ? (
-                    <div className="py-6 text-center text-sm text-muted-foreground">
-                      No available repositories
-                    </div>
-                  ) : (
-                    availableRepos.map((repo) => (
-                      <SelectItem key={`${repo.owner}/${repo.repo}`} value={`${repo.owner}/${repo.repo}`}>
-                        <div className="flex items-center gap-2">
-                          <FolderGit2 className="h-4 w-4" />
-                          <span>{repo.owner}/{repo.repo}</span>
+              {isCheckingConnection ? (
+                <Skeleton className="h-10 w-full" />
+              ) : !isGitHubConnected ? (
+                <div className="flex flex-col items-center justify-center rounded-lg border border-dashed p-6">
+                  <Github className="h-10 w-10 text-muted-foreground/50 mb-3" />
+                  <p className="text-sm font-medium">GitHub Not Connected</p>
+                  <p className="text-xs text-muted-foreground mt-1 mb-3">
+                    Connect your GitHub account to select a repository
+                  </p>
+                  <Button size="sm" asChild>
+                    <Link href="/settings/integrations">
+                      Connect GitHub
+                    </Link>
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Select
+                    value={formData.repository}
+                    onValueChange={(value) => {
+                      // Auto-fill name from repo
+                      const repoName = value.split("/")[1] || ""
+                      if (!formData.name) {
+                        setFormData({
+                          ...formData,
+                          repository: value,
+                          name: repoName.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+                        })
+                      } else {
+                        setFormData({ ...formData, repository: value })
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={reposLoading ? "Loading repositories..." : "Select a repository"} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      {reposLoading ? (
+                        <div className="py-6 text-center text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                          Loading repositories...
                         </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Only repositories not connected to existing projects are shown
-              </p>
+                      ) : availableRepos.length === 0 ? (
+                        <div className="py-6 text-center text-sm text-muted-foreground">
+                          No available repositories
+                        </div>
+                      ) : (
+                        availableRepos.map((repo) => (
+                          <SelectItem key={repo.full_name} value={repo.full_name}>
+                            <div className="flex items-center gap-2">
+                              <FolderGit2 className="h-4 w-4 flex-shrink-0" />
+                              <span className="truncate">{repo.full_name}</span>
+                              {repo.private ? (
+                                <Lock className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                              ) : (
+                                <Globe className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                              )}
+                            </div>
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Only repositories not connected to existing projects are shown ({availableRepos.length} available)
+                  </p>
+                </>
+              )}
             </div>
 
             {/* Project Name */}
