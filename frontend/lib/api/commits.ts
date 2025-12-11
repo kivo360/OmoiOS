@@ -64,7 +64,7 @@ export async function linkCommitToTicket(
 ): Promise<Commit> {
   return apiRequest<Commit>(`/api/v1/commits/ticket/${ticketId}/link`, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 

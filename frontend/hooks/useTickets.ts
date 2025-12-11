@@ -7,6 +7,7 @@ import {
   listTickets,
   getTicket,
   createTicket,
+  checkDuplicates,
   transitionTicket,
   blockTicket,
   unblockTicket,
@@ -19,16 +20,17 @@ import {
 import type {
   Ticket,
   TicketCreate,
+  TicketListParams,
   TicketListResponse,
   TicketTransitionRequest,
+  DuplicateCheckResponse,
 } from "@/lib/api/types"
 
 // Query keys
 export const ticketKeys = {
   all: ["tickets"] as const,
   lists: () => [...ticketKeys.all, "list"] as const,
-  list: (params: { limit?: number; offset?: number }) =>
-    [...ticketKeys.lists(), params] as const,
+  list: (params: TicketListParams) => [...ticketKeys.lists(), params] as const,
   details: () => [...ticketKeys.all, "detail"] as const,
   detail: (id: string) => [...ticketKeys.details(), id] as const,
   context: (id: string) => [...ticketKeys.detail(id), "context"] as const,
@@ -36,12 +38,26 @@ export const ticketKeys = {
 }
 
 /**
- * Hook to fetch list of tickets
+ * Hook to fetch list of tickets with filtering
  */
-export function useTickets(params?: { limit?: number; offset?: number }) {
+export function useTickets(params?: TicketListParams) {
   return useQuery<TicketListResponse>({
     queryKey: ticketKeys.list(params ?? {}),
     queryFn: () => listTickets(params),
+  })
+}
+
+/**
+ * Hook to check for duplicate tickets
+ */
+export function useCheckDuplicates() {
+  return useMutation<
+    DuplicateCheckResponse,
+    Error,
+    { title: string; description?: string; similarityThreshold?: number }
+  >({
+    mutationFn: ({ title, description, similarityThreshold }) =>
+      checkDuplicates(title, description, similarityThreshold),
   })
 }
 

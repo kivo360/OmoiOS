@@ -38,7 +38,7 @@ export async function moveTicket(
     status: string
   }>("/api/v1/board/move", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 

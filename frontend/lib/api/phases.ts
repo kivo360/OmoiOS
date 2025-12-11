@@ -17,8 +17,8 @@ export async function validateGate(
   phaseId?: string
 ): Promise<GateValidationResult> {
   const url = phaseId
-    ? `/api/v1/phases/tickets/${ticketId}/validate-gate?phase_id=${phaseId}`
-    : `/api/v1/phases/tickets/${ticketId}/validate-gate`
+    ? `/api/v1/tickets/${ticketId}/validate-gate?phase_id=${phaseId}`
+    : `/api/v1/tickets/${ticketId}/validate-gate`
   return apiRequest<GateValidationResult>(url, { method: "POST" })
 }
 
@@ -30,8 +30,8 @@ export async function getGateStatus(
   phaseId?: string
 ): Promise<Record<string, unknown>> {
   const url = phaseId
-    ? `/api/v1/phases/tickets/${ticketId}/gate-status?phase_id=${phaseId}`
-    : `/api/v1/phases/tickets/${ticketId}/gate-status`
+    ? `/api/v1/tickets/${ticketId}/gate-status?phase_id=${phaseId}`
+    : `/api/v1/tickets/${ticketId}/gate-status`
   return apiRequest<Record<string, unknown>>(url)
 }
 
@@ -43,10 +43,10 @@ export async function addArtifact(
   data: PhaseArtifactCreate
 ): Promise<PhaseArtifact> {
   return apiRequest<PhaseArtifact>(
-    `/api/v1/phases/tickets/${ticketId}/artifacts`,
+    `/api/v1/tickets/${ticketId}/artifacts`,
     {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data,
     }
   )
 }

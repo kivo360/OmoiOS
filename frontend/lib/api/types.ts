@@ -321,6 +321,33 @@ export interface TicketCreate {
   description?: string
   phase_id?: string
   priority?: string
+  project_id?: string
+  // Deduplication options
+  check_duplicates?: boolean
+  similarity_threshold?: number
+  force_create?: boolean
+}
+
+export interface TicketListParams {
+  limit?: number
+  offset?: number
+  status?: string
+  priority?: string
+  phase_id?: string
+  search?: string
+}
+
+export interface DuplicateCandidate {
+  ticket_id: string
+  title: string
+  similarity_score: number
+}
+
+export interface DuplicateCheckResponse {
+  is_duplicate: boolean
+  message: string
+  candidates: DuplicateCandidate[]
+  highest_similarity: number
 }
 
 export interface TicketListResponse {

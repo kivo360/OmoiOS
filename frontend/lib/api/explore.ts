@@ -67,7 +67,7 @@ export async function listConversations(
   if (limit) params.set("limit", String(limit))
   const query = params.toString()
   return apiRequest<ConversationListResponse>(
-    `/explore/project/${projectId}/conversations${query ? `?${query}` : ""}`
+    `/api/v1/explore/project/${projectId}/conversations${query ? `?${query}` : ""}`
   )
 }
 
@@ -75,7 +75,7 @@ export async function createConversation(
   projectId: string
 ): Promise<ConversationResponse> {
   return apiRequest<ConversationResponse>(
-    `/explore/project/${projectId}/conversations`,
+    `/api/v1/explore/project/${projectId}/conversations`,
     { method: "POST" }
   )
 }
@@ -85,7 +85,7 @@ export async function getConversation(
   conversationId: string
 ): Promise<ConversationResponse> {
   return apiRequest<ConversationResponse>(
-    `/explore/project/${projectId}/conversations/${conversationId}`
+    `/api/v1/explore/project/${projectId}/conversations/${conversationId}`
   )
 }
 
@@ -95,10 +95,10 @@ export async function sendMessage(
   content: string
 ): Promise<MessageResponse> {
   return apiRequest<MessageResponse>(
-    `/explore/project/${projectId}/conversations/${conversationId}/messages`,
+    `/api/v1/explore/project/${projectId}/conversations/${conversationId}/messages`,
     {
       method: "POST",
-      body: JSON.stringify({ content }),
+      body: { content },
     }
   )
 }
@@ -108,7 +108,7 @@ export async function deleteConversation(
   conversationId: string
 ): Promise<{ message: string }> {
   return apiRequest<{ message: string }>(
-    `/explore/project/${projectId}/conversations/${conversationId}`,
+    `/api/v1/explore/project/${projectId}/conversations/${conversationId}`,
     { method: "DELETE" }
   )
 }
@@ -117,7 +117,7 @@ export async function getProjectFiles(
   projectId: string
 ): Promise<ProjectFilesResponse> {
   return apiRequest<ProjectFilesResponse>(
-    `/explore/project/${projectId}/files`
+    `/api/v1/explore/project/${projectId}/files`
   )
 }
 
@@ -129,6 +129,6 @@ export async function getSuggestions(
   if (context) params.set("context", context)
   const query = params.toString()
   return apiRequest<SuggestionsResponse>(
-    `/explore/project/${projectId}/suggestions${query ? `?${query}` : ""}`
+    `/api/v1/explore/project/${projectId}/suggestions${query ? `?${query}` : ""}`
   )
 }

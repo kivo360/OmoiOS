@@ -105,7 +105,7 @@ export async function getReasoningChain(
   }
   const query = searchParams.toString()
   return apiRequest<ReasoningChainResponse>(
-    `/reasoning/${entityType}/${entityId}${query ? `?${query}` : ""}`
+    `/api/v1/reasoning/${entityType}/${entityId}${query ? `?${query}` : ""}`
   )
 }
 
@@ -115,10 +115,10 @@ export async function addReasoningEvent(
   event: ReasoningEventCreate
 ): Promise<ReasoningEvent> {
   return apiRequest<ReasoningEvent>(
-    `/reasoning/${entityType}/${entityId}/events`,
+    `/api/v1/reasoning/${entityType}/${entityId}/events`,
     {
       method: "POST",
-      body: JSON.stringify(event),
+      body: event,
     }
   )
 }
@@ -129,7 +129,7 @@ export async function getReasoningEvent(
   eventId: string
 ): Promise<ReasoningEvent> {
   return apiRequest<ReasoningEvent>(
-    `/reasoning/${entityType}/${entityId}/events/${eventId}`
+    `/api/v1/reasoning/${entityType}/${entityId}/events/${eventId}`
   )
 }
 
@@ -139,11 +139,11 @@ export async function deleteReasoningEvent(
   eventId: string
 ): Promise<{ message: string }> {
   return apiRequest<{ message: string }>(
-    `/reasoning/${entityType}/${entityId}/events/${eventId}`,
+    `/api/v1/reasoning/${entityType}/${entityId}/events/${eventId}`,
     { method: "DELETE" }
   )
 }
 
 export async function getEventTypes(): Promise<EventTypesResponse> {
-  return apiRequest<EventTypesResponse>("/reasoning/types")
+  return apiRequest<EventTypesResponse>("/api/v1/reasoning/types")
 }

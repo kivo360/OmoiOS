@@ -18,7 +18,7 @@ export async function getProjectDependencyGraph(
   }
   const query = searchParams.toString()
   return apiRequest<DependencyGraphResponse>(
-    `/dependency-graph/project/${projectId}${query ? `?${query}` : ""}`
+    `/api/v1/graph/dependency-graph/project/${projectId}${query ? `?${query}` : ""}`
   )
 }
 
@@ -38,7 +38,7 @@ export async function getTicketDependencyGraph(
   }
   const query = searchParams.toString()
   return apiRequest<DependencyGraphResponse>(
-    `/dependency-graph/ticket/${ticketId}${query ? `?${query}` : ""}`
+    `/api/v1/graph/dependency-graph/ticket/${ticketId}${query ? `?${query}` : ""}`
   )
 }
 
@@ -46,12 +46,12 @@ export async function getTicketDependencyGraph(
  * Get tasks blocked by a specific task
  */
 export async function getBlockedTasks(taskId: string): Promise<BlockedTasksResponse> {
-  return apiRequest<BlockedTasksResponse>(`/dependency-graph/task/${taskId}/blocked`)
+  return apiRequest<BlockedTasksResponse>(`/api/v1/graph/dependency-graph/task/${taskId}/blocked`)
 }
 
 /**
  * Get tasks that block a specific task
  */
 export async function getBlockingTasks(taskId: string): Promise<BlockingTasksResponse> {
-  return apiRequest<BlockingTasksResponse>(`/dependency-graph/task/${taskId}/blocking`)
+  return apiRequest<BlockingTasksResponse>(`/api/v1/graph/dependency-graph/task/${taskId}/blocking`)
 }

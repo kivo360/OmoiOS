@@ -32,7 +32,7 @@ export async function getAgent(agentId: string): Promise<Agent> {
 export async function registerAgent(data: AgentRegisterRequest): Promise<Agent> {
   return apiRequest<Agent>("/api/v1/agents/register", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -45,7 +45,7 @@ export async function updateAgent(
 ): Promise<Agent> {
   return apiRequest<Agent>(`/api/v1/agents/${agentId}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -58,7 +58,7 @@ export async function toggleAgentAvailability(
 ): Promise<Agent> {
   return apiRequest<Agent>(`/api/v1/agents/${agentId}/availability`, {
     method: "POST",
-    body: JSON.stringify({ available }),
+    body: { available },
   })
 }
 

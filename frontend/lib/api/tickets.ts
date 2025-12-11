@@ -6,25 +6,46 @@ import { apiRequest } from "./client"
 import type {
   Ticket,
   TicketCreate,
+  TicketListParams,
   TicketListResponse,
   TicketTransitionRequest,
+  DuplicateCheckResponse,
 } from "./types"
 
 /**
- * List all tickets with pagination
+ * List all tickets with pagination and filtering
  */
-export async function listTickets(params?: {
-  limit?: number
-  offset?: number
-}): Promise<TicketListResponse> {
+export async function listTickets(params?: TicketListParams): Promise<TicketListResponse> {
   const searchParams = new URLSearchParams()
   if (params?.limit) searchParams.set("limit", String(params.limit))
   if (params?.offset) searchParams.set("offset", String(params.offset))
+  if (params?.status) searchParams.set("status", params.status)
+  if (params?.priority) searchParams.set("priority", params.priority)
+  if (params?.phase_id) searchParams.set("phase_id", params.phase_id)
+  if (params?.search) searchParams.set("search", params.search)
 
   const query = searchParams.toString()
   const url = query ? `/api/v1/tickets?${query}` : "/api/v1/tickets"
 
   return apiRequest<TicketListResponse>(url)
+}
+
+/**
+ * Check for duplicate tickets before creating
+ */
+export async function checkDuplicates(
+  title: string,
+  description?: string,
+  similarityThreshold?: number
+): Promise<DuplicateCheckResponse> {
+  return apiRequest<DuplicateCheckResponse>("/api/v1/tickets/check-duplicates", {
+    method: "POST",
+    body: {
+      title,
+      description,
+      similarity_threshold: similarityThreshold,
+    },
+  })
 }
 
 /**
@@ -40,7 +61,7 @@ export async function getTicket(ticketId: string): Promise<Ticket> {
 export async function createTicket(data: TicketCreate): Promise<Ticket> {
   return apiRequest<Ticket>("/api/v1/tickets", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -53,7 +74,7 @@ export async function transitionTicket(
 ): Promise<Ticket> {
   return apiRequest<Ticket>(`/api/v1/tickets/${ticketId}/transition`, {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -105,7 +126,7 @@ export async function approveTicket(
     "/api/v1/tickets/approve",
     {
       method: "POST",
-      body: JSON.stringify({ ticket_id: ticketId }),
+      body: { ticket_id: ticketId },
     }
   )
 }
@@ -121,7 +142,7 @@ export async function rejectTicket(
     "/api/v1/tickets/reject",
     {
       method: "POST",
-      body: JSON.stringify({ ticket_id: ticketId, rejection_reason: rejectionReason }),
+      body: { ticket_id: ticketId, rejection_reason: rejectionReason },
     }
   )
 }

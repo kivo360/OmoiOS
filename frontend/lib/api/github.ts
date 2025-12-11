@@ -21,7 +21,7 @@ export async function connectRepository(
     `/api/v1/github/connect?project_id=${projectId}`,
     {
       method: "POST",
-      body: JSON.stringify(data),
+      body: data,
     }
   )
 }

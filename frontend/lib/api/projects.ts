@@ -43,7 +43,7 @@ export async function getProject(projectId: string): Promise<Project> {
 export async function createProject(data: ProjectCreate): Promise<Project> {
   return apiRequest<Project>("/api/v1/projects", {
     method: "POST",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
@@ -56,7 +56,7 @@ export async function updateProject(
 ): Promise<Project> {
   return apiRequest<Project>(`/api/v1/projects/${projectId}`, {
     method: "PATCH",
-    body: JSON.stringify(data),
+    body: data,
   })
 }
 
