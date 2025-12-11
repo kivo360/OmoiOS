@@ -1,0 +1,273 @@
+"""OAuth API routes."""
+
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
+
+from omoi_os.api.dependencies import get_db_service, get_current_user
+from omoi_os.config import get_app_settings
+from omoi_os.models.user import User
+from omoi_os.services.auth_service import AuthService
+from omoi_os.services.database import DatabaseService
+from omoi_os.services.oauth_service import OAuthService
+
+
+router = APIRouter()
+
+
+# ============================================================================
+# Pydantic Response Models
+# ============================================================================
+
+
+class ProviderInfo(BaseModel):
+    """OAuth provider info."""
+
+    name: str
+    enabled: bool
+
+
+class ProvidersResponse(BaseModel):
+    """List of OAuth providers."""
+
+    providers: list[ProviderInfo]
+
+
+class AuthUrlResponse(BaseModel):
+    """OAuth authorization URL response."""
+
+    auth_url: str
+    state: str
+
+
+class ConnectedProvider(BaseModel):
+    """Connected OAuth provider info."""
+
+    provider: str
+    username: Optional[str] = None
+    connected: bool = True
+
+
+class ConnectedProvidersResponse(BaseModel):
+    """List of connected OAuth providers for a user."""
+
+    providers: list[ConnectedProvider]
+
+
+class DisconnectResponse(BaseModel):
+    """Response for disconnecting a provider."""
+
+    success: bool
+    message: str
+
+
+# ============================================================================
+# Dependencies
+# ============================================================================
+
+
+def get_oauth_service(
+    db: DatabaseService = Depends(get_db_service),
+) -> OAuthService:
+    """Get OAuth service instance."""
+    return OAuthService(db)
+
+
+def get_auth_service_sync(
+    db: DatabaseService = Depends(get_db_service),
+) -> AuthService:
+    """Get auth service instance with sync session."""
+    from omoi_os.config import settings
+
+    with db.get_session() as session:
+        return AuthService(
+            db=session,
+            jwt_secret=settings.jwt_secret_key,
+            jwt_algorithm=settings.jwt_algorithm,
+            access_token_expire_minutes=settings.access_token_expire_minutes,
+            refresh_token_expire_days=settings.refresh_token_expire_days,
+        )
+
+
+# ============================================================================
+# Public Routes (No Authentication Required)
+# ============================================================================
+
+
+@router.get("/oauth/providers", response_model=ProvidersResponse)
+async def list_oauth_providers(
+    oauth_service: OAuthService = Depends(get_oauth_service),
+):
+    """List available OAuth providers and their status."""
+    providers = oauth_service.get_available_providers()
+    return ProvidersResponse(providers=[ProviderInfo(**p) for p in providers])
+
+
+@router.get("/oauth/{provider}/url", response_model=AuthUrlResponse)
+async def get_oauth_url(
+    provider: str,
+    oauth_service: OAuthService = Depends(get_oauth_service),
+):
+    """
+    Get OAuth authorization URL for a provider.
+    
+    Use this to get the URL to redirect the user to for OAuth login.
+    The response includes a state parameter that will be verified on callback.
+    """
+    try:
+        auth_url, state = oauth_service.get_auth_url(provider)
+        return AuthUrlResponse(auth_url=auth_url, state=state)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/oauth/{provider}")
+async def start_oauth(
+    provider: str,
+    oauth_service: OAuthService = Depends(get_oauth_service),
+):
+    """
+    Start OAuth flow for a provider.
+
+    Redirects user to provider's authorization page.
+    """
+    try:
+        auth_url, state = oauth_service.get_auth_url(provider)
+        return RedirectResponse(url=auth_url)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/oauth/{provider}/callback")
+async def oauth_callback(
+    provider: str,
+    code: str = Query(...),
+    state: str = Query(...),
+    error: Optional[str] = Query(None),
+    error_description: Optional[str] = Query(None),
+    oauth_service: OAuthService = Depends(get_oauth_service),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Handle OAuth callback.
+
+    Exchanges code for user info, creates/updates user, and redirects to frontend.
+    """
+    settings = get_app_settings().auth
+    frontend_url = settings.oauth_redirect_uri
+
+    # Handle OAuth error
+    if error:
+        error_msg = error_description or error
+        return RedirectResponse(url=f"{frontend_url}?error={error_msg}")
+
+    # Verify state
+    if not oauth_service.verify_state(state, provider):
+        return RedirectResponse(url=f"{frontend_url}?error=invalid_state")
+
+    # Exchange code for user info
+    oauth_info = await oauth_service.handle_callback(provider, code)
+    if not oauth_info:
+        return RedirectResponse(url=f"{frontend_url}?error=oauth_failed")
+
+    # Get or create user
+    user = oauth_service.get_or_create_user(oauth_info)
+
+    # Generate JWT tokens using a sync session
+    from omoi_os.config import settings as auth_settings
+    
+    with db.get_session() as session:
+        auth_service = AuthService(
+            db=session,
+            jwt_secret=auth_settings.jwt_secret_key,
+            jwt_algorithm=auth_settings.jwt_algorithm,
+            access_token_expire_minutes=auth_settings.access_token_expire_minutes,
+            refresh_token_expire_days=auth_settings.refresh_token_expire_days,
+        )
+        
+        access_token = auth_service.create_access_token(user.id)
+        refresh_token = auth_service.create_refresh_token(user.id)
+
+    # Redirect to frontend with tokens
+    redirect_url = (
+        f"{frontend_url}"
+        f"?access_token={access_token}"
+        f"&refresh_token={refresh_token}"
+        f"&provider={provider}"
+    )
+
+    return RedirectResponse(url=redirect_url)
+
+
+# ============================================================================
+# Authenticated Routes
+# ============================================================================
+
+
+@router.get("/oauth/connected", response_model=ConnectedProvidersResponse)
+async def list_connected_providers(
+    current_user: User = Depends(get_current_user),
+):
+    """List OAuth providers connected to the current user's account."""
+    providers = []
+    attrs = current_user.attributes or {}
+
+    for provider_name in ["github", "google", "gitlab"]:
+        if attrs.get(f"{provider_name}_user_id"):
+            providers.append(
+                ConnectedProvider(
+                    provider=provider_name,
+                    username=attrs.get(f"{provider_name}_username"),
+                    connected=True,
+                )
+            )
+
+    return ConnectedProvidersResponse(providers=providers)
+
+
+@router.post("/oauth/{provider}/connect")
+async def connect_provider(
+    provider: str,
+    oauth_service: OAuthService = Depends(get_oauth_service),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Start OAuth flow to connect a provider to the current user's account.
+    
+    Returns the authorization URL - the frontend should redirect the user to this URL.
+    """
+    try:
+        auth_url, state = oauth_service.get_auth_url(provider)
+        return AuthUrlResponse(auth_url=auth_url, state=state)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.delete("/oauth/{provider}/disconnect", response_model=DisconnectResponse)
+async def disconnect_provider(
+    provider: str,
+    oauth_service: OAuthService = Depends(get_oauth_service),
+    current_user: User = Depends(get_current_user),
+):
+    """Disconnect an OAuth provider from the current user's account."""
+    # Check if user has a password set (can't disconnect if it's the only auth method)
+    attrs = current_user.attributes or {}
+    has_password = current_user.hashed_password is not None
+    
+    connected_providers = sum(
+        1 for p in ["github", "google", "gitlab"] if attrs.get(f"{p}_user_id")
+    )
+
+    if not has_password and connected_providers <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot disconnect the only authentication method. Set a password first.",
+        )
+
+    success = oauth_service.disconnect_provider(current_user.id, provider)
+    if success:
+        return DisconnectResponse(success=True, message=f"{provider} disconnected successfully")
+    else:
+        raise HTTPException(status_code=404, detail="User not found")

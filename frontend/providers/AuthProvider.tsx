@@ -87,6 +87,7 @@ const PUBLIC_ROUTES = [
   "/forgot-password",
   "/reset-password",
   "/verify-email",
+  "/callback",
 ]
 
 // Routes that should redirect to main app if already authenticated
