@@ -27,6 +27,19 @@ ENVIRONMENT_VARIABLE = "OMOIOS_ENV"
 DEFAULT_ENVIRONMENT = "local"
 
 
+def get_env_files():
+    """Get environment files in priority order: .env.local, .env."""
+    # Pydantic Settings supports list for multiple env files (higher index = higher priority)
+    # Priority order: .env.local (highest), .env
+    env_files = []
+    if os.path.exists(".env"):
+        env_files.append(".env")
+    if os.path.exists(".env.local"):
+        env_files.append(".env.local")
+    # Return list if files exist, None otherwise (pydantic-settings accepts list or str)
+    return env_files if env_files else None
+
+
 def _merge_mappings(
     base: MutableMapping[str, Any], override: Mapping[str, Any]
 ) -> MutableMapping[str, Any]:
@@ -97,6 +110,7 @@ class OmoiBaseSettings(BaseSettings):
         sources: list[PydanticBaseSettingsSource] = [
             init_settings,
             env_settings,
+            dotenv_settings,  # Include .env file loading
             file_secret_settings,
         ]
         if cls.yaml_section:
@@ -292,6 +306,8 @@ class AuthSettings(OmoiBaseSettings):
     yaml_section = "auth"
     model_config = SettingsConfigDict(
         env_prefix="AUTH_",
+        env_file=get_env_files(),
+        env_file_encoding="utf-8",
         extra="ignore",
     )
 

@@ -58,25 +58,33 @@ class OAuthService:
         """Build the OAuth callback redirect URI for a provider."""
         # Parse the base redirect URI to construct the callback URL
         base_uri = self.settings.oauth_redirect_uri
-        # The callback URL is /api/v1/auth/oauth/{provider}/callback on the backend
-        # We need to use the backend URL for the actual OAuth callback
-        # Assuming the backend and frontend are on the same origin in development
-        # In production, this should be configured properly
 
-        # For now, we'll use a pattern where the backend handles the callback
-        # and then redirects to the frontend
-        # The redirect_uri should point to the backend's callback endpoint
+        # The redirect_uri sent to OAuth providers must point to the BACKEND callback endpoint
+        # The base_uri is the frontend callback URL (e.g., http://localhost:3000/auth/callback)
+        # We need to convert it to the backend callback URL (e.g., http://localhost:18000/api/v1/auth/oauth/{provider}/callback)
 
-        # Extract the origin from the oauth_redirect_uri (frontend URL)
-        # and construct the backend callback URL
-        if "localhost:3000" in base_uri:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(base_uri)
+
+        # Extract the origin (scheme + netloc)
+        if "localhost:3000" in parsed.netloc:
             # Development: frontend on 3000, backend on 18000
-            backend_base = base_uri.replace("localhost:3000", "localhost:18000")
+            backend_netloc = parsed.netloc.replace("localhost:3000", "localhost:18000")
         else:
-            # Production: assume same origin
-            backend_base = base_uri.rsplit("/", 1)[0]
+            # Production: use same origin (backend and frontend on same domain)
+            backend_netloc = parsed.netloc
 
-        return f"{backend_base}/api/v1/auth/oauth/{provider_name}/callback"
+        # Build the backend callback URL
+        redirect_uri = f"{parsed.scheme}://{backend_netloc}/api/v1/auth/oauth/{provider_name}/callback"
+
+        # Log the redirect URI for debugging OAuth configuration issues
+        logger.info(
+            f"OAuth redirect URI for {provider_name}: {redirect_uri} "
+            f"(base_uri: {base_uri})"
+        )
+
+        return redirect_uri
 
     def get_auth_url(self, provider_name: str) -> tuple[str, str]:
         """
@@ -113,6 +121,11 @@ class OAuthService:
             raise ValueError(f"Provider '{provider_name}' not found")
 
         auth_url, state = provider.get_auth_url()
+
+        # Log the authorization URL (without sensitive data) for debugging
+        logger.debug(
+            f"Generated OAuth auth URL for {provider_name} (state: {state[:8]}...)"
+        )
 
         # Store state in Redis with TTL for verification
         state_key = f"{OAUTH_STATE_PREFIX}{state}"

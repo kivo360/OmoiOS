@@ -12,6 +12,7 @@ import { Github, Mail, Loader2 } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { login as apiLogin, getCurrentUser } from "@/lib/api/auth"
 import { ApiError } from "@/lib/api/client"
+import { startOAuthFlow } from "@/lib/api/oauth"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -51,8 +52,12 @@ export default function LoginPage() {
   }
 
   const handleOAuth = (provider: "github" | "google") => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-    window.location.href = `${apiUrl}/api/v1/auth/oauth/${provider}`
+    try {
+      startOAuthFlow(provider)
+    } catch (error) {
+      console.error(`Failed to start OAuth flow for ${provider}:`, error)
+      setError(`Failed to start ${provider} authentication. Please try again.`)
+    }
   }
 
   return (
@@ -125,7 +130,11 @@ export default function LoginPage() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => handleOAuth("github")}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleOAuth("github")
+          }}
           disabled={isLoading}
         >
           <Github className="mr-2 h-4 w-4" />
@@ -134,7 +143,11 @@ export default function LoginPage() {
         <Button
           type="button"
           variant="outline"
-          onClick={() => handleOAuth("google")}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            handleOAuth("google")
+          }}
           disabled={isLoading}
         >
           <Mail className="mr-2 h-4 w-4" />
