@@ -285,17 +285,19 @@ export default function AgentsPage() {
                 )}
 
                 {/* Health & Phase */}
-                <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <HealthIcon className={`h-3 w-3 text-${healthCfg.color}`} />
                     <span>{agent.health_status}</span>
                   </div>
                   {agent.phase_id && (
-                    <span className="text-xs">{agent.phase_id}</span>
-                )}
+                    <span className="truncate text-xs max-w-[140px]" title={agent.phase_id}>
+                      {agent.phase_id}
+                    </span>
+                  )}
                 </div>
 
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
                   <div className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     <span>{formatTimeAgo(agent.last_heartbeat)}</span>

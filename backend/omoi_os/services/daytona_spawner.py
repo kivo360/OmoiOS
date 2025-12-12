@@ -108,6 +108,7 @@ class DaytonaSpawnerService:
         agent_type: Optional[str] = None,
         extra_env: Optional[Dict[str, str]] = None,
         labels: Optional[Dict[str, str]] = None,
+        runtime: str = "openhands",  # "openhands" or "claude"
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -118,6 +119,7 @@ class DaytonaSpawnerService:
             agent_type: Optional agent type override
             extra_env: Additional environment variables
             labels: Labels for the sandbox
+            runtime: Agent runtime to use - "openhands" (default) or "claude"
 
         Returns:
             Sandbox ID
@@ -189,14 +191,18 @@ class DaytonaSpawnerService:
 
         try:
             # Create Daytona sandbox
-            logger.info(f"Creating Daytona sandbox {sandbox_id} for task {task_id}")
+            logger.info(f"Creating Daytona sandbox {sandbox_id} for task {task_id} (runtime: {runtime})")
 
+            # Store runtime type before creation
+            info.extra_data["runtime"] = runtime
+            
             await self._create_daytona_sandbox(
                 sandbox_id=sandbox_id,
                 env_vars=env_vars,
                 labels=sandbox_labels,
+                runtime=runtime,
             )
-
+            
             # Update status
             info.status = "running"
             info.started_at = utc_now()
@@ -241,10 +247,17 @@ class DaytonaSpawnerService:
         sandbox_id: str,
         env_vars: Dict[str, str],
         labels: Dict[str, str],
+        runtime: str = "openhands",
     ) -> None:
         """Create a Daytona sandbox via their API.
 
         This is the actual Daytona SDK integration point.
+        
+        Args:
+            sandbox_id: Unique sandbox identifier
+            env_vars: Environment variables to set in sandbox
+            labels: Labels for sandbox organization
+            runtime: Agent runtime - "openhands" or "claude"
         """
         try:
             from daytona import Daytona, DaytonaConfig, CreateSandboxFromImageParams
@@ -273,7 +286,7 @@ class DaytonaSpawnerService:
                 info.extra_data["daytona_sandbox_id"] = sandbox.id
 
             # Set environment variables and start the worker
-            await self._start_worker_in_sandbox(sandbox, env_vars)
+            await self._start_worker_in_sandbox(sandbox, env_vars, runtime)
 
             logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
 
@@ -289,19 +302,32 @@ class DaytonaSpawnerService:
         self,
         sandbox: Any,
         env_vars: Dict[str, str],
+        runtime: str = "openhands",
     ) -> None:
-        """Start the sandbox worker inside the Daytona sandbox."""
+        """Start the sandbox worker inside the Daytona sandbox.
+        
+        Args:
+            sandbox: Daytona sandbox instance
+            env_vars: Environment variables for the worker
+            runtime: Agent runtime - "openhands" or "claude"
+        """
 
         # Build environment export string
         env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
 
-        # First, install required packages
-        logger.info("Installing dependencies in sandbox...")
-        install_cmd = "pip install openhands-ai mcp httpx"
+        # Install required packages based on runtime
+        logger.info(f"Installing {runtime} dependencies in sandbox...")
+        if runtime == "claude":
+            install_cmd = "pip install claude-agent-sdk httpx"
+        else:  # openhands (default)
+            install_cmd = "pip install openhands-ai mcp httpx"
         sandbox.process.exec(install_cmd, timeout=120)
 
-        # Upload the standalone worker script
-        worker_script = self._get_worker_script()
+        # Upload the appropriate worker script
+        if runtime == "claude":
+            worker_script = self._get_claude_worker_script()
+        else:
+            worker_script = self._get_worker_script()
         sandbox.fs.upload_file(worker_script.encode("utf-8"), "/tmp/sandbox_worker.py")
 
         # Start the worker
@@ -442,6 +468,193 @@ async def main():
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         await update_task_status("failed", str(e))
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+'''
+
+    def _get_claude_worker_script(self) -> str:
+        """Get the Claude Agent SDK worker script content."""
+        return '''#!/usr/bin/env python3
+"""Standalone sandbox worker - runs Claude Agent SDK for a task."""
+
+import asyncio
+import os
+import logging
+import subprocess
+from pathlib import Path
+from typing import Any
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Environment configuration
+TASK_ID = os.environ.get("TASK_ID")
+AGENT_ID = os.environ.get("AGENT_ID")
+MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", os.environ.get("LLM_API_KEY", ""))
+SANDBOX_ID = os.environ.get("SANDBOX_ID", "")
+
+
+async def fetch_task():
+    """Fetch task details from orchestrator."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{MCP_SERVER_URL}/api/v1/tasks/{TASK_ID}")
+            if resp.status_code == 200:
+                return resp.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch task: {e}")
+    return None
+
+
+async def report_status(status: str, result: str = None):
+    """Report task status back to orchestrator."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.patch(
+                f"{MCP_SERVER_URL}/api/v1/tasks/{TASK_ID}",
+                json={"status": status, "result": result},
+            )
+    except Exception as e:
+        logger.debug(f"Failed to report status: {e}")
+
+
+async def report_event(event_type: str, event_data: dict):
+    """Report an agent event for Guardian observation."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{MCP_SERVER_URL}/api/v1/agent-events",
+                json={
+                    "task_id": TASK_ID,
+                    "agent_id": AGENT_ID,
+                    "sandbox_id": SANDBOX_ID,
+                    "event_type": event_type,
+                    "event_data": event_data,
+                },
+            )
+    except Exception as e:
+        logger.debug(f"Failed to report event: {e}")
+
+
+def create_tools():
+    """Create custom tools for the Claude agent."""
+    from claude_agent_sdk import tool, create_sdk_mcp_server
+    
+    @tool("read_file", "Read contents of a file", {"file_path": str})
+    async def read_file(args: dict[str, Any]) -> dict[str, Any]:
+        file_path = Path(args["file_path"])
+        try:
+            content = file_path.read_text()
+            return {"content": [{"type": "text", "text": content}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
+    
+    @tool("write_file", "Write contents to a file", {"file_path": str, "content": str})
+    async def write_file(args: dict[str, Any]) -> dict[str, Any]:
+        file_path = Path(args["file_path"])
+        try:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(args["content"])
+            asyncio.create_task(report_event("file_written", {"path": str(file_path)}))
+            return {"content": [{"type": "text", "text": f"Wrote to {file_path}"}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
+    
+    @tool("run_command", "Execute a shell command", {"command": str})
+    async def run_command(args: dict[str, Any]) -> dict[str, Any]:
+        command = args["command"]
+        try:
+            asyncio.create_task(report_event("command_started", {"command": command}))
+            result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=300, cwd="/workspace")
+            return {"content": [{"type": "text", "text": f"Exit: {result.returncode}\\nStdout: {result.stdout}\\nStderr: {result.stderr}"}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
+    
+    @tool("list_files", "List files in a directory", {"directory": str})
+    async def list_files(args: dict[str, Any]) -> dict[str, Any]:
+        directory = Path(args["directory"])
+        try:
+            files = ["[DIR] " + item.name if item.is_dir() else "[FILE] " + item.name for item in directory.iterdir()]
+            return {"content": [{"type": "text", "text": "\\n".join(files) or "(empty)"}]}
+        except Exception as e:
+            return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
+    
+    server = create_sdk_mcp_server("workspace", tools=[read_file, write_file, run_command, list_files])
+    return server, ["mcp__workspace__read_file", "mcp__workspace__write_file", "mcp__workspace__run_command", "mcp__workspace__list_files"]
+
+
+async def run_agent(task_description: str):
+    """Run the Claude Agent SDK."""
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
+    
+    tools_server, tool_names = create_tools()
+    
+    async def track_tool(input_data, tool_use_id, context):
+        await report_event("tool_use", {"tool": input_data.get("tool_name", "unknown")})
+        return {}
+    
+    options = ClaudeAgentOptions(
+        allowed_tools=tool_names + ["Read", "Write", "Bash", "Edit", "Glob", "Grep"],
+        permission_mode="acceptEdits",
+        system_prompt=f"You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.",
+        cwd=Path("/workspace"),
+        max_turns=50,
+        max_budget_usd=10.0,
+        model="claude-sonnet-4-5",
+        mcp_servers={"workspace": tools_server},
+        hooks={"PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool])]},
+    )
+    
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query(task_description)
+            outputs = []
+            async for msg in client.receive_response():
+                outputs.append(str(msg)[:500])
+            return True, "\\n".join(outputs[-5:])
+    except Exception as e:
+        return False, str(e)
+
+
+async def main():
+    logger.info(f"Claude Agent Worker starting for task {TASK_ID}")
+    
+    if not TASK_ID or not AGENT_ID:
+        logger.error("TASK_ID and AGENT_ID required")
+        return
+    
+    if not ANTHROPIC_API_KEY:
+        logger.error("ANTHROPIC_API_KEY required")
+        await report_status("failed", "Missing ANTHROPIC_API_KEY")
+        return
+    
+    os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
+    
+    task = await fetch_task()
+    if not task:
+        await report_status("failed", "Could not fetch task")
+        return
+    
+    task_desc = task.get("description", "No description")
+    logger.info(f"Task: {task_desc}")
+    
+    await report_status("in_progress")
+    await report_event("agent_started", {"task": task_desc[:200]})
+    
+    success, result = await run_agent(task_desc)
+    
+    if success:
+        await report_status("completed", result)
+        await report_event("agent_completed", {"success": True})
+    else:
+        await report_status("failed", result)
+        await report_event("agent_failed", {"error": result})
 
 
 if __name__ == "__main__":
