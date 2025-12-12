@@ -119,6 +119,159 @@ async def get_github_connection_status(
     }
 
 
+@router.get("/repos-test")
+async def test_list_repos(
+    current_user: User = Depends(verify_github_connected),
+    github_service: GitHubAPIService = Depends(get_github_api_service),
+):
+    """
+    Simple test endpoint to debug repository listing.
+    Returns step-by-step information about what's happening.
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    attrs = current_user.attributes or {}
+    token_from_attrs = attrs.get("github_access_token")
+
+    result = {
+        "user_id": str(current_user.id),
+        "has_token_in_attrs": token_from_attrs is not None,
+        "token_length": len(token_from_attrs) if token_from_attrs else 0,
+        "github_keys": [k for k in attrs.keys() if "github" in k],
+    }
+
+    # Try to get token via service method (using internal method for debugging)
+    # Note: This is for debugging only
+    try:
+        token_from_service = github_service._get_user_token_by_id(current_user.id)
+        result["has_token_from_service"] = token_from_service is not None
+        result["token_from_service_length"] = (
+            len(token_from_service) if token_from_service else 0
+        )
+    except Exception as e:
+        result["token_service_error"] = str(e)
+
+    # Try to call the service method
+    try:
+        repos = await github_service.list_user_repos(
+            user_id=current_user.id,
+            visibility="all",
+            sort="updated",
+            per_page=100,
+            page=1,
+            fetch_all_pages=True,
+        )
+        result["repos_count"] = len(repos)
+        result["first_3_repos"] = [r.full_name for r in repos[:3]] if repos else []
+        result["success"] = True
+    except Exception as e:
+        result["success"] = False
+        result["error"] = str(e)
+        result["error_type"] = type(e).__name__
+        logger.exception(f"Error in test_list_repos: {e}")
+
+    return result
+
+
+@router.get("/repos-diagnostic")
+async def diagnostic_list_repos(
+    current_user: User = Depends(verify_github_connected),
+    github_service: GitHubAPIService = Depends(get_github_api_service),
+):
+    """
+    Diagnostic endpoint to see exactly what GitHub API returns.
+
+    This shows:
+    - Raw API response details
+    - Total repositories found
+    - Pagination information
+    - Token scopes (if available)
+    - Sample repository data
+    """
+    import logging
+    import httpx
+
+    logger = logging.getLogger(__name__)
+
+    attrs = current_user.attributes or {}
+    token = attrs.get("github_access_token")
+
+    if not token:
+        return {
+            "error": "No GitHub access token found",
+            "user_id": str(current_user.id),
+        }
+
+    # Make direct API call to get full response details
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "https://api.github.com/user/repos",
+            headers={
+                "Authorization": f"Bearer {token}",  # Match the format used by GitHubAPIService
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            params={
+                "visibility": "all",
+                "sort": "updated",
+                "per_page": 100,
+                "page": 1,
+            },
+        )
+
+        # Get pagination info from headers
+        link_header = response.headers.get("Link", "")
+        total_count = None
+        if 'rel="last"' in link_header:
+            # Extract last page number from Link header
+            import re
+
+            last_match = re.search(r'page=(\d+)>; rel="last"', link_header)
+            if last_match:
+                total_count = int(last_match.group(1)) * 100  # Approximate
+
+        # Get rate limit info
+        rate_limit_remaining = response.headers.get("X-RateLimit-Remaining")
+        rate_limit_total = response.headers.get("X-RateLimit-Limit")
+
+        repos_data = response.json() if response.status_code == 200 else None
+
+        diagnostic_info = {
+            "api_status_code": response.status_code,
+            "api_response_headers": {
+                "link": link_header,
+                "x-ratelimit-remaining": rate_limit_remaining,
+                "x-ratelimit-limit": rate_limit_total,
+                "x-oauth-scopes": response.headers.get(
+                    "X-OAuth-Scopes", "Not available"
+                ),
+            },
+            "repositories_returned": len(repos_data) if repos_data else 0,
+            "estimated_total": total_count,
+            "has_more_pages": 'rel="next"' in link_header,
+            "sample_repositories": repos_data[:5]
+            if repos_data
+            else None,  # First 5 repos
+            "all_repo_names": [r["full_name"] for r in repos_data]
+            if repos_data
+            else [],
+            "token_valid": response.status_code == 200,
+            "error_message": response.text[:500]
+            if response.status_code != 200
+            else None,
+        }
+
+        logger.info(
+            f"GitHub diagnostic for user {current_user.id}: "
+            f"status={response.status_code}, repos={len(repos_data) if repos_data else 0}, "
+            f"scopes={response.headers.get('X-OAuth-Scopes', 'unknown')}"
+        )
+
+        return diagnostic_info
+
+
 # ============================================================================
 # Connected Repositories Routes
 # ============================================================================
@@ -185,25 +338,81 @@ async def list_connected_repositories(
 async def list_repos(
     visibility: str = Query("all", pattern="^(all|public|private)$"),
     sort: str = Query("updated", pattern="^(created|updated|pushed|full_name)$"),
-    per_page: int = Query(30, ge=1, le=100),
-    page: int = Query(1, ge=1),
+    per_page: int = Query(100, ge=1, le=100),  # Default to 100 for efficiency
+    page: int = Query(
+        1, ge=1
+    ),  # Kept for API compatibility, but ignored when fetch_all_pages=True
     current_user: User = Depends(verify_github_connected),
     github_service: GitHubAPIService = Depends(get_github_api_service),
 ):
     """List repositories for the authenticated user."""
     import logging
+    import sys
 
     logger = logging.getLogger(__name__)
 
+    # FORCE LOGGING - print to stderr so it always shows
+    print(
+        f"[list_repos] FUNCTION CALLED! User: {current_user.id}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+    # Debug: Log user and connection status
+    attrs = current_user.attributes or {}
+    has_token = attrs.get("github_access_token") is not None
+    print(
+        f"[list_repos] Called for user {current_user.id}: "
+        f"has_token={has_token}, visibility={visibility}, sort={sort}, per_page={per_page}",
+        file=sys.stderr,
+        flush=True,
+    )
+    logger.info(
+        f"[list_repos] Called for user {current_user.id}: "
+        f"has_token={has_token}, visibility={visibility}, sort={sort}, per_page={per_page}"
+    )
+
     try:
+        # Log token status BEFORE calling service (like test endpoint does)
+        token_from_attrs = attrs.get("github_access_token")
+        logger.info(
+            f"[list_repos] Token check: has_token_in_attrs={token_from_attrs is not None}, "
+            f"token_length={len(token_from_attrs) if token_from_attrs else 0}"
+        )
+
+        # EXACT COPY of test endpoint service call that works
+        # The test endpoint returns 204 repos, so this should work too
+        logger.info(
+            f"[list_repos] About to call list_user_repos with user_id={current_user.id}, "
+            f"visibility=all, sort=updated, per_page=100, page=1, fetch_all_pages=True"
+        )
         repos = await github_service.list_user_repos(
             user_id=current_user.id,
-            visibility=visibility,
-            sort=sort,
-            per_page=per_page,
-            page=page,
+            visibility="all",
+            sort="updated",
+            per_page=100,
+            page=1,
+            fetch_all_pages=True,
         )
-        logger.info(f"Retrieved {len(repos)} repositories for user {current_user.id}")
+        logger.info(
+            f"[list_repos] Service returned {len(repos)} repositories for user {current_user.id}. "
+            f"First 3: {[r.full_name for r in repos[:3]] if repos else 'none'}"
+        )
+        if len(repos) == 0:
+            logger.error(
+                f"[list_repos] CRITICAL BUG: Service returned 0 repos but /repos-test returns 204 for user {current_user.id}!"
+            )
+            # Try to get token via service method to compare
+            try:
+                token_from_service = github_service._get_user_token_by_id(
+                    current_user.id
+                )
+                logger.error(
+                    f"[list_repos] Token from service: has_token={token_from_service is not None}, "
+                    f"length={len(token_from_service) if token_from_service else 0}"
+                )
+            except Exception as e:
+                logger.error(f"[list_repos] Error getting token from service: {e}")
         return repos
     except ValueError as e:
         # Handle authentication errors from GitHub API
@@ -211,6 +420,15 @@ async def list_repos(
         raise HTTPException(
             status_code=400,
             detail=str(e),
+        )
+    except Exception as e:
+        # Catch any other unexpected errors
+        logger.exception(
+            f"Unexpected error in list_repos for user {current_user.id}: {e}"
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}",
         )
 
 
