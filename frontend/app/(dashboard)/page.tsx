@@ -38,6 +38,7 @@ export default function CommandCenterPage() {
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
+  const [selectedBranch, setSelectedBranch] = useState("main")
   const [selectedModel, setSelectedModel] = useState("opus-4.5")
   const [isSubmitting, setIsSubmitting] = useState(false)
   
@@ -104,8 +105,10 @@ export default function CommandCenterPage() {
             repositories={repositories}
             selectedProject={selectedProject}
             selectedRepo={selectedRepo}
+            selectedBranch={selectedBranch}
             onProjectSelect={handleProjectSelect}
             onRepoSelect={handleRepoSelect}
+            onBranchChange={setSelectedBranch}
           />
           <ModelSelector
             value={selectedModel}
