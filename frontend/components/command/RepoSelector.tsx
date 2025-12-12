@@ -29,7 +29,7 @@ import {
   Lock,
   Globe,
 } from "lucide-react"
-import { useGitHubRepos } from "@/hooks/useGitHubRepos"
+import { useGitHubRepos, useGitHubBranches } from "@/hooks/useGitHubRepos"
 import { useIsProviderConnected } from "@/hooks/useOAuth"
 
 export interface Project {
@@ -68,12 +68,18 @@ export function RepoSelector({
   className,
 }: RepoSelectorProps) {
   const [open, setOpen] = useState(false)
+  const [branchOpen, setBranchOpen] = useState(false)
   const [connectDialogOpen, setConnectDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [branchSearchQuery, setBranchSearchQuery] = useState("")
   const [connectSearchQuery, setConnectSearchQuery] = useState("")
   
   // Check GitHub connection status
   const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } = useIsProviderConnected("github")
+  
+  // Parse owner/repo from selectedRepo (format: "owner/repo")
+  const repoFullName = selectedProject?.repo || selectedRepo
+  const [repoOwner, repoName] = repoFullName?.split("/") ?? [null, null]
   
   // Fetch all GitHub repositories for the connect dialog (only if connected)
   const { data: allRepos, isLoading: reposLoading, error: reposError } = useGitHubRepos(
@@ -83,6 +89,17 @@ export function RepoSelector({
     },
     isGitHubConnected && !isCheckingConnection // Only fetch if GitHub is connected
   )
+  
+  // Fetch branches for the selected repository
+  const { data: branches, isLoading: branchesLoading } = useGitHubBranches(
+    repoOwner ?? "",
+    repoName ?? "",
+  )
+  
+  // Filter branches based on search
+  const filteredBranches = branches?.filter((b) =>
+    b.name.toLowerCase().includes(branchSearchQuery.toLowerCase())
+  ) ?? []
 
   const displayName = selectedProject?.repo || selectedRepo || "Select repository"
 
@@ -257,15 +274,71 @@ export function RepoSelector({
       </Popover>
 
       {/* Branch Selector */}
-      <Button
-        variant="ghost"
-        size="sm"
-        className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
-      >
-        <GitBranch className="h-4 w-4" />
-        <span>{selectedBranch}</span>
-        <ChevronDown className="h-3 w-3" />
-      </Button>
+      <Popover open={branchOpen} onOpenChange={setBranchOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-muted-foreground hover:text-foreground"
+            disabled={!repoFullName}
+          >
+            <GitBranch className="h-4 w-4" />
+            <span>{selectedBranch}</span>
+            <ChevronDown className="h-3 w-3" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[250px] p-0" align="start">
+          <div className="p-3">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search branches..."
+                value={branchSearchQuery}
+                onChange={(e) => setBranchSearchQuery(e.target.value)}
+                className="h-9 pl-8"
+              />
+            </div>
+          </div>
+          <ScrollArea className="h-[200px]">
+            {!repoFullName ? (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                Select a repository first
+              </div>
+            ) : branchesLoading ? (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                Loading branches...
+              </div>
+            ) : filteredBranches.length === 0 ? (
+              <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+                {branchSearchQuery ? "No branches match your search" : "No branches found"}
+              </div>
+            ) : (
+              <div className="px-2 pb-2">
+                {filteredBranches.map((branch) => (
+                  <button
+                    key={branch.name}
+                    onClick={() => {
+                      onBranchChange?.(branch.name)
+                      setBranchOpen(false)
+                      setBranchSearchQuery("")
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent",
+                      selectedBranch === branch.name && "bg-accent"
+                    )}
+                  >
+                    <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span className="truncate text-sm">{branch.name}</span>
+                    {selectedBranch === branch.name && (
+                      <Check className="ml-auto h-4 w-4 shrink-0 text-success" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
 
       {/* Connect Repository Dialog */}
       <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
