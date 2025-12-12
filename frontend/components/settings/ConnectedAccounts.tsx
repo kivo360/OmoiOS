@@ -213,10 +213,10 @@ export function ConnectedAccounts() {
               <div className="flex items-center gap-2">
                 {connected ? (
                   <>
-                    {provider.name === "github" && (
+                    {provider.name === "github" && provider.manage_url && (
                       <Button variant="outline" size="sm" asChild>
                         <a
-                          href="https://github.com/settings/connections/applications"
+                          href={provider.manage_url}
                           target="_blank"
                           rel="noopener noreferrer"
                         >

@@ -28,6 +28,9 @@ class ProviderInfo(BaseModel):
 
     name: str
     enabled: bool
+    manage_url: Optional[str] = (
+        None  # URL to manage the OAuth app (e.g., GitHub app settings)
+    )
 
 
 class ProvidersResponse(BaseModel):
@@ -144,6 +147,104 @@ async def get_redirect_uri_diagnostic(
         calculated_redirect_uri=redirect_uri,
         message=message,
     )
+
+
+# Authenticated Routes - must come before parameterized routes
+# ============================================================================
+
+
+@router.get("/oauth/connected", response_model=ConnectedProvidersResponse)
+async def list_connected_providers(
+    current_user: User = Depends(get_current_user),
+):
+    """List OAuth providers connected to the current user's account."""
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        # Log that we reached the handler
+        logger.info(f"list_connected_providers called for user {current_user.id}")
+
+        # Validate user object
+        if not current_user:
+            logger.error("current_user is None in list_connected_providers")
+            return ConnectedProvidersResponse(providers=[])
+
+        # Ensure attributes are loaded - handle case where user might not have attributes
+        if not hasattr(current_user, "attributes") or current_user.attributes is None:
+            logger.warning(f"User {current_user.id} has no attributes field")
+            return ConnectedProvidersResponse(providers=[])
+
+        attrs = current_user.attributes or {}
+
+        logger.debug(f"Checking connected providers for user {current_user.id}")
+        logger.debug(f"User attributes type: {type(attrs)}")
+        logger.debug(f"User attributes keys: {list(attrs.keys()) if attrs else 'None'}")
+
+        providers = []
+
+        for provider_name in ["github", "google", "gitlab"]:
+            user_id_key = f"{provider_name}_user_id"
+            access_token_key = f"{provider_name}_access_token"
+
+            # Check for both user_id and access_token to ensure connection is valid
+            has_user_id = attrs.get(user_id_key) is not None
+            has_access_token = attrs.get(access_token_key) is not None
+
+            logger.debug(
+                f"Provider {provider_name}: has_user_id={has_user_id}, "
+                f"has_access_token={has_access_token}"
+            )
+
+            if has_user_id and has_access_token:
+                username = attrs.get(f"{provider_name}_username")
+                try:
+                    providers.append(
+                        ConnectedProvider(
+                            provider=provider_name,
+                            username=username,
+                            connected=True,
+                        )
+                    )
+                    logger.debug(f"Found connected provider: {provider_name}")
+                except Exception as e:
+                    logger.error(
+                        f"Error creating ConnectedProvider for {provider_name}: {e}",
+                        exc_info=True,
+                    )
+
+        logger.info(
+            f"Returning {len(providers)} connected providers for user {current_user.id}"
+        )
+
+        # Create response and validate it manually
+        try:
+            result = ConnectedProvidersResponse(providers=providers)
+            logger.debug(
+                f"Response model created successfully: providers={len(providers)}"
+            )
+            return result
+        except Exception as model_error:
+            logger.error(f"Error creating response model: {model_error}", exc_info=True)
+            # Return a safe response
+            return {"providers": []}
+    except HTTPException as e:
+        # Log HTTP exceptions with details
+        logger.error(
+            f"HTTPException in list_connected_providers: status={e.status_code}, "
+            f"detail={e.detail}, user={current_user.id if 'current_user' in locals() else 'unknown'}"
+        )
+        # Re-raise HTTP exceptions (like 401 from get_current_user)
+        raise
+    except Exception as e:
+        logger.error(f"Error in list_connected_providers: {e}", exc_info=True)
+        # Return empty list instead of raising error for other exceptions
+        return ConnectedProvidersResponse(providers=[])
+
+
+# Parameterized Routes - must come after specific routes
+# ============================================================================
 
 
 @router.get("/oauth/{provider}/url", response_model=AuthUrlResponse)
@@ -307,31 +408,6 @@ async def oauth_callback(
 
 
 # ============================================================================
-# Authenticated Routes
-# ============================================================================
-
-
-@router.get("/oauth/connected", response_model=ConnectedProvidersResponse)
-async def list_connected_providers(
-    current_user: User = Depends(get_current_user),
-):
-    """List OAuth providers connected to the current user's account."""
-    providers = []
-    attrs = current_user.attributes or {}
-
-    for provider_name in ["github", "google", "gitlab"]:
-        if attrs.get(f"{provider_name}_user_id"):
-            providers.append(
-                ConnectedProvider(
-                    provider=provider_name,
-                    username=attrs.get(f"{provider_name}_username"),
-                    connected=True,
-                )
-            )
-
-    return ConnectedProvidersResponse(providers=providers)
-
-
 @router.post("/oauth/{provider}/connect")
 async def connect_provider(
     provider: str,

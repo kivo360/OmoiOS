@@ -167,10 +167,22 @@ class GitHubAPIService:
 
     def _get_user_token_by_id(self, user_id: UUID) -> Optional[str]:
         """Get GitHub access token by user ID."""
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         with self.db.get_session() as session:
             user = session.get(User, user_id)
             if user:
-                return self._get_user_token(user)
+                # Force load attributes before accessing
+                _ = user.attributes
+                token = self._get_user_token(user)
+                if not token:
+                    logger.debug(
+                        f"No GitHub token found for user {user_id}. Attributes keys: {list((user.attributes or {}).keys())}"
+                    )
+                return token
+        logger.warning(f"User {user_id} not found when retrieving GitHub token")
         return None
 
     def _headers(self, token: str) -> dict[str, str]:
@@ -199,8 +211,13 @@ class GitHubAPIService:
             per_page: Results per page (max 100)
             page: Page number
         """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         token = self._get_user_token_by_id(user_id)
         if not token:
+            logger.warning(f"No GitHub access token found for user {user_id}")
             return []
 
         async with httpx.AsyncClient() as client:
@@ -216,9 +233,24 @@ class GitHubAPIService:
             )
 
             if response.status_code != 200:
+                error_detail = (
+                    response.text[:500] if response.text else "No error details"
+                )
+                logger.error(
+                    f"GitHub API error for user {user_id}: "
+                    f"status={response.status_code}, "
+                    f"response={error_detail}"
+                )
+                # If it's an auth error, we should raise an exception so the route can handle it
+                if response.status_code in (401, 403):
+                    raise ValueError(
+                        f"GitHub API authentication failed: {response.status_code}. "
+                        f"Token may be invalid or expired. Please reconnect your GitHub account."
+                    )
                 return []
 
             repos = response.json()
+            logger.debug(f"Retrieved {len(repos)} repositories for user {user_id}")
             return [
                 GitHubRepo(
                     id=r["id"],
@@ -449,7 +481,9 @@ class GitHubAPIService:
         """Create or update a file in the repository."""
         token = self._get_user_token_by_id(user_id)
         if not token:
-            return FileOperationResult(success=False, message="No GitHub token", error="No GitHub token")
+            return FileOperationResult(
+                success=False, message="No GitHub token", error="No GitHub token"
+            )
 
         # Encode content to base64
         encoded_content = base64.b64encode(content.encode()).decode()
@@ -611,9 +645,15 @@ class GitHubAPIService:
                 GitHubCommit(
                     sha=c["sha"],
                     message=c["commit"]["message"],
-                    author_name=c["commit"]["author"]["name"] if c["commit"].get("author") else None,
-                    author_email=c["commit"]["author"]["email"] if c["commit"].get("author") else None,
-                    date=c["commit"]["author"]["date"] if c["commit"].get("author") else None,
+                    author_name=c["commit"]["author"]["name"]
+                    if c["commit"].get("author")
+                    else None,
+                    author_email=c["commit"]["author"]["email"]
+                    if c["commit"].get("author")
+                    else None,
+                    date=c["commit"]["author"]["date"]
+                    if c["commit"].get("author")
+                    else None,
                     html_url=c.get("html_url"),
                 )
                 for c in commits

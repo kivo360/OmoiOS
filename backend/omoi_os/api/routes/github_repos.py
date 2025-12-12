@@ -7,7 +7,9 @@ from pydantic import BaseModel
 
 from omoi_os.api.dependencies import get_db_service, get_current_user
 from omoi_os.models.user import User
+from omoi_os.models.project import Project
 from omoi_os.services.database import DatabaseService
+from sqlalchemy import select
 from omoi_os.services.github_api import (
     GitHubAPIService,
     GitHubRepo,
@@ -70,12 +72,108 @@ def get_github_api_service(
 
 def verify_github_connected(current_user: User = Depends(get_current_user)) -> User:
     """Verify that the user has GitHub connected."""
-    if not (current_user.attributes or {}).get("github_access_token"):
+    attrs = current_user.attributes or {}
+    access_token = attrs.get("github_access_token")
+    user_id = attrs.get("github_user_id")
+
+    # Debug logging
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.debug(f"Verifying GitHub connection for user {current_user.id}")
+    logger.debug(f"Has access_token: {access_token is not None}")
+    logger.debug(f"Has user_id: {user_id is not None}")
+    logger.debug(f"All GitHub keys: {[k for k in attrs.keys() if 'github' in k]}")
+
+    if not access_token:
         raise HTTPException(
             status_code=400,
             detail="GitHub not connected. Please authenticate with GitHub first.",
         )
     return current_user
+
+
+# ============================================================================
+# Diagnostic Routes
+# ============================================================================
+
+
+@router.get("/connection-status")
+async def get_github_connection_status(
+    current_user: User = Depends(get_current_user),
+):
+    """Get GitHub connection status and diagnostic information."""
+    attrs = current_user.attributes or {}
+
+    has_user_id = attrs.get("github_user_id") is not None
+    has_access_token = attrs.get("github_access_token") is not None
+    has_username = attrs.get("github_username") is not None
+
+    return {
+        "connected": has_user_id and has_access_token,
+        "has_user_id": has_user_id,
+        "has_access_token": has_access_token,
+        "has_username": has_username,
+        "username": attrs.get("github_username"),
+        "github_keys": [k for k in attrs.keys() if "github" in k],
+    }
+
+
+# ============================================================================
+# Connected Repositories Routes
+# ============================================================================
+
+
+class RepositoryInfo(BaseModel):
+    """Repository information for connected repositories."""
+
+    owner: str
+    repo: str
+    connected: bool = True
+    webhook_configured: bool = False
+
+
+@router.get("/connected", response_model=list[RepositoryInfo])
+async def list_connected_repositories(
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """List repositories connected to projects for the current user."""
+    with db.get_session() as session:
+        # Get all projects for the current user that have GitHub repos connected
+        # Use created_by to find user's projects
+        # Filter by status='active' instead of deleted_at (Project model uses status field)
+        projects = (
+            session.execute(
+                select(Project).where(
+                    Project.created_by == current_user.id,
+                    Project.github_owner.isnot(None),
+                    Project.github_repo.isnot(None),
+                    Project.status == "active",
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Convert to RepositoryInfo format
+        repos = []
+        seen = set()
+        for project in projects:
+            if project.github_owner and project.github_repo:
+                key = f"{project.github_owner}/{project.github_repo}"
+                if key not in seen:
+                    repos.append(
+                        RepositoryInfo(
+                            owner=project.github_owner,
+                            repo=project.github_repo,
+                            connected=True,
+                            webhook_configured=False,  # TODO: Check if webhook is configured
+                        )
+                    )
+                    seen.add(key)
+
+        return repos
 
 
 # ============================================================================
@@ -93,14 +191,27 @@ async def list_repos(
     github_service: GitHubAPIService = Depends(get_github_api_service),
 ):
     """List repositories for the authenticated user."""
-    repos = await github_service.list_user_repos(
-        user_id=current_user.id,
-        visibility=visibility,
-        sort=sort,
-        per_page=per_page,
-        page=page,
-    )
-    return repos
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    try:
+        repos = await github_service.list_user_repos(
+            user_id=current_user.id,
+            visibility=visibility,
+            sort=sort,
+            per_page=per_page,
+            page=page,
+        )
+        logger.info(f"Retrieved {len(repos)} repositories for user {current_user.id}")
+        return repos
+    except ValueError as e:
+        # Handle authentication errors from GitHub API
+        logger.error(f"GitHub API error for user {current_user.id}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=str(e),
+        )
 
 
 @router.get("/repos/{owner}/{repo}", response_model=GitHubRepo)
@@ -166,7 +277,9 @@ async def create_branch(
     )
 
     if not result.success:
-        raise HTTPException(status_code=400, detail=result.error or "Failed to create branch")
+        raise HTTPException(
+            status_code=400, detail=result.error or "Failed to create branch"
+        )
 
     return result
 
@@ -200,7 +313,9 @@ async def get_file_content(
     return result
 
 
-@router.put("/repos/{owner}/{repo}/contents/{path:path}", response_model=FileOperationResult)
+@router.put(
+    "/repos/{owner}/{repo}/contents/{path:path}", response_model=FileOperationResult
+)
 async def create_or_update_file(
     owner: str,
     repo: str,
@@ -233,7 +348,9 @@ async def create_or_update_file(
     )
 
     if not result.success:
-        raise HTTPException(status_code=400, detail=result.error or "Failed to create/update file")
+        raise HTTPException(
+            status_code=400, detail=result.error or "Failed to create/update file"
+        )
 
     return result
 
@@ -355,6 +472,8 @@ async def create_pull_request(
     )
 
     if not result.success:
-        raise HTTPException(status_code=400, detail=result.error or "Failed to create pull request")
+        raise HTTPException(
+            status_code=400, detail=result.error or "Failed to create pull request"
+        )
 
     return result

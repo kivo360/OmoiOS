@@ -61,12 +61,16 @@ export const githubRepoKeys = {
 
 /**
  * Hook to list repositories for authenticated user
+ * @param params - Query parameters for listing repos
+ * @param enabled - Whether the query should run (default: true)
  */
-export function useGitHubRepos(params?: ListReposParams) {
+export function useGitHubRepos(params?: ListReposParams, enabled: boolean = true) {
   return useQuery<GitHubRepo[]>({
     queryKey: githubRepoKeys.repos(params),
     queryFn: () => listRepos(params),
+    enabled,
     staleTime: 2 * 60 * 1000, // 2 minutes
+    retry: 1, // Only retry once on failure
   })
 }
 

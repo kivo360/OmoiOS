@@ -665,6 +665,7 @@ export interface BlockingTasksResponse {
 export interface OAuthProvider {
   name: string
   enabled: boolean
+  manage_url?: string | null  // URL to manage the OAuth app (e.g., GitHub app settings)
 }
 
 export interface OAuthProvidersResponse {
