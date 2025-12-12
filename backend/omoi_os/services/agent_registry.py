@@ -156,21 +156,21 @@ class AgentRegistryService:
         if self.event_bus:
             self._subscribe_to_event_bus(agent_id, agent_type, phase_id)
         
-        # Step 5: Wait for Initial Heartbeat (with 60s timeout per REQ-ALM-001)
-        try:
-            self._wait_for_initial_heartbeat(agent_id, timeout=60)
-        except TimeoutError:
-            # Registration timeout - clean up and raise
-            logger.error(f"Registration timeout for agent {agent_id} - no initial heartbeat within 60s")
-            with self.db.get_session() as session:
-                agent = session.get(Agent, agent_id)
-                if agent:
-                    session.delete(agent)
-                    session.commit()
-            raise RegistrationRejectedError(
-                reason="Initial heartbeat not received within 60 seconds",
-                details={"agent_id": agent_id, "timeout": 60}
-            )
+        # Step 5: Set initial heartbeat timestamp
+        # NOTE: We no longer block waiting for heartbeat - this caused a deadlock where
+        # the HTTP response couldn't be returned until heartbeat arrived, but the client
+        # couldn't send heartbeats until it received the response with agent_id.
+        # Instead, we set an initial heartbeat timestamp at registration time.
+        # The monitoring system will track stale agents asynchronously.
+        with self.db.get_session() as session:
+            agent = session.get(Agent, agent_id)
+            if agent:
+                agent.last_heartbeat = utc_now()
+                session.commit()
+                session.refresh(agent)
+                session.expunge(agent)
+        
+        logger.info(f"Agent {agent_id} registered with initial heartbeat timestamp")
         
         # Transition to requested status (default IDLE) using status manager
         if self.status_manager:
