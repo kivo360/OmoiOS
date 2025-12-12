@@ -67,9 +67,20 @@ export const githubRepoKeys = {
 export function useGitHubRepos(params?: ListReposParams, enabled: boolean = true) {
   return useQuery<GitHubRepo[]>({
     queryKey: githubRepoKeys.repos(params),
-    queryFn: () => listRepos(params),
+    queryFn: async () => {
+      const repos = await listRepos(params)
+      // Log in development to help debug
+      if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+        console.log(`[useGitHubRepos] Fetched ${repos.length} repos`, {
+          params,
+          enabled,
+          firstFew: repos.slice(0, 3).map(r => r.full_name),
+        })
+      }
+      return repos
+    },
     enabled,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 1 * 60 * 1000, // 1 minute
     retry: 1, // Only retry once on failure
   })
 }

@@ -198,8 +198,12 @@ class GitHubAPIService:
         user_id: UUID,
         visibility: str = "all",
         sort: str = "updated",
-        per_page: int = 30,
+        per_page: int = 100,
         page: int = 1,
+        fetch_all_pages: bool = True,
+        token: Optional[
+            str
+        ] = None,  # Allow passing token directly to avoid re-fetching
     ) -> list[GitHubRepo]:
         """
         List repositories for the authenticated user.
@@ -208,66 +212,121 @@ class GitHubAPIService:
             user_id: User ID
             visibility: all, public, or private
             sort: created, updated, pushed, full_name
-            per_page: Results per page (max 100)
-            page: Page number
+            per_page: Results per page (max 100, default 100 for efficiency)
+            page: Page number (only used if fetch_all_pages=False)
+            fetch_all_pages: If True, automatically fetch all pages and return all repos
         """
         import logging
 
         logger = logging.getLogger(__name__)
 
-        token = self._get_user_token_by_id(user_id)
+        # Use provided token if available, otherwise fetch from database
         if not token:
-            logger.warning(f"No GitHub access token found for user {user_id}")
-            return []
+            token = self._get_user_token_by_id(user_id)
+            if not token:
+                logger.warning(
+                    f"No GitHub access token found for user {user_id}. "
+                    f"This will cause an empty repository list to be returned."
+                )
+                return []
+        else:
+            logger.debug(f"Using provided token for user {user_id}")
+
+        logger.debug(
+            f"Retrieved GitHub token for user {user_id}, starting to fetch repos..."
+        )
+
+        all_repos = []
+        current_page = page
+        max_pages = 50  # Safety limit to prevent infinite loops
 
         async with httpx.AsyncClient() as client:
-            response = await client.get(
-                f"{self.BASE_URL}/user/repos",
-                headers=self._headers(token),
-                params={
-                    "visibility": visibility,
-                    "sort": sort,
-                    "per_page": per_page,
-                    "page": page,
-                },
-            )
+            while current_page <= max_pages:
+                response = await client.get(
+                    f"{self.BASE_URL}/user/repos",
+                    headers=self._headers(token),
+                    params={
+                        "visibility": visibility,
+                        "sort": sort,
+                        "per_page": per_page,
+                        "page": current_page,
+                    },
+                )
 
-            if response.status_code != 200:
-                error_detail = (
-                    response.text[:500] if response.text else "No error details"
-                )
-                logger.error(
-                    f"GitHub API error for user {user_id}: "
-                    f"status={response.status_code}, "
-                    f"response={error_detail}"
-                )
-                # If it's an auth error, we should raise an exception so the route can handle it
-                if response.status_code in (401, 403):
-                    raise ValueError(
-                        f"GitHub API authentication failed: {response.status_code}. "
-                        f"Token may be invalid or expired. Please reconnect your GitHub account."
+                if response.status_code != 200:
+                    error_detail = (
+                        response.text[:500] if response.text else "No error details"
                     )
-                return []
+                    logger.error(
+                        f"GitHub API error for user {user_id}: "
+                        f"status={response.status_code}, "
+                        f"response={error_detail}"
+                    )
+                    # If it's an auth error, we should raise an exception so the route can handle it
+                    if response.status_code in (401, 403):
+                        raise ValueError(
+                            f"GitHub API authentication failed: {response.status_code}. "
+                            f"Token may be invalid or expired. Please reconnect your GitHub account."
+                        )
+                    # If we've already fetched some repos, return what we have
+                    if all_repos:
+                        break
+                    return []
 
-            repos = response.json()
-            logger.debug(f"Retrieved {len(repos)} repositories for user {user_id}")
-            return [
-                GitHubRepo(
-                    id=r["id"],
-                    name=r["name"],
-                    full_name=r["full_name"],
-                    owner=r["owner"]["login"],
-                    description=r.get("description"),
-                    private=r["private"],
-                    html_url=r["html_url"],
-                    clone_url=r["clone_url"],
-                    default_branch=r.get("default_branch", "main"),
-                    language=r.get("language"),
-                    stargazers_count=r.get("stargazers_count", 0),
-                    forks_count=r.get("forks_count", 0),
-                )
-                for r in repos
-            ]
+                repos = response.json()
+                if not repos:
+                    # No more repos
+                    break
+
+                # Convert to GitHubRepo objects
+                page_repos = [
+                    GitHubRepo(
+                        id=r["id"],
+                        name=r["name"],
+                        full_name=r["full_name"],
+                        owner=r["owner"]["login"],
+                        description=r.get("description"),
+                        private=r["private"],
+                        html_url=r["html_url"],
+                        clone_url=r["clone_url"],
+                        default_branch=r.get("default_branch", "main"),
+                        language=r.get("language"),
+                        stargazers_count=r.get("stargazers_count", 0),
+                        forks_count=r.get("forks_count", 0),
+                    )
+                    for r in repos
+                ]
+                all_repos.extend(page_repos)
+
+                # Check if there are more pages
+                link_header = response.headers.get("Link", "")
+                has_more = 'rel="next"' in link_header
+
+                # Log first page details
+                if current_page == page:
+                    logger.info(
+                        f"GitHub API response for user {user_id}: "
+                        f"status={response.status_code}, repos_on_page={len(repos)}, "
+                        f"has_more_pages={has_more}, "
+                        f"scopes={response.headers.get('X-OAuth-Scopes', 'unknown')}"
+                    )
+                    if repos:
+                        repo_names = [r.get("full_name", "unknown") for r in repos[:5]]
+                        logger.debug(
+                            f"Sample repositories (page {current_page}): {repo_names}"
+                        )
+
+                # If not fetching all pages, or no more pages, break
+                if not fetch_all_pages or not has_more:
+                    break
+
+                current_page += 1
+
+            logger.info(
+                f"Retrieved {len(all_repos)} total repositories for user {user_id} "
+                f"(fetched {current_page - page + 1} page(s))"
+            )
+            return all_repos
 
     async def get_repo(
         self,

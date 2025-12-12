@@ -92,18 +92,21 @@ async def connect_repository(
     )
 
 
-@router.get("/repos", response_model=list[RepositoryResponse])
+@router.get("/connected", response_model=list[RepositoryResponse])
 async def list_connected_repositories(
     db: DatabaseService = Depends(get_db_service),
 ):
     """
-    List all connected GitHub repositories.
+    List all projects with connected GitHub repositories.
+
+    NOTE: This returns projects that have GitHub repos connected to them.
+    For listing the user's actual GitHub repositories, use GET /api/v1/github/repos
 
     Args:
         db: Database service
 
     Returns:
-        List of connected repositories
+        List of projects with connected repositories
     """
     with db.get_session() as session:
         projects = (
