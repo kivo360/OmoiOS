@@ -6,7 +6,9 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 # Security scheme
-security = HTTPBearer()
+# Use auto_error=False to handle missing tokens gracefully
+# We'll check for credentials manually and raise appropriate errors
+security = HTTPBearer(auto_error=False)
 
 if TYPE_CHECKING:
     from omoi_os.models.user import User
@@ -373,7 +375,7 @@ def get_supabase_auth_service():
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: "DatabaseService" = Depends(get_db_service),
 ):
     """
@@ -382,7 +384,7 @@ async def get_current_user(
     Uses local JWT auth (not Supabase).
 
     Args:
-        credentials: HTTP Bearer token credentials
+        credentials: HTTP Bearer token credentials (optional if auto_error=False)
         db: Database service
 
     Returns:
@@ -391,11 +393,34 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
     from omoi_os.services.auth_service import AuthService
     from omoi_os.config import settings
     from omoi_os.models.user import User
 
-    token = credentials.credentials
+    # Check if credentials are provided
+    if not credentials:
+        logger.warning("Missing Authorization header in get_current_user")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        token = credentials.credentials
+    except AttributeError as e:
+        logger.error(
+            f"Missing credentials.credentials in get_current_user: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing authorization credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Create auth service with a sync session
     with db.get_session() as session:
@@ -410,6 +435,7 @@ async def get_current_user(
         # Verify JWT token
         token_data = auth_service.verify_token(token, token_type="access")
         if not token_data:
+            logger.warning("Token verification failed in get_current_user")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid authentication token",
@@ -418,7 +444,15 @@ async def get_current_user(
 
         # Load user from database
         user = session.get(User, token_data.user_id)
-        if not user or user.deleted_at:
+        if not user:
+            logger.warning(f"User {token_data.user_id} not found in database")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        if user.deleted_at:
+            logger.warning(f"User {user.id} is deleted")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
@@ -427,6 +461,8 @@ async def get_current_user(
 
         # Eagerly load all attributes before session closes
         # This prevents DetachedInstanceError when serializing
+        # Access attributes to ensure JSONB field is loaded
+        _ = user.attributes  # Force load the JSONB field
         session.refresh(user)
         session.expunge(user)
 

@@ -46,12 +46,19 @@ class OAuthService:
         providers = []
         for name in list_providers():
             config = self.settings.get_provider_config(name)
-            providers.append(
-                {
-                    "name": name,
-                    "enabled": config is not None,
-                }
-            )
+            provider_info = {
+                "name": name,
+                "enabled": config is not None,
+            }
+
+            # Add manage URL for GitHub if client_id is available
+            if name == "github" and config and config.get("client_id"):
+                client_id = config["client_id"]
+                provider_info["manage_url"] = (
+                    f"https://github.com/settings/connections/applications/{client_id}"
+                )
+
+            providers.append(provider_info)
         return providers
 
     def _build_redirect_uri(self, provider_name: str) -> str:

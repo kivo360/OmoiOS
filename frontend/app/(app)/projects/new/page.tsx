@@ -32,8 +32,11 @@ export default function NewProjectPage() {
 
   const createMutation = useCreateProject()
   const { data: projectsData } = useProjects()
-  const { data: repos, isLoading: reposLoading } = useGitHubRepos({ sort: "updated" })
   const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } = useIsProviderConnected("github")
+  const { data: repos, isLoading: reposLoading } = useGitHubRepos(
+    { sort: "updated" },
+    isGitHubConnected && !isCheckingConnection // Only fetch if GitHub is connected
+  )
 
   // Get repos that are not already connected to projects
   const availableRepos = useMemo(() => {

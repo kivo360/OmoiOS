@@ -67,12 +67,21 @@ export function RepositoryBrowser({ onSelectRepo, selectedRepoId }: RepositoryBr
       setLoading(true)
       const data = await listRepos({ visibility, sort, per_page: 100 })
       setRepos(data)
+      if (data.length === 0) {
+        console.warn("No repositories returned from GitHub API")
+      }
     } catch (error: any) {
       console.error("Failed to fetch repos:", error)
       if (error.status === 400) {
+        const errorMessage = error.message || "GitHub not connected"
+        console.error("GitHub connection error:", errorMessage)
+        setConnected(false)
+        toast.error(errorMessage)
+      } else if (error.status === 401 || error.status === 403) {
+        toast.error("GitHub authentication failed. Please reconnect your GitHub account.")
         setConnected(false)
       } else {
-        toast.error("Failed to load repositories")
+        toast.error(`Failed to load repositories: ${error.message || "Unknown error"}`)
       }
     } finally {
       setLoading(false)

@@ -4,10 +4,12 @@ import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
+import logging
 
 from omoi_os.config import get_app_settings
 from omoi_os.mcp.fastmcp_server import mcp_app
@@ -817,6 +819,56 @@ app = FastAPI(
     version="0.1.0",
     lifespan=combined_lifespan,
 )
+
+# Set up logging
+logger = logging.getLogger(__name__)
+
+
+# Exception handler for RequestValidationError (returns 422, but sometimes shows as 400)
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    """Log validation errors for debugging."""
+    logger.error(
+        f"Validation error on {request.method} {request.url.path}: {exc.errors()}",
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": exc.errors()},
+    )
+
+
+# Exception handler for HTTPException with 400 status
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Log HTTP exceptions, especially 400 errors."""
+    if exc.status_code == status.HTTP_400_BAD_REQUEST:
+        logger.error(
+            f"400 Bad Request on {request.method} {request.url.path}: "
+            f"detail={exc.detail}, headers={dict(request.headers)}",
+            exc_info=True,
+        )
+    # Return JSONResponse with CORS headers
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+        headers=dict(exc.headers) if exc.headers else {},
+    )
+
+
+# Exception handler for all unhandled exceptions (500 errors)
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Log all unhandled exceptions and return 500 with CORS headers."""
+    logger.error(
+        f"Unhandled exception on {request.method} {request.url.path}: {exc}",
+        exc_info=True,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "Internal server error"},
+    )
+
 
 # Add CORS middleware
 app.add_middleware(

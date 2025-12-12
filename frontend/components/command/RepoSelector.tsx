@@ -1,12 +1,19 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -22,6 +29,8 @@ import {
   Lock,
   Globe,
 } from "lucide-react"
+import { useGitHubRepos } from "@/hooks/useGitHubRepos"
+import { useIsProviderConnected } from "@/hooks/useOAuth"
 
 export interface Project {
   id: string
@@ -59,7 +68,21 @@ export function RepoSelector({
   className,
 }: RepoSelectorProps) {
   const [open, setOpen] = useState(false)
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
+  const [connectSearchQuery, setConnectSearchQuery] = useState("")
+  
+  // Check GitHub connection status
+  const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } = useIsProviderConnected("github")
+  
+  // Fetch all GitHub repositories for the connect dialog (only if connected)
+  const { data: allRepos, isLoading: reposLoading, error: reposError } = useGitHubRepos(
+    { 
+      sort: "updated",
+      per_page: 100 
+    },
+    isGitHubConnected && !isCheckingConnection // Only fetch if GitHub is connected
+  )
 
   const displayName = selectedProject?.repo || selectedRepo || "Select repository"
 
@@ -72,6 +95,33 @@ export function RepoSelector({
   const filteredRepos = repositories.filter((r) =>
     r.fullName.toLowerCase().includes(searchQuery.toLowerCase())
   )
+  
+  // Filter all GitHub repos for the connect dialog
+  const filteredAllRepos = allRepos?.filter((r) =>
+    r.full_name.toLowerCase().includes(connectSearchQuery.toLowerCase())
+  ) || []
+  
+  // Get repos that aren't already in the repositories list
+  const availableToConnect = filteredAllRepos.filter(
+    (r) => !repositories.some((existing) => existing.fullName === r.full_name)
+  )
+
+  // Debug logging (only in development, after all variables are defined)
+  useEffect(() => {
+    if (typeof window !== "undefined" && process.env.NODE_ENV === "development") {
+      console.log("RepoSelector Debug:", {
+        isGitHubConnected,
+        isCheckingConnection,
+        reposLoading,
+        reposError: reposError ? String(reposError) : null,
+        allReposCount: allRepos?.length ?? 0,
+        repositoriesCount: repositories.length,
+        filteredAllReposCount: filteredAllRepos.length,
+        availableToConnectCount: availableToConnect.length,
+        repositoriesList: repositories.map(r => r.fullName),
+      })
+    }
+  }, [isGitHubConnected, isCheckingConnection, reposLoading, reposError, allRepos, repositories, filteredAllRepos, availableToConnect])
 
   return (
     <div className={cn("flex items-center gap-2", className)}>
@@ -186,7 +236,13 @@ export function RepoSelector({
 
             {/* Connect New Repository */}
             <div className="px-2 pb-2">
-              <button className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent">
+              <button
+                onClick={() => {
+                  setOpen(false)
+                  setConnectDialogOpen(true)
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left hover:bg-accent"
+              >
                 <Plus className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-sm">Connect New Repository</p>
@@ -210,6 +266,105 @@ export function RepoSelector({
         <span>{selectedBranch}</span>
         <ChevronDown className="h-3 w-3" />
       </Button>
+
+      {/* Connect Repository Dialog */}
+      <Dialog open={connectDialogOpen} onOpenChange={setConnectDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Connect GitHub Repository</DialogTitle>
+            <DialogDescription>
+              Select a repository from your GitHub account to connect
+            </DialogDescription>
+          </DialogHeader>
+          
+          {!isGitHubConnected ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-muted-foreground mb-4">
+                Please connect your GitHub account first to view repositories.
+              </p>
+              <Button onClick={() => window.location.href = "/settings"}>
+                Go to Settings
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div className="relative mb-4">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search repositories..."
+                  value={connectSearchQuery}
+                  onChange={(e) => setConnectSearchQuery(e.target.value)}
+                  className="h-9 pl-8"
+                />
+              </div>
+              
+              <ScrollArea className="h-[400px]">
+                {reposLoading || isCheckingConnection ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    Loading repositories...
+                  </div>
+                ) : reposError ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    <p className="text-destructive mb-2">Failed to load repositories</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(reposError as any)?.message || "Please try again or reconnect your GitHub account"}
+                    </p>
+                  </div>
+                ) : !allRepos || allRepos.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    <p>No repositories found in your GitHub account</p>
+                    <p className="text-xs mt-2">Make sure you have repositories on GitHub</p>
+                  </div>
+                ) : availableToConnect.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    {connectSearchQuery
+                      ? "No repositories match your search"
+                      : filteredAllRepos.length === 0
+                      ? "No repositories match your search"
+                      : `All ${filteredAllRepos.length} repository${filteredAllRepos.length === 1 ? '' : 'ies'} are already connected`}
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {availableToConnect.map((repo) => (
+                      <button
+                        key={repo.id}
+                        onClick={() => {
+                          onRepoSelect?.(repo.full_name)
+                          setConnectDialogOpen(false)
+                        }}
+                        className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 text-left hover:bg-accent"
+                      >
+                        <FolderGit2 className="h-5 w-5 shrink-0 text-muted-foreground" />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {repo.full_name}
+                          </p>
+                          {repo.description && (
+                            <p className="truncate text-xs text-muted-foreground">
+                              {repo.description}
+                            </p>
+                          )}
+                        </div>
+                        <Badge variant="outline" className="shrink-0 gap-1 text-xs">
+                          {repo.private ? (
+                            <>
+                              <Lock className="h-3 w-3" /> Private
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="h-3 w-3" /> Public
+                            </>
+                          )}
+                        </Badge>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </ScrollArea>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

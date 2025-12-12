@@ -62,7 +62,7 @@ auth:
   # The backend converts this to: http://localhost:18000/api/v1/auth/oauth/{provider}/callback
   # for the actual OAuth provider callback URL
   # Can be overridden with AUTH_OAUTH_REDIRECT_URI environment variable
-  oauth_redirect_uri: http://localhost:3000/auth/callback
+  oauth_redirect_uri: http://localhost:3000/callback
 
 workspace:
   root: ./workspaces

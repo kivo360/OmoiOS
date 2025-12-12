@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import { CardTitle, CardDescription } from "@/components/ui/card"
 import { Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
@@ -14,6 +15,7 @@ function CallbackContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuth()
+  const queryClient = useQueryClient()
   const [status, setStatus] = useState<CallbackStatus>("loading")
   const [errorMessage, setErrorMessage] = useState<string>("")
   const [provider, setProvider] = useState<string>("")
@@ -54,6 +56,11 @@ function CallbackContent() {
 
         // Update auth context
         login(user)
+        
+        // Invalidate OAuth-related queries to refresh connection status
+        queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] })
+        queryClient.invalidateQueries({ queryKey: ["github-repos"] })
+        
         setStatus("success")
 
         // Redirect to main app after brief success display
@@ -68,7 +75,7 @@ function CallbackContent() {
     }
 
     handleCallback()
-  }, [searchParams, router, login])
+  }, [searchParams, router, login, queryClient])
 
   return (
     <div className="space-y-6">
