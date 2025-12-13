@@ -17,7 +17,7 @@ import os
 import signal
 import sys
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import structlog
 
@@ -163,11 +163,13 @@ async def orchestrator_loop():
                 if sandbox_execution and daytona_spawner:
                     # Sandbox mode: spawn a Daytona sandbox for this task
                     try:
-                        # Extract user_id, repo info, and ticket info from DB
+                        # Extract user_id, repo info, ticket info, and GitHub token from DB
                         # This enables per-user credentials and GitHub branch workflow
                         extra_env: dict[str, str] = {}
+                        user_id_for_token = None
                         with db.get_session() as session:
                             from omoi_os.models.ticket import Ticket
+                            from omoi_os.models.user import User
 
                             ticket = session.get(Ticket, task.ticket_id)
                             if ticket:
@@ -184,9 +186,8 @@ async def orchestrator_loop():
 
                                 if ticket.project:
                                     if ticket.project.created_by:
-                                        extra_env["USER_ID"] = str(
-                                            ticket.project.created_by
-                                        )
+                                        user_id_for_token = ticket.project.created_by
+                                        extra_env["USER_ID"] = str(user_id_for_token)
                                     # Combine owner/repo into GITHUB_REPO format
                                     owner = ticket.project.github_owner
                                     repo = ticket.project.github_repo
@@ -196,18 +197,44 @@ async def orchestrator_loop():
                                         extra_env["GITHUB_REPO_OWNER"] = owner
                                         extra_env["GITHUB_REPO_NAME"] = repo
 
+                            # Fetch GitHub token from user attributes
+                            # Token is stored in user.attributes.github_access_token (via OAuth)
+                            if user_id_for_token:
+                                user = session.get(User, user_id_for_token)
+                                if user:
+                                    attrs = user.attributes or {}
+                                    github_token = attrs.get("github_access_token")
+                                    if github_token:
+                                        extra_env["GITHUB_TOKEN"] = github_token
+                                        log.debug(
+                                            "github_token_found",
+                                            user_id=str(user_id_for_token),
+                                        )
+                                    else:
+                                        log.debug(
+                                            "no_github_token",
+                                            user_id=str(user_id_for_token),
+                                        )
+
                         log.debug(
                             "env_extracted",
                             user_id=extra_env.get("USER_ID"),
                             github_repo=extra_env.get("GITHUB_REPO"),
                             ticket_type=extra_env.get("TICKET_TYPE"),
+                            has_github_token="GITHUB_TOKEN" in extra_env,
                         )
 
                         # Determine agent type from phase
                         from omoi_os.agents.templates import get_template_for_phase
 
                         template = get_template_for_phase(phase_id)
-                        agent_type = template.agent_type.value
+                        agent_type: Literal[
+                            "planner",
+                            "implementer",
+                            "validator",
+                            "diagnostician",
+                            "coordinator",
+                        ] = template.agent_type.value
 
                         # Register sandbox agent in database (skip heartbeat wait)
                         from omoi_os.models.agent import Agent

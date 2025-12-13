@@ -367,8 +367,13 @@ class DaytonaSpawnerService:
             env_vars: Environment variables for the worker
             runtime: Agent runtime - "openhands" or "claude"
         """
+        # Extract git clone parameters (don't pass token to env vars for security)
+        github_repo = env_vars.pop("GITHUB_REPO", None)
+        github_token = env_vars.pop("GITHUB_TOKEN", None)
+        github_owner = env_vars.pop("GITHUB_REPO_OWNER", None)
+        github_repo_name = env_vars.pop("GITHUB_REPO_NAME", None)
 
-        # Build environment export string
+        # Build environment export string (without sensitive token)
         env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
 
         # Also write env vars to a file for persistence and debugging
@@ -392,12 +397,63 @@ class DaytonaSpawnerService:
             install_cmd = "uv pip install openhands-sdk openhands-tools httpx 2>/dev/null || pip install openhands-sdk openhands-tools httpx"
         sandbox.process.exec(install_cmd, timeout=180)
 
+        # Clone GitHub repository using Daytona SDK (if configured)
+        # This uses sandbox.git.clone() directly instead of shell commands
+        # Token is passed via SDK, never exposed in environment variables
+        if github_repo and github_token:
+            logger.info(f"Cloning repository {github_repo} via Daytona SDK...")
+            try:
+                repo_url = f"https://github.com/{github_repo}.git"
+                workspace_path = "/workspace"
+
+                # Use Daytona SDK's native git.clone() with authentication
+                # username="x-access-token" is GitHub's convention for token auth
+                sandbox.git.clone(
+                    url=repo_url,
+                    path=workspace_path,
+                    username="x-access-token",
+                    password=github_token,
+                )
+
+                logger.info(f"Repository cloned successfully to {workspace_path}")
+
+                # Set WORKSPACE_PATH env var so worker knows where code is
+                env_vars["WORKSPACE_PATH"] = workspace_path
+                env_vars["GITHUB_REPO"] = (
+                    github_repo  # Re-add repo info (not the token)
+                )
+                if github_owner:
+                    env_vars["GITHUB_REPO_OWNER"] = github_owner
+                if github_repo_name:
+                    env_vars["GITHUB_REPO_NAME"] = github_repo_name
+
+                # Update env file with workspace path
+                sandbox.process.exec(
+                    f'echo "WORKSPACE_PATH="{workspace_path}"" >> /tmp/.sandbox_env'
+                )
+                sandbox.process.exec(
+                    f'echo "export WORKSPACE_PATH="{workspace_path}"" >> /root/.bashrc'
+                )
+
+            except Exception as e:
+                logger.warning(f"Failed to clone repository via SDK: {e}")
+                # Continue without repo - worker can still run
+        elif github_repo:
+            logger.info(
+                f"GITHUB_REPO set ({github_repo}) but no GITHUB_TOKEN - skipping clone"
+            )
+        else:
+            logger.debug("No GITHUB_REPO configured - skipping repository clone")
+
         # Upload the appropriate worker script
         if runtime == "claude":
             worker_script = self._get_claude_worker_script()
         else:
             worker_script = self._get_worker_script()
         sandbox.fs.upload_file(worker_script.encode("utf-8"), "/tmp/sandbox_worker.py")
+
+        # Rebuild env_exports with any new variables (like WORKSPACE_PATH)
+        env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
 
         # Start the worker
         logger.info("Starting sandbox worker...")
@@ -450,11 +506,9 @@ import subprocess
 import httpx
 from typing import List, Optional
 
-# OpenHands SDK imports - per official docs
-from openhands.sdk import LLM, Agent, Conversation, Tool
-from openhands.tools.terminal import TerminalTool
-from openhands.tools.file_editor import FileEditorTool
-from openhands.tools.task_tracker import TaskTrackerTool
+# OpenHands SDK imports - using actual package structure
+from openhands.sdk import LLM, Conversation
+from openhands.tools.preset.default import get_default_agent
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -807,15 +861,9 @@ async def main():
         api_key=LLM_API_KEY,
     )
     
-    # Create agent with LLM and tools
-    agent = Agent(
-        llm=llm,
-        tools=[
-            Tool(name=TerminalTool.name),
-            Tool(name=FileEditorTool.name),
-            Tool(name=TaskTrackerTool.name),
-        ],
-    )
+    # Create agent with default tools using pre-configured helper
+    # cli_mode=True disables browser tools for CLI/sandbox usage
+    agent = get_default_agent(llm=llm, cli_mode=True)
     
     # Create conversation with message injection callback
     _conversation = Conversation(
