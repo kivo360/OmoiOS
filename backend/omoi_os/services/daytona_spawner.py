@@ -348,18 +348,40 @@ class DaytonaSpawnerService:
 
         SDK Reference: docs/libraries/software-agent-sdk-clean.md
         GitHub: https://github.com/OpenHands/software-agent-sdk
+
+        Phase 3 Updates:
+        - Uses /api/v1/sandboxes/{id}/events for event callbacks
+        - Polls /api/v1/sandboxes/{id}/messages for message injection
+        - Enhanced callback checks for pending messages
+        - Handles interrupt messages to stop execution
+
+        Phase 3.5 Updates:
+        - Clones GitHub repository on startup if credentials provided
+        - Checks out feature branch if BRANCH_NAME specified
+        - Configures git user for commits
         """
         return '''#!/usr/bin/env python3
 """Standalone sandbox worker - runs OpenHands agent for a task.
 
 SDK Reference: https://github.com/OpenHands/software-agent-sdk
 Local Docs: docs/libraries/software-agent-sdk-clean.md
+
+Phase 3: HTTP Callbacks and Message Injection
+- Reports events via POST /api/v1/sandboxes/{sandbox_id}/events
+- Polls GET /api/v1/sandboxes/{sandbox_id}/messages for injected messages
+- Event callback checks for pending messages
+
+Phase 3.5: GitHub Clone Integration
+- Clones repository on startup if GITHUB_TOKEN provided
+- Checks out feature branch if BRANCH_NAME specified
 """
 
 import asyncio
 import os
 import logging
+import subprocess
 import httpx
+from typing import List, Optional
 
 # OpenHands SDK imports - per official docs
 from openhands.sdk import LLM, Agent, Conversation, Tool
@@ -373,40 +395,173 @@ logger = logging.getLogger(__name__)
 # Environment configuration
 TASK_ID = os.environ.get("TASK_ID")
 AGENT_ID = os.environ.get("AGENT_ID")
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000/mcp")
+SANDBOX_ID = os.environ.get("SANDBOX_ID", "")
+# Base URL without /mcp suffix for API calls
+BASE_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000").replace("/mcp", "").rstrip("/")
 LLM_MODEL = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-4-20250514")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
-SANDBOX_ID = os.environ.get("SANDBOX_ID", "")
 
+# GitHub configuration (Phase 3.5)
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_REPO = os.environ.get("GITHUB_REPO")  # format: owner/repo
+BRANCH_NAME = os.environ.get("BRANCH_NAME")
+
+# Global state for message injection
+_should_stop: bool = False
+_conversation: Optional[Conversation] = None
+
+
+# ============================================================================
+# GITHUB CLONE SETUP (Phase 3.5)
+# ============================================================================
+
+def clone_repo():
+    """Clone GitHub repo and checkout branch. Called on startup.
+    
+    Phase 3.5: Clones repository if GITHUB_TOKEN and GITHUB_REPO are set.
+    If BRANCH_NAME is provided, checks out that branch after cloning.
+    """
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        logger.info("No GitHub credentials, skipping repo clone")
+        return False
+    
+    # Configure git user for commits
+    subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
+    subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
+    
+    # Build authenticated clone URL
+    clone_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git"
+    
+    logger.info(f"Cloning {GITHUB_REPO}...")
+    result = subprocess.run(
+        ["git", "clone", clone_url, "/workspace"],
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode != 0:
+        logger.error(f"Clone failed: {result.stderr}")
+        return False
+    
+    os.chdir("/workspace")
+    
+    # Checkout branch if specified
+    if BRANCH_NAME:
+        logger.info(f"Checking out branch: {BRANCH_NAME}")
+        # Try to checkout existing branch
+        result = subprocess.run(
+            ["git", "checkout", BRANCH_NAME],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # Branch doesn't exist remotely, create it locally
+            logger.info(f"Creating new branch: {BRANCH_NAME}")
+            subprocess.run(["git", "checkout", "-b", BRANCH_NAME], check=False)
+    
+    logger.info("Repository ready at /workspace")
+    return True
+
+
+# ============================================================================
+# HTTP CALLBACK FUNCTIONS (Phase 3)
+# ============================================================================
 
 async def fetch_task():
-    """Fetch task details from MCP server via HTTP."""
-    async with httpx.AsyncClient(timeout=30) as client:
-        # Call MCP tool via HTTP endpoint
-        resp = await client.get(
-            f"{MCP_SERVER_URL.replace('/mcp', '')}/api/v1/tasks/{TASK_ID}",
-        )
-        if resp.status_code == 200:
-            return resp.json()
+    """Fetch task details from orchestrator."""
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.get(f"{BASE_URL}/api/v1/tasks/{TASK_ID}")
+            if resp.status_code == 200:
+                return resp.json()
+    except Exception as e:
+        logger.error(f"Failed to fetch task: {e}")
     return None
 
 
-async def report_event(event_type: str, event_data: dict):
-    """Report an agent event back to the server."""
+async def report_event(event_type: str, event_data: dict, source: str = "agent"):
+    """Report an agent event via sandbox callback endpoint.
+    
+    Phase 3: Uses POST /api/v1/sandboxes/{sandbox_id}/events
+    """
+    if not SANDBOX_ID:
+        logger.debug("No SANDBOX_ID, skipping event report")
+        return
+    
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
-                f"{MCP_SERVER_URL.replace('/mcp', '')}/api/v1/agent-events",
+                f"{BASE_URL}/api/v1/sandboxes/{SANDBOX_ID}/events",
                 json={
-                    "task_id": TASK_ID,
-                    "agent_id": AGENT_ID,
-                    "sandbox_id": SANDBOX_ID,
                     "event_type": event_type,
-                    "event_data": event_data,
+                    "event_data": {
+                        **event_data,
+                        "task_id": TASK_ID,
+                        "agent_id": AGENT_ID,
+                    },
+                    "source": source,
                 },
             )
     except Exception as e:
         logger.debug(f"Failed to report event: {e}")
+
+
+async def poll_messages() -> List[dict]:
+    """Poll for pending messages from the message queue.
+    
+    Phase 3: Uses GET /api/v1/sandboxes/{sandbox_id}/messages
+    Messages are consumed (cleared) after retrieval.
+    """
+    if not SANDBOX_ID:
+        return []
+    
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{BASE_URL}/api/v1/sandboxes/{SANDBOX_ID}/messages")
+            if resp.status_code == 200:
+                messages = resp.json()
+                if messages:
+                    logger.info(f"Received {len(messages)} injected message(s)")
+                return messages
+    except Exception as e:
+        logger.debug(f"Failed to poll messages: {e}")
+    return []
+
+
+def process_messages(messages: List[dict]) -> Optional[str]:
+    """Process injected messages and return context to inject.
+    
+    Handles message types:
+    - user_message: Guidance from user
+    - guardian_nudge: Suggestion from Guardian
+    - interrupt: Stop current work immediately
+    - system: System notification
+    """
+    global _should_stop
+    
+    context_parts = []
+    
+    for msg in messages:
+        msg_type = msg.get("message_type", "user_message")
+        content = msg.get("content", "")
+        
+        if msg_type == "interrupt":
+            logger.warning(f"INTERRUPT received: {content}")
+            _should_stop = True
+            return f"INTERRUPT: {content}. Stop current work immediately."
+        
+        elif msg_type == "guardian_nudge":
+            context_parts.append(f"Guardian suggests: {content}")
+        
+        elif msg_type == "user_message":
+            context_parts.append(f"User message: {content}")
+        
+        elif msg_type == "system":
+            context_parts.append(f"System: {content}")
+    
+    if context_parts:
+        return "\\n".join(context_parts)
+    return None
 
 
 async def register_conversation(conversation_id: str):
@@ -414,7 +569,7 @@ async def register_conversation(conversation_id: str):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
-                f"{MCP_SERVER_URL.replace('/mcp', '')}/api/v1/tasks/{TASK_ID}/register-conversation",
+                f"{BASE_URL}/api/v1/tasks/{TASK_ID}/register-conversation",
                 json={
                     "conversation_id": conversation_id,
                     "sandbox_id": SANDBOX_ID,
@@ -430,25 +585,72 @@ async def update_task_status(status: str, result: str = None):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.patch(
-                f"{MCP_SERVER_URL.replace('/mcp', '')}/api/v1/tasks/{TASK_ID}",
+                f"{BASE_URL}/api/v1/tasks/{TASK_ID}",
                 json={"status": status, "result": result},
             )
     except Exception as e:
         logger.warning(f"Failed to update task status: {e}")
 
 
-async def main():
-    logger.info(f"OpenHands Worker starting for task {TASK_ID}")
+# ============================================================================
+# AGENT EXECUTION WITH MESSAGE INJECTION
+# ============================================================================
+
+def create_event_callback():
+    """Create event callback with message injection support."""
+    global _should_stop, _conversation
     
+    async def check_and_report(event):
+        """Event callback that checks for messages and reports events."""
+        global _should_stop
+        
+        # Report the event
+        event_type = type(event).__name__
+        event_data = {"message": str(event)[:300]}
+        await report_event(f"agent.{event_type}", event_data)
+        
+        # Check for pending messages (message injection)
+        messages = await poll_messages()
+        if messages:
+            injected_context = process_messages(messages)
+            
+            if _should_stop:
+                # Interrupt received - this will be handled in main loop
+                await report_event("agent.interrupted", {"reason": "interrupt_message"})
+                logger.warning("Interrupt flag set - agent should stop")
+            
+            elif injected_context and _conversation:
+                # Inject the message into the conversation
+                await report_event("agent.message_injected", {"message_count": len(messages)})
+                # Send injected context as a new message
+                _conversation.send_message(f"[INJECTED GUIDANCE]\\n{injected_context}")
+    
+    def sync_callback(event):
+        """Synchronous wrapper for async callback."""
+        asyncio.create_task(check_and_report(event))
+    
+    return sync_callback
+
+
+async def main():
+    global _conversation, _should_stop
+
+    logger.info(f"OpenHands Worker starting for task {TASK_ID}")
+    logger.info(f"Sandbox ID: {SANDBOX_ID}")
+    logger.info(f"Backend URL: {BASE_URL}")
+
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
         return
-    
+
     if not LLM_API_KEY:
         logger.error("LLM_API_KEY required")
         await update_task_status("failed", "Missing LLM_API_KEY")
         return
-    
+
+    # Phase 3.5: Clone GitHub repo if credentials provided
+    clone_repo()
+
     # Fetch task
     task = await fetch_task()
     if not task:
@@ -460,15 +662,15 @@ async def main():
     logger.info(f"Task: {task_desc}")
     
     await update_task_status("in_progress")
-    await report_event("agent_started", {"task": task_desc[:200]})
+    await report_event("agent.started", {"task": task_desc[:200]})
     
-    # Create LLM instance (per SDK docs - LLM is separate from Agent)
+    # Create LLM instance
     llm = LLM(
         model=LLM_MODEL,
         api_key=LLM_API_KEY,
     )
     
-    # Create agent with LLM and tools (per SDK docs)
+    # Create agent with LLM and tools
     agent = Agent(
         llm=llm,
         tools=[
@@ -478,36 +680,36 @@ async def main():
         ],
     )
     
-    # Event callback for Guardian observation
-    def on_event(event):
-        event_type = type(event).__name__
-        event_data = {"message": str(event)[:300]}
-        asyncio.create_task(report_event(event_type, event_data))
-    
-    # Create conversation with callbacks (per SDK docs - use Conversation, not LocalConversation)
-    conversation = Conversation(
+    # Create conversation with message injection callback
+    _conversation = Conversation(
         agent=agent,
         workspace="/workspace",
-        callbacks=[on_event],
+        callbacks=[create_event_callback()],
     )
     
     # Register with server for Guardian observation
-    # Per SDK docs: conversation ID is at conversation.state.id
-    await register_conversation(str(conversation.state.id))
+    await register_conversation(str(_conversation.state.id))
     
     # Send task and run
     logger.info("Sending task to agent...")
-    conversation.send_message(task_desc)
+    _conversation.send_message(task_desc)
     
     try:
-        conversation.run()
-        logger.info("Agent completed successfully")
-        await update_task_status("completed", "Task completed successfully")
-        await report_event("agent_completed", {"success": True})
+        _conversation.run()
+        
+        if _should_stop:
+            logger.warning("Agent stopped due to interrupt")
+            await update_task_status("completed", "Stopped by interrupt")
+            await report_event("agent.completed", {"success": True, "interrupted": True})
+        else:
+            logger.info("Agent completed successfully")
+            await update_task_status("completed", "Task completed successfully")
+            await report_event("agent.completed", {"success": True})
+            
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         await update_task_status("failed", str(e))
-        await report_event("agent_failed", {"error": str(e)})
+        await report_event("agent.failed", {"error": str(e)})
 
 
 if __name__ == "__main__":
@@ -519,12 +721,32 @@ if __name__ == "__main__":
 
         SDK Reference: docs/libraries/claude-agent-sdk-python-clean.md
         GitHub: https://github.com/anthropics/claude-agent-sdk-python
+
+        Phase 3 Updates:
+        - Uses /api/v1/sandboxes/{id}/events for event callbacks
+        - Polls /api/v1/sandboxes/{id}/messages for message injection
+        - PreToolUse hook for sub-second intervention delivery
+        - Handles interrupt messages to stop execution
+
+        Phase 3.5 Updates:
+        - Clones GitHub repository on startup if credentials provided
+        - Checks out feature branch if BRANCH_NAME specified
+        - Configures git user for commits
         """
         return '''#!/usr/bin/env python3
 """Standalone sandbox worker - runs Claude Agent SDK for a task.
 
 SDK Reference: https://github.com/anthropics/claude-agent-sdk-python
 Local Docs: docs/libraries/claude-agent-sdk-python-clean.md
+
+Phase 3: HTTP Callbacks and Message Injection
+- Reports events via POST /api/v1/sandboxes/{sandbox_id}/events
+- Polls GET /api/v1/sandboxes/{sandbox_id}/messages for injected messages
+- PreToolUse hook checks for pending messages (sub-second intervention)
+
+Phase 3.5: GitHub Clone Integration
+- Clones repository on startup if GITHUB_TOKEN provided
+- Checks out feature branch if BRANCH_NAME specified
 """
 
 import asyncio
@@ -532,7 +754,7 @@ import os
 import logging
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -540,17 +762,83 @@ logger = logging.getLogger(__name__)
 # Environment configuration
 TASK_ID = os.environ.get("TASK_ID")
 AGENT_ID = os.environ.get("AGENT_ID")
-MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", os.environ.get("LLM_API_KEY", ""))
 SANDBOX_ID = os.environ.get("SANDBOX_ID", "")
+# Base URL without /mcp suffix for API calls
+BASE_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000").replace("/mcp", "").rstrip("/")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", os.environ.get("LLM_API_KEY", ""))
 
+# GitHub configuration (Phase 3.5)
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_REPO = os.environ.get("GITHUB_REPO")  # format: owner/repo
+BRANCH_NAME = os.environ.get("BRANCH_NAME")
+
+# Global state for message injection
+_pending_messages: List[dict] = []
+_should_stop: bool = False
+
+
+# ============================================================================
+# GITHUB CLONE SETUP (Phase 3.5)
+# ============================================================================
+
+def clone_repo():
+    """Clone GitHub repo and checkout branch. Called on startup.
+    
+    Phase 3.5: Clones repository if GITHUB_TOKEN and GITHUB_REPO are set.
+    If BRANCH_NAME is provided, checks out that branch after cloning.
+    """
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        logger.info("No GitHub credentials, skipping repo clone")
+        return False
+    
+    # Configure git user for commits
+    subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
+    subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
+    
+    # Build authenticated clone URL
+    clone_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git"
+    
+    logger.info(f"Cloning {GITHUB_REPO}...")
+    result = subprocess.run(
+        ["git", "clone", clone_url, "/workspace"],
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode != 0:
+        logger.error(f"Clone failed: {result.stderr}")
+        return False
+    
+    os.chdir("/workspace")
+    
+    # Checkout branch if specified
+    if BRANCH_NAME:
+        logger.info(f"Checking out branch: {BRANCH_NAME}")
+        # Try to checkout existing branch
+        result = subprocess.run(
+            ["git", "checkout", BRANCH_NAME],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # Branch doesn't exist remotely, create it locally
+            logger.info(f"Creating new branch: {BRANCH_NAME}")
+            subprocess.run(["git", "checkout", "-b", BRANCH_NAME], check=False)
+    
+    logger.info("Repository ready at /workspace")
+    return True
+
+
+# ============================================================================
+# HTTP CALLBACK FUNCTIONS (Phase 3)
+# ============================================================================
 
 async def fetch_task():
     """Fetch task details from orchestrator."""
     import httpx
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.get(f"{MCP_SERVER_URL}/api/v1/tasks/{TASK_ID}")
+            resp = await client.get(f"{BASE_URL}/api/v1/tasks/{TASK_ID}")
             if resp.status_code == 200:
                 return resp.json()
     except Exception as e:
@@ -564,31 +852,109 @@ async def report_status(status: str, result: str = None):
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.patch(
-                f"{MCP_SERVER_URL}/api/v1/tasks/{TASK_ID}",
+                f"{BASE_URL}/api/v1/tasks/{TASK_ID}",
                 json={"status": status, "result": result},
             )
     except Exception as e:
         logger.debug(f"Failed to report status: {e}")
 
 
-async def report_event(event_type: str, event_data: dict):
-    """Report an agent event for Guardian observation."""
+async def report_event(event_type: str, event_data: dict, source: str = "agent"):
+    """Report an agent event via sandbox callback endpoint.
+    
+    Phase 3: Uses POST /api/v1/sandboxes/{sandbox_id}/events
+    """
     import httpx
+    if not SANDBOX_ID:
+        logger.debug("No SANDBOX_ID, skipping event report")
+        return
+    
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
-                f"{MCP_SERVER_URL}/api/v1/agent-events",
+                f"{BASE_URL}/api/v1/sandboxes/{SANDBOX_ID}/events",
                 json={
-                    "task_id": TASK_ID,
-                    "agent_id": AGENT_ID,
-                    "sandbox_id": SANDBOX_ID,
                     "event_type": event_type,
-                    "event_data": event_data,
+                    "event_data": {
+                        **event_data,
+                        "task_id": TASK_ID,
+                        "agent_id": AGENT_ID,
+                    },
+                    "source": source,
                 },
             )
     except Exception as e:
         logger.debug(f"Failed to report event: {e}")
 
+
+async def poll_messages() -> List[dict]:
+    """Poll for pending messages from the message queue.
+    
+    Phase 3: Uses GET /api/v1/sandboxes/{sandbox_id}/messages
+    Messages are consumed (cleared) after retrieval.
+    
+    Returns:
+        List of message dicts with content, message_type, timestamp
+    """
+    import httpx
+    if not SANDBOX_ID:
+        return []
+    
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{BASE_URL}/api/v1/sandboxes/{SANDBOX_ID}/messages")
+            if resp.status_code == 200:
+                messages = resp.json()
+                if messages:
+                    logger.info(f"Received {len(messages)} injected message(s)")
+                return messages
+    except Exception as e:
+        logger.debug(f"Failed to poll messages: {e}")
+    return []
+
+
+def process_messages(messages: List[dict]) -> Optional[str]:
+    """Process injected messages and return context to inject.
+    
+    Handles message types:
+    - user_message: Guidance from user
+    - guardian_nudge: Suggestion from Guardian
+    - interrupt: Stop current work immediately
+    - system: System notification
+    
+    Returns:
+        Context string to inject, or None
+    """
+    global _should_stop
+    
+    context_parts = []
+    
+    for msg in messages:
+        msg_type = msg.get("message_type", "user_message")
+        content = msg.get("content", "")
+        
+        if msg_type == "interrupt":
+            logger.warning(f"INTERRUPT received: {content}")
+            _should_stop = True
+            return f"⚠️ INTERRUPT: {content}. Stop current work immediately."
+        
+        elif msg_type == "guardian_nudge":
+            context_parts.append(f"💡 Guardian suggests: {content}")
+        
+        elif msg_type == "user_message":
+            context_parts.append(f"📝 User message: {content}")
+        
+        elif msg_type == "system":
+            context_parts.append(f"🔔 System: {content}")
+    
+    if context_parts:
+        return "\\n".join(context_parts)
+    return None
+
+
+# ============================================================================
+# TOOL DEFINITIONS
+# ============================================================================
 
 def create_tools():
     """Create custom tools for the Claude agent."""
@@ -609,7 +975,7 @@ def create_tools():
         try:
             file_path.parent.mkdir(parents=True, exist_ok=True)
             file_path.write_text(args["content"])
-            asyncio.create_task(report_event("file_written", {"path": str(file_path)}))
+            asyncio.create_task(report_event("agent.file_written", {"path": str(file_path)}))
             return {"content": [{"type": "text", "text": f"Wrote to {file_path}"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
@@ -618,8 +984,9 @@ def create_tools():
     async def run_command(args: dict[str, Any]) -> dict[str, Any]:
         command = args["command"]
         try:
-            asyncio.create_task(report_event("command_started", {"command": command}))
+            asyncio.create_task(report_event("agent.command_started", {"command": command}))
             result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=300, cwd="/workspace")
+            asyncio.create_task(report_event("agent.command_completed", {"command": command, "exit_code": result.returncode}))
             return {"content": [{"type": "text", "text": f"Exit: {result.returncode}\\nStdout: {result.stdout}\\nStderr: {result.stderr}"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
@@ -637,26 +1004,68 @@ def create_tools():
     return server, ["mcp__workspace__read_file", "mcp__workspace__write_file", "mcp__workspace__run_command", "mcp__workspace__list_files"]
 
 
+# ============================================================================
+# AGENT EXECUTION WITH HOOKS (Phase 3)
+# ============================================================================
+
 async def run_agent(task_description: str):
-    """Run the Claude Agent SDK."""
+    """Run the Claude Agent SDK with message injection hooks."""
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
     
     tools_server, tool_names = create_tools()
     
-    async def track_tool(input_data, tool_use_id, context):
-        await report_event("tool_use", {"tool": input_data.get("tool_name", "unknown")})
+    # PreToolUse hook: Check for pending messages before each tool call
+    # This provides sub-second intervention latency
+    async def check_pending_messages(input_data, tool_use_id, context):
+        """PreToolUse hook for immediate message injection."""
+        global _should_stop
+        
+        # Poll for any pending messages
+        messages = await poll_messages()
+        
+        if messages:
+            injected_context = process_messages(messages)
+            
+            if _should_stop:
+                # Interrupt received - stop execution
+                await report_event("agent.interrupted", {"reason": "interrupt_message"})
+                return {
+                    "continue_": False,
+                    "stopReason": "Interrupt received from user/guardian",
+                    "systemMessage": injected_context,
+                }
+            
+            if injected_context:
+                # Inject context as system message
+                await report_event("agent.message_injected", {"message_count": len(messages)})
+                return {
+                    "continue_": True,
+                    "systemMessage": injected_context,
+                    "reason": "Injected guidance from message queue",
+                }
+        
+        return {"continue_": True}
+    
+    # PostToolUse hook: Report tool usage for Guardian observation
+    async def track_tool_use(input_data, tool_use_id, context):
+        """PostToolUse hook for event reporting."""
+        tool_name = input_data.get("tool_name", "unknown")
+        await report_event("agent.tool_use", {"tool": tool_name})
         return {}
     
     options = ClaudeAgentOptions(
         allowed_tools=tool_names + ["Read", "Write", "Bash", "Edit", "Glob", "Grep"],
         permission_mode="acceptEdits",
-        system_prompt=f"You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.",
+        system_prompt=f"You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes. If you receive guidance messages, incorporate them into your work.",
         cwd=Path("/workspace"),
         max_turns=50,
         max_budget_usd=10.0,
-        model="claude-sonnet-4-20250514",  # Per SDK docs - use full model name with date
+        model="claude-sonnet-4-20250514",
         mcp_servers={"workspace": tools_server},
-        hooks={"PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool])]},
+        hooks={
+            "PreToolUse": [HookMatcher(matcher=None, hooks=[check_pending_messages])],
+            "PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool_use])],
+        },
     )
     
     try:
@@ -672,18 +1081,23 @@ async def run_agent(task_description: str):
 
 async def main():
     logger.info(f"Claude Agent Worker starting for task {TASK_ID}")
-    
+    logger.info(f"Sandbox ID: {SANDBOX_ID}")
+    logger.info(f"Backend URL: {BASE_URL}")
+
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
         return
-    
+
     if not ANTHROPIC_API_KEY:
         logger.error("ANTHROPIC_API_KEY required")
         await report_status("failed", "Missing ANTHROPIC_API_KEY")
         return
-    
+
+    # Phase 3.5: Clone GitHub repo if credentials provided
+    clone_repo()
+
     os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
-    
+
     task = await fetch_task()
     if not task:
         await report_status("failed", "Could not fetch task")
@@ -693,16 +1107,16 @@ async def main():
     logger.info(f"Task: {task_desc}")
     
     await report_status("in_progress")
-    await report_event("agent_started", {"task": task_desc[:200]})
+    await report_event("agent.started", {"task": task_desc[:200]})
     
     success, result = await run_agent(task_desc)
     
     if success:
         await report_status("completed", result)
-        await report_event("agent_completed", {"success": True})
+        await report_event("agent.completed", {"success": True})
     else:
         await report_status("failed", result)
-        await report_event("agent_failed", {"error": result})
+        await report_event("agent.failed", {"error": result})
 
 
 if __name__ == "__main__":

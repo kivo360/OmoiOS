@@ -466,6 +466,60 @@ I need to add message injection similar to what I did for Claude.
 
 ---
 
+### Testing & Validation Prompts
+
+#### Contract Testing
+
+```
+@backend/tests/contract/test_sandbox_event_contract.py
+@docs/design/sandbox-agents/04_communication_patterns.md
+
+Create/extend contract tests for sandbox APIs:
+1. Validate SandboxEventPayload schema matches design docs
+2. Test all event_type enum values are handled
+3. Ensure request/response shapes are backward compatible
+4. Add contract tests for message injection endpoint
+
+Follow the existing contract test patterns.
+```
+
+#### E2E Flow Validation ("Does This Actually Work?")
+
+```
+@docs/design/sandbox-agents/01_architecture.md
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@backend/tests/integration/sandbox/
+
+Test the complete sandbox lifecycle end-to-end:
+1. User sends message → Sandbox spawned
+2. Worker starts → Reports AGENT_STARTED event
+3. Worker executes tool → Reports TOOL_CALL event  
+4. User sends intervention → Message injected to worker
+5. Worker completes → Reports TASK_COMPLETED
+6. Sandbox cleaned up
+
+Write an integration test that validates this entire flow works together.
+This is the "does this shit actually work" test.
+```
+
+#### Mocking External Services
+
+```
+@backend/tests/conftest.py
+@backend/omoi_os/services/daytona_spawner.py
+@backend/omoi_os/services/github_api.py
+
+Set up test fixtures that mock external services:
+1. Mock Daytona API (create_sandbox, execute_command, delete_sandbox)
+2. Mock GitHub API (clone repo, create branch, create PR)
+3. Ensure tests can run without real API credentials
+4. Follow existing mock patterns in conftest.py
+
+Show me the fixtures I need to create.
+```
+
+---
+
 ## Phase Progress Tracking
 
 Copy this checklist into your notes and update as you progress:
