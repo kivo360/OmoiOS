@@ -239,6 +239,64 @@ The **SandboxSessionManager** is the central hub that maintains live connections
 
 ---
 
+## Sandbox Lifecycle State Machine
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SANDBOX STATE TRANSITIONS                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│                              ┌────────────────────┐                         │
+│                              │                    │                         │
+│                              ▼                    │                         │
+│  ┌──────────┐  spawn()  ┌──────────┐  ready   ┌──────────┐                  │
+│  │ PENDING  │ ────────► │ CREATING │ ───────► │ RUNNING  │                  │
+│  └──────────┘           └──────────┘          └──────────┘                  │
+│       │                      │                     │  │                     │
+│       │                      │ error               │  │ task_done           │
+│       │                      ▼                     │  ▼                     │
+│       │                ┌──────────┐                │ ┌──────────┐           │
+│       │                │  FAILED  │ ◄──────────────┤ │COMPLETING│           │
+│       │                └──────────┘   crash/       │ └──────────┘           │
+│       │                      ▲        timeout      │      │                 │
+│       │ cancel               │                     │      │ pr_created      │
+│       │                      │                     │      ▼                 │
+│       │                      │                     │ ┌──────────┐           │
+│       └──────────────────────┴─────────────────────┴►│COMPLETED │           │
+│                                                      └──────────┘           │
+│                                                           │                 │
+│                                                           │ cleanup         │
+│                                                           ▼                 │
+│                                                      ┌──────────┐           │
+│                                                      │TERMINATED│           │
+│                                                      └──────────┘           │
+│                                                                             │
+│  TRANSITION TRIGGERS:                                                       │
+│  ────────────────────                                                       │
+│  PENDING → CREATING    : DaytonaSpawnerService.spawn_sandbox() called       │
+│  CREATING → RUNNING    : Worker script starts, registers conversation       │
+│  CREATING → FAILED     : Daytona API error, provision timeout (5 min)       │
+│  RUNNING → COMPLETING  : Agent calls update_task_status(done)               │
+│  RUNNING → FAILED      : Agent crash, heartbeat timeout (60s), Guardian     │
+│  COMPLETING → COMPLETED: PR created, branch pushed                          │
+│  COMPLETING → FAILED   : GitHub API error, merge conflicts                  │
+│  * → TERMINATED        : Cleanup after completion or manual termination     │
+│                                                                             │
+│  STATUS FIELD VALUES:                                                       │
+│  ────────────────────                                                       │
+│  'pending'    - Task queued, sandbox not yet requested                      │
+│  'creating'   - Daytona sandbox provisioning in progress                    │
+│  'running'    - Agent actively working in sandbox                           │
+│  'completing' - Agent done, PR/commit in progress                           │
+│  'completed'  - All work done, PR created                                   │
+│  'failed'     - Error occurred, see error_message                           │
+│  'terminated' - Sandbox destroyed (normal cleanup or forced)                │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Database Schema
 
 ### New Tables

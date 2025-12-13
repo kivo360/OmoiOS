@@ -118,10 +118,59 @@ pytest tests/integration/test_websocket_existing.py -v
 
 ---
 
+## Sandbox Lifecycle States
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        SANDBOX LIFECYCLE STATE MACHINE                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  ┌──────────┐     spawn()      ┌──────────┐    agent starts   ┌──────────┐ │
+│  │ PENDING  │ ───────────────► │ CREATING │ ────────────────► │ RUNNING  │ │
+│  └──────────┘                  └──────────┘                   └──────────┘ │
+│       │                              │                              │       │
+│       │                              │ creation fails               │       │
+│       │                              ▼                              │       │
+│       │                        ┌──────────┐                        │       │
+│       │                        │  FAILED  │ ◄──────────────────────┤       │
+│       │                        └──────────┘   agent crashes/       │       │
+│       │                              ▲        timeout              │       │
+│       │                              │                              │       │
+│       │                              │                              ▼       │
+│       │                              │                        ┌──────────┐ │
+│       │                              │                        │COMPLETING│ │
+│       │                              │                        └──────────┘ │
+│       │                              │                              │       │
+│       │                              │                              │       │
+│       │                              │                              ▼       │
+│       │                              │                        ┌──────────┐ │
+│       └──────────────────────────────┴───────────────────────►│COMPLETED │ │
+│              manual cancel                                     └──────────┘ │
+│                                                                             │
+│  STATE TRANSITIONS:                                                         │
+│  ─────────────────                                                          │
+│  PENDING → CREATING   : DaytonaSpawnerService.spawn_sandbox()               │
+│  CREATING → RUNNING   : Worker script starts, first heartbeat               │
+│  CREATING → FAILED    : Daytona API error, timeout                          │
+│  RUNNING → COMPLETING : Task marked done, creating PR                       │
+│  RUNNING → FAILED     : Agent crash, Guardian timeout                       │
+│  COMPLETING → COMPLETED: PR created successfully                            │
+│  COMPLETING → FAILED   : PR creation fails                                  │
+│  * → COMPLETED        : Manual cancellation                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## ⚠️ Critical Issues Identified
 
-1. **Missing `sandbox_id` on Task model** - Required for Guardian mode detection
-2. **Guardian can't intervene with sandbox agents** - Needs HTTP routing (Phase 6)
-3. **Fault tolerance not sandbox-aware** - Needs RestartOrchestrator integration (Phase 7)
+| Issue | Status | Resolution |
+|-------|--------|------------|
+| Missing `sandbox_id` on Task model | 📋 Documented | See [Gap Analysis #4](./02_gap_analysis.md) - Fix in Phase 6 |
+| Guardian can't intervene with sandbox agents | 📋 Documented | See [Gap Analysis #5](./02_gap_analysis.md) - Fix in Phase 6 |
+| Fault tolerance not sandbox-aware | 📋 Documented | See [07_existing_systems_integration.md](./07_existing_systems_integration.md) - Phase 7 |
+| Polling-based intervention latency | ✅ Resolved | Hook-based injection designed in [04_communication_patterns.md](./04_communication_patterns.md) |
+| SDK API correctness | ✅ Resolved | Fixed in [02_gap_analysis.md](./02_gap_analysis.md) - Gap #8 |
 
-See [02_gap_analysis.md](./02_gap_analysis.md) for full details.
+See [02_gap_analysis.md](./02_gap_analysis.md) for full details and risk assessments.
