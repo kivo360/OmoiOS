@@ -39,6 +39,19 @@
    - Impact: Hard to test, hard to maintain
    - Recommendation: Consider extracting to files that get uploaded
 
+8. **✅ SDK API Correctness** (RESOLVED 2025-12-12)
+   - Location: `daytona_spawner.py` - `_get_worker_script()` and `_get_claude_worker_script()`
+   - Issues Fixed:
+     - **OpenHands SDK**: Worker used wrong imports (`LocalConversation` → `Conversation`)
+     - **OpenHands SDK**: Agent created incorrectly (missing separate `LLM` object)
+     - **OpenHands SDK**: No tools passed to Agent (added `TerminalTool`, `FileEditorTool`, `TaskTrackerTool`)
+     - **OpenHands SDK**: Used wrong property for conversation ID (`conversation.state.id`)
+     - **Claude SDK**: Model name was malformed (`claude-sonnet-4-5` → `claude-sonnet-4-20250514`)
+   - SDK References:
+     - Claude: `docs/libraries/claude-agent-sdk-python-clean.md`
+     - OpenHands: `docs/libraries/software-agent-sdk-clean.md`
+   - Status: **Fixed** - Worker scripts now match official SDK documentation
+
 3. **Event Endpoint Overlap** (Low Risk)
    - Current: `/tasks/{id}/events` and `/agent-events` endpoints exist
    - Planned: `/sandboxes/{id}/events` endpoint

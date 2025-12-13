@@ -773,6 +773,12 @@ CREATE TABLE sandbox_ws_connections (
 
 ## SDK Comparison
 
+> **SDK Documentation References:**
+> - **Claude Agent SDK**: `docs/libraries/claude-agent-sdk-python-clean.md`
+>   - GitHub: https://github.com/anthropics/claude-agent-sdk-python
+> - **OpenHands SDK**: `docs/libraries/software-agent-sdk-clean.md`
+>   - GitHub: https://github.com/OpenHands/software-agent-sdk
+
 ### Claude Agent SDK vs OpenHands SDK
 
 ```
@@ -786,16 +792,17 @@ CREATE TABLE sandbox_ws_connections (
 │  │                               │                                       │  │
 │  │  ARCHITECTURE:                │  ARCHITECTURE:                        │  │
 │  │  ┌─────────────────────────┐  │  ┌─────────────────────────────────┐  │  │
-│  │  │ ClaudeSDKClient         │  │  │ LocalConversation               │  │  │
-│  │  │   └── Claude API        │  │  │   ├── Agent (LLM config)        │  │  │
-│  │  │       └── Tool Use      │  │  │   ├── Workspace (files)         │  │  │
-│  │  └─────────────────────────┘  │  │   └── Tool Registry             │  │  │
+│  │  │ ClaudeSDKClient         │  │  │ Conversation                    │  │  │
+│  │  │   └── Claude CLI        │  │  │   ├── Agent                     │  │  │
+│  │  │       └── Tool Use      │  │  │   │     └── LLM (separate!)     │  │  │
+│  │  └─────────────────────────┘  │  │   ├── Workspace                 │  │  │
+│  │                               │  │   └── Tools[...]                │  │  │
 │  │                               │  └─────────────────────────────────┘  │  │
 │  │                               │                                       │  │
 │  │  STREAMING:                   │  STREAMING:                           │  │
-│  │  • async for in receive_*()   │  • Event callbacks                    │  │
+│  │  • async for in receive_*()   │  • callbacks=[fn]                     │  │
 │  │  • StreamEvent messages       │  • WebSocket /events/socket           │  │
-│  │  • Partial message updates    │  • LLMConvertibleEvent               │  │
+│  │  • Partial message updates    │  • Event handlers                     │  │
 │  │                               │                                       │  │
 │  │  HOOKS:                       │  HOOKS:                               │  │
 │  │  • PreToolUse                 │  • callbacks=[fn]                     │  │
@@ -805,16 +812,25 @@ CREATE TABLE sandbox_ws_connections (
 │  │  TOOLS:                       │  TOOLS:                               │  │
 │  │  • @tool decorator            │  • Tool(name=ToolName.name)           │  │
 │  │  • create_sdk_mcp_server()    │  • TerminalTool, FileEditorTool       │  │
-│  │  • mcp_servers={} option      │  • Custom tool registration           │  │
+│  │  • mcp_servers={} option      │  • TaskTrackerTool                    │  │
 │  │                               │                                       │  │
 │  │  CONVERSATION CONTROL:        │  CONVERSATION CONTROL:                │  │
 │  │  • client.query()             │  • conversation.send_message()        │  │
-│  │  • client.interrupt()         │  • POST /events                       │  │
-│  │  • Multi-turn sessions        │  • conversation.run()                 │  │
+│  │  • client.interrupt()         │  • conversation.run()                 │  │
+│  │  • Multi-turn sessions        │  • REST API + WebSocket               │  │
 │  │                               │                                       │  │
 │  │  COST TRACKING:               │  COST TRACKING:                       │  │
 │  │  • max_budget_usd option      │  • llm.metrics.accumulated_cost       │  │
 │  │  • ResultMessage.total_cost   │  • llm.metrics.accumulated_tokens     │  │
+│  │                               │                                       │  │
+│  │  SETUP:                       │  SETUP:                               │  │
+│  │  ┌─────────────────────────┐  │  ┌─────────────────────────────────┐  │  │
+│  │  │ options = ClaudeAgent   │  │  │ llm = LLM(model=..., api_key=.) │  │  │
+│  │  │   Options(...)          │  │  │ agent = Agent(llm=llm,          │  │  │
+│  │  │ client = ClaudeSDK      │  │  │               tools=[...])      │  │  │
+│  │  │   Client(options)       │  │  │ conv = Conversation(agent,      │  │  │
+│  │  │ client.query(prompt)    │  │  │               workspace="/w")   │  │  │
+│  │  └─────────────────────────┘  │  └─────────────────────────────────┘  │  │
 │  │                               │                                       │  │
 │  └───────────────────────────────┴───────────────────────────────────────┘  │
 │                                                                             │

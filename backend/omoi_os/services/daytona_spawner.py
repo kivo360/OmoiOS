@@ -191,18 +191,20 @@ class DaytonaSpawnerService:
 
         try:
             # Create Daytona sandbox
-            logger.info(f"Creating Daytona sandbox {sandbox_id} for task {task_id} (runtime: {runtime})")
+            logger.info(
+                f"Creating Daytona sandbox {sandbox_id} for task {task_id} (runtime: {runtime})"
+            )
 
             # Store runtime type before creation
             info.extra_data["runtime"] = runtime
-            
+
             await self._create_daytona_sandbox(
                 sandbox_id=sandbox_id,
                 env_vars=env_vars,
                 labels=sandbox_labels,
                 runtime=runtime,
             )
-            
+
             # Update status
             info.status = "running"
             info.started_at = utc_now()
@@ -252,7 +254,7 @@ class DaytonaSpawnerService:
         """Create a Daytona sandbox via their API.
 
         This is the actual Daytona SDK integration point.
-        
+
         Args:
             sandbox_id: Unique sandbox identifier
             env_vars: Environment variables to set in sandbox
@@ -305,7 +307,7 @@ class DaytonaSpawnerService:
         runtime: str = "openhands",
     ) -> None:
         """Start the sandbox worker inside the Daytona sandbox.
-        
+
         Args:
             sandbox: Daytona sandbox instance
             env_vars: Environment variables for the worker
@@ -342,15 +344,28 @@ class DaytonaSpawnerService:
         logger.info("Sandbox worker started, check /tmp/worker.log for output")
 
     def _get_worker_script(self) -> str:
-        """Get the standalone sandbox worker script content."""
+        """Get the standalone sandbox worker script content.
+
+        SDK Reference: docs/libraries/software-agent-sdk-clean.md
+        GitHub: https://github.com/OpenHands/software-agent-sdk
+        """
         return '''#!/usr/bin/env python3
-"""Standalone sandbox worker - runs OpenHands agent for a task."""
+"""Standalone sandbox worker - runs OpenHands agent for a task.
+
+SDK Reference: https://github.com/OpenHands/software-agent-sdk
+Local Docs: docs/libraries/software-agent-sdk-clean.md
+"""
 
 import asyncio
 import os
 import logging
 import httpx
-from openhands.sdk import LocalConversation, Agent, LocalWorkspace
+
+# OpenHands SDK imports - per official docs
+from openhands.sdk import LLM, Agent, Conversation, Tool
+from openhands.tools.terminal import TerminalTool
+from openhands.tools.file_editor import FileEditorTool
+from openhands.tools.task_tracker import TaskTrackerTool
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -368,7 +383,7 @@ async def fetch_task():
     """Fetch task details from MCP server via HTTP."""
     async with httpx.AsyncClient(timeout=30) as client:
         # Call MCP tool via HTTP endpoint
-        resp = await client.post(
+        resp = await client.get(
             f"{MCP_SERVER_URL.replace('/mcp', '')}/api/v1/tasks/{TASK_ID}",
         )
         if resp.status_code == 200:
@@ -385,6 +400,7 @@ async def report_event(event_type: str, event_data: dict):
                 json={
                     "task_id": TASK_ID,
                     "agent_id": AGENT_ID,
+                    "sandbox_id": SANDBOX_ID,
                     "event_type": event_type,
                     "event_data": event_data,
                 },
@@ -422,24 +438,45 @@ async def update_task_status(status: str, result: str = None):
 
 
 async def main():
-    logger.info(f"Sandbox worker starting for task {TASK_ID}")
+    logger.info(f"OpenHands Worker starting for task {TASK_ID}")
     
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
+        return
+    
+    if not LLM_API_KEY:
+        logger.error("LLM_API_KEY required")
+        await update_task_status("failed", "Missing LLM_API_KEY")
         return
     
     # Fetch task
     task = await fetch_task()
     if not task:
         logger.error(f"Could not fetch task {TASK_ID}")
+        await update_task_status("failed", "Could not fetch task")
         return
     
     task_desc = task.get("description", "No description")
     logger.info(f"Task: {task_desc}")
     
-    # Create agent and workspace
-    workspace = LocalWorkspace(workspace_dir="/workspace")
-    agent = Agent(model=LLM_MODEL, api_key=LLM_API_KEY)
+    await update_task_status("in_progress")
+    await report_event("agent_started", {"task": task_desc[:200]})
+    
+    # Create LLM instance (per SDK docs - LLM is separate from Agent)
+    llm = LLM(
+        model=LLM_MODEL,
+        api_key=LLM_API_KEY,
+    )
+    
+    # Create agent with LLM and tools (per SDK docs)
+    agent = Agent(
+        llm=llm,
+        tools=[
+            Tool(name=TerminalTool.name),
+            Tool(name=FileEditorTool.name),
+            Tool(name=TaskTrackerTool.name),
+        ],
+    )
     
     # Event callback for Guardian observation
     def on_event(event):
@@ -447,14 +484,15 @@ async def main():
         event_data = {"message": str(event)[:300]}
         asyncio.create_task(report_event(event_type, event_data))
     
-    # Create conversation with callbacks
-    conversation = LocalConversation(
+    # Create conversation with callbacks (per SDK docs - use Conversation, not LocalConversation)
+    conversation = Conversation(
         agent=agent,
-        workspace=workspace,
+        workspace="/workspace",
         callbacks=[on_event],
     )
     
-    # Register with server
+    # Register with server for Guardian observation
+    # Per SDK docs: conversation ID is at conversation.state.id
     await register_conversation(str(conversation.state.id))
     
     # Send task and run
@@ -463,11 +501,13 @@ async def main():
     
     try:
         conversation.run()
-        logger.info("Agent completed")
+        logger.info("Agent completed successfully")
         await update_task_status("completed", "Task completed successfully")
+        await report_event("agent_completed", {"success": True})
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         await update_task_status("failed", str(e))
+        await report_event("agent_failed", {"error": str(e)})
 
 
 if __name__ == "__main__":
@@ -475,9 +515,17 @@ if __name__ == "__main__":
 '''
 
     def _get_claude_worker_script(self) -> str:
-        """Get the Claude Agent SDK worker script content."""
+        """Get the Claude Agent SDK worker script content.
+
+        SDK Reference: docs/libraries/claude-agent-sdk-python-clean.md
+        GitHub: https://github.com/anthropics/claude-agent-sdk-python
+        """
         return '''#!/usr/bin/env python3
-"""Standalone sandbox worker - runs Claude Agent SDK for a task."""
+"""Standalone sandbox worker - runs Claude Agent SDK for a task.
+
+SDK Reference: https://github.com/anthropics/claude-agent-sdk-python
+Local Docs: docs/libraries/claude-agent-sdk-python-clean.md
+"""
 
 import asyncio
 import os
@@ -606,7 +654,7 @@ async def run_agent(task_description: str):
         cwd=Path("/workspace"),
         max_turns=50,
         max_budget_usd=10.0,
-        model="claude-sonnet-4-5",
+        model="claude-sonnet-4-20250514",  # Per SDK docs - use full model name with date
         mcp_servers={"workspace": tools_server},
         hooks={"PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool])]},
     )
