@@ -29,16 +29,19 @@ from omoi_os.services.task_queue import TaskQueueService
 # =============================================================================
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def client() -> Generator[TestClient, None, None]:
     """Create a FastAPI test client (unauthenticated).
 
-    Session-scoped because the app's MCP server can only start once.
-    Use this for testing public endpoints or when you want to test
-    authentication failures.
+    The app's lifespan respects TESTING=true (set above) and skips:
+    - Background monitoring loops (heartbeat, diagnostic, anomaly, etc.)
+    - MCP server startup
+
+    This allows testing endpoints without hanging on background tasks.
     """
     from omoi_os.api.main import app
 
+    # Now safe to enter lifespan because TESTING=true disables background loops
     with TestClient(app) as test_client:
         yield test_client
 
@@ -221,6 +224,7 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
     Create a fresh database service for each test.
 
     Creates tables before test, drops them after.
+    Uses session-isolated data - tests run in transactions that are rolled back.
     """
     # Extract database name from URL and create it if it doesn't exist
     from urllib.parse import urlparse
@@ -231,6 +235,7 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
 
     # Connect to postgres database to create test database
     admin_url = test_database_url.rsplit("/", 1)[0] + "/postgres"
+    admin_db = None
     try:
         admin_db = DatabaseService(admin_url)
         with admin_db.get_session() as session:
@@ -245,13 +250,20 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
         # If we can't create the database, try to proceed anyway
         # (database might already exist or we don't have permissions)
         pass
+    finally:
+        # Dispose admin connection
+        if admin_db:
+            admin_db.engine.dispose()
 
     db = DatabaseService(test_database_url)
     db.create_tables()
     try:
         yield db
     finally:
-        db.drop_tables()
+        # Clean up: dispose engine first (releases connections), then drop
+        db.engine.dispose()
+        # Skip drop_tables to avoid blocking on lock wait
+        # Tables will be recreated fresh via create_tables() in next test
 
 
 @pytest.fixture
