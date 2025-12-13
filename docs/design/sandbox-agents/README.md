@@ -6,6 +6,17 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 
 ---
 
+## 🚀 Getting Started
+
+**New to this project?** Start here:
+
+1. **[Development Workflow Guide](./10_development_workflow.md)** — Step-by-step instructions for using these docs to build features
+2. **[Implementation Checklist](./06_implementation_checklist.md)** — Copy-pasteable test code and implementation for each phase
+
+The workflow guide explains *how* to use these documents practically. The checklist contains the actual code to copy.
+
+---
+
 ## 🎯 Two-Track Implementation Strategy
 
 ```
@@ -48,6 +59,7 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 | 07 | [Existing Systems Integration](./07_existing_systems_integration.md) | Guardian, Registry, Fault Tolerance | Full | 🆕 NEW |
 | 08 | [Frontend Integration](./08_frontend_integration.md) | UI components, WebSocket hooks, **+ Rich Activity Feed spec** | Full | 🆕 NEW |
 | 09 | [Rich Activity Feed Architecture](./09_rich_activity_feed_architecture.md) | ⭐ **Future**: Tool events, diffs, streaming | Future | 🔮 POST-MVP |
+| 10 | [Development Workflow Guide](./10_development_workflow.md) | 🚀 **Start Here**: How to use these docs | Both | 🆕 NEW |
 
 ### Status Legend
 - 📋 Design - Design document, not yet validated
@@ -61,29 +73,35 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 ## Reading Order
 
 ### For MVP (Quick Start)
-1. **Gap Analysis** - See what's already built (85% exists!) ✅
-2. **Implementation Checklist** - ⭐ **Start here** - Phases 0-3.5 only
-3. **Architecture** - Reference as needed
+1. **Development Workflow Guide** - 🚀 **Start here** - How to use these docs
+2. **Gap Analysis** - See what's already built (85% exists!) ✅
+3. **Implementation Checklist** - ⭐ Phases 0-3.5 test code & implementation
+4. **Architecture** - Reference as needed
 
 ### For Full Integration
-4. **Existing Systems Integration** - Understand Guardian, Fault Tolerance
-5. **Implementation Checklist** - Phases 4-7
-6. **Git Workflow** - Branch/PR automation details
-7. **Frontend Integration** - UI components and WebSocket hooks (Optional)
+5. **Existing Systems Integration** - Understand Guardian, Fault Tolerance
+6. **Implementation Checklist** - Phases 4-7
+7. **Git Workflow** - Branch/PR automation details
+8. **Frontend Integration** - UI components and WebSocket hooks (Optional)
 
 ### For Future Enhancements (Post-MVP)
-8. **Rich Activity Feed Architecture** - Tool events, file diffs, streaming (Optional)
+9. **Rich Activity Feed Architecture** - Tool events, file diffs, streaming (Optional)
 
 ---
 
 ## Quick Start for Implementation
 
-```bash
-# 1. Run existing infrastructure tests (Phase 0)
-pytest tests/integration/test_websocket_existing.py -v
+> 📖 **For detailed instructions, see [Development Workflow Guide](./10_development_workflow.md)**
 
-# 2. If Phase 0 passes, proceed with Phase 1
-# See 06_implementation_checklist.md for details
+```bash
+# 1. Setup environment
+cd backend && uv sync
+
+# 2. Run existing infrastructure tests (Phase 0)
+pytest tests/integration/ -v -k "websocket or event_bus"
+
+# 3. If Phase 0 passes, proceed with Phase 1
+# See 06_implementation_checklist.md for copy-pasteable code
 ```
 
 ---
