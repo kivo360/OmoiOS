@@ -47,12 +47,14 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 | 06 | [Implementation Checklist](./06_implementation_checklist.md) | ⭐ **Test-driven implementation plan** | Both | 🆕 NEW |
 | 07 | [Existing Systems Integration](./07_existing_systems_integration.md) | Guardian, Registry, Fault Tolerance | Full | 🆕 NEW |
 | 08 | [Frontend Integration](./08_frontend_integration.md) | UI components, WebSocket hooks, **+ Rich Activity Feed spec** | Full | 🆕 NEW |
+| 09 | [Rich Activity Feed Architecture](./09_rich_activity_feed_architecture.md) | ⭐ **Future**: Tool events, diffs, streaming | Future | 🔮 POST-MVP |
 
 ### Status Legend
 - 📋 Design - Design document, not yet validated
 - ✅ Validated - Cross-referenced against codebase
 - 🆕 NEW - Recently added
 - ⏳ In Progress - Implementation underway
+- 🔮 POST-MVP - Future enhancement (implement after MVP validated)
 
 ---
 
@@ -68,6 +70,9 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 5. **Implementation Checklist** - Phases 4-7
 6. **Git Workflow** - Branch/PR automation details
 7. **Frontend Integration** - UI components and WebSocket hooks (Optional)
+
+### For Future Enhancements (Post-MVP)
+8. **Rich Activity Feed Architecture** - Tool events, file diffs, streaming (Optional)
 
 ---
 
