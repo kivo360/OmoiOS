@@ -44,6 +44,13 @@ services:
       - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
       - REDIS_URL=redis://redis:6379
       - PYTHONUNBUFFERED=1
+      # Disable background loops - they run in separate containers
+      - ORCHESTRATOR_ENABLED=false
+      - MONITORING_ENABLED=false
+      - MCP_ENABLED=false
+      # Daytona configuration (passed through from host)
+      - DAYTONA_SANDBOX_EXECUTION=${DAYTONA_SANDBOX_EXECUTION:-true}
+      - DAYTONA_API_KEY=${DAYTONA_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -104,6 +111,78 @@ services:
           path: ./config.py
           target: /app/config.py
         # Rebuild on dependency changes
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
+    restart: unless-stopped
+
+  # Orchestrator - handles task assignment and Daytona sandbox spawning
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: omoi_os_orchestrator
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
+      - REDIS_URL=redis://redis:6379
+      - PYTHONUNBUFFERED=1
+      # Daytona configuration
+      - DAYTONA_SANDBOX_EXECUTION=${DAYTONA_SANDBOX_EXECUTION:-true}
+      - DAYTONA_API_KEY=${DAYTONA_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m omoi_os.workers.orchestrator_worker
+    develop:
+      watch:
+        - action: restart
+          path: ./omoi_os/workers
+          target: /app/omoi_os/workers
+        - action: restart
+          path: ./omoi_os/services/daytona_spawner.py
+          target: /app/omoi_os/services/daytona_spawner.py
+        - action: restart
+          path: ./omoi_os/services/task_queue.py
+          target: /app/omoi_os/services/task_queue.py
+        - action: rebuild
+          path: ./pyproject.toml
+        - action: rebuild
+          path: ./uv.lock
+    restart: unless-stopped
+
+  # Monitoring - handles all monitoring loops (heartbeat, diagnostic, anomaly, etc.)
+  monitoring:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    container_name: omoi_os_monitoring
+    environment:
+      - DATABASE_URL=postgresql+psycopg://postgres:postgres@postgres:5432/app_db
+      - REDIS_URL=redis://redis:6379
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: python -m omoi_os.workers.monitoring_worker
+    develop:
+      watch:
+        - action: restart
+          path: ./omoi_os/workers
+          target: /app/omoi_os/workers
+        - action: restart
+          path: ./omoi_os/services/intelligent_guardian.py
+          target: /app/omoi_os/services/intelligent_guardian.py
+        - action: restart
+          path: ./omoi_os/services/monitoring_loop.py
+          target: /app/omoi_os/services/monitoring_loop.py
+        - action: restart
+          path: ./omoi_os/services/diagnostic.py
+          target: /app/omoi_os/services/diagnostic.py
         - action: rebuild
           path: ./pyproject.toml
         - action: rebuild
