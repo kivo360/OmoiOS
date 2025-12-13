@@ -403,6 +403,10 @@ class MonitoringSettings(OmoiBaseSettings):
         extra="ignore",
     )
 
+    # Master toggle for all monitoring loops
+    # Set MONITORING_ENABLED=false to disable all background monitoring
+    enabled: bool = True
+
     guardian_interval_seconds: int = 60
     conductor_interval_seconds: int = 300
     health_check_interval_seconds: int = 30
