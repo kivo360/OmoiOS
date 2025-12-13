@@ -1,7 +1,7 @@
 # Existing Systems Integration Guide
 
 **Status**: Draft  
-**Last Updated**: 2024-12-12  
+**Last Updated**: 2025-12-12  
 **Purpose**: Document how existing systems work and how they need to change to support sandbox agents
 
 ---

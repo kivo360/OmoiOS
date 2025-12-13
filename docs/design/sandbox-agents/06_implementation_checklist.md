@@ -2686,6 +2686,180 @@ async def test_merge_work_completes_pr():
 | 5.9 | Add AI branch naming | ⬜ |
 | 5.10 | Run tests - confirm PASS | ⬜ |
 
+### 5.3 Rollback & Recovery Strategies
+
+> **Critical**: Git operations are stateful and can leave partial state. Define recovery for each failure mode.
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        ROLLBACK STRATEGY MATRIX                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  FAILURE POINT              RECOVERY ACTION                 AUTO?           │
+│  ─────────────              ───────────────                 ─────           │
+│                                                                             │
+│  Sandbox creation fails     Log error, mark task failed     ✅ Auto        │
+│                             No cleanup needed (nothing created)             │
+│                                                                             │
+│  Branch creation fails      Retry 3x with backoff           ✅ Auto        │
+│                             Then mark task failed                           │
+│                                                                             │
+│  Agent crash mid-work       Preserve branch for debug       ⚠️ Manual      │
+│                             Don't delete uncommitted work                   │
+│                             Guardian can restart task                       │
+│                                                                             │
+│  Commit fails               Retry commit                    ✅ Auto        │
+│                             Log diff for manual recovery                    │
+│                                                                             │
+│  PR creation fails          Retry 3x                        ✅ Auto        │
+│                             Leave branch for manual PR                      │
+│                             Mark task as "needs_review"                     │
+│                                                                             │
+│  PR has conflicts           Do NOT auto-merge               ⚠️ Manual      │
+│                             Notify user                                     │
+│                             Agent can attempt resolution (future)           │
+│                                                                             │
+│  Merge fails                Do NOT force push               ⚠️ Manual      │
+│                             Notify user                                     │
+│                             Keep PR open for review                         │
+│                                                                             │
+│  Sandbox termination fails  Log error, orphan warning       ✅ Auto        │
+│                             Background cleanup job                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Rollback Tests
+
+```python
+# tests/integration/test_branch_workflow_rollback.py
+
+import pytest
+from unittest.mock import MagicMock, patch
+
+
+@pytest.mark.asyncio
+async def test_branch_creation_retry_on_transient_failure():
+    """Branch creation should retry on GitHub API failures."""
+    from omoi_os.services.branch_workflow import BranchWorkflowService
+    
+    mock_github = MagicMock()
+    # First two calls fail, third succeeds
+    mock_github.create_branch.side_effect = [
+        Exception("GitHub API rate limited"),
+        Exception("GitHub API timeout"),
+        {"success": True, "ref": "refs/heads/feature/123"},
+    ]
+    
+    service = BranchWorkflowService(github_service=mock_github)
+    
+    result = await service.start_work_on_ticket(
+        ticket_id="123",
+        ticket_title="Test",
+        repo_owner="org",
+        repo_name="repo"
+    )
+    
+    # VERIFY: Succeeded after retries
+    assert result["success"] is True
+    assert mock_github.create_branch.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_pr_conflict_does_not_auto_merge():
+    """PR with conflicts should NOT be auto-merged."""
+    from omoi_os.services.branch_workflow import BranchWorkflowService
+    
+    mock_github = MagicMock()
+    mock_github.get_pull_request.return_value = {
+        "number": 42,
+        "mergeable": False,
+        "mergeable_state": "dirty",  # Has conflicts
+    }
+    
+    service = BranchWorkflowService(github_service=mock_github)
+    
+    result = await service.merge_ticket_work(
+        ticket_id="123",
+        pr_number=42,
+        auto_merge=True  # Requested auto-merge
+    )
+    
+    # VERIFY: Did NOT attempt merge
+    assert result["success"] is False
+    assert result["reason"] == "conflicts"
+    assert result["needs_manual_review"] is True
+    mock_github.merge_pull_request.assert_not_called()
+
+
+@pytest.mark.asyncio  
+async def test_agent_crash_preserves_branch():
+    """Agent crash should NOT delete the branch (preserves work)."""
+    from omoi_os.services.branch_workflow import BranchWorkflowService
+    
+    mock_github = MagicMock()
+    
+    service = BranchWorkflowService(github_service=mock_github)
+    
+    # Simulate agent crash cleanup
+    await service.handle_agent_failure(
+        ticket_id="123",
+        branch_name="feature/123-add-auth",
+        error="Agent process killed"
+    )
+    
+    # VERIFY: Branch NOT deleted
+    mock_github.delete_branch.assert_not_called()
+    
+    # VERIFY: Task marked for review
+    # (would check database in real test)
+
+
+@pytest.mark.asyncio
+async def test_sandbox_cleanup_on_success():
+    """Successful completion should cleanup sandbox."""
+    from omoi_os.services.branch_workflow import BranchWorkflowService
+    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    
+    mock_github = MagicMock()
+    mock_daytona = MagicMock()
+    mock_daytona.terminate_sandbox.return_value = {"success": True}
+    
+    service = BranchWorkflowService(
+        github_service=mock_github,
+        daytona_service=mock_daytona
+    )
+    
+    await service.complete_workflow(
+        ticket_id="123",
+        sandbox_id="sandbox-abc",
+        pr_number=42
+    )
+    
+    # VERIFY: Sandbox terminated
+    mock_daytona.terminate_sandbox.assert_called_once_with("sandbox-abc")
+```
+
+#### Recovery State Tracking
+
+Add to `sandbox_sessions` table:
+
+```sql
+-- Track recovery state for partial failures
+ALTER TABLE sandbox_sessions ADD COLUMN IF NOT EXISTS recovery_state JSONB DEFAULT '{}';
+
+-- Example recovery_state:
+-- {
+--   "branch_created": true,
+--   "commits_pushed": true,
+--   "pr_created": false,
+--   "pr_number": null,
+--   "last_error": "GitHub API rate limited",
+--   "retry_count": 2,
+--   "last_retry_at": "2025-12-12T10:30:00Z"
+-- }
+```
+
 ---
 
 ## Integration Test Suite
