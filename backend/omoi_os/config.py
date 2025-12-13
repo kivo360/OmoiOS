@@ -407,6 +407,10 @@ class MonitoringSettings(OmoiBaseSettings):
     # Set MONITORING_ENABLED=false to disable all background monitoring
     enabled: bool = True
 
+    # Toggle for orchestrator loop (task assignment/sandbox spawning)
+    # Set ORCHESTRATOR_ENABLED=false to disable the orchestrator
+    orchestrator_enabled: bool = True
+
     guardian_interval_seconds: int = 60
     conductor_interval_seconds: int = 300
     health_check_interval_seconds: int = 30

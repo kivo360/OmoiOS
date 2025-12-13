@@ -271,6 +271,36 @@ docker-clean:
     cd {{backend_dir}} && docker-compose up -d --build
 
 # ============================================================================
+# Docker Compose Watch (Hot-Reload Development)
+# ============================================================================
+
+# Start all backend services with hot-reload (recommended for development)
+[group('docker')]
+watch:
+    @echo "🚀 Starting all backend services with hot-reload..."
+    @echo "   API: http://localhost:{{api_port}}"
+    @echo "   Press Ctrl+C to stop"
+    cd {{backend_dir}} && docker compose watch
+
+# Start only API + infrastructure (no background workers)
+[group('docker')]
+watch-api:
+    @echo "🚀 Starting API with hot-reload (no workers)..."
+    cd {{backend_dir}} && docker compose watch api postgres redis
+
+# Start orchestrator worker only
+[group('docker')]
+watch-orchestrator:
+    @echo "🚀 Starting orchestrator worker with hot-reload..."
+    cd {{backend_dir}} && docker compose watch orchestrator postgres redis
+
+# Start monitoring worker only
+[group('docker')]
+watch-monitoring:
+    @echo "🚀 Starting monitoring worker with hot-reload..."
+    cd {{backend_dir}} && docker compose watch monitoring postgres redis
+
+# ============================================================================
 # Service Utilities
 # ============================================================================
 
@@ -473,6 +503,60 @@ backend-api:
 backend-worker:
     @echo "🚀 Starting worker..."
     cd {{backend_dir}} && uv run --active python -m omoi_os.worker
+
+# ============================================================================
+# Separate Process Development (No Docker)
+# ============================================================================
+
+# Quick local API - all background loops disabled
+[group('services')]
+api-light port=api_port:
+    @echo "🚀 Starting lightweight API (no background loops)..."
+    cd {{backend_dir}} && MONITORING_ENABLED=false ORCHESTRATOR_ENABLED=false MCP_ENABLED=false \
+    DAYTONA_SANDBOX_EXECUTION=true \
+    uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{port}} --reload
+
+# Start orchestrator as separate process (local, no Docker)
+[group('services')]
+orchestrator:
+    @echo "🚀 Starting orchestrator worker..."
+    cd {{backend_dir}} && uv run --active python -m omoi_os.workers.orchestrator_worker
+
+# Start monitoring as separate process (local, no Docker)
+[group('services')]
+monitoring:
+    @echo "🚀 Starting monitoring worker..."
+    cd {{backend_dir}} && uv run --active python -m omoi_os.workers.monitoring_worker
+
+# ============================================================================
+# Full Stack Development
+# ============================================================================
+
+# Start everything: backend (docker watch) + frontend
+[group('services')]
+dev-watch:
+    #!/usr/bin/env bash
+    set -e
+    echo "🚀 Starting full stack with hot-reload..."
+    echo ""
+    echo "Backend API: http://localhost:{{api_port}}"
+    echo "Frontend: http://localhost:{{frontend_port}}"
+    echo ""
+    
+    # Start backend in background
+    cd {{backend_dir}} && docker compose watch &
+    BACKEND_PID=$!
+    
+    # Wait for API to be ready
+    echo "Waiting for backend..."
+    sleep 5
+    
+    # Start frontend in foreground
+    echo "Starting frontend..."
+    cd {{frontend_dir}} && npm run dev -- -p {{frontend_port}}
+    
+    # Cleanup on exit
+    kill $BACKEND_PID 2>/dev/null || true
 
 # ============================================================================
 # Frontend Services
@@ -994,13 +1078,18 @@ groups:
     @echo "  quality    - Code quality (lint, format, type)"
     @echo "  database   - Database operations"
     @echo "  docker     - Docker operations"
+    @echo "    • watch            - Hot-reload all backend services"
+    @echo "    • watch-api        - Hot-reload API only (no workers)"
+    @echo "    • watch-orchestrator - Hot-reload orchestrator"
+    @echo "    • watch-monitoring - Hot-reload monitoring"
     @echo "  services   - Running services (backend & frontend)"
+    @echo "    • api-light    - Lightweight API (no background loops)"
+    @echo "    • orchestrator - Standalone orchestrator worker"
+    @echo "    • monitoring   - Standalone monitoring worker"
+    @echo "    • dev-watch    - Full stack (backend docker + frontend)"
     @echo "    • status       - Check all service statuses"
     @echo "    • stop-all     - Stop all running services"
-    @echo "    • restart-all  - Restart all services"
     @echo "    • health-*     - Health check commands"
-    @echo "    • check-port   - Check if port is in use"
-    @echo "    • kill-port    - Kill process on port"
     @echo "  frontend   - Frontend development commands"
     @echo "  docs       - Documentation (includes AI organization)"
     @echo "  config     - Configuration"
@@ -1010,11 +1099,11 @@ groups:
     @echo "  ci         - CI/CD simulation"
     @echo "  advanced   - Advanced operations"
     @echo ""
-    @echo "AI-Powered Features:"
-    @echo "  just docs-organize              - AI-organize docs (50 concurrent workers)"
-    @echo "  just docs-organize 100          - Use 100 concurrent workers (max speed)"
-    @echo "  just docs-organize-apply        - Apply AI suggestions"
-    @echo "  just docs-organize-pattern PATTERN - Organize specific files"
+    @echo "Quick Start (Hot-Reload Development):"
+    @echo "  just watch                      - Start all backend services"
+    @echo "  just watch-api                  - Start API only (for quick testing)"
+    @echo "  just api-light                  - Local API without Docker"
+    @echo "  just dev-watch                  - Full stack (backend + frontend)"
     @echo ""
     @echo "Use 'just --list' to see all commands"
 
