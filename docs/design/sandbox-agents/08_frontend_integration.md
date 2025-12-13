@@ -298,23 +298,23 @@ Since the core agent UI already exists, sandbox-specific additions are **lower p
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    SANDBOX UI: BUILD ON EXISTING                             │
+│                    SANDBOX UI: BUILD ON EXISTING UI                         │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  EXISTING UI (No changes needed):                                           │
-│  ├─ Agent list page             → 03_agents_workspaces.md                  │
-│  ├─ Agent detail with tabs      → 03_agents_workspaces.md                  │
-│  ├─ Trajectory & interventions  → 10a_monitoring_system.md                 │
-│  ├─ Real-time WebSocket events  → 10a_monitoring_system.md                 │
-│  └─ Command center & spawn      → 10_command_center.md                     │
+│  ├─ Agent list page             → 03_agents_workspaces.md                   │
+│  ├─ Agent detail with tabs      → 03_agents_workspaces.md                   │
+│  ├─ Trajectory & interventions  → 10a_monitoring_system.md                  │
+│  ├─ Real-time WebSocket events  → 10a_monitoring_system.md                  │
+│  └─ Command center & spawn      → 10_command_center.md                      │
 │                                                                             │
 │  SANDBOX ADDITIONS (This document):                                         │
-│  ├─ Sandbox lifecycle badge     → Agent cards & detail header              │
-│  ├─ Git tab with branch/PR      → New tab in agent detail                  │
-│  ├─ Clone progress during spawn → Enhancement to spawn modal               │
-│  └─ User message panel          → Simple UI for sending messages           │
+│  ├─ Sandbox lifecycle badge     → Agent cards & detail header               │
+│  ├─ Git tab with branch/PR      → New tab in agent detail                   │
+│  ├─ Clone progress during spawn → Enhancement to spawn modal                │
+│  └─ User message panel          → Simple UI for sending messages            │
 │                                                                             │
-│  KEY INSIGHT: Most UI already exists! Sandbox agents are just              │
+│  KEY INSIGHT: Most UI already exists! Sandbox agents are just               │
 │  "agents with extra context" - reuse existing components.                   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
