@@ -46,7 +46,7 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 | 05 | [HTTP API Migration](./05_http_api_migration.md) | MCP→HTTP mapping, new routes | Both | 📋 Design |
 | 06 | [Implementation Checklist](./06_implementation_checklist.md) | ⭐ **Test-driven implementation plan** | Both | 🆕 NEW |
 | 07 | [Existing Systems Integration](./07_existing_systems_integration.md) | Guardian, Registry, Fault Tolerance | Full | 🆕 NEW |
-| 08 | [Frontend Integration](./08_frontend_integration.md) | UI components, WebSocket hooks, wireframes | Full | 🆕 NEW |
+| 08 | [Frontend Integration](./08_frontend_integration.md) | UI components, WebSocket hooks, **+ Rich Activity Feed spec** | Full | 🆕 NEW |
 
 ### Status Legend
 - 📋 Design - Design document, not yet validated

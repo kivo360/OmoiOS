@@ -322,6 +322,410 @@ Since the core agent UI already exists, sandbox-specific additions are **lower p
 
 ---
 
+## Future Enhancement: Rich Activity Feed
+
+**Status**: Future / Post-MVP  
+**Priority**: Nice-to-have  
+**Effort**: ~2-3 weeks
+
+### Current State
+
+The existing agent detail view (`10_command_center.md`) shows:
+- ✅ Agent thinking indicator ("Thought for 3s")
+- ⚠️ Tool use summary only ("Explored 15 files")
+- ✅ Agent text responses (rendered blocks)
+- ✅ User follow-up input
+
+**What's missing**: Detailed, real-time tool calls and file edits inline (like Cursor/Claude.ai).
+
+---
+
+### Proposed: Rich Activity Feed
+
+Transform the activity feed into a Cursor-style chat interface with expandable tool calls:
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│  Agent Activity Feed                                                  │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  💭 Thinking...                                                │ │
+│  │  I'll analyze the authentication module to understand the      │ │
+│  │  current implementation before adding OAuth2 support.          │ │
+│  │                                                     (3.2s)     │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  🔧 Read file: src/auth/handler.py                   [▼ Show]  │ │
+│  │     248 lines • completed in 0.3s                              │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  🔧 Search codebase: "jwt token validation"          [▼ Show]  │ │
+│  │     Found 3 files • completed in 1.2s                          │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  💬 Agent Response                                             │ │
+│  │                                                                │ │
+│  │  I've analyzed the codebase. The current auth system uses      │ │
+│  │  basic JWT validation in `handler.py`. I'll now add OAuth2     │ │
+│  │  support by:                                                   │ │
+│  │                                                                │ │
+│  │  1. Creating an OAuth2 configuration module                    │ │
+│  │  2. Adding token refresh logic                                 │ │
+│  │  3. Updating the handler to support both flows                 │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  📝 Edited: src/auth/oauth2.py (NEW)                 [▼ Diff]  │ │
+│  │     +127 lines • created new file                              │ │
+│  │  ┌──────────────────────────────────────────────────────────┐ │ │
+│  │  │  + """OAuth2 authentication module."""                   │ │ │
+│  │  │  + from typing import Optional                           │ │ │
+│  │  │  + import jwt                                            │ │ │
+│  │  │  +                                                       │ │ │
+│  │  │  + class OAuth2Handler:                                  │ │ │
+│  │  │  +     def __init__(self, client_id: str):              │ │ │
+│  │  │  +         self.client_id = client_id                   │ │ │
+│  │  │  +         ...                                          │ │ │
+│  │  │  │                                    [View Full Diff →] │ │ │
+│  │  └──────────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  📝 Edited: src/auth/handler.py                      [▼ Diff]  │ │
+│  │     +15 -3 lines                                               │ │
+│  │  ┌──────────────────────────────────────────────────────────┐ │ │
+│  │  │    def validate_token(self, token: str):                 │ │ │
+│  │  │  -     return jwt.decode(token, self.secret)             │ │ │
+│  │  │  +     # Support both JWT and OAuth2 tokens              │ │ │
+│  │  │  +     if self._is_oauth_token(token):                   │ │ │
+│  │  │  +         return self.oauth2.validate(token)            │ │ │
+│  │  │  +     return jwt.decode(token, self.secret)             │ │ │
+│  │  └──────────────────────────────────────────────────────────┘ │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+│  ┌────────────────────────────────────────────────────────────────┐ │
+│  │  🔧 Run command: pytest tests/auth/                  [▼ Show]  │ │
+│  │     ✅ 12 passed • completed in 4.5s                           │ │
+│  └────────────────────────────────────────────────────────────────┘ │
+│                                                                      │
+├──────────────────────────────────────────────────────────────────────┤
+│  [Ask follow-up or provide guidance...]                      [Send] │
+└──────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### New WebSocket Events Required
+
+Add these to the event types in `10a_monitoring_system.md`:
+
+```python
+# Tool Execution Events
+TOOL_STARTED = "TOOL_STARTED"
+TOOL_COMPLETED = "TOOL_COMPLETED"
+TOOL_FAILED = "TOOL_FAILED"
+
+# File Change Events
+FILE_CREATED = "FILE_CREATED"
+FILE_EDITED = "FILE_EDITED"
+FILE_DELETED = "FILE_DELETED"
+
+# Streaming Events
+AGENT_THINKING_START = "AGENT_THINKING_START"
+AGENT_THINKING_END = "AGENT_THINKING_END"
+AGENT_MESSAGE_CHUNK = "AGENT_MESSAGE_CHUNK"
+AGENT_MESSAGE_END = "AGENT_MESSAGE_END"
+```
+
+**Event Payloads**:
+
+```json
+// TOOL_STARTED
+{
+  "event_type": "TOOL_STARTED",
+  "entity_type": "agent",
+  "entity_id": "worker-1",
+  "payload": {
+    "tool_id": "uuid",
+    "tool_name": "read_file",
+    "tool_args": {
+      "path": "src/auth/handler.py"
+    }
+  }
+}
+
+// TOOL_COMPLETED
+{
+  "event_type": "TOOL_COMPLETED",
+  "entity_type": "agent",
+  "entity_id": "worker-1",
+  "payload": {
+    "tool_id": "uuid",
+    "tool_name": "read_file",
+    "duration_ms": 320,
+    "result_summary": "248 lines",
+    "result_preview": "First 500 chars...",  // Optional, for expandable view
+    "success": true
+  }
+}
+
+// FILE_EDITED
+{
+  "event_type": "FILE_EDITED",
+  "entity_type": "agent",
+  "entity_id": "worker-1",
+  "payload": {
+    "file_path": "src/auth/handler.py",
+    "change_type": "edit",  // "create", "edit", "delete"
+    "lines_added": 15,
+    "lines_removed": 3,
+    "diff_preview": "--- a/src/auth/handler.py\n+++ b/src/auth/handler.py\n...",
+    "commit_sha": null  // Filled after commit
+  }
+}
+
+// AGENT_MESSAGE_CHUNK (for streaming)
+{
+  "event_type": "AGENT_MESSAGE_CHUNK",
+  "entity_type": "agent",
+  "entity_id": "worker-1",
+  "payload": {
+    "message_id": "uuid",
+    "chunk": "I've analyzed the codebase. The current auth system uses ",
+    "chunk_index": 0,
+    "is_thinking": false
+  }
+}
+```
+
+---
+
+### New UI Components Required
+
+```tsx
+// 1. ToolCallCard - Expandable tool execution display
+interface ToolCallCardProps {
+  toolName: string;
+  toolArgs: Record<string, any>;
+  status: 'running' | 'completed' | 'failed';
+  durationMs?: number;
+  resultSummary?: string;
+  resultPreview?: string;  // For expansion
+}
+
+// 2. FileChangeCard - Inline diff preview
+interface FileChangeCardProps {
+  filePath: string;
+  changeType: 'create' | 'edit' | 'delete';
+  linesAdded: number;
+  linesRemoved: number;
+  diffPreview: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}
+
+// 3. StreamingMessage - Typewriter-style message rendering
+interface StreamingMessageProps {
+  messageId: string;
+  chunks: string[];
+  isComplete: boolean;
+  isThinking: boolean;
+}
+
+// 4. ActivityFeed - Container for all activity items
+interface ActivityFeedProps {
+  agentId: string;
+  items: ActivityItem[];  // Union of tools, files, messages
+  onSendMessage: (message: string) => void;
+}
+```
+
+---
+
+### Backend Implementation Required
+
+#### 1. SDK Hook Integration
+
+Hook into Claude Agent SDK callbacks to emit events:
+
+```python
+# In sandbox worker or agent wrapper
+from claude_sdk import Agent, PreToolUseHook, PostToolUseHook
+
+class EventEmittingHooks:
+    def __init__(self, event_bus: EventBusService, agent_id: str):
+        self.event_bus = event_bus
+        self.agent_id = agent_id
+    
+    async def pre_tool_use(self, tool_name: str, tool_args: dict) -> None:
+        """Emit TOOL_STARTED event."""
+        await self.event_bus.publish(SystemEvent(
+            event_type="TOOL_STARTED",
+            entity_type="agent",
+            entity_id=self.agent_id,
+            payload={
+                "tool_id": str(uuid.uuid4()),
+                "tool_name": tool_name,
+                "tool_args": tool_args,
+            }
+        ))
+    
+    async def post_tool_use(
+        self, 
+        tool_name: str, 
+        tool_args: dict, 
+        result: Any,
+        duration_ms: int,
+    ) -> None:
+        """Emit TOOL_COMPLETED event with result summary."""
+        await self.event_bus.publish(SystemEvent(
+            event_type="TOOL_COMPLETED",
+            entity_type="agent",
+            entity_id=self.agent_id,
+            payload={
+                "tool_id": tool_args.get("_tool_id"),
+                "tool_name": tool_name,
+                "duration_ms": duration_ms,
+                "result_summary": self._summarize_result(tool_name, result),
+                "success": True,
+            }
+        ))
+    
+    def _summarize_result(self, tool_name: str, result: Any) -> str:
+        """Create human-readable summary of tool result."""
+        if tool_name == "read_file":
+            return f"{result.count(chr(10)) + 1} lines"
+        elif tool_name == "str_replace_editor":
+            # Parse the edit result
+            return f"+{result.lines_added} -{result.lines_removed} lines"
+        elif tool_name == "bash":
+            return f"Exit code: {result.exit_code}"
+        # ... other tools
+        return "Completed"
+```
+
+#### 2. File Change Detection
+
+```python
+# Track file changes from str_replace_editor tool
+async def on_file_edit(
+    self,
+    file_path: str,
+    old_content: str,
+    new_content: str,
+) -> None:
+    """Emit FILE_EDITED event with diff preview."""
+    import difflib
+    
+    diff = list(difflib.unified_diff(
+        old_content.splitlines(keepends=True),
+        new_content.splitlines(keepends=True),
+        fromfile=f"a/{file_path}",
+        tofile=f"b/{file_path}",
+    ))
+    
+    lines_added = sum(1 for line in diff if line.startswith('+') and not line.startswith('+++'))
+    lines_removed = sum(1 for line in diff if line.startswith('-') and not line.startswith('---'))
+    
+    await self.event_bus.publish(SystemEvent(
+        event_type="FILE_EDITED",
+        entity_type="agent",
+        entity_id=self.agent_id,
+        payload={
+            "file_path": file_path,
+            "change_type": "edit",
+            "lines_added": lines_added,
+            "lines_removed": lines_removed,
+            "diff_preview": ''.join(diff[:50]),  # First 50 lines of diff
+        }
+    ))
+```
+
+#### 3. Streaming Message Support
+
+```python
+# Wrap agent message streaming
+async def stream_agent_response(
+    self,
+    message_id: str,
+    response_stream: AsyncIterator[str],
+) -> None:
+    """Stream agent response chunks over WebSocket."""
+    chunk_index = 0
+    
+    async for chunk in response_stream:
+        await self.event_bus.publish(SystemEvent(
+            event_type="AGENT_MESSAGE_CHUNK",
+            entity_type="agent",
+            entity_id=self.agent_id,
+            payload={
+                "message_id": message_id,
+                "chunk": chunk,
+                "chunk_index": chunk_index,
+                "is_thinking": False,
+            }
+        ))
+        chunk_index += 1
+    
+    await self.event_bus.publish(SystemEvent(
+        event_type="AGENT_MESSAGE_END",
+        entity_type="agent",
+        entity_id=self.agent_id,
+        payload={"message_id": message_id}
+    ))
+```
+
+---
+
+### Implementation Effort Estimate
+
+| Component | Effort | Notes |
+|-----------|--------|-------|
+| **Backend: SDK Hooks** | 3-4 days | Hook into Claude SDK callbacks |
+| **Backend: Event Types** | 1 day | Add new event types to system |
+| **Backend: Diff Generation** | 1 day | Parse and summarize file changes |
+| **Frontend: ToolCallCard** | 2 days | Expandable component with syntax highlighting |
+| **Frontend: FileChangeCard** | 2-3 days | Inline diff viewer |
+| **Frontend: StreamingMessage** | 2 days | Typewriter effect, chunk assembly |
+| **Frontend: ActivityFeed** | 2-3 days | Container, virtual scrolling, state management |
+| **Integration Testing** | 2 days | WebSocket flow, UI tests |
+| **Total** | **~2-3 weeks** | |
+
+---
+
+### Phased Rollout
+
+**Phase 1 (MVP - 1 week)**:
+- Tool call cards (collapsed by default)
+- Basic file change notifications
+- No streaming (render complete messages)
+
+**Phase 2 (Enhanced - 1 week)**:
+- Expandable tool results
+- Inline diff previews
+- Streaming message support
+
+**Phase 3 (Polish - 1 week)**:
+- Syntax highlighting in diffs
+- Virtual scrolling for long sessions
+- Export activity log
+
+---
+
+### Inspiration
+
+This design is inspired by:
+- **Cursor IDE** - Background agent activity feed
+- **Claude.ai** - Artifacts with tool use display
+- **GitHub Copilot Workspace** - Step-by-step execution visibility
+- **Devin** - Full session replay with tool calls
+
+---
+
 ## Related Documents
 
 - [Architecture](./01_architecture.md) - System design
