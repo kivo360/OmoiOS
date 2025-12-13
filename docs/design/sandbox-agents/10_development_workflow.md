@@ -9,6 +9,8 @@
 
 This guide explains **how to use** the design documents in this directory to actually build the sandbox agents system. The key insight is that `06_implementation_checklist.md` is your **actionable guide** — it contains copy-pasteable test code and implementation code for each step.
 
+**Using Cursor?** Jump to [🤖 Cursor AI Prompts](#-cursor-ai-prompts) for ready-to-use prompts with the right `@` context for each phase.
+
 ---
 
 ## Document Purpose Map
@@ -145,6 +147,321 @@ pytest tests/integration/sandbox/test_event_callback.py -v
 # 6. Commit your work
 git add -A
 git commit -m "Phase 1: Add sandbox event callback endpoint"
+```
+
+---
+
+## 🤖 Cursor AI Prompts
+
+Copy these prompts directly into Cursor. The `@` references will automatically include the right context.
+
+### Phase 0: Validate Infrastructure
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md 
+@docs/design/sandbox-agents/02_gap_analysis.md
+
+I'm starting Phase 0 of the sandbox agents implementation. Help me:
+
+1. Identify which existing tests I need to run to validate infrastructure
+2. Run the WebSocket and EventBus integration tests
+3. Check if there are any failing tests I need to fix before proceeding
+
+Show me the exact pytest commands to run and explain what each test validates.
+```
+
+### Phase 1: Sandbox Event Callback
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md 
+@docs/design/sandbox-agents/04_communication_patterns.md
+@backend/tests/conftest.py
+
+I'm implementing Phase 1: Sandbox Event Callback. Following the test-first approach:
+
+1. Create the test file at `tests/integration/sandbox/test_event_callback.py`
+2. Copy the Phase 1 test specifications from the checklist
+3. Make sure the tests use existing fixtures from conftest.py
+
+Start by creating the test file with the test code from the checklist.
+```
+
+**After tests exist:**
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/05_http_api_migration.md
+@backend/omoi_os/api/routes/
+
+The Phase 1 tests are failing (as expected). Now implement the sandbox event callback endpoint:
+
+1. Create `backend/omoi_os/api/routes/sandbox.py`
+2. Implement POST /api/v1/sandbox/{sandbox_id}/events
+3. Register the route in the API router
+4. Follow the patterns from existing routes
+
+Use the implementation code from the checklist.
+```
+
+### Phase 2: Message Injection
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/04_communication_patterns.md
+@backend/omoi_os/api/routes/sandbox.py
+
+I'm implementing Phase 2: Message Injection. Following test-first:
+
+1. Add the Phase 2 test specifications to the sandbox test file
+2. The tests should cover message posting and queue retrieval
+3. Use existing fixtures from conftest.py
+
+Create the tests first, then we'll implement.
+```
+
+**After tests exist:**
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@backend/omoi_os/api/routes/sandbox.py
+@backend/omoi_os/services/event_bus.py
+
+Phase 2 tests are ready. Now implement:
+
+1. POST /api/v1/sandbox/{sandbox_id}/messages - Accept messages for injection
+2. GET /api/v1/sandbox/{sandbox_id}/messages - Poll for pending messages
+3. Use Redis for the message queue (follow EventBusService patterns)
+
+Implement these endpoints to make the tests pass.
+```
+
+### Phase 3: Worker Script Updates
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/01_architecture.md
+@docs/libraries/claude-agent-sdk-python-clean.md
+@backend/omoi_os/services/daytona_spawner.py
+
+I'm implementing Phase 3: Worker Script Updates. I need to:
+
+1. Update the Claude worker script to use HTTP callbacks instead of MCP
+2. Add PreToolUse hooks for message injection (sub-second intervention)
+3. Make the worker report events via POST to our new endpoints
+
+Show me how to modify the worker script template in daytona_spawner.py.
+```
+
+**For OpenHands worker:**
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/libraries/software-agent-sdk-clean.md
+@backend/omoi_os/services/daytona_spawner.py
+
+Now update the OpenHands worker script similarly:
+
+1. Add HTTP callbacks for event reporting
+2. Implement hook-based message injection
+3. Follow the same patterns as the Claude worker
+
+Show me the OpenHands-specific modifications.
+```
+
+### Phase 3.5: GitHub Clone Integration
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/03_git_branch_workflow.md
+@backend/omoi_os/services/daytona_spawner.py
+@backend/omoi_os/services/github_api.py
+
+I'm implementing Phase 3.5: GitHub Clone Integration. I need to:
+
+1. Inject GitHub OAuth token into sandbox environment
+2. Clone the repository when sandbox starts
+3. Create a feature branch for the task
+
+Show me how to modify spawn_sandbox() to include GitHub setup.
+```
+
+### Phase 4: Database Persistence
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/07_existing_systems_integration.md
+@backend/omoi_os/models/
+
+I'm implementing Phase 4: Database Persistence. I need to:
+
+1. Create a SandboxEvent model for persisting events
+2. Add migration for the new table
+3. Update the event callback endpoint to persist events
+
+Follow existing model patterns and avoid SQLAlchemy reserved keywords (no `metadata` attribute!).
+```
+
+### Phase 5: Branch Workflow Service
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/03_git_branch_workflow.md
+@backend/omoi_os/services/github_api.py
+
+I'm implementing Phase 5: BranchWorkflowService. This handles:
+
+1. Creating feature branches when tasks start
+2. Creating PRs when tasks complete
+3. Managing the branch lifecycle (Musubi workflow)
+
+Create the BranchWorkflowService class following existing service patterns.
+```
+
+### Phase 6: Guardian Integration
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/07_existing_systems_integration.md
+@backend/omoi_os/services/intelligent_guardian.py
+@backend/omoi_os/services/conversation_intervention.py
+
+I'm implementing Phase 6: Guardian Integration. I need to:
+
+1. Connect IntelligentGuardian to monitor sandbox agents
+2. Route interventions through message injection (not MCP)
+3. Update trajectory analysis to handle sandbox mode
+
+Show me the modifications needed to integrate Guardian with sandboxes.
+```
+
+### Phase 7: Fault Tolerance
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@docs/design/sandbox-agents/07_existing_systems_integration.md
+@backend/omoi_os/services/restart_orchestrator.py
+
+I'm implementing Phase 7: Fault Tolerance. I need to:
+
+1. Make RestartOrchestrator sandbox-aware
+2. Add heartbeat monitoring for sandbox agents
+3. Implement graceful shutdown and recovery
+
+Show me how to extend the fault tolerance system for sandboxes.
+```
+
+### Debugging / Test Failures
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@backend/tests/integration/sandbox/
+
+My sandbox tests are failing. Here's the error:
+
+[PASTE ERROR HERE]
+
+Help me debug this. Check:
+1. Is the route registered correctly?
+2. Are all imports working?
+3. Does the test use the right fixtures?
+```
+
+### Running All Phase Tests
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+
+I've completed Phase [X]. Help me verify by:
+
+1. Running all tests for this phase
+2. Checking test coverage
+3. Running linting and type checks
+4. Confirming I can proceed to the next phase
+
+What commands should I run?
+```
+
+---
+
+### Utility Prompts
+
+#### Understanding the Architecture
+
+```
+@docs/design/sandbox-agents/01_architecture.md
+@docs/design/sandbox-agents/02_gap_analysis.md
+
+Explain the sandbox agents architecture to me:
+1. How do sandboxes communicate with the main server?
+2. What's the flow when a user sends a message to an agent?
+3. How does Guardian monitor and intervene?
+
+Use diagrams from the architecture doc.
+```
+
+#### Code Review Before Commit
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@backend/omoi_os/api/routes/sandbox.py
+
+Review my sandbox.py implementation:
+1. Does it follow the checklist specifications?
+2. Are there any security issues?
+3. Does it match the API patterns in communication_patterns.md?
+4. Any missing error handling?
+```
+
+#### Understanding Existing Code
+
+```
+@backend/omoi_os/services/daytona_spawner.py
+@docs/design/sandbox-agents/02_gap_analysis.md
+
+Help me understand the existing DaytonaSpawnerService:
+1. How does spawn_sandbox() work?
+2. Where do I need to add GitHub token injection?
+3. What worker script templates exist?
+```
+
+#### Creating a PR Summary
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+
+I just completed Phase [X]. Help me write a PR description that includes:
+1. What was implemented
+2. How it was tested
+3. Any decisions made
+4. What's next (Phase X+1)
+```
+
+#### Quick Context Refresh
+
+```
+@docs/design/sandbox-agents/README.md
+@docs/design/sandbox-agents/06_implementation_checklist.md
+
+I'm returning to this project after a break. Give me a quick summary:
+1. What phase am I on?
+2. What's left to do for MVP?
+3. What should I work on next?
+```
+
+#### SDK Reference
+
+```
+@docs/libraries/claude-agent-sdk-python-clean.md
+
+Show me how to use PreToolUse hooks in the Claude Agent SDK.
+I need to inject a check for pending messages before each tool call.
+```
+
+```
+@docs/libraries/software-agent-sdk-clean.md
+
+Show me how OpenHands/Software Agent SDK handles tool execution hooks.
+I need to add message injection similar to what I did for Claude.
 ```
 
 ---
