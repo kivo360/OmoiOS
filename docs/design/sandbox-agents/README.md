@@ -114,6 +114,7 @@ pytest tests/integration/test_websocket_existing.py -v
 - **BranchWorkflowService**: Manages ticket → branch → PR → merge lifecycle
 - **HTTP over MCP**: Use simple HTTP for task/status operations (more reliable)
 - **MVP Extension Points**: MVP code creates hooks that Full Integration uses
+- **Hook-Based Intervention**: PreToolUse hooks enable sub-second message injection (vs polling)
 
 ---
 

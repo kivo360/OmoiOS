@@ -52,6 +52,23 @@
      - OpenHands: `docs/libraries/software-agent-sdk-clean.md`
    - Status: **Fixed** - Worker scripts now match official SDK documentation
 
+9. **⚠️ Polling-Based Intervention Latency** (Medium Risk - Performance)
+   - Location: Worker scripts in `daytona_spawner.py`
+   - Issue: Current design uses polling for message injection (worker polls after each turn)
+   - Impact: Interventions may be delayed by seconds to minutes (full agent turn cycle)
+   - Solution: **Hook-based injection** - check for pending messages BEFORE each tool call
+   - SDK Support:
+     - **Claude SDK**: Native `PreToolUse` hooks ✅
+     - **OpenHands SDK**: Event callbacks (ActionEvent interception) ⚠️
+   - Benefits:
+     - Sub-second intervention injection (< 100ms vs seconds)
+     - Guardian steering is immediate
+     - User nudges take effect on next tool call
+   - Implementation: Phase 2 enhancement (hook registration in worker scripts)
+   - References:
+     - Claude hooks: `docs/libraries/claude-agent-sdk-python-clean.md` (Lifecycle Hooks section)
+     - OpenHands callbacks: `docs/libraries/software-agent-sdk-clean.md` (Event Callbacks section)
+
 3. **Event Endpoint Overlap** (Low Risk)
    - Current: `/tasks/{id}/events` and `/agent-events` endpoints exist
    - Planned: `/sandboxes/{id}/events` endpoint
