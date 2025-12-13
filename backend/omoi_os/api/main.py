@@ -733,10 +733,11 @@ async def lifespan(app: FastAPI):
     # NOTE: Database tables should be created via alembic migrations, not create_all()
     # Run: alembic upgrade head (handled in Dockerfile CMD)
 
-    # Check if we're in testing mode - skip background loops
+    # Check if we're in testing mode or monitoring is disabled
     is_testing = os.environ.get("TESTING", "").lower() == "true"
+    monitoring_enabled = app_settings.monitoring.enabled
 
-    # Start background loops (skip in test mode to prevent hanging)
+    # Start background loops (skip in test mode or if monitoring disabled)
     orchestrator_task = None
     heartbeat_task = None
     diagnostic_task = None
@@ -744,7 +745,11 @@ async def lifespan(app: FastAPI):
     blocking_detection_task = None
     approval_timeout_task = None
 
-    if not is_testing:
+    skip_monitoring = is_testing or not monitoring_enabled
+    if skip_monitoring and not is_testing:
+        print("⚠️  Monitoring DISABLED via MONITORING_ENABLED=false")
+
+    if not skip_monitoring:
         orchestrator_task = asyncio.create_task(orchestrator_loop())
         heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
         diagnostic_task = asyncio.create_task(diagnostic_monitoring_loop())
@@ -760,7 +765,9 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 print(f"⚠️  Failed to start MonitoringLoop: {e}")
     else:
-        print("🧪 TESTING mode: Skipping background loops")
+        if is_testing:
+            print("🧪 TESTING mode: Skipping background loops")
+        # (monitoring disabled message already printed above)
 
     yield
 
@@ -778,8 +785,8 @@ async def lifespan(app: FastAPI):
     if approval_timeout_task:
         approval_timeout_task.cancel()
 
-    # Stop intelligent monitoring loop if running (and not in test mode)
-    if monitoring_loop and not is_testing:
+    # Stop intelligent monitoring loop if running (and wasn't skipped)
+    if monitoring_loop and not skip_monitoring:
         try:
             await monitoring_loop.stop()
             print("✅ Intelligent Monitoring Loop stopped")
