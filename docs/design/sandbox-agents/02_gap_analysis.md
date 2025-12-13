@@ -141,6 +141,41 @@
    - **Full Integration**: Connect RestartOrchestrator to DaytonaSpawnerService
    - See "MVP vs Full Integration" section below
 
+10. **🟡 GitHub API Missing Methods for Branch Workflow** (Medium Risk - Phase 5 Blocker)
+    - Location: `backend/omoi_os/services/github_api.py`
+    - Issue: GitHub API service missing methods required for BranchWorkflowService
+    - **Existing** (ready to use):
+      - `create_branch()` ✅
+      - `create_pull_request()` ✅
+      - `list_branches()`, `list_commits()`, `list_pull_requests()` ✅
+    - **Missing** (must add in Phase 5):
+      - `merge_pull_request(user_id, owner, repo, pr_number)` ❌
+      - `delete_branch(user_id, owner, repo, branch_name)` ❌
+      - `get_pull_request(user_id, owner, repo, pr_number)` ❌ - for mergeable check
+      - `compare_branches(user_id, owner, repo, base, head)` ❌ - for conflict detection
+    - Impact: BranchWorkflowService cannot complete PR lifecycle
+    - **Required Fix**: Add missing methods before Phase 5 implementation
+
+11. **🔴 RestartOrchestrator Spawns Local Agents, Not Sandboxes** (HIGH Risk - Phase 7 Blocker)
+    - Location: `backend/omoi_os/services/restart_orchestrator.py` line 246-265
+    - Issue: `_spawn_replacement()` uses `AgentRegistryService.register_agent()` which creates local agents
+    - Current code:
+      ```python
+      def _spawn_replacement(self, original_agent: Agent) -> str:
+          replacement = self.agent_registry.register_agent(...)  # LOCAL ONLY!
+          return replacement.id
+      ```
+    - Problem: For sandbox tasks, we need `DaytonaSpawnerService.spawn_for_task()` instead
+    - Impact: Restarted sandbox agents become local agents, breaking sandbox isolation
+    - **Required Fix (Phase 7)**:
+      ```python
+      if task.sandbox_id:  # Was a sandbox task
+          new_sandbox_id = await self.daytona_spawner.spawn_for_task(...)
+      else:
+          replacement = self.agent_registry.register_agent(...)
+      ```
+    - Status: Documented in `07_existing_systems_integration.md` Phase 7 changes
+
 ### File Path Reference
 
 For implementers, here are the exact file locations:

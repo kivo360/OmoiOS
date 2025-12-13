@@ -3582,6 +3582,145 @@ async def _build_from_event_store(self, task: Task) -> AgentTrajectoryContext:
 
 ---
 
+## Critical Implementation Notes - Deep Dive Findings
+
+> **⚠️ READ THIS BEFORE IMPLEMENTATION**: These findings from codebase analysis reveal critical details that affect implementation.
+
+### 🚨 Critical Bug: Missing `sandbox_id` Field
+
+**PROBLEM**: `tasks.py` line 78 does `task.sandbox_id = request.sandbox_id` BUT the Task model **does NOT have a `sandbox_id` field!**
+
+```python
+# CURRENT Task model (backend/omoi_os/models/task.py) - MISSING sandbox_id
+class Task(Base):
+    conversation_id: Mapped[Optional[str]]    # ✅ EXISTS
+    persistence_dir: Mapped[Optional[str]]    # ✅ EXISTS
+    # sandbox_id: NOT PRESENT ❌ - MUST BE ADDED IN PHASE 6
+```
+
+**FIX REQUIRED (Phase 6)**:
+```python
+# Add to Task model:
+sandbox_id: Mapped[Optional[str]] = mapped_column(
+    String(255), nullable=True, index=True,
+    comment="Daytona sandbox ID for sandbox-mode execution"
+)
+```
+
+### GitHub API Service - Missing Methods
+
+**Location**: `backend/omoi_os/services/github_api.py`
+
+**Has** (ready to use):
+- ✅ `create_branch(user_id, owner, repo, branch_name, from_sha)`
+- ✅ `create_pull_request(user_id, owner, repo, title, head, base, body, draft)`
+- ✅ `list_branches()`, `list_commits()`, `list_pull_requests()`
+- ✅ `create_or_update_file()`, `get_file_content()`
+
+**Missing** (add in Phase 5):
+- ❌ `merge_pull_request(user_id, owner, repo, pr_number)` 
+- ❌ `delete_branch(user_id, owner, repo, branch_name)`
+- ❌ `compare_branches(user_id, owner, repo, base, head)` - for conflict detection
+- ❌ `get_pull_request(user_id, owner, repo, pr_number)` - for mergeable status check
+
+### GitHub Token Injection - Not Implemented
+
+**Location**: `backend/omoi_os/services/daytona_spawner.py` lines 146-169
+
+**CURRENT env_vars**:
+```python
+env_vars = {
+    "AGENT_ID": agent_id,
+    "TASK_ID": task_id,
+    "MCP_SERVER_URL": self.mcp_server_url,
+    "PHASE_ID": phase_id,
+    "SANDBOX_ID": sandbox_id,
+    "LLM_API_KEY": ...,  # ✅ Injected
+    "LLM_MODEL": ...,    # ✅ Injected
+    # GITHUB_TOKEN: ❌ NOT INJECTED YET
+}
+```
+
+**FIX REQUIRED (Phase 3.5)**:
+```python
+# Add GitHub token to env_vars (get from user's OAuth)
+if github_token:
+    env_vars["GITHUB_TOKEN"] = github_token
+    env_vars["GITHUB_REPO_URL"] = repo_clone_url
+```
+
+### Worker Script Uses MCP (Not HTTP)
+
+**Location**: `backend/omoi_os/sandbox_worker.py`
+
+The sandbox worker currently uses **MCP** for ALL communication:
+```python
+await mcp_client.call_tool("get_task", {...})
+await mcp_client.call_tool("update_task_status", {...})
+await mcp_client.call_tool("report_agent_event", {...})
+await mcp_client.call_tool("register_conversation", {...})
+```
+
+**Migration to HTTP (Phase 3)**: Replace MCP calls with HTTP:
+```python
+# Replace MCP calls with HTTP
+async with httpx.AsyncClient() as client:
+    await client.post(f"{API_URL}/sandboxes/{sandbox_id}/events", json={...})
+    messages = await client.get(f"{API_URL}/sandboxes/{sandbox_id}/messages")
+```
+
+### RestartOrchestrator Not Sandbox-Aware
+
+**Location**: `backend/omoi_os/services/restart_orchestrator.py`
+
+**CURRENT**: Spawns replacement via `AgentRegistryService`:
+```python
+replacement = self.agent_registry.register_agent(...)  # Local agent
+```
+
+**NEEDS UPDATE (Phase 7)**: For sandbox tasks, call `DaytonaSpawnerService`:
+```python
+if task.sandbox_id:
+    # Sandbox task - spawn new Daytona sandbox
+    new_sandbox_id = await self.daytona_spawner.spawn_for_task(...)
+else:
+    # Legacy local agent
+    replacement = self.agent_registry.register_agent(...)
+```
+
+### Existing Test Fixtures (Use These!)
+
+**Location**: `backend/tests/conftest.py`
+
+| Fixture | Scope | Description |
+|---------|-------|-------------|
+| `client` | session | FastAPI TestClient (unauthenticated) |
+| `db_service` | function | Fresh DB per test (creates/drops tables) |
+| `test_user`, `admin_user` | function | Real users in DB |
+| `auth_token`, `auth_headers` | function | JWT tokens |
+| `authenticated_client` | function | TestClient with auth |
+| `mock_authenticated_client` | function | Mocked auth (fastest) |
+| `event_bus_service` | function | EventBusService (requires Redis) |
+| `task_queue_service` | function | TaskQueueService |
+| `sample_ticket`, `sample_task`, `sample_agent` | function | Sample entities |
+
+### EventBus Patterns
+
+**Location**: `backend/omoi_os/services/event_bus.py`
+
+```python
+# Channel format: events.{event_type}
+# Use Pydantic for serialization
+event_bus.publish(SystemEvent(
+    event_type="SANDBOX_EVENT",      # → publishes to "events.SANDBOX_EVENT"
+    entity_type="sandbox",
+    entity_id=sandbox_id,
+    payload={...}
+))
+```
+
+---
+
 ## Integration with Existing Systems
 
 > **Critical**: The sandbox event/message system must integrate with existing infrastructure. Here's what already exists.
@@ -3596,18 +3735,20 @@ async def _build_from_event_store(self, task: Task) -> AgentTrajectoryContext:
 | `omoi_os/services/daytona_spawner.py` | Spawns sandboxes from server | `DaytonaSpawnerService`, `spawn_sandbox()` |
 | `omoi_os/services/conversation_intervention.py` | Sends messages TO sandbox | `ConversationInterventionService.send_intervention()` |
 | `omoi_os/services/intelligent_guardian.py` | Analyzes trajectories | `IntelligentGuardian.analyze_agent_trajectory()` |
-| `omoi_os/api/routes/tasks.py` | Already has sandbox endpoints | `register_conversation()`, `report_agent_event()` |
+| `omoi_os/api/routes/tasks.py` | Already has sandbox endpoints | `register_conversation()` |
 
-**Existing Task Model Fields** (already in database):
+**⚠️ Task Model Fields - CURRENT STATE**:
 
 ```python
-# Task model already has these - DON'T add duplicate fields
+# Task model (backend/omoi_os/models/task.py) - as of deep dive analysis
 class Task(Base):
     # ...existing fields...
-    sandbox_id: Mapped[Optional[str]]         # Daytona sandbox ID
-    conversation_id: Mapped[Optional[str]]    # OpenHands conversation ID
-    persistence_dir: Mapped[Optional[str]]    # For intervention resumption
+    conversation_id: Mapped[Optional[str]]    # ✅ EXISTS - OpenHands conversation ID
+    persistence_dir: Mapped[Optional[str]]    # ✅ EXISTS - For intervention resumption
+    # sandbox_id: ❌ MISSING - Must be added in Phase 6!
 ```
+
+**⚠️ tasks.py Bug**: Line 78 attempts to set `task.sandbox_id` which doesn't exist yet. This code path will error until Phase 6 adds the field.
 
 ### Where New Code Fits
 

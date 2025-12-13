@@ -733,3 +733,229 @@ Authorization: Bearer {sandbox_token}
 
 The existing `/messages` endpoint continues to work for polling-based injection.
 The new `/interventions` endpoint is optimized for hook-based immediate injection.
+
+---
+
+## Security Considerations
+
+> **Critical**: Sandbox endpoints are publicly accessible. They must be secured to prevent unauthorized access and abuse.
+
+### Authentication Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      SANDBOX AUTHENTICATION FLOW                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Server creates sandbox via DaytonaSpawnerService                        │
+│     └─ Generates unique SANDBOX_TOKEN (JWT or opaque token)                │
+│     └─ Stores token hash in sandbox_sessions table                         │
+│                                                                             │
+│  2. Token passed to sandbox as environment variable                         │
+│     env_vars = {                                                            │
+│         "SANDBOX_TOKEN": token,        # For API auth                       │
+│         "SANDBOX_ID": sandbox_id,      # For identification                 │
+│         "TASK_ID": task_id,            # For task context                   │
+│     }                                                                       │
+│                                                                             │
+│  3. Sandbox worker includes token in all HTTP requests                      │
+│     Authorization: Bearer {SANDBOX_TOKEN}                                   │
+│                                                                             │
+│  4. Server validates token on each request                                  │
+│     a. Token exists in sandbox_sessions                                     │
+│     b. Token not expired (sandbox still active)                             │
+│     c. sandbox_id in URL matches token's sandbox                           │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Token Implementation
+
+**Option A: JWT Tokens (Recommended for stateless validation)**
+
+```python
+# In daytona_spawner.py - when creating sandbox
+import jwt
+from datetime import datetime, timedelta
+
+def generate_sandbox_token(sandbox_id: str, task_id: str) -> str:
+    """Generate JWT token for sandbox authentication."""
+    payload = {
+        "sandbox_id": sandbox_id,
+        "task_id": task_id,
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() + timedelta(hours=24),  # 24hr expiry
+        "type": "sandbox",
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+```
+
+**Option B: Opaque Tokens (Simpler, requires DB lookup)**
+
+```python
+import secrets
+
+def generate_sandbox_token(sandbox_id: str) -> str:
+    """Generate opaque token stored in database."""
+    token = secrets.token_urlsafe(32)
+    # Store: INSERT INTO sandbox_tokens (token_hash, sandbox_id, expires_at)
+    return token
+```
+
+### FastAPI Dependency for Sandbox Auth
+
+```python
+# backend/omoi_os/api/dependencies.py
+
+from fastapi import Depends, HTTPException, Header
+from typing import Optional
+import jwt
+
+async def get_sandbox_from_token(
+    authorization: str = Header(..., description="Bearer {sandbox_token}"),
+    db: DatabaseService = Depends(get_db),
+) -> SandboxSession:
+    """
+    Validate sandbox token and return sandbox session.
+    
+    Raises:
+        HTTPException 401: Invalid or missing token
+        HTTPException 403: Token doesn't match requested sandbox
+    """
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Invalid authorization header")
+    
+    token = authorization.replace("Bearer ", "")
+    
+    try:
+        # JWT validation
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+        sandbox_id = payload["sandbox_id"]
+        
+        # Verify sandbox exists and is active
+        sandbox = await db.get_sandbox_session(sandbox_id)
+        if not sandbox or sandbox.status in ["terminated", "failed"]:
+            raise HTTPException(status_code=401, detail="Sandbox session invalid")
+        
+        return sandbox
+        
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+```
+
+### Rate Limiting
+
+**Problem**: A buggy or malicious worker could flood the server with events.
+
+**Solution**: Per-sandbox rate limiting
+
+```python
+# backend/omoi_os/api/middleware/rate_limit.py
+
+from fastapi import Request, HTTPException
+from collections import defaultdict
+import time
+
+# In-memory rate limiter (production: use Redis)
+_request_counts: dict[str, list[float]] = defaultdict(list)
+
+RATE_LIMITS = {
+    "events": {"requests": 100, "window_seconds": 60},      # 100 events/min
+    "heartbeats": {"requests": 10, "window_seconds": 60},   # 10 heartbeats/min
+    "messages": {"requests": 30, "window_seconds": 60},     # 30 message polls/min
+    "default": {"requests": 60, "window_seconds": 60},      # 60 req/min default
+}
+
+
+def check_rate_limit(sandbox_id: str, endpoint_type: str = "default") -> bool:
+    """Check if request is within rate limit."""
+    limit = RATE_LIMITS.get(endpoint_type, RATE_LIMITS["default"])
+    now = time.time()
+    window_start = now - limit["window_seconds"]
+    
+    key = f"{sandbox_id}:{endpoint_type}"
+    
+    # Clean old entries
+    _request_counts[key] = [t for t in _request_counts[key] if t > window_start]
+    
+    # Check limit
+    if len(_request_counts[key]) >= limit["requests"]:
+        return False
+    
+    # Record request
+    _request_counts[key].append(now)
+    return True
+
+
+# Usage in endpoint
+@router.post("/{sandbox_id}/events")
+async def post_event(
+    sandbox_id: str,
+    event: SandboxEventCreate,
+    sandbox = Depends(get_sandbox_from_token),
+):
+    if not check_rate_limit(sandbox_id, "events"):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded")
+    # ... rest of handler
+```
+
+### Input Validation
+
+**Problem**: Malicious payloads in event_data or message content.
+
+**Solution**: Strict schema validation + size limits
+
+```python
+from pydantic import BaseModel, Field, validator
+from typing import Any
+
+class SandboxEventCreate(BaseModel):
+    event_type: str = Field(..., max_length=100, regex=r"^[a-zA-Z0-9_.]+$")
+    event_data: dict[str, Any] = Field(default_factory=dict)
+    source: Literal["agent", "worker", "system"] = Field(default="agent")
+    
+    @validator("event_data")
+    def validate_event_data_size(cls, v):
+        """Prevent oversized payloads."""
+        import json
+        serialized = json.dumps(v)
+        if len(serialized) > 100_000:  # 100KB limit
+            raise ValueError("event_data exceeds 100KB limit")
+        return v
+
+
+class MessageCreate(BaseModel):
+    content: str = Field(..., max_length=10_000)  # 10KB message limit
+    message_type: Literal["user_message", "system_message", "guardian_intervention"]
+    
+    @validator("content")
+    def sanitize_content(cls, v):
+        """Basic sanitization - no control characters except newlines."""
+        import re
+        return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', v)
+```
+
+### Security Checklist
+
+| Item | Status | Implementation |
+|------|--------|----------------|
+| **Token generation** | ⬜ | `daytona_spawner.py` |
+| **Token validation middleware** | ⬜ | `api/dependencies.py` |
+| **Rate limiting** | ⬜ | `api/middleware/rate_limit.py` |
+| **Input size limits** | ⬜ | Pydantic schemas |
+| **Sandbox isolation** | ⬜ | `verify_sandbox_owns_task()` |
+| **Token expiration** | ⬜ | JWT exp claim or DB check |
+| **Audit logging** | ⬜ | Log all API calls with sandbox_id |
+
+### Threat Model
+
+| Threat | Mitigation |
+|--------|------------|
+| **Stolen token** | Tokens expire after 24h; tied to specific sandbox_id |
+| **Event flooding** | Rate limiting (100 events/min) |
+| **Large payloads** | Size limits (100KB events, 10KB messages) |
+| **Cross-sandbox access** | Token validation checks sandbox_id in URL |
+| **Replay attacks** | JWT includes `iat` (issued-at); can add nonce |
+| **Token leakage via logs** | Never log full tokens; log token fingerprint only |
