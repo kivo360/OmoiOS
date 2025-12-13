@@ -9,20 +9,27 @@ This module is designed for testability:
 Phase 4 Updates:
 - Events are persisted to sandbox_events table
 - Returns event_id in response
+
+Phase 2 Fix:
+- Message queue now uses Redis for persistence and scaling
+- InMemoryMessageQueue available for testing
 """
 
-import uuid
-from collections import defaultdict
+import os
 from datetime import datetime, timezone
-from threading import Lock
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.message_queue import (
+    InMemoryMessageQueue,
+    RedisMessageQueue,
+    get_message_queue,
+)
 
 router = APIRouter()
 
@@ -105,73 +112,36 @@ class MessageItem(BaseModel):
 
 
 # ============================================================================
-# PHASE 2: MESSAGE QUEUE (Testable via Unit Tests)
+# PHASE 2: MESSAGE QUEUE (Redis-backed, with In-Memory fallback for tests)
 # ============================================================================
 
+# Re-export MessageQueue for backward compatibility with existing tests
+MessageQueue = InMemoryMessageQueue  # Alias for unit tests
 
-class MessageQueue:
+# Global message queue instance - uses Redis in production, in-memory in tests
+_global_message_queue: RedisMessageQueue | InMemoryMessageQueue | None = None
+
+
+def _get_message_queue() -> RedisMessageQueue | InMemoryMessageQueue:
     """
-    Thread-safe in-memory message queue.
+    Get or create global message queue instance.
 
-    UNIT TESTABLE: No external dependencies.
-
-    Note: For production with multiple server instances, replace with Redis-based
-    implementation. This in-memory version is suitable for single-instance deployment
-    and testing.
+    Uses in-memory queue if TESTING=true, otherwise Redis.
     """
-
-    def __init__(self):
-        self._queues: dict[str, list[dict]] = defaultdict(list)
-        self._lock = Lock()
-
-    def enqueue(
-        self,
-        sandbox_id: str,
-        content: str,
-        message_type: str,
-    ) -> str:
-        """
-        Add message to queue. Returns message_id.
-
-        Args:
-            sandbox_id: Target sandbox identifier
-            content: Message content
-            message_type: Type of message
-
-        Returns:
-            Generated message ID
-        """
-        message_id = f"msg-{uuid.uuid4().hex[:12]}"
-
-        with self._lock:
-            self._queues[sandbox_id].append(
-                {
-                    "id": message_id,
-                    "content": content,
-                    "message_type": message_type,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-            )
-
-        return message_id
-
-    def get_all(self, sandbox_id: str) -> list[dict]:
-        """
-        Get and clear all messages for sandbox.
-
-        Args:
-            sandbox_id: Sandbox identifier
-
-        Returns:
-            List of message dictionaries (FIFO order)
-        """
-        with self._lock:
-            messages = self._queues.pop(sandbox_id, [])
-        return messages
+    global _global_message_queue
+    if _global_message_queue is None:
+        is_testing = os.environ.get("TESTING", "").lower() == "true"
+        if is_testing:
+            _global_message_queue = InMemoryMessageQueue()
+        else:
+            _global_message_queue = get_message_queue()
+    return _global_message_queue
 
 
-# Global message queue instance
-_global_message_queue = MessageQueue()
+def reset_message_queue() -> None:
+    """Reset global message queue (useful for tests)."""
+    global _global_message_queue
+    _global_message_queue = None
 
 
 # ============================================================================
@@ -340,6 +310,132 @@ async def post_sandbox_event(
 
 
 # ============================================================================
+# PHASE 4: EVENT QUERY SCHEMAS AND ENDPOINT
+# ============================================================================
+
+
+class SandboxEventItem(BaseModel):
+    """Response model for individual sandbox event."""
+
+    id: str
+    sandbox_id: str
+    event_type: str
+    event_data: dict[str, Any]
+    source: str
+    created_at: datetime
+
+
+class SandboxEventsListResponse(BaseModel):
+    """Response model for list of sandbox events."""
+
+    events: list[SandboxEventItem]
+    total_count: int
+    sandbox_id: str
+
+
+def query_sandbox_events(
+    db: DatabaseService,
+    sandbox_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    event_type: Optional[str] = None,
+) -> tuple[list[dict], int]:
+    """
+    Query persisted events for a sandbox.
+
+    Args:
+        db: Database service
+        sandbox_id: Sandbox identifier
+        limit: Maximum events to return
+        offset: Pagination offset
+        event_type: Optional filter by event type
+
+    Returns:
+        Tuple of (events list, total count)
+    """
+    from omoi_os.models.sandbox_event import SandboxEvent
+
+    with db.get_session() as session:
+        query = session.query(SandboxEvent).filter(
+            SandboxEvent.sandbox_id == sandbox_id
+        )
+
+        if event_type:
+            query = query.filter(SandboxEvent.event_type == event_type)
+
+        # Get total count
+        total_count = query.count()
+
+        # Get paginated results, ordered by created_at desc (newest first)
+        events = (
+            query.order_by(SandboxEvent.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+
+        return [
+            {
+                "id": str(e.id),
+                "sandbox_id": e.sandbox_id,
+                "event_type": e.event_type,
+                "event_data": e.event_data,
+                "source": e.source,
+                "created_at": e.created_at,
+            }
+            for e in events
+        ], total_count
+
+
+@router.get("/{sandbox_id}/events", response_model=SandboxEventsListResponse)
+async def get_sandbox_events(
+    sandbox_id: str,
+    limit: int = Query(default=100, le=500, ge=1, description="Max events to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    event_type: Optional[str] = Query(default=None, description="Filter by event type"),
+) -> SandboxEventsListResponse:
+    """
+    Query persisted events for a sandbox.
+
+    Returns events in descending order by creation time (newest first).
+    Supports pagination and optional filtering by event_type.
+
+    Args:
+        sandbox_id: Sandbox identifier (from URL path)
+        limit: Maximum number of events to return (default: 100, max: 500)
+        offset: Pagination offset (default: 0)
+        event_type: Optional filter by event type (e.g., 'agent.tool_use')
+
+    Returns:
+        SandboxEventsListResponse with events and total count
+
+    Example:
+        GET /api/v1/sandboxes/sandbox-abc123/events?limit=50&event_type=agent.tool_use
+    """
+    try:
+        db = get_db_service()
+        events, total_count = query_sandbox_events(
+            db=db,
+            sandbox_id=sandbox_id,
+            limit=limit,
+            offset=offset,
+            event_type=event_type,
+        )
+        return SandboxEventsListResponse(
+            events=[SandboxEventItem(**e) for e in events],
+            total_count=total_count,
+            sandbox_id=sandbox_id,
+        )
+    except Exception:
+        # Return empty if DB unavailable
+        return SandboxEventsListResponse(
+            events=[],
+            total_count=0,
+            sandbox_id=sandbox_id,
+        )
+
+
+# ============================================================================
 # PHASE 2: MESSAGE HELPER FUNCTIONS (Testable via Unit Tests)
 # ============================================================================
 
@@ -380,7 +476,7 @@ def enqueue_message_with_broadcast(
     sandbox_id: str,
     content: str,
     message_type: str,
-    queue: MessageQueue | None = None,
+    queue: RedisMessageQueue | InMemoryMessageQueue | None = None,
     event_bus: EventBusService | None = None,
 ) -> str:
     """
@@ -392,14 +488,14 @@ def enqueue_message_with_broadcast(
         sandbox_id: Target sandbox identifier
         content: Message content
         message_type: Type of message
-        queue: Optional MessageQueue instance (defaults to global)
+        queue: Optional MessageQueue instance (defaults to global Redis queue)
         event_bus: Optional EventBusService instance (defaults to global)
 
     Returns:
         Generated message ID
     """
     if queue is None:
-        queue = _global_message_queue
+        queue = _get_message_queue()
     if event_bus is None:
         event_bus = get_event_bus()
 
@@ -486,5 +582,6 @@ async def get_messages(sandbox_id: str) -> list[MessageItem]:
             }
         ]
     """
-    messages = _global_message_queue.get_all(sandbox_id)
+    queue = _get_message_queue()
+    messages = queue.get_all(sandbox_id)
     return [MessageItem(**m) for m in messages]

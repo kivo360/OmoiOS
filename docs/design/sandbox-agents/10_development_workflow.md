@@ -483,7 +483,7 @@ Create/extend contract tests for sandbox APIs:
 Follow the existing contract test patterns.
 ```
 
-#### E2E Flow Validation ("Does This Actually Work?")
+#### E2E Flow Validation (Automated Test)
 
 ```
 @docs/design/sandbox-agents/01_architecture.md
@@ -500,6 +500,62 @@ Test the complete sandbox lifecycle end-to-end:
 
 Write an integration test that validates this entire flow works together.
 This is the "does this shit actually work" test.
+```
+
+#### Manual MVP Smoke Test ("Run It For Real")
+
+```
+@docs/design/sandbox-agents/06_implementation_checklist.md
+@backend/omoi_os/services/daytona_spawner.py
+@backend/omoi_os/api/routes/sandbox.py
+
+I've completed the MVP phases (0-3.5). Now I want to actually run it and see it work:
+
+1. Show me how to start the backend server locally
+2. Give me curl commands (or a Python script) to:
+    - Create a conversation
+    - Spawn a sandbox for that conversation
+    - Send a test message to trigger the agent
+3. Show me how to monitor:
+    - Server logs (watch for incoming sandbox events)
+    - WebSocket events (verify frontend would receive them)
+    - The sandbox itself (is the worker running?)
+4. Show me how to manually inject a message and verify the worker receives it
+5. How do I clean up the sandbox when done?
+
+I want to watch the whole flow happen in real-time, not just trust the tests.
+```
+
+**Quick Manual Test Commands (Reference):**
+
+```bash
+# Terminal 1: Start backend server
+cd backend
+uv run uvicorn omoi_os.main:app --reload --port 8000
+
+# Terminal 2: Watch server logs
+# (logs appear in Terminal 1)
+
+# Terminal 3: Test the flow with curl
+# 1. Create conversation (adjust based on your auth setup)
+curl -X POST http://localhost:8000/api/v1/conversations \
+  -H "Content-Type: application/json" \
+  -d '{"title": "Test Sandbox"}'
+
+# 2. Spawn sandbox (replace {conversation_id})
+curl -X POST http://localhost:8000/api/v1/conversations/{conversation_id}/sandbox \
+  -H "Content-Type: application/json" \
+  -d '{"agent_type": "claude"}'
+
+# 3. Simulate sandbox event callback (replace {sandbox_id})
+curl -X POST http://localhost:8000/api/v1/sandbox/{sandbox_id}/events \
+  -H "Content-Type: application/json" \
+  -H "X-Sandbox-Key: {api_key}" \
+  -d '{"event_type": "AGENT_STARTED", "payload": {"message": "Worker initialized"}}'
+
+# 4. Check message queue
+curl http://localhost:8000/api/v1/sandbox/{sandbox_id}/messages \
+  -H "X-Sandbox-Key: {api_key}"
 ```
 
 #### Mocking External Services

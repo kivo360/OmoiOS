@@ -147,6 +147,44 @@ class PullRequestCreateResult(BaseModel):
     model_config = {"extra": "ignore"}
 
 
+class MergeResult(BaseModel):
+    """Result of a PR merge operation."""
+
+    success: bool
+    sha: Optional[str] = None
+    message: str
+    error: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class FileDiff(BaseModel):
+    """File diff information from branch comparison."""
+
+    filename: str
+    status: str  # "added", "modified", "removed", "renamed"
+    additions: int = 0
+    deletions: int = 0
+    changes: int = 0
+    patch: Optional[str] = None
+
+    model_config = {"extra": "ignore"}
+
+
+class BranchComparison(BaseModel):
+    """Comparison between two branches."""
+
+    status: str  # "ahead", "behind", "diverged", "identical"
+    ahead_by: int
+    behind_by: int
+    total_commits: int
+    files: list[FileDiff] = []
+    mergeable: bool = True
+    has_conflicts: bool = False
+
+    model_config = {"extra": "ignore"}
+
+
 # ============================================================================
 # GitHub API Service
 # ============================================================================
@@ -762,3 +800,210 @@ class GitHubAPIService:
                 )
                 for pr in prs
             ]
+
+    async def get_pull_request(
+        self,
+        user_id: UUID,
+        owner: str,
+        repo: str,
+        pr_number: int,
+    ) -> Optional[GitHubPullRequest]:
+        """
+        Get pull request details including mergeable status.
+        
+        Phase 5: Required for merge workflow to check if PR can be merged.
+        
+        Args:
+            user_id: User ID for authentication
+            owner: Repository owner
+            repo: Repository name
+            pr_number: Pull request number
+            
+        Returns:
+            GitHubPullRequest with mergeable status, or None if not found
+        """
+        token = self._get_user_token_by_id(user_id)
+        if not token:
+            return None
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/pulls/{pr_number}",
+                headers=self._headers(token),
+            )
+
+            if response.status_code != 200:
+                return None
+
+            pr = response.json()
+            return GitHubPullRequest(
+                number=pr["number"],
+                title=pr["title"],
+                state=pr["state"],
+                html_url=pr["html_url"],
+                head_branch=pr["head"]["ref"],
+                base_branch=pr["base"]["ref"],
+                body=pr.get("body"),
+                merged=pr.get("merged", False),
+                mergeable=pr.get("mergeable"),
+                draft=pr.get("draft", False),
+            )
+
+    async def merge_pull_request(
+        self,
+        user_id: UUID,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        merge_method: str = "merge",  # "merge", "squash", "rebase"
+        commit_title: Optional[str] = None,
+        commit_message: Optional[str] = None,
+    ) -> MergeResult:
+        """
+        Merge a pull request.
+        
+        Phase 5: Required for completing work on a ticket.
+        
+        Args:
+            user_id: User ID for authentication
+            owner: Repository owner
+            repo: Repository name
+            pr_number: Pull request number
+            merge_method: How to merge - "merge", "squash", or "rebase"
+            commit_title: Optional custom commit title (for squash/merge)
+            commit_message: Optional custom commit message
+            
+        Returns:
+            MergeResult with success status and merge SHA
+        """
+        token = self._get_user_token_by_id(user_id)
+        if not token:
+            return MergeResult(success=False, message="No token", error="No GitHub token")
+
+        data: dict[str, Any] = {"merge_method": merge_method}
+        if commit_title:
+            data["commit_title"] = commit_title
+        if commit_message:
+            data["commit_message"] = commit_message
+
+        async with httpx.AsyncClient() as client:
+            response = await client.put(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/pulls/{pr_number}/merge",
+                headers=self._headers(token),
+                json=data,
+            )
+
+            result = response.json()
+
+            if response.status_code == 200:
+                return MergeResult(
+                    success=True,
+                    sha=result.get("sha"),
+                    message=result.get("message", "PR merged successfully"),
+                )
+            elif response.status_code == 405:
+                return MergeResult(
+                    success=False,
+                    message="PR not mergeable",
+                    error=result.get("message", "Merge conflicts or other issue"),
+                )
+            elif response.status_code == 409:
+                return MergeResult(
+                    success=False,
+                    message="Merge conflict",
+                    error=result.get("message", "Head branch was modified"),
+                )
+            else:
+                return MergeResult(
+                    success=False,
+                    message="Merge failed",
+                    error=result.get("message", f"HTTP {response.status_code}"),
+                )
+
+    async def delete_branch(
+        self,
+        user_id: UUID,
+        owner: str,
+        repo: str,
+        branch_name: str,
+    ) -> bool:
+        """
+        Delete a branch.
+        
+        Phase 5: Required for cleanup after PR merge.
+        
+        Args:
+            user_id: User ID for authentication
+            owner: Repository owner
+            repo: Repository name
+            branch_name: Branch to delete (without refs/heads/ prefix)
+            
+        Returns:
+            True if deleted successfully, False otherwise
+        """
+        token = self._get_user_token_by_id(user_id)
+        if not token:
+            return False
+
+        async with httpx.AsyncClient() as client:
+            response = await client.delete(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/git/refs/heads/{branch_name}",
+                headers=self._headers(token),
+            )
+
+            return response.status_code == 204
+
+    async def compare_branches(
+        self,
+        user_id: UUID,
+        owner: str,
+        repo: str,
+        base: str,
+        head: str,
+    ) -> Optional[BranchComparison]:
+        """
+        Compare two branches.
+        
+        Phase 5: Useful for detecting conflicts before merge.
+        
+        Args:
+            user_id: User ID for authentication
+            owner: Repository owner
+            repo: Repository name
+            base: Base branch name
+            head: Head branch name
+            
+        Returns:
+            BranchComparison with diff information, or None on error
+        """
+        token = self._get_user_token_by_id(user_id)
+        if not token:
+            return None
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(
+                f"{self.BASE_URL}/repos/{owner}/{repo}/compare/{base}...{head}",
+                headers=self._headers(token),
+            )
+
+            if response.status_code != 200:
+                return None
+
+            data = response.json()
+            return BranchComparison(
+                status=data["status"],
+                ahead_by=data["ahead_by"],
+                behind_by=data["behind_by"],
+                total_commits=data["total_commits"],
+                files=[
+                    FileDiff(
+                        filename=f["filename"],
+                        status=f["status"],
+                        additions=f.get("additions", 0),
+                        deletions=f.get("deletions", 0),
+                        changes=f.get("changes", 0),
+                        patch=f.get("patch"),
+                    )
+                    for f in data.get("files", [])
+                ],
+            )

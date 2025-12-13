@@ -19,6 +19,7 @@ from omoi_os.api.routes import (
     alerts,
     auth,
     board,
+    branch_workflow,
     collaboration,
     commits,
     costs,
@@ -751,11 +752,11 @@ async def lifespan(app: FastAPI):
         blocking_detection_task = asyncio.create_task(blocking_detection_loop())
         approval_timeout_task = asyncio.create_task(approval_timeout_loop())
 
-        # Start intelligent monitoring loop if available
+        # Start intelligent monitoring loop if available (as background task, don't block startup)
         if monitoring_loop:
             try:
-                await monitoring_loop.start()
-                print("✅ Intelligent Monitoring Loop started")
+                asyncio.create_task(monitoring_loop.start())
+                print("✅ Intelligent Monitoring Loop started (background)")
             except Exception as e:
                 print(f"⚠️  Failed to start MonitoringLoop: {e}")
     else:
@@ -932,6 +933,9 @@ app.include_router(validation.router, prefix="/api/validation", tags=["validatio
 app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
 app.include_router(sandbox.router, prefix="/api/v1/sandboxes", tags=["sandboxes"])
+app.include_router(
+    branch_workflow.router, prefix="/api/v1/branch-workflow", tags=["branch-workflow"]
+)
 
 # Dependency graph routes
 app.include_router(graph.router, prefix="/api/v1/graph", tags=["graph"])
