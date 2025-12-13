@@ -406,24 +406,80 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")  # format: owner/repo
 BRANCH_NAME = os.environ.get("BRANCH_NAME")
 
+# Phase 5: Additional environment variables for branch workflow
+TICKET_ID = os.environ.get("TICKET_ID")  # For GitFlow branch naming
+TICKET_TITLE = os.environ.get("TICKET_TITLE", "")
+TICKET_TYPE = os.environ.get("TICKET_TYPE", "feature")
+USER_ID = os.environ.get("USER_ID", "")
+
 # Global state for message injection
 _should_stop: bool = False
 _conversation: Optional[Conversation] = None
 
 
 # ============================================================================
-# GITHUB CLONE SETUP (Phase 3.5)
+# GITHUB CLONE SETUP (Phase 3.5 + Phase 5 Integration)
 # ============================================================================
 
-def clone_repo():
+async def create_branch_via_api():
+    """Call BranchWorkflowService API to create properly named branch.
+    
+    Phase 5: Uses BranchWorkflowService for GitFlow-compliant branch naming.
+    Returns the branch name if successful, None otherwise.
+    """
+    if not GITHUB_REPO or not TICKET_ID or not USER_ID:
+        logger.info("Missing GITHUB_REPO, TICKET_ID, or USER_ID - skipping API branch creation")
+        return None
+    
+    # Parse owner/repo
+    parts = GITHUB_REPO.split("/")
+    if len(parts) != 2:
+        logger.error(f"Invalid GITHUB_REPO format: {GITHUB_REPO}")
+        return None
+    owner, repo = parts
+    
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{BASE_URL}/api/v1/branch-workflow/start",
+                json={
+                    "ticket_id": TICKET_ID,
+                    "ticket_title": TICKET_TITLE or f"Task {TICKET_ID}",
+                    "repo_owner": owner,
+                    "repo_name": repo,
+                    "user_id": USER_ID,
+                    "ticket_type": TICKET_TYPE,
+                }
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success"):
+                    branch_name = data.get("branch_name")
+                    logger.info(f"Branch created via API: {branch_name}")
+                    return branch_name
+                else:
+                    logger.warning(f"Branch creation failed: {data.get('error')}")
+            else:
+                logger.warning(f"Branch API returned {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"Failed to create branch via API: {e}")
+    
+    return None
+
+
+def clone_repo(branch_name: str | None = None):
     """Clone GitHub repo and checkout branch. Called on startup.
     
     Phase 3.5: Clones repository if GITHUB_TOKEN and GITHUB_REPO are set.
-    If BRANCH_NAME is provided, checks out that branch after cloning.
+    Phase 5: Uses branch_name from BranchWorkflowService if provided,
+             otherwise falls back to BRANCH_NAME env var.
     """
     if not GITHUB_TOKEN or not GITHUB_REPO:
         logger.info("No GitHub credentials, skipping repo clone")
         return False
+    
+    # Use provided branch_name or fall back to env var
+    target_branch = branch_name or BRANCH_NAME
     
     # Configure git user for commits
     subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
@@ -446,21 +502,35 @@ def clone_repo():
     os.chdir("/workspace")
     
     # Checkout branch if specified
-    if BRANCH_NAME:
-        logger.info(f"Checking out branch: {BRANCH_NAME}")
-        # Try to checkout existing branch
+    if target_branch:
+        logger.info(f"Checking out branch: {target_branch}")
+        # Try to checkout existing branch (created via API)
         result = subprocess.run(
-            ["git", "checkout", BRANCH_NAME],
+            ["git", "checkout", target_branch],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
             # Branch doesn't exist remotely, create it locally
-            logger.info(f"Creating new branch: {BRANCH_NAME}")
-            subprocess.run(["git", "checkout", "-b", BRANCH_NAME], check=False)
+            logger.info(f"Creating new branch locally: {target_branch}")
+            subprocess.run(["git", "checkout", "-b", target_branch], check=False)
     
     logger.info("Repository ready at /workspace")
     return True
+
+
+async def setup_github_workspace():
+    """Setup GitHub workspace with proper branch naming.
+    
+    Phase 5 Integration: 
+    1. Calls BranchWorkflowService API to create properly named branch
+    2. Clones repo and checks out the branch
+    """
+    # Try to create branch via API (Phase 5)
+    branch_name = await create_branch_via_api()
+    
+    # Clone repo (will use API branch name or fall back to BRANCH_NAME env var)
+    return clone_repo(branch_name)
 
 
 # ============================================================================
@@ -648,8 +718,8 @@ async def main():
         await update_task_status("failed", "Missing LLM_API_KEY")
         return
 
-    # Phase 3.5: Clone GitHub repo if credentials provided
-    clone_repo()
+    # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
+    await setup_github_workspace()
 
     # Fetch task
     task = await fetch_task()
@@ -772,24 +842,82 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 GITHUB_REPO = os.environ.get("GITHUB_REPO")  # format: owner/repo
 BRANCH_NAME = os.environ.get("BRANCH_NAME")
 
+# Phase 5: Additional environment variables for branch workflow
+TICKET_ID = os.environ.get("TICKET_ID")  # For GitFlow branch naming
+TICKET_TITLE = os.environ.get("TICKET_TITLE", "")
+TICKET_TYPE = os.environ.get("TICKET_TYPE", "feature")
+USER_ID = os.environ.get("USER_ID", "")
+
 # Global state for message injection
 _pending_messages: List[dict] = []
 _should_stop: bool = False
 
 
 # ============================================================================
-# GITHUB CLONE SETUP (Phase 3.5)
+# GITHUB CLONE SETUP (Phase 3.5 + Phase 5 Integration)
 # ============================================================================
 
-def clone_repo():
+async def create_branch_via_api():
+    """Call BranchWorkflowService API to create properly named branch.
+    
+    Phase 5: Uses BranchWorkflowService for GitFlow-compliant branch naming.
+    Returns the branch name if successful, None otherwise.
+    """
+    import httpx
+    
+    if not GITHUB_REPO or not TICKET_ID or not USER_ID:
+        logger.info("Missing GITHUB_REPO, TICKET_ID, or USER_ID - skipping API branch creation")
+        return None
+    
+    # Parse owner/repo
+    parts = GITHUB_REPO.split("/")
+    if len(parts) != 2:
+        logger.error(f"Invalid GITHUB_REPO format: {GITHUB_REPO}")
+        return None
+    owner, repo = parts
+    
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{BASE_URL}/api/v1/branch-workflow/start",
+                json={
+                    "ticket_id": TICKET_ID,
+                    "ticket_title": TICKET_TITLE or f"Task {TICKET_ID}",
+                    "repo_owner": owner,
+                    "repo_name": repo,
+                    "user_id": USER_ID,
+                    "ticket_type": TICKET_TYPE,
+                }
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("success"):
+                    branch_name = data.get("branch_name")
+                    logger.info(f"Branch created via API: {branch_name}")
+                    return branch_name
+                else:
+                    logger.warning(f"Branch creation failed: {data.get('error')}")
+            else:
+                logger.warning(f"Branch API returned {resp.status_code}")
+    except Exception as e:
+        logger.warning(f"Failed to create branch via API: {e}")
+    
+    return None
+
+
+def clone_repo(branch_name: str | None = None):
     """Clone GitHub repo and checkout branch. Called on startup.
     
     Phase 3.5: Clones repository if GITHUB_TOKEN and GITHUB_REPO are set.
-    If BRANCH_NAME is provided, checks out that branch after cloning.
+    Phase 5: Uses branch_name from BranchWorkflowService if provided,
+             otherwise falls back to BRANCH_NAME env var.
     """
     if not GITHUB_TOKEN or not GITHUB_REPO:
         logger.info("No GitHub credentials, skipping repo clone")
         return False
+    
+    # Use provided branch_name or fall back to env var
+    target_branch = branch_name or BRANCH_NAME
     
     # Configure git user for commits
     subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
@@ -812,21 +940,35 @@ def clone_repo():
     os.chdir("/workspace")
     
     # Checkout branch if specified
-    if BRANCH_NAME:
-        logger.info(f"Checking out branch: {BRANCH_NAME}")
-        # Try to checkout existing branch
+    if target_branch:
+        logger.info(f"Checking out branch: {target_branch}")
+        # Try to checkout existing branch (created via API)
         result = subprocess.run(
-            ["git", "checkout", BRANCH_NAME],
+            ["git", "checkout", target_branch],
             capture_output=True,
             text=True
         )
         if result.returncode != 0:
             # Branch doesn't exist remotely, create it locally
-            logger.info(f"Creating new branch: {BRANCH_NAME}")
-            subprocess.run(["git", "checkout", "-b", BRANCH_NAME], check=False)
+            logger.info(f"Creating new branch locally: {target_branch}")
+            subprocess.run(["git", "checkout", "-b", target_branch], check=False)
     
     logger.info("Repository ready at /workspace")
     return True
+
+
+async def setup_github_workspace():
+    """Setup GitHub workspace with proper branch naming.
+    
+    Phase 5 Integration: 
+    1. Calls BranchWorkflowService API to create properly named branch
+    2. Clones repo and checks out the branch
+    """
+    # Try to create branch via API (Phase 5)
+    branch_name = await create_branch_via_api()
+    
+    # Clone repo (will use API branch name or fall back to BRANCH_NAME env var)
+    return clone_repo(branch_name)
 
 
 # ============================================================================
@@ -1093,8 +1235,8 @@ async def main():
         await report_status("failed", "Missing ANTHROPIC_API_KEY")
         return
 
-    # Phase 3.5: Clone GitHub repo if credentials provided
-    clone_repo()
+    # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
+    await setup_github_workspace()
 
     os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
 
@@ -1280,3 +1422,26 @@ def get_daytona_spawner(
         )
 
     return _spawner_service
+
+
+# ============================================================================
+# WORKER SCRIPT EXPORTS (for testing and inspection)
+# ============================================================================
+
+# These module-level constants allow tests to verify worker script contents.
+# They are created once by instantiating a minimal service instance.
+
+
+def _create_worker_script_exports():
+    """Create worker script exports without full service initialization."""
+    # Create minimal instance just to access script methods
+    service = DaytonaSpawnerService.__new__(DaytonaSpawnerService)
+    return (
+        service._get_worker_script(),
+        service._get_claude_worker_script(),
+    )
+
+
+# Export worker scripts as module-level constants
+# These contain the full worker script content including guardian_nudge handling
+OPENHANDS_WORKER_SCRIPT, CLAUDE_WORKER_SCRIPT = _create_worker_script_exports()

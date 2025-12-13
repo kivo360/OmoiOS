@@ -3,13 +3,20 @@
 This service combines the existing emergency intervention capabilities
 with sophisticated trajectory analysis using OpenHands conversation data
 and LLM-powered agent understanding.
+
+Phase 6 Updates:
+- Added sandbox detection (_is_sandbox_task)
+- Added sandbox intervention routing (_sandbox_intervention)
+- Added legacy intervention routing (_legacy_intervention)
+- Interventions now route based on task.sandbox_id
 """
 
 import logging
 import uuid
 from datetime import timedelta
 from typing import Dict, List, Optional, Any
-
+import os
+import httpx
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -227,7 +234,9 @@ class IntelligentGuardian:
         analyses = []
 
         for agent in active_agents:
-            analysis = await self.analyze_agent_trajectory(agent.id, force_analysis)
+            analysis: TrajectoryAnalysis | None = await self.analyze_agent_trajectory(
+                agent.id, force_analysis
+            )
             if analysis:
                 analyses.append(analysis)
 
@@ -677,8 +686,155 @@ class IntelligentGuardian:
 
         session.add(steering_intervention)
 
+    # -------------------------------------------------------------------------
+    # Phase 6: Sandbox Intervention Methods
+    # -------------------------------------------------------------------------
+
+    def _is_sandbox_task(self, task: Task) -> bool:
+        """Check if a task is running in a sandbox (vs local OpenHands).
+
+        Args:
+            task: Task to check
+
+        Returns:
+            True if task has sandbox_id (running in Daytona sandbox)
+        """
+        return bool(task.sandbox_id) if task else False
+
+    async def _sandbox_intervention(
+        self, intervention: SteeringIntervention, task: Task
+    ) -> bool:
+        """Send intervention to sandbox via message injection API.
+
+        Phase 6: Routes Guardian interventions through HTTP API for sandbox agents.
+
+        Args:
+            intervention: Steering intervention to send
+            task: Task with sandbox_id
+
+        Returns:
+            True if message was queued successfully
+        """
+        if not task.sandbox_id:
+            logger.error("Cannot send sandbox intervention: task has no sandbox_id")
+            return False
+
+        # Get base URL from environment or default
+        base_url = (
+            os.environ.get("MCP_SERVER_URL", "http://localhost:18000")
+            .replace("/mcp", "")
+            .rstrip("/")
+        )
+
+        # Build the intervention message
+        message_content = f"[GUARDIAN INTERVENTION - {intervention.steering_type}] {intervention.message}"
+
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(
+                    f"{base_url}/api/v1/sandboxes/{task.sandbox_id}/messages",
+                    json={
+                        "content": message_content,
+                        "message_type": "guardian_nudge",
+                    },
+                )
+
+                if response.status_code == 200:
+                    logger.info(
+                        f"Successfully sent Guardian intervention to sandbox {task.sandbox_id} "
+                        f"for agent {intervention.agent_id}: {intervention.steering_type}"
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"Failed to send sandbox intervention: {response.status_code} - {response.text}"
+                    )
+                    return False
+
+        except Exception as e:
+            logger.error(f"Failed to send sandbox intervention: {e}")
+            return False
+
+    async def _legacy_intervention(
+        self, intervention: SteeringIntervention, task: Task
+    ) -> bool:
+        """Send intervention via direct OpenHands conversation access.
+
+        This is the original intervention method for local OpenHands agents.
+
+        Args:
+            intervention: Steering intervention to send
+            task: Task with conversation_id and persistence_dir
+
+        Returns:
+            True if intervention was sent successfully
+        """
+        if not task.conversation_id or not task.persistence_dir:
+            logger.warning(
+                f"Task {task.id} missing conversation info for legacy intervention"
+            )
+            return False
+
+        try:
+            # Get agent for workspace directory
+            with self.db.get_session() as session:
+                agent = session.query(Agent).filter_by(id=intervention.agent_id).first()
+                if not agent:
+                    return False
+
+                workspace_dir = self._get_workspace_dir(agent)
+                if not workspace_dir:
+                    workspace_dir = (
+                        f"{self.workspace_root}/{task.id}"
+                        if self.workspace_root
+                        else None
+                    )
+
+                if not workspace_dir:
+                    logger.error(f"Cannot determine workspace for task {task.id}")
+                    return False
+
+                # Send via ConversationInterventionService
+                intervention_service = ConversationInterventionService()
+                return intervention_service.send_intervention(
+                    conversation_id=task.conversation_id,
+                    persistence_dir=task.persistence_dir,
+                    workspace_dir=workspace_dir,
+                    message=intervention.message,
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to send legacy intervention: {e}")
+            return False
+
+    async def _execute_intervention_for_task(
+        self, intervention: SteeringIntervention, task: Task
+    ) -> bool:
+        """Route intervention to appropriate handler based on task type.
+
+        Phase 6: Central routing method that determines whether to use
+        sandbox message injection or legacy OpenHands conversation access.
+
+        Args:
+            intervention: Steering intervention to execute
+            task: Task to send intervention to
+
+        Returns:
+            True if intervention was sent successfully
+        """
+        if self._is_sandbox_task(task):
+            # Sandbox agent: use message injection API
+            return await self._sandbox_intervention(intervention, task)
+        else:
+            # Legacy agent: use ConversationInterventionService
+            return await self._legacy_intervention(intervention, task)
+
     def _execute_intervention_action(self, intervention: SteeringIntervention) -> bool:
-        """Execute the actual intervention action by sending message to OpenHands conversation."""
+        """Execute the actual intervention action (legacy sync wrapper).
+
+        Note: This method is kept for backward compatibility. New code should use
+        _execute_intervention_for_task() directly.
+        """
         try:
             # Get agent's current task to find conversation info
             with self.db.get_session() as session:
@@ -699,7 +855,44 @@ class IntelligentGuardian:
                     .first()
                 )
 
-                if not task or not task.conversation_id or not task.persistence_dir:
+                if not task:
+                    logger.warning(
+                        f"No running task found for agent {intervention.agent_id}"
+                    )
+                    self._publish_intervention_event(intervention)
+                    self._log_intervention(intervention)
+                    return False
+
+                # Phase 6: Check if sandbox task and route appropriately
+                if self._is_sandbox_task(task):
+                    # For sandbox tasks, we need to run async method
+                    import asyncio
+
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            # Already in async context, create task
+                            future = asyncio.ensure_future(
+                                self._sandbox_intervention(intervention, task)
+                            )
+                            # Can't await in sync context, but task is scheduled
+                            success = True  # Optimistic
+                        else:
+                            success = loop.run_until_complete(
+                                self._sandbox_intervention(intervention, task)
+                            )
+                    except RuntimeError:
+                        # No event loop, create one
+                        success = asyncio.run(
+                            self._sandbox_intervention(intervention, task)
+                        )
+
+                    self._publish_intervention_event(intervention)
+                    self._log_intervention(intervention)
+                    return success
+
+                # Legacy path: require conversation info
+                if not task.conversation_id or not task.persistence_dir:
                     logger.warning(
                         f"Task with conversation info not found for agent {intervention.agent_id}. "
                         f"Task: {task.id if task else None}, "

@@ -10,6 +10,7 @@ from omoi_os.services.ace_reflector import Reflector
 from omoi_os.services.ace_curator import Curator
 from omoi_os.services.approval import ApprovalService
 from omoi_os.services.baseline_learner import BaselineLearner
+from omoi_os.services.branch_workflow import BranchWorkflowService
 from omoi_os.services.collaboration import CollaborationService
 from omoi_os.services.composite_anomaly_scorer import CompositeAnomalyScorer
 from omoi_os.services.context_service import ContextService
@@ -17,6 +18,11 @@ from omoi_os.services.coordination import CoordinationService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
+from omoi_os.services.message_queue import (
+    RedisMessageQueue,
+    InMemoryMessageQueue,
+    get_message_queue,
+)
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.resource_lock import ResourceLockService
 from omoi_os.services.restart_orchestrator import RestartOrchestrator
@@ -37,6 +43,7 @@ __all__ = [
     "AgentStatusManager",
     "ApprovalService",
     "BaselineLearner",
+    "BranchWorkflowService",
     "CollaborationService",
     "CompositeAnomalyScorer",
     "ContextService",
@@ -44,8 +51,10 @@ __all__ = [
     "DatabaseService",
     "EventBusService",
     "HeartbeatProtocolService",
+    "InMemoryMessageQueue",
     "LLMService",
     "PhaseGateService",
+    "RedisMessageQueue",
     "ResourceLockService",
     "RestartOrchestrator",
     "SystemEvent",
@@ -54,4 +63,5 @@ __all__ = [
     "TicketWorkflowOrchestrator",
     "ValidationAgent",
     "get_llm_service",
+    "get_message_queue",
 ]
