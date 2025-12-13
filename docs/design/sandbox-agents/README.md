@@ -42,10 +42,11 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 | 01 | [Architecture](./01_architecture.md) | System design for real-time agent communication | Both | 📋 Design |
 | 02 | [Gap Analysis](./02_gap_analysis.md) | What we have vs. what we need | Both | ✅ Validated |
 | 03 | [Git Branch Workflow](./03_git_branch_workflow.md) | Branch management, PR workflow (Musubi) | Full | 📋 Design |
-| 04 | [Communication Patterns](./04_communication_patterns.md) | HTTP-based communication patterns | Both | 📋 Design |
+| 04 | [Communication Patterns](./04_communication_patterns.md) | HTTP patterns, **security, rate limiting** | Both | 📋 Design |
 | 05 | [HTTP API Migration](./05_http_api_migration.md) | MCP→HTTP mapping, new routes | Both | 📋 Design |
 | 06 | [Implementation Checklist](./06_implementation_checklist.md) | ⭐ **Test-driven implementation plan** | Both | 🆕 NEW |
 | 07 | [Existing Systems Integration](./07_existing_systems_integration.md) | Guardian, Registry, Fault Tolerance | Full | 🆕 NEW |
+| 08 | [Frontend Integration](./08_frontend_integration.md) | UI components, WebSocket hooks, wireframes | Full | 🆕 NEW |
 
 ### Status Legend
 - 📋 Design - Design document, not yet validated
@@ -66,6 +67,7 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 4. **Existing Systems Integration** - Understand Guardian, Fault Tolerance
 5. **Implementation Checklist** - Phases 4-7
 6. **Git Workflow** - Branch/PR automation details
+7. **Frontend Integration** - UI components and WebSocket hooks (Optional)
 
 ---
 
