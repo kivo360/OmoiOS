@@ -58,19 +58,19 @@ services:
         condition: service_healthy
     develop:
       watch:
-        # Restart on Python source code changes
-        - action: restart
+        # Sync code then restart
+        - action: sync+restart
           path: ./omoi_os/api
           target: /app/omoi_os/api
-        - action: restart
+        - action: sync+restart
           path: ./omoi_os/services
           target: /app/omoi_os/services
-        - action: restart
+        - action: sync+restart
           path: ./omoi_os/models
           target: /app/omoi_os/models
-        - action: restart
-          path: ./config.py
-          target: /app/config.py
+        - action: sync+restart
+          path: ./omoi_os/config
+          target: /app/omoi_os/config
         # Rebuild on dependency changes
         - action: rebuild
           path: ./pyproject.toml
@@ -97,19 +97,10 @@ services:
         condition: service_healthy
     develop:
       watch:
-        # Restart on Python source code changes
-        - action: restart
-          path: ./omoi_os/worker.py
-          target: /app/omoi_os/worker.py
-        - action: restart
-          path: ./omoi_os/services
-          target: /app/omoi_os/services
-        - action: restart
-          path: ./omoi_os/models
-          target: /app/omoi_os/models
-        - action: restart
-          path: ./config.py
-          target: /app/config.py
+        # Sync code then restart
+        - action: sync+restart
+          path: ./omoi_os
+          target: /app/omoi_os
         # Rebuild on dependency changes
         - action: rebuild
           path: ./pyproject.toml
@@ -138,15 +129,20 @@ services:
     command: python -m omoi_os.workers.orchestrator_worker
     develop:
       watch:
-        - action: restart
+        # Sync code then restart (sync+restart syncs files before restarting)
+        - action: sync+restart
           path: ./omoi_os/workers
           target: /app/omoi_os/workers
-        - action: restart
-          path: ./omoi_os/services/daytona_spawner.py
-          target: /app/omoi_os/services/daytona_spawner.py
-        - action: restart
-          path: ./omoi_os/services/task_queue.py
-          target: /app/omoi_os/services/task_queue.py
+        - action: sync+restart
+          path: ./omoi_os/services
+          target: /app/omoi_os/services
+        - action: sync+restart
+          path: ./omoi_os/models
+          target: /app/omoi_os/models
+        - action: sync+restart
+          path: ./omoi_os/config
+          target: /app/omoi_os/config
+        # Rebuild on dependency changes
         - action: rebuild
           path: ./pyproject.toml
         - action: rebuild
@@ -171,18 +167,20 @@ services:
     command: python -m omoi_os.workers.monitoring_worker
     develop:
       watch:
-        - action: restart
+        # Sync code then restart
+        - action: sync+restart
           path: ./omoi_os/workers
           target: /app/omoi_os/workers
-        - action: restart
-          path: ./omoi_os/services/intelligent_guardian.py
-          target: /app/omoi_os/services/intelligent_guardian.py
-        - action: restart
-          path: ./omoi_os/services/monitoring_loop.py
-          target: /app/omoi_os/services/monitoring_loop.py
-        - action: restart
-          path: ./omoi_os/services/diagnostic.py
-          target: /app/omoi_os/services/diagnostic.py
+        - action: sync+restart
+          path: ./omoi_os/services
+          target: /app/omoi_os/services
+        - action: sync+restart
+          path: ./omoi_os/models
+          target: /app/omoi_os/models
+        - action: sync+restart
+          path: ./omoi_os/config
+          target: /app/omoi_os/config
+        # Rebuild on dependency changes
         - action: rebuild
           path: ./pyproject.toml
         - action: rebuild
