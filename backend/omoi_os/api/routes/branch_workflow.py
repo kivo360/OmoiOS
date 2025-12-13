@@ -126,13 +126,11 @@ def get_branch_workflow_service() -> BranchWorkflowService:
     if _branch_workflow_service is None:
         # Create GitHub API service
         from omoi_os.services.database import DatabaseService
-        from omoi_os.services.event_bus import EventBusService
         from omoi_os.config import get_app_settings
 
         settings = get_app_settings()
-        db_service = DatabaseService(database_url=settings.database.url)
-        event_bus = EventBusService(redis_url=settings.redis.url)
-        github_service = GitHubAPIService(db_service=db_service, event_bus=event_bus)
+        db_service = DatabaseService(connection_string=settings.database.url)
+        github_service = GitHubAPIService(db=db_service)
 
         _branch_workflow_service = BranchWorkflowService(github_service=github_service)
     return _branch_workflow_service

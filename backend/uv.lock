@@ -826,6 +826,30 @@ wheels = [
 ]
 
 [[package]]
+name = "daytona-sdk"
+version = "0.119.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "aiofiles" },
+    { name = "daytona-api-client" },
+    { name = "daytona-api-client-async" },
+    { name = "daytona-toolbox-api-client" },
+    { name = "daytona-toolbox-api-client-async" },
+    { name = "deprecated" },
+    { name = "environs" },
+    { name = "httpx" },
+    { name = "multipart" },
+    { name = "obstore" },
+    { name = "pydantic" },
+    { name = "toml" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4f/e8/2be6b7b94e4492d2e1c18c97e647cea28971ee719c99b3995cad8bca75fb/daytona_sdk-0.119.0.tar.gz", hash = "sha256:7f0e5334df12fbfd74b66c0ae7b323c98a930132bb0d56491536b5abf1b56f61", size = 109871, upload-time = "2025-11-27T16:15:24.019Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/d4/5e0f14267c36dc1a7f30e3af4ce5d13bedf80ce87647bb071f955903058e/daytona_sdk-0.119.0-py3-none-any.whl", hash = "sha256:7f2682324e0f4a429be4fd15cbce95427e04cba5c810aebe686bb8eba2bdd3c8", size = 136620, upload-time = "2025-11-27T16:15:22.668Z" },
+]
+
+[[package]]
 name = "daytona-toolbox-api-client"
 version = "0.119.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2683,6 +2707,7 @@ dependencies = [
     { name = "anthropic" },
     { name = "cryptography" },
     { name = "daytona" },
+    { name = "daytona-sdk" },
     { name = "email-validator" },
     { name = "fastapi" },
     { name = "fastembed" },
@@ -2743,6 +2768,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.73.0" },
     { name = "cryptography", specifier = ">=43.0.0,<44" },
     { name = "daytona", specifier = ">=0.112.0" },
+    { name = "daytona-sdk", specifier = ">=0.119.0" },
     { name = "email-validator", specifier = ">=2.0.0,<3" },
     { name = "fastapi", specifier = ">=0.104.0" },
     { name = "fastembed", specifier = ">=0.2.0" },

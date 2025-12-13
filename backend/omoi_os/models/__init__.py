@@ -29,6 +29,7 @@ from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.project import Project
 from omoi_os.models.spec import Spec, SpecAcceptanceCriterion, SpecRequirement, SpecTask
 from omoi_os.models.user import User
+from omoi_os.models.user_credentials import UserCredential
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.phase_gate_result import PhaseGateResult
 from omoi_os.models.phase_history import PhaseHistory
@@ -122,6 +123,7 @@ __all__ = [
     "Ticket",
     "TicketStatus",
     "User",
+    "UserCredential",
     "ValidationReview",
     "WorkflowResult",
     "AgentWorkspace",

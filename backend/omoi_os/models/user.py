@@ -15,6 +15,7 @@ from omoi_os.utils.datetime import utc_now
 if TYPE_CHECKING:
     from omoi_os.models.organization import Organization, OrganizationMembership
     from omoi_os.models.auth import Session, APIKey
+    from omoi_os.models.user_credentials import UserCredential
 
 
 class User(Base):
@@ -80,6 +81,11 @@ class User(Base):
     )
     sessions: Mapped[list["Session"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+    credentials: Mapped[list["UserCredential"]] = relationship(
+        back_populates="user",
+        foreign_keys="UserCredential.user_id",
+        cascade="all, delete-orphan",
     )
     # Note: spawned_agents relationship not included due to Agent.id type mismatch
     # (Agent.id is VARCHAR, need UUID for FK relationship)

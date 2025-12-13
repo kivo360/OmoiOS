@@ -41,6 +41,7 @@ dependencies = [
     "greenlet>=3.2.4",
     "openhands-workspace>=1.1.0",
     "openhands-agent-server>=1.1.0",
+    "daytona-sdk>=0.119.0",
 ]
 
 [build-system]

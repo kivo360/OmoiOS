@@ -99,6 +99,7 @@ class DaytonaSpawnerService:
         # In-memory tracking of active sandboxes
         self._sandboxes: Dict[str, SandboxInfo] = {}
         self._task_to_sandbox: Dict[str, str] = {}  # task_id -> sandbox_id
+        print("Something aint right here")
 
     async def spawn_for_task(
         self,
@@ -163,6 +164,60 @@ class DaytonaSpawnerService:
                 env_vars["LLM_API_KEY"] = app_settings.llm.api_key
             if app_settings.llm.model:
                 env_vars["LLM_MODEL"] = app_settings.llm.model
+
+        # Anthropic / Z.AI API Configuration
+        # Supports per-user credentials with fallback to global config
+        from omoi_os.services.credentials import CredentialsService
+
+        # Get user_id from extra_env if provided
+        user_id = None
+        if extra_env and extra_env.get("USER_ID"):
+            try:
+                from uuid import UUID
+
+                user_id = UUID(extra_env["USER_ID"])
+            except (ValueError, TypeError):
+                pass
+
+        # Get credentials (user-specific or global fallback)
+        cred_service = CredentialsService(self.db) if self.db else None
+        if cred_service:
+            creds = cred_service.get_anthropic_credentials(user_id=user_id)
+        else:
+            # No DB available, use config directly
+            from omoi_os.config import load_anthropic_settings
+
+            settings = load_anthropic_settings()
+            from omoi_os.services.credentials import AnthropicCredentials
+
+            creds = AnthropicCredentials(
+                api_key=settings.get_api_key() or "",
+                base_url=settings.base_url,
+                model=settings.model,
+                default_model=settings.default_model,
+                default_haiku_model=settings.default_haiku_model,
+                default_sonnet_model=settings.default_sonnet_model,
+                default_opus_model=settings.default_opus_model,
+                source="config",
+            )
+
+        if creds.api_key:
+            env_vars["ANTHROPIC_API_KEY"] = creds.api_key
+        if creds.base_url:
+            env_vars["ANTHROPIC_BASE_URL"] = creds.base_url
+        if creds.model:
+            env_vars["ANTHROPIC_MODEL"] = creds.model
+        # Model aliases for Claude SDK compatibility
+        if creds.default_model:
+            env_vars["ANTHROPIC_DEFAULT_MODEL"] = creds.default_model
+        if creds.default_haiku_model:
+            env_vars["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = creds.default_haiku_model
+        if creds.default_sonnet_model:
+            env_vars["ANTHROPIC_DEFAULT_SONNET_MODEL"] = creds.default_sonnet_model
+        if creds.default_opus_model:
+            env_vars["ANTHROPIC_DEFAULT_OPUS_MODEL"] = creds.default_opus_model
+
+        logger.debug(f"Using {creds.source} credentials for sandbox")
 
         # Add extra env vars
         if extra_env:
@@ -316,6 +371,14 @@ class DaytonaSpawnerService:
 
         # Build environment export string
         env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
+
+        # Also write env vars to a file for persistence and debugging
+        env_file_content = "\n".join([f'{k}="{v}"' for k, v in env_vars.items()])
+        sandbox.process.exec(
+            f"cat > /tmp/.sandbox_env << 'ENVEOF'\n{env_file_content}\nENVOF"
+        )
+        # Export to current shell profile for all future commands
+        sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVOF")
 
         # Install required packages based on runtime
         logger.info(f"Installing {runtime} dependencies in sandbox...")
@@ -835,7 +898,11 @@ AGENT_ID = os.environ.get("AGENT_ID")
 SANDBOX_ID = os.environ.get("SANDBOX_ID", "")
 # Base URL without /mcp suffix for API calls
 BASE_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000").replace("/mcp", "").rstrip("/")
+
+# Anthropic / Z.AI API configuration
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", os.environ.get("LLM_API_KEY", ""))
+ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")  # Custom API endpoint (e.g., Z.AI)
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-20250514"))
 
 # GitHub configuration (Phase 3.5)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
@@ -1202,7 +1269,7 @@ async def run_agent(task_description: str):
         cwd=Path("/workspace"),
         max_turns=50,
         max_budget_usd=10.0,
-        model="claude-sonnet-4-20250514",
+        model=ANTHROPIC_MODEL,  # Use configured model (e.g., glm-4.6v via Z.AI)
         mcp_servers={"workspace": tools_server},
         hooks={
             "PreToolUse": [HookMatcher(matcher=None, hooks=[check_pending_messages])],
@@ -1225,6 +1292,8 @@ async def main():
     logger.info(f"Claude Agent Worker starting for task {TASK_ID}")
     logger.info(f"Sandbox ID: {SANDBOX_ID}")
     logger.info(f"Backend URL: {BASE_URL}")
+    logger.info(f"Anthropic Base URL: {ANTHROPIC_BASE_URL or 'default'}")
+    logger.info(f"Model: {ANTHROPIC_MODEL}")
 
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
@@ -1238,7 +1307,12 @@ async def main():
     # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
     await setup_github_workspace()
 
+    # Set Anthropic/Z.AI environment variables
     os.environ["ANTHROPIC_API_KEY"] = ANTHROPIC_API_KEY
+    if ANTHROPIC_BASE_URL:
+        os.environ["ANTHROPIC_BASE_URL"] = ANTHROPIC_BASE_URL
+        logger.info(f"Using custom Anthropic API: {ANTHROPIC_BASE_URL}")
+    logger.info(f"Using model: {ANTHROPIC_MODEL}")
 
     task = await fetch_task()
     if not task:
