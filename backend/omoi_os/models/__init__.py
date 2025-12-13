@@ -36,6 +36,7 @@ from omoi_os.models.quality_gate import QualityGate
 from omoi_os.models.quality_metric import MetricType, QualityMetric
 from omoi_os.models.reasoning import ReasoningEvent
 from omoi_os.models.resource_lock import ResourceLock
+from omoi_os.models.sandbox_event import SandboxEvent
 from omoi_os.models.task import Task
 from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task_memory import TaskMemory
@@ -108,6 +109,7 @@ __all__ = [
     "ReasoningEvent",
     "ResourceLock",
     "Role",
+    "SandboxEvent",
     "Session",
     "Spec",
     "SpecAcceptanceCriterion",

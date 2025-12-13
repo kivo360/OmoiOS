@@ -37,6 +37,7 @@ from omoi_os.api.routes import (
     quality,
     reasoning,
     results,
+    sandbox,
     specs,
     tasks,
     tickets,
@@ -897,6 +898,7 @@ app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagno
 app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
 app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
+app.include_router(sandbox.router, prefix="/api/v1/sandboxes", tags=["sandboxes"])
 
 # Dependency graph routes
 app.include_router(graph.router, prefix="/api/v1/graph", tags=["graph"])

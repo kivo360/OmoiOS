@@ -362,3 +362,58 @@ def sample_agent(db_service: DatabaseService) -> Agent:
         # Expunge so it can be used outside the session
         session.expunge(agent)
         return agent
+
+
+# =============================================================================
+# SANDBOX SYSTEM FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def sample_sandbox_event() -> dict:
+    """Standard sandbox event payload for testing."""
+    return {
+        "event_type": "agent.tool_use",
+        "event_data": {
+            "tool": "bash",
+            "command": "npm install",
+            "exit_code": 0,
+        },
+        "source": "agent",
+    }
+
+
+@pytest.fixture
+def sample_message() -> dict:
+    """Standard message payload for testing."""
+    return {
+        "content": "Please focus on authentication first.",
+        "message_type": "user_message",
+    }
+
+
+@pytest.fixture
+def sandbox_id() -> str:
+    """Generate unique sandbox ID for test isolation."""
+    return f"test-sandbox-{uuid4().hex[:8]}"
+
+
+@pytest.fixture
+def sample_task_with_sandbox(
+    db_service: DatabaseService, sample_ticket: Ticket
+) -> Task:
+    """Create a task WITH sandbox_id for sandbox mode tests."""
+    with db_service.get_session() as session:
+        task = Task(
+            ticket_id=sample_ticket.id,
+            phase_id="PHASE_IMPLEMENTATION",
+            task_type="implement_feature",
+            description="Test task in sandbox mode",
+            status="running",
+            sandbox_id=f"sandbox-{uuid4().hex[:8]}",
+        )
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        session.expunge(task)
+        return task
