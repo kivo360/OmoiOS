@@ -163,8 +163,10 @@ async def orchestrator_loop():
                 if sandbox_execution and daytona_spawner:
                     # Sandbox mode: spawn a Daytona sandbox for this task
                     try:
-                        # Extract user_id, repo info, ticket info, and GitHub token from DB
-                        # This enables per-user credentials and GitHub branch workflow
+                        # Extract user_id, repo info, ticket info, GitHub token, and FULL TASK DATA from DB
+                        # This enables per-user credentials, GitHub branch workflow, and task injection
+                        import json
+
                         extra_env: dict[str, str] = {}
                         user_id_for_token = None
                         with db.get_session() as session:
@@ -176,6 +178,9 @@ async def orchestrator_loop():
                                 # Ticket info for branch naming
                                 extra_env["TICKET_ID"] = str(ticket.id)
                                 extra_env["TICKET_TITLE"] = ticket.title or ""
+                                extra_env["TICKET_DESCRIPTION"] = (
+                                    ticket.description or ""
+                                )
                                 # Determine ticket type from phase or status
                                 ticket_type = "feature"
                                 if ticket.priority == "CRITICAL":
@@ -183,6 +188,32 @@ async def orchestrator_loop():
                                 elif "bug" in (ticket.title or "").lower():
                                     ticket_type = "bug"
                                 extra_env["TICKET_TYPE"] = ticket_type
+                                extra_env["TICKET_PRIORITY"] = (
+                                    ticket.priority or "MEDIUM"
+                                )
+
+                                # Inject full task context as base64-encoded JSON
+                                # This eliminates the need for worker to fetch from API
+                                # Base64 encoding avoids shell escaping issues with JSON
+                                import base64
+
+                                task_data = {
+                                    "task_id": str(task.id),
+                                    "task_type": task.task_type,
+                                    "task_description": task.description or "",
+                                    "task_priority": task.priority,
+                                    "phase_id": task.phase_id,
+                                    "ticket_id": str(ticket.id),
+                                    "ticket_title": ticket.title or "",
+                                    "ticket_description": ticket.description or "",
+                                    "ticket_priority": ticket.priority,
+                                    "ticket_context": ticket.context or {},
+                                }
+                                # Base64 encode to avoid shell escaping issues
+                                task_json = json.dumps(task_data)
+                                extra_env["TASK_DATA_BASE64"] = base64.b64encode(
+                                    task_json.encode()
+                                ).decode()
 
                                 if ticket.project:
                                     if ticket.project.created_by:
@@ -222,6 +253,7 @@ async def orchestrator_loop():
                             github_repo=extra_env.get("GITHUB_REPO"),
                             ticket_type=extra_env.get("TICKET_TYPE"),
                             has_github_token="GITHUB_TOKEN" in extra_env,
+                            has_task_data="TASK_DATA_JSON" in extra_env,
                         )
 
                         # Determine agent type from phase

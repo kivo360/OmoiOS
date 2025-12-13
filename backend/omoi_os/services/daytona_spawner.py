@@ -533,6 +533,11 @@ TICKET_TITLE = os.environ.get("TICKET_TITLE", "")
 TICKET_TYPE = os.environ.get("TICKET_TYPE", "feature")
 USER_ID = os.environ.get("USER_ID", "")
 
+# Phase 6: Injected task data from orchestrator (eliminates need for API fetch)
+# Task data is base64-encoded to avoid shell escaping issues
+TASK_DATA_BASE64 = os.environ.get("TASK_DATA_BASE64")
+WORKSPACE_PATH = os.environ.get("WORKSPACE_PATH", "/workspace")
+
 # Global state for message injection
 _should_stop: bool = False
 _conversation: Optional[Conversation] = None
@@ -590,18 +595,25 @@ async def create_branch_via_api():
 
 def clone_repo(branch_name: str | None = None):
     """Clone GitHub repo and checkout branch. Called on startup.
-    
+
     Phase 3.5: Clones repository if GITHUB_TOKEN and GITHUB_REPO are set.
     Phase 5: Uses branch_name from BranchWorkflowService if provided,
              otherwise falls back to BRANCH_NAME env var.
+    Phase 6: Skips clone if WORKSPACE_PATH already contains a git repo
+             (spawner uses sandbox.git.clone() directly).
     """
+    # Phase 6: Check if workspace was already cloned by spawner
+    if os.path.exists(os.path.join(WORKSPACE_PATH, ".git")):
+        logger.info(f"Workspace {WORKSPACE_PATH} already has a git repo - skipping clone")
+        return True
+    
     if not GITHUB_TOKEN or not GITHUB_REPO:
         logger.info("No GitHub credentials, skipping repo clone")
         return False
-    
+
     # Use provided branch_name or fall back to env var
     target_branch = branch_name or BRANCH_NAME
-    
+
     # Configure git user for commits
     subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
     subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
@@ -659,7 +671,37 @@ async def setup_github_workspace():
 # ============================================================================
 
 async def fetch_task():
-    """Fetch task details from orchestrator."""
+    """Fetch task details - uses injected data first, falls back to API.
+    
+    Phase 6: The orchestrator injects TASK_DATA_BASE64 with full task context,
+    eliminating the need for an API call. This enables local development
+    and ensures task data is always available regardless of API connectivity.
+    """
+    import json
+    import base64
+    
+    # First: Check for injected task data (Phase 6 - base64 encoded)
+    if TASK_DATA_BASE64:
+        try:
+            task_json = base64.b64decode(TASK_DATA_BASE64).decode()
+            task_data = json.loads(task_json)
+            logger.info("Using injected task data from orchestrator")
+            # Map to expected format
+            return {
+                "id": task_data.get("task_id"),
+                "description": task_data.get("task_description") or task_data.get("ticket_description") or task_data.get("ticket_title"),
+                "task_type": task_data.get("task_type"),
+                "priority": task_data.get("task_priority"),
+                "phase_id": task_data.get("phase_id"),
+                "ticket_id": task_data.get("ticket_id"),
+                "ticket_title": task_data.get("ticket_title"),
+                "ticket_description": task_data.get("ticket_description"),
+                "ticket_context": task_data.get("ticket_context", {}),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to decode TASK_DATA_BASE64: {e}, falling back to API")
+    
+    # Fallback: Fetch from API (original behavior)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(f"{BASE_URL}/api/v1/tasks/{TASK_ID}")
@@ -967,6 +1009,11 @@ TICKET_TITLE = os.environ.get("TICKET_TITLE", "")
 TICKET_TYPE = os.environ.get("TICKET_TYPE", "feature")
 USER_ID = os.environ.get("USER_ID", "")
 
+# Phase 6: Injected task data from orchestrator (eliminates need for API fetch)
+# Task data is base64-encoded to avoid shell escaping issues
+TASK_DATA_BASE64 = os.environ.get("TASK_DATA_BASE64")
+WORKSPACE_PATH = os.environ.get("WORKSPACE_PATH", "/workspace")
+
 # Global state for message injection
 _pending_messages: List[dict] = []
 _should_stop: bool = False
@@ -1026,18 +1073,25 @@ async def create_branch_via_api():
 
 def clone_repo(branch_name: str | None = None):
     """Clone GitHub repo and checkout branch. Called on startup.
-    
+
     Phase 3.5: Clones repository if GITHUB_TOKEN and GITHUB_REPO are set.
     Phase 5: Uses branch_name from BranchWorkflowService if provided,
              otherwise falls back to BRANCH_NAME env var.
+    Phase 6: Skips clone if WORKSPACE_PATH already contains a git repo
+             (spawner uses sandbox.git.clone() directly).
     """
+    # Phase 6: Check if workspace was already cloned by spawner
+    if os.path.exists(os.path.join(WORKSPACE_PATH, ".git")):
+        logger.info(f"Workspace {WORKSPACE_PATH} already has a git repo - skipping clone")
+        return True
+    
     if not GITHUB_TOKEN or not GITHUB_REPO:
         logger.info("No GitHub credentials, skipping repo clone")
         return False
-    
+
     # Use provided branch_name or fall back to env var
     target_branch = branch_name or BRANCH_NAME
-    
+
     # Configure git user for commits
     subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
     subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
@@ -1095,8 +1149,36 @@ async def setup_github_workspace():
 # ============================================================================
 
 async def fetch_task():
-    """Fetch task details from orchestrator."""
+    """Fetch task details - uses injected data first, falls back to API.
+    
+    Phase 6: The orchestrator injects TASK_DATA_BASE64 with full task context,
+    eliminating the need for an API call.
+    """
+    import json
+    import base64
     import httpx
+    
+    # First: Check for injected task data (Phase 6 - base64 encoded)
+    if TASK_DATA_BASE64:
+        try:
+            task_json = base64.b64decode(TASK_DATA_BASE64).decode()
+            task_data = json.loads(task_json)
+            logger.info("Using injected task data from orchestrator")
+            return {
+                "id": task_data.get("task_id"),
+                "description": task_data.get("task_description") or task_data.get("ticket_description") or task_data.get("ticket_title"),
+                "task_type": task_data.get("task_type"),
+                "priority": task_data.get("task_priority"),
+                "phase_id": task_data.get("phase_id"),
+                "ticket_id": task_data.get("ticket_id"),
+                "ticket_title": task_data.get("ticket_title"),
+                "ticket_description": task_data.get("ticket_description"),
+                "ticket_context": task_data.get("ticket_context", {}),
+            }
+        except Exception as e:
+            logger.warning(f"Failed to decode TASK_DATA_BASE64: {e}, falling back to API")
+    
+    # Fallback: Fetch from API
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.get(f"{BASE_URL}/api/v1/tasks/{TASK_ID}")

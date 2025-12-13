@@ -468,9 +468,12 @@ I need to add message injection similar to what I did for Claude.
 
 ### Testing & Validation Prompts
 
+> **📚 For comprehensive testing strategies, see [Testing Workflows](./11_testing_workflows.md)**
+
 #### Contract Testing
 
 ```
+@docs/design/sandbox-agents/11_testing_workflows.md
 @backend/tests/contract/test_sandbox_event_contract.py
 @docs/design/sandbox-agents/04_communication_patterns.md
 
@@ -486,6 +489,7 @@ Follow the existing contract test patterns.
 #### E2E Flow Validation (Automated Test)
 
 ```
+@docs/design/sandbox-agents/11_testing_workflows.md
 @docs/design/sandbox-agents/01_architecture.md
 @docs/design/sandbox-agents/06_implementation_checklist.md
 @backend/tests/integration/sandbox/
@@ -500,14 +504,18 @@ Test the complete sandbox lifecycle end-to-end:
 
 Write an integration test that validates this entire flow works together.
 This is the "does this shit actually work" test.
+
+Use the E2E testing workflow from 11_testing_workflows.md.
 ```
 
 #### Manual MVP Smoke Test ("Run It For Real")
 
 ```
+@docs/design/sandbox-agents/11_testing_workflows.md
 @docs/design/sandbox-agents/06_implementation_checklist.md
 @backend/omoi_os/services/daytona_spawner.py
 @backend/omoi_os/api/routes/sandbox.py
+@backend/scripts/
 
 I've completed the MVP phases (0-3.5). Now I want to actually run it and see it work:
 
@@ -524,6 +532,43 @@ I've completed the MVP phases (0-3.5). Now I want to actually run it and see it 
 5. How do I clean up the sandbox when done?
 
 I want to watch the whole flow happen in real-time, not just trust the tests.
+
+Use the script-based testing approach from 11_testing_workflows.md.
+```
+
+#### Script-Based Testing
+
+```
+@docs/design/sandbox-agents/11_testing_workflows.md
+@backend/scripts/test_spawner_e2e.py
+
+I need to create a test script for [FEATURE]. Help me:
+
+1. Use the script template from 11_testing_workflows.md
+2. Follow the pattern from test_spawner_e2e.py
+3. Include proper error handling and cleanup
+4. Make it easy to run with clear output
+
+Feature to test: [DESCRIBE]
+```
+
+#### Debugging Test Failures
+
+```
+@docs/design/sandbox-agents/11_testing_workflows.md
+@backend/tests/integration/sandbox/test_[test_file].py
+
+My test is failing. Here's the error:
+
+[PASTE ERROR HERE]
+
+Help me:
+1. Use the debugging guide from 11_testing_workflows.md
+2. Check common issues table
+3. Fix the issue
+4. Verify the fix works
+
+Test: [TEST_NAME]
 ```
 
 **Quick Manual Test Commands (Reference):**
@@ -778,3 +823,4 @@ gh pr create --title "Phase 1: Sandbox Event Callback" --body "Implements event 
 - [Implementation Checklist](./06_implementation_checklist.md) — ⭐ Main implementation guide
 - [Architecture](./01_architecture.md) — System design reference
 - [Communication Patterns](./04_communication_patterns.md) — API schemas and security
+- [Testing Workflows](./11_testing_workflows.md) — ⭐ Comprehensive testing strategies and prompts
