@@ -23,7 +23,7 @@ This document provides context on existing systems in the codebase that interact
 │  AgentRegistryService          Minor awareness                  Optional    │
 │  TaskQueueService              Works as-is ✅                   -           │
 │  EventBusService               Works as-is ✅                   -           │
-│  DaytonaSpawnerService         Already sandbox-native ✅        -           │
+│  DaytonaSpawnerService         Add GitHub env vars              Phase 3.5   │
 │  Worker (worker.py)            Legacy only, not for sandbox     -           │
 │                                                                             │
 │  FAULT TOLERANCE SYSTEMS       SANDBOX CHANGES NEEDED          PHASE        │
@@ -317,7 +317,65 @@ class DaytonaSpawnerService:
 
 ### Required Changes
 
-**Minor**: Update the spawner to:
+**Phase 3.5: GitHub Clone Integration** (Critical for working on repos!)
+
+Currently, sandboxes are created without GitHub credentials. Agents can't clone repos or work on files directly.
+
+**Add these environment variables to `spawn_for_task()`:**
+
+```python
+# In daytona_spawner.py - spawn_for_task() method
+
+# Build environment variables
+env_vars = {
+    "AGENT_ID": agent_id,
+    "TASK_ID": task_id,
+    "MCP_SERVER_URL": self.mcp_server_url,
+    "PHASE_ID": phase_id,
+    "SANDBOX_ID": sandbox_id,
+}
+
+# ADD: GitHub credentials for repo cloning
+# These come from extra_env parameter (passed by caller)
+if extra_env:
+    env_vars.update(extra_env)
+
+# Caller passes GitHub info like this:
+# extra_env = {
+#     "GITHUB_TOKEN": user.attributes.get("github_access_token"),
+#     "GITHUB_REPO": f"{project.github_owner}/{project.github_repo}",
+#     "BRANCH_NAME": task.attributes.get("branch_name"),
+# }
+```
+
+**Update worker script to clone on startup:**
+
+```python
+# Add to _get_worker_script() return string
+
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_REPO = os.environ.get("GITHUB_REPO")
+BRANCH_NAME = os.environ.get("BRANCH_NAME")
+
+def clone_repo():
+    """Clone repo on startup if credentials provided."""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        return False
+    
+    clone_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git"
+    subprocess.run(["git", "clone", clone_url, "/workspace"])
+    os.chdir("/workspace")
+    
+    if BRANCH_NAME:
+        subprocess.run(["git", "checkout", BRANCH_NAME])
+    
+    return True
+
+# Call at startup
+clone_repo()
+```
+
+**Also (minor)**:
 1. Set `task.sandbox_id` after creating sandbox
 2. Use the new event callback endpoints instead of legacy ones
 
