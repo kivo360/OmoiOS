@@ -15,14 +15,14 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 │                                                                             │
 │  MVP TRACK (Start Here!)             FULL INTEGRATION (Build On MVP)       │
 │  ────────────────────────            ────────────────────────────────       │
-│  Phases 0-3                          Phases 4-7                             │
-│  ~10-13 hours (~1-2 days)            +20-30 hours (~3-5 days)              │
+│  Phases 0-3.5                        Phases 4-7                             │
+│  ~14-17 hours (~2 days)              +20-30 hours (~3-5 days)              │
 │                                                                             │
 │  ✅ Event streaming to frontend      ✅ Database persistence                │
 │  ✅ Message injection works          ✅ Branch workflow automation          │
 │  ✅ Basic Guardian intervention      ✅ Full Guardian integration           │
 │  ✅ Task timeout handling            ✅ Heartbeat-based health              │
-│                                      ✅ Fault tolerance integration         │
+│  ✅ GitHub repo clone on startup     ✅ Fault tolerance integration         │
 │                                      ✅ RestartOrchestrator integration     │
 │                                                                             │
 │  WHY MVP FIRST:                                                             │
@@ -59,7 +59,7 @@ Documentation for running AI agents in isolated sandbox environments (Daytona) w
 
 ### For MVP (Quick Start)
 1. **Gap Analysis** - See what's already built (85% exists!) ✅
-2. **Implementation Checklist** - ⭐ **Start here** - Phases 0-3 only
+2. **Implementation Checklist** - ⭐ **Start here** - Phases 0-3.5 only
 3. **Architecture** - Reference as needed
 
 ### For Full Integration
@@ -83,16 +83,17 @@ pytest tests/integration/test_websocket_existing.py -v
 
 ## Implementation Summary
 
-### MVP Track (Phases 0-3) - Get Working Fast
+### MVP Track (Phases 0-3.5) - Get Working Fast
 
 | Phase | Effort | Description | Gate |
 |-------|--------|-------------|------|
 | Phase 0 | 1-2h | Validate existing infrastructure | Tests pass |
 | Phase 1 | 2-3h | Sandbox event callback endpoint | Tests pass |
 | Phase 2 | 4-6h | Message injection endpoints | Tests pass |
-| Phase 3 | 4h | Worker script updates | 🎉 **MVP Complete** |
+| Phase 3 | 4h | Worker script updates | Tests pass |
+| Phase 3.5 | 3-4h | **GitHub clone integration** | 🎉 **MVP Complete** |
 
-**MVP Total**: 10-13 hours (~1-2 days)
+**MVP Total**: 14-17 hours (~2 days)
 
 ### Full Integration Track (Phases 4-7) - Production Ready
 

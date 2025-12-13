@@ -90,7 +90,15 @@
    - Impact: Guardian and monitoring code must detect mode and route correctly
    - Recommendation: Clear mode detection via `task.sandbox_id` presence
 
-7. **🟡 Fault Tolerance System Not Designed for Sandbox** (Medium Risk - Future Integration)
+7. **🔴 GitHub Token Not Passed to Sandbox** (HIGH Risk - Blocking MVP!)
+   - Location: `backend/omoi_os/services/daytona_spawner.py` lines 147-169
+   - Issue: `spawn_for_task()` does NOT pass GitHub credentials to sandbox
+   - Missing env vars: `GITHUB_TOKEN`, `GITHUB_REPO`, `BRANCH_NAME`
+   - Impact: Agents cannot clone repos, work on files directly, or create commits
+   - **Required Fix**: Pass user's OAuth token to sandbox via `extra_env` (see Phase 3.5)
+   - Status: **Addressed in Phase 3.5** of implementation checklist
+
+9. **🟡 Fault Tolerance System Not Designed for Sandbox** (Medium Risk - Future Integration)
    - Location: `docs/design/monitoring/fault_tolerance.md`
    - Issue: Existing fault tolerance system assumes direct agent access
    - Components affected:

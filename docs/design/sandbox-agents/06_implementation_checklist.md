@@ -659,7 +659,274 @@ Update `_get_worker_script()` and `_get_claude_worker_script()` to:
 | 3.11 | Run tests - confirm PASS | ⬜ | ✅ All green |
 | 3.12 | Run Phase 0+1+2 tests - confirm no regression | ⬜ | ✅ All green |
 
-**Gate**: All Phase 3 tests must pass. ✅ MVP COMPLETE at this point!
+**Gate**: All Phase 3 tests must pass before Phase 3.5. ✅
+
+---
+
+## Phase 3.5: GitHub Clone Integration
+
+**Goal**: Sandbox clones the user's GitHub repo on startup so agents can work on local files.
+
+**Estimated Effort**: 3-4 hours
+
+### Background
+
+Without this phase, agents would need to:
+- Read files one-by-one via GitHub API (slow)
+- Write files one-by-one via GitHub API (creates separate commits)
+- Cannot use `git diff`, `git status`, etc.
+
+With this phase, agents:
+- Have full repo cloned at `/workspace`
+- Can edit files directly with bash tools
+- Can commit multiple changes at once
+- Can push and create PRs
+
+### Branch Flow (Important!)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         BRANCH CREATION FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  STEP 1: BEFORE SANDBOX (Phase 5: BranchWorkflowService)                    │
+│  ─────────────────────────────────────────────────────────                  │
+│                                                                             │
+│    BASE BRANCH (main)                                                       │
+│         │                                                                   │
+│         └──► Create NEW branch via GitHub API                               │
+│              └──► feature/TICKET-123-dark-mode                              │
+│                                                                             │
+│  STEP 2: SPAWN SANDBOX (Phase 3.5)                                          │
+│  ─────────────────────────────────                                          │
+│                                                                             │
+│    Pass to sandbox:                                                         │
+│    • GITHUB_TOKEN = user's OAuth token                                      │
+│    • GITHUB_REPO = owner/repo                                               │
+│    • BRANCH_NAME = feature/TICKET-123-dark-mode  ← Already created!         │
+│                                                                             │
+│  STEP 3: SANDBOX STARTUP (Worker script)                                    │
+│  ───────────────────────────────────────                                    │
+│                                                                             │
+│    git clone https://x-access-token:{TOKEN}@github.com/{REPO}.git           │
+│         │                                                                   │
+│         └──► Clones default branch (main)                                   │
+│                   │                                                         │
+│                   └──► git checkout feature/TICKET-123-dark-mode            │
+│                              │                                              │
+│                              └──► Now working on feature branch!            │
+│                                                                             │
+│  STEP 4: AGENT WORKS                                                        │
+│  ───────────────────                                                        │
+│                                                                             │
+│    Agent edits files in /workspace                                          │
+│    git add .                                                                │
+│    git commit -m "Implement dark mode toggle"                               │
+│                                                                             │
+│  STEP 5: TASK COMPLETION                                                    │
+│  ───────────────────────                                                    │
+│                                                                             │
+│    git push origin feature/TICKET-123-dark-mode                             │
+│         │                                                                   │
+│         └──► Create PR: feature/TICKET-123-dark-mode → main                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+TWO BRANCHES:
+┌──────────────────────┬─────────────────────────────┬─────────────────────────┐
+│ Branch               │ Description                 │ When Created            │
+├──────────────────────┼─────────────────────────────┼─────────────────────────┤
+│ Base (main)          │ Source we branch FROM       │ Already exists          │
+│ Feature (feature/...)│ NEW branch for this task    │ Phase 5, before sandbox │
+└──────────────────────┴─────────────────────────────┴─────────────────────────┘
+
+NOTE: Phase 3.5 assumes the feature branch already exists (created in Phase 5).
+      The sandbox just checks out that existing branch.
+```
+
+### 3.5.1 Write Tests First
+
+```python
+# tests/integration/test_github_clone.py
+
+import pytest
+from unittest.mock import MagicMock, patch
+
+
+def test_spawner_includes_github_env_vars():
+    """
+    SPEC: DaytonaSpawnerService should pass GitHub credentials to sandbox.
+    """
+    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    
+    spawner = DaytonaSpawnerService()
+    
+    # Mock the internal method to capture env_vars
+    captured_env = {}
+    original_create = spawner._create_daytona_sandbox
+    
+    async def capture_create(sandbox_id, env_vars, labels, runtime):
+        captured_env.update(env_vars)
+    
+    spawner._create_daytona_sandbox = capture_create
+    
+    # Call with GitHub context
+    await spawner.spawn_for_task(
+        task_id="task-123",
+        agent_id="agent-456",
+        phase_id="PHASE_IMPLEMENTATION",
+        extra_env={
+            "GITHUB_TOKEN": "ghp_test123",
+            "GITHUB_REPO": "owner/repo",
+            "BRANCH_NAME": "feature/TICKET-123-dark-mode",
+        }
+    )
+    
+    assert "GITHUB_TOKEN" in captured_env
+    assert "GITHUB_REPO" in captured_env
+    assert "BRANCH_NAME" in captured_env
+
+
+def test_worker_script_clones_repo_on_startup():
+    """
+    SPEC: Worker script should clone repo if GITHUB_TOKEN is provided.
+    """
+    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    
+    spawner = DaytonaSpawnerService()
+    script = spawner._get_worker_script()
+    
+    # Verify clone logic exists
+    assert "git clone" in script or "clone_repo" in script
+    assert "GITHUB_TOKEN" in script
+    assert "GITHUB_REPO" in script
+
+
+def test_worker_script_checks_out_branch():
+    """
+    SPEC: Worker script should checkout the feature branch after cloning.
+    """
+    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    
+    spawner = DaytonaSpawnerService()
+    script = spawner._get_worker_script()
+    
+    # Verify branch checkout
+    assert "checkout" in script.lower()
+    assert "BRANCH_NAME" in script
+
+
+def test_worker_script_handles_missing_github_gracefully():
+    """
+    SPEC: Worker should start normally even without GitHub credentials.
+    """
+    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    
+    spawner = DaytonaSpawnerService()
+    script = spawner._get_worker_script()
+    
+    # Should have conditional check
+    assert "if" in script.lower() and "GITHUB" in script
+```
+
+### 3.5.2 Implementation
+
+**File**: `backend/omoi_os/services/daytona_spawner.py` (MODIFY)
+
+Add GitHub clone logic to the worker script:
+
+```python
+# Add to worker script (inside _get_worker_script() return string)
+
+# --- GitHub Repository Setup ---
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+GITHUB_REPO = os.environ.get("GITHUB_REPO")  # format: owner/repo
+BRANCH_NAME = os.environ.get("BRANCH_NAME")
+
+def clone_repo():
+    """Clone GitHub repo and checkout branch. Called on startup."""
+    if not GITHUB_TOKEN or not GITHUB_REPO:
+        logger.info("No GitHub credentials, skipping repo clone")
+        return False
+    
+    # Build authenticated clone URL
+    clone_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git"
+    
+    logger.info(f"Cloning {GITHUB_REPO}...")
+    result = subprocess.run(
+        ["git", "clone", clone_url, "/workspace"],
+        capture_output=True,
+        text=True
+    )
+    
+    if result.returncode != 0:
+        logger.error(f"Clone failed: {result.stderr}")
+        return False
+    
+    os.chdir("/workspace")
+    
+    # Checkout branch if specified
+    if BRANCH_NAME:
+        logger.info(f"Checking out branch: {BRANCH_NAME}")
+        # Try checkout existing, or create new
+        result = subprocess.run(
+            ["git", "checkout", BRANCH_NAME],
+            capture_output=True,
+            text=True
+        )
+        if result.returncode != 0:
+            # Branch doesn't exist remotely, create it
+            subprocess.run(["git", "checkout", "-b", BRANCH_NAME])
+    
+    logger.info("Repo ready at /workspace")
+    return True
+
+# Call on startup (before agent loop)
+clone_repo()
+```
+
+**Caller Change**: Update orchestrator or spawn caller to pass GitHub info:
+
+```python
+# Example: In orchestrator_loop.py or wherever spawn_for_task is called
+
+# Get GitHub credentials from task's project
+project = get_project_for_task(task)
+user = get_user_for_project(project)
+
+github_token = user.attributes.get("github_access_token")
+github_repo = f"{project.github_owner}/{project.github_repo}" if project.github_owner else None
+branch_name = task.attributes.get("branch_name")
+
+await spawner.spawn_for_task(
+    task_id=task.id,
+    agent_id=agent_id,
+    phase_id=phase_id,
+    extra_env={
+        "GITHUB_TOKEN": github_token,
+        "GITHUB_REPO": github_repo,
+        "BRANCH_NAME": branch_name,
+    } if github_token and github_repo else {}
+)
+```
+
+### 3.5.3 Checklist
+
+| # | Task | Status | Test |
+|---|------|--------|------|
+| 3.5.1 | Write `test_spawner_includes_github_env_vars` | ⬜ | — |
+| 3.5.2 | Write `test_worker_script_clones_repo_on_startup` | ⬜ | — |
+| 3.5.3 | Write `test_worker_script_checks_out_branch` | ⬜ | — |
+| 3.5.4 | Write `test_worker_script_handles_missing_github_gracefully` | ⬜ | — |
+| 3.5.5 | Run tests - verify they FAIL | ⬜ | — |
+| 3.5.6 | Add `clone_repo()` function to worker script | ⬜ | — |
+| 3.5.7 | Add GITHUB_TOKEN/REPO/BRANCH env var reads | ⬜ | — |
+| 3.5.8 | Call `clone_repo()` at worker startup | ⬜ | — |
+| 3.5.9 | Update spawn caller to pass GitHub env vars | ⬜ | — |
+| 3.5.10 | Run tests - confirm PASS | ⬜ | ✅ All green |
+| 3.5.11 | Run Phase 0-3 tests - confirm no regression | ⬜ | ✅ All green |
+
+**Gate**: All Phase 3.5 tests must pass. ✅ MVP COMPLETE at this point!
 
 ---
 
