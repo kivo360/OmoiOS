@@ -2,8 +2,126 @@
 
 **Created**: 2025-12-12  
 **Updated**: 2025-12-12 (major revision after discovering existing WebSocket system)  
-**Status**: Planning Document  
+**Validated**: 2025-12-12 ✅ (cross-referenced against actual codebase)  
+**Status**: Planning Document - VALIDATED  
 **Purpose**: Comprehensive analysis of existing infrastructure vs. requirements for real-time sandbox agent communication
+
+---
+
+## 🔍 Validation Status
+
+> **This document has been validated against the actual codebase on 2025-12-12.**
+
+### Validation Summary
+
+| Category | Documented | Verified | Status |
+|----------|------------|----------|--------|
+| WebSocket endpoint exists | `/api/v1/ws/events` | `backend/omoi_os/api/routes/events.py` | ✅ Confirmed |
+| WebSocketEventManager | Redis pub/sub bridge | Lines 23-161 in `events.py` | ✅ Confirmed |
+| Frontend useEvents hook | Filters, reconnection | `frontend/hooks/useEvents.ts` (242 lines) | ✅ Confirmed |
+| WebSocketProvider | Auto-connect, query invalidation | `frontend/providers/WebSocketProvider.tsx` | ✅ Confirmed |
+| EventBusService | Redis pub/sub | `backend/omoi_os/services/event_bus.py` (83 lines) | ✅ Confirmed |
+| DaytonaSpawnerService | OpenHands + Claude workers | `backend/omoi_os/services/daytona_spawner.py` (821 lines) | ✅ Confirmed |
+| TaskQueueService | DAG-aware, events | `backend/omoi_os/services/task_queue.py` (~860 lines) | ✅ Confirmed |
+| GitHubAPIService | Full API wrapper | `backend/omoi_os/services/github_api.py` (~765 lines) | ✅ Confirmed |
+
+### ⚠️ Risks Identified During Validation
+
+1. **In-Memory Sandbox Tracking** (Medium Risk)
+   - Location: `daytona_spawner.py` lines 99-101
+   - Issue: `_sandboxes` and `_task_to_sandbox` are in-memory dicts
+   - Impact: Server restart = lose all active sandbox state
+   - Mitigation: Phase 4 (optional) adds database persistence
+
+2. **Embedded Worker Scripts** (Low Risk)
+   - Location: `daytona_spawner.py` lines 344-662
+   - Issue: 100+ line scripts embedded as string returns
+   - Impact: Hard to test, hard to maintain
+   - Recommendation: Consider extracting to files that get uploaded
+
+3. **Event Endpoint Overlap** (Low Risk)
+   - Current: `/tasks/{id}/events` and `/agent-events` endpoints exist
+   - Planned: `/sandboxes/{id}/events` endpoint
+   - Recommendation: Consolidate to sandbox-centric model per this design
+
+4. **🔴 Missing `sandbox_id` Field in Task Model** (HIGH Risk - BUG!)
+   - Location: `backend/omoi_os/api/routes/tasks.py` line ~45
+   - Issue: `register_conversation` endpoint sets `task.sandbox_id = request.sandbox_id`
+   - Problem: The `Task` model has NO `sandbox_id` field defined!
+   - Impact: Sandbox-task association is broken; Guardian can't identify sandbox tasks
+   - **Required Fix**: Add `sandbox_id` field to Task model (see Phase 6)
+
+5. **🔴 Guardian Cannot Intervene with Sandbox Agents** (HIGH Risk - Architecture Gap!)
+   - Location: `backend/omoi_os/services/intelligent_guardian.py` and `conversation_intervention.py`
+   - Issue: Guardian uses `ConversationInterventionService` which loads conversation state from **LOCAL filesystem**
+   - Problem: Sandbox agents have conversation state **INSIDE the Daytona sandbox**, not locally accessible
+   - Impact: Guardian monitoring works but CANNOT send interventions to sandbox agents
+   - **Required Fix**: Add sandbox-aware intervention routing (see Phase 6)
+
+   ```
+   CURRENT FLOW (Broken for Sandbox):
+   ┌─────────────────────────────────────────────────────────────────┐
+   │  Guardian.execute_steering_intervention()                       │
+   │       │                                                         │
+   │       └─► ConversationInterventionService.send_intervention()   │
+   │                │                                                │
+   │                └─► Conversation(                                │
+   │                        persistence_dir=task.persistence_dir     │
+   │                    )  ◄── FAILS! Path doesn't exist locally!   │
+   └─────────────────────────────────────────────────────────────────┘
+   
+   REQUIRED FLOW (Sandbox-aware):
+   ┌─────────────────────────────────────────────────────────────────┐
+   │  Guardian.execute_steering_intervention()                       │
+   │       │                                                         │
+   │       ├─► IF task.sandbox_id:                                   │
+   │       │       POST /api/v1/sandboxes/{id}/messages              │
+   │       │       (Uses message injection API)                      │
+   │       │                                                         │
+   │       └─► ELSE:                                                 │
+   │               ConversationInterventionService (legacy path)     │
+   └─────────────────────────────────────────────────────────────────┘
+   ```
+
+6. **Dual Monitoring Paths Complexity** (Medium Risk - Architecture Complexity)
+   - Issue: System now has TWO agent execution modes with different intervention mechanisms
+   - Legacy Path: Direct filesystem access via `persistence_dir`
+   - Sandbox Path: HTTP API via message injection endpoints
+   - Impact: Guardian and monitoring code must detect mode and route correctly
+   - Recommendation: Clear mode detection via `task.sandbox_id` presence
+
+7. **🟡 Fault Tolerance System Not Designed for Sandbox** (Medium Risk - Future Integration)
+   - Location: `docs/design/monitoring/fault_tolerance.md`
+   - Issue: Existing fault tolerance system assumes direct agent access
+   - Components affected:
+     - **Heartbeat Detection**: Expects bidirectional heartbeats from agents
+     - **Restart Orchestrator**: Doesn't know how to restart Daytona sandboxes
+     - **Trajectory Context Builder**: Reads logs from local filesystem
+     - **Forensics Collector**: Collects data from local agent process
+   - Impact: MVP can work without fault tolerance, but Full Integration needs it
+   - **MVP Strategy**: Use task timeouts, simple restart (terminate + spawn new)
+   - **Full Integration**: Connect RestartOrchestrator to DaytonaSpawnerService
+   - See "MVP vs Full Integration" section below
+
+### File Path Reference
+
+For implementers, here are the exact file locations:
+
+**Backend (confirmed to exist):**
+- `backend/omoi_os/api/routes/events.py` - WebSocket endpoint + manager
+- `backend/omoi_os/services/event_bus.py` - EventBusService
+- `backend/omoi_os/services/daytona_spawner.py` - Sandbox spawner
+- `backend/omoi_os/services/task_queue.py` - Task queue
+- `backend/omoi_os/services/github_api.py` - GitHub API wrapper
+- `backend/omoi_os/services/intelligent_guardian.py` - Guardian monitoring
+
+**Frontend (confirmed to exist):**
+- `frontend/hooks/useEvents.ts` - Event subscription hooks
+- `frontend/providers/WebSocketProvider.tsx` - WebSocket context
+
+**To Be Created:**
+- `backend/omoi_os/api/routes/sandboxes.py` - NEW (Phase 1-2)
+- `backend/omoi_os/services/branch_workflow.py` - NEW (Phase 5)
 
 ---
 
@@ -425,6 +543,67 @@
 │  └─ Use PreToolUse/PostToolUse hooks for real-time reporting               │
 │                                                                             │
 │  Effort: ~4 hours                                                          │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Gap 5: Guardian & Monitoring Integration ❌ (NEW - Critical!)
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│              NEEDED: Guardian & Existing Systems Integration                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  PROBLEM: Guardian CANNOT intervene with sandbox agents!                    │
+│                                                                             │
+│  Existing Systems Affected:                                                 │
+│  ├─ IntelligentGuardian (intelligent_guardian.py)                          │
+│  │   └─ Monitors agent trajectories, detects drift, sends interventions    │
+│  ├─ ConversationInterventionService (conversation_intervention.py)         │
+│  │   └─ Sends messages by loading from LOCAL persistence_dir               │
+│  ├─ Task Model (models/task.py)                                            │
+│  │   └─ MISSING sandbox_id field!                                          │
+│  └─ Agent Registry Service (agent_registry.py)                             │
+│      └─ Tracks agent capabilities - needs sandbox mode awareness           │
+│                                                                             │
+│  Required Changes:                                                          │
+│                                                                             │
+│  1. Add sandbox_id to Task Model                                           │
+│     ┌──────────────────────────────────────────────────────────────┐       │
+│     │  # backend/omoi_os/models/task.py                            │       │
+│     │  sandbox_id: Mapped[Optional[str]] = mapped_column(          │       │
+│     │      String(255), nullable=True, index=True                  │       │
+│     │  )                                                           │       │
+│     └──────────────────────────────────────────────────────────────┘       │
+│                                                                             │
+│  2. Update Guardian to Detect Sandbox Mode                                  │
+│     ┌──────────────────────────────────────────────────────────────┐       │
+│     │  def _is_sandbox_task(self, task: Task) -> bool:             │       │
+│     │      return bool(task.sandbox_id)                            │       │
+│     └──────────────────────────────────────────────────────────────┘       │
+│                                                                             │
+│  3. Add Sandbox Intervention Path                                          │
+│     ┌──────────────────────────────────────────────────────────────┐       │
+│     │  async def _sandbox_intervention(self, sandbox_id, msg):     │       │
+│     │      async with httpx.AsyncClient() as client:               │       │
+│     │          await client.post(                                  │       │
+│     │              f"{URL}/sandboxes/{sandbox_id}/messages",       │       │
+│     │              json={                                          │       │
+│     │                  "content": msg,                             │       │
+│     │                  "message_type": "guardian_intervention"     │       │
+│     │              }                                               │       │
+│     │          )                                                   │       │
+│     └──────────────────────────────────────────────────────────────┘       │
+│                                                                             │
+│  4. Update Worker to Handle Guardian Messages                              │
+│     ┌──────────────────────────────────────────────────────────────┐       │
+│     │  if msg["message_type"] == "guardian_intervention":          │       │
+│     │      agent.inject_system_message(                            │       │
+│     │          f"[GUARDIAN] {msg['content']}"                      │       │
+│     │      )                                                       │       │
+│     └──────────────────────────────────────────────────────────────┘       │
+│                                                                             │
+│  Effort: ~6-8 hours                                                        │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -874,16 +1053,159 @@ while agent_running:
 - ✅ Task queue with full DAG support
 - ✅ Monitoring infrastructure
 
-### What We Need (Minimal!)
+### What We Need (Updated!)
 - ❌ Sandbox event callback endpoint (~2-3 hours)
 - ❌ Message injection endpoints (~4-6 hours)
 - ❌ Worker script updates (~4 hours)
+- ❌ **Guardian & Systems Integration (~6-8 hours)** ← Critical for monitoring!
 - ❌ (Optional) Database persistence for audit trail
+- ❌ (Full Integration) Fault tolerance integration (~8-12 hours)
 
 ### Revised Effort
 **Original estimate**: 36-52 hours  
-**Revised estimate**: 14-19 hours  
-**Savings**: 60-70% reduction!
+**MVP estimate**: 14-19 hours (without Guardian integration)
+**Full estimate with Guardian**: 20-27 hours  
+**Full Integration (incl. fault tolerance)**: 30-40 hours  
+**Savings**: Still 50-60% reduction from original!
+
+---
+
+## MVP vs Full Integration Strategy
+
+This section clarifies the two-track approach to implementation:
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                MVP vs FULL INTEGRATION ROADMAP                               │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  MVP TRACK (Phases 0-3)                  FULL INTEGRATION (Phases 4-7)     │
+│  ─────────────────────                   ─────────────────────────────     │
+│  Goal: Get sandbox agents working        Goal: Production-ready system     │
+│  Timeframe: 1-2 days                     Timeframe: +3-5 days              │
+│                                                                             │
+│  ✅ Event streaming to frontend          ✅ Database persistence            │
+│  ✅ Message injection for interventions  ✅ Branch workflow automation      │
+│  ✅ Guardian can steer sandbox agents    ✅ Guardian integrated properly    │
+│  ✅ Basic task timeout handling          ✅ Heartbeat-based health          │
+│                                          ✅ RestartOrchestrator integration │
+│  ⚠️ No heartbeat system                  ✅ Full fault tolerance            │
+│  ⚠️ Simple restart (kill + respawn)     ✅ Forensics & quarantine          │
+│  ⚠️ In-memory sandbox tracking                                             │
+│                                                                             │
+│  WHY THIS ORDER:                                                            │
+│  ───────────────                                                            │
+│  1. MVP validates core assumptions FAST                                    │
+│  2. Full Integration builds ON TOP of MVP (not parallel)                   │
+│  3. Each phase adds to existing code, doesn't replace                      │
+│  4. Tests at each gate prevent regressions                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### MVP Simplifications
+
+The MVP intentionally skips some sophistication to get working faster:
+
+| Feature | MVP Approach | Full Integration |
+|---------|-------------|------------------|
+| **Health Monitoring** | Task timeout (no heartbeats) | Bidirectional heartbeats to `/sandboxes/{id}/heartbeat` |
+| **Agent Restart** | Simple: terminate sandbox + spawn new | Full escalation ladder (1→2→3 misses) via RestartOrchestrator |
+| **Sandbox Tracking** | In-memory dict in DaytonaSpawner | Database table + foreign key to Task |
+| **Log Collection** | Event streaming only | Pull logs from sandbox for forensics |
+| **Guardian** | Message injection works | Full trajectory analysis with sandbox context |
+| **Anomaly Detection** | None | Sandbox-specific baselines |
+
+### Why MVP First is Safe
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    MVP → FULL INTEGRATION UPGRADE PATH                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  MVP creates EXTENSION POINTS for Full Integration:                        │
+│                                                                             │
+│  1. Event Callback Endpoint (Phase 1)                                       │
+│     MVP: Workers POST events                                               │
+│     Full: SAME endpoint, add heartbeat event type                          │
+│     └─ No breaking change, just new event type                             │
+│                                                                             │
+│  2. Message Injection (Phase 2)                                             │
+│     MVP: Guardian uses it for interventions                                │
+│     Full: SAME endpoint, Fault Tolerance uses it too                       │
+│     └─ No breaking change, just more consumers                             │
+│                                                                             │
+│  3. sandbox_id on Task (Phase 6)                                           │
+│     MVP: Guardian uses for mode detection                                  │
+│     Full: RestartOrchestrator uses for sandbox restart                     │
+│     └─ Field is there, more code uses it                                   │
+│                                                                             │
+│  4. DaytonaSpawnerService                                                   │
+│     MVP: spawn_for_task() and terminate_sandbox()                          │
+│     Full: RestartOrchestrator calls these same methods                     │
+│     └─ No new methods needed, just integration                             │
+│                                                                             │
+│  KEY INSIGHT: MVP is a SUBSET of Full Integration, not separate system     │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Fault Tolerance Integration Details (Full Integration)
+
+When ready for Full Integration, these are the specific changes needed:
+
+**Phase 7A: Heartbeat for Sandbox Agents**
+```python
+# Worker script addition (in _get_worker_script)
+# Every 15 seconds, POST heartbeat:
+requests.post(
+    f"{API_BASE}/api/v1/sandboxes/{sandbox_id}/events",
+    json={
+        "event_type": "heartbeat",
+        "event_data": {
+            "status": "running",
+            "current_action": agent.current_action,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    }
+)
+```
+
+**Phase 7B: RestartOrchestrator Integration**
+```python
+# In RestartOrchestrator.initiate_restart()
+task = get_task_for_agent(agent_id)
+
+if task.sandbox_id:
+    # Sandbox mode: use DaytonaSpawner
+    await daytona_spawner.terminate_sandbox(task.sandbox_id)
+    new_sandbox_id = await daytona_spawner.spawn_for_task(
+        task_id=task.id,
+        agent_id=agent_id,
+        phase_id=task.phase_id,
+        agent_type=task.agent_type,
+    )
+    task.sandbox_id = new_sandbox_id
+    session.commit()
+else:
+    # Legacy mode: existing logic
+    ...
+```
+
+**Phase 7C: Trajectory Context for Sandbox**
+```python
+# In TrajectoryContextBuilder
+if task.sandbox_id:
+    # Get context from event store (events were POSTed by worker)
+    recent_events = await db.query(SandboxEvent).filter(
+        SandboxEvent.sandbox_id == task.sandbox_id
+    ).order_by(SandboxEvent.created_at.desc()).limit(100).all()
+    
+    context.logs_snippet = "\n".join(e.payload.get("message", "") for e in recent_events)
+else:
+    # Legacy mode: read from local filesystem
+    context.logs_snippet = tail_file(task.persistence_dir + "/agent.log")
+```
 
 ### Why the Reduction?
 The existing WebSocket system already handles:

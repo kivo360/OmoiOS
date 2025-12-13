@@ -675,35 +675,97 @@ CREATE TABLE sandbox_ws_connections (
 
 ### 4. Guardian Intervention Flow
 
+> **⚠️ IMPORTANT**: The Guardian has TWO intervention paths depending on agent execution mode:
+> - **Sandbox Mode**: Uses HTTP message injection API
+> - **Legacy Mode**: Uses local filesystem via `ConversationInterventionService`
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     GUARDIAN INTERVENTION FLOW (UPDATED)                     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  Guardian Service                                                           │
+│       │                                                                     │
+│       │ Monitoring loop detects:                                           │
+│       │ - Agent drift                                                      │
+│       │ - Stuck state                                                      │
+│       │ - Off-track trajectory                                             │
+│       │                                                                     │
+│       ▼                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │  execute_steering_intervention(intervention, task)                  │   │
+│  │                                                                     │   │
+│  │       ┌───────────────────────────────────────────────────────┐    │   │
+│  │       │   Is task.sandbox_id present?                         │    │   │
+│  │       └───────────────────┬───────────────────────────────────┘    │   │
+│  │                           │                                        │   │
+│  │              YES ─────────┼───────── NO                            │   │
+│  │                           │                                        │   │
+│  │    ┌──────────────────────┴──────────────────────┐                 │   │
+│  │    │                      │                      │                 │   │
+│  │    ▼                      │                      ▼                 │   │
+│  │  SANDBOX PATH             │             LEGACY PATH                │   │
+│  │  ────────────             │             ────────────               │   │
+│  │  POST /api/v1/sandboxes   │             ConversationIntervention   │   │
+│  │    /{sandbox_id}/messages │             Service.send_intervention() │   │
+│  │                           │                      │                 │   │
+│  │  Body:                    │             Uses:                      │   │
+│  │  {                        │             - task.conversation_id     │   │
+│  │    "content": "...",      │             - task.persistence_dir     │   │
+│  │    "message_type":        │               (LOCAL filesystem)       │   │
+│  │      "guardian_           │                      │                 │   │
+│  │       intervention"       │                      │                 │   │
+│  │  }                        │                      │                 │   │
+│  │         │                 │                      │                 │   │
+│  │         ▼                 │                      ▼                 │   │
+│  │  Worker polls             │             OpenHands Conversation     │   │
+│  │  GET /messages            │             object loads state         │   │
+│  │  and receives it          │             and injects message        │   │
+│  │                           │                                        │   │
+│  └───────────────────────────┴────────────────────────────────────────┘   │
+│                                                                             │
+│  BOTH PATHS:                                                               │
+│  ───────────                                                               │
+│  • Agent receives intervention message                                     │
+│  • Agent course-corrects behavior                                         │
+│  • Event published for frontend visibility                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Sequence Diagram (Sandbox Mode)**:
+
 ```
 ┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐
-│ Guardian │      │  Event   │      │ Sandbox  │      │  Agent   │
-│ Service  │      │   Bus    │      │ Worker   │      │ Runtime  │
+│ Guardian │      │  HTTP    │      │ Sandbox  │      │  Agent   │
+│ Service  │      │   API    │      │ Worker   │      │ Runtime  │
 └────┬─────┘      └────┬─────┘      └────┬─────┘      └────┬─────┘
      │                 │                 │                 │
      │ Monitoring loop │                 │                 │
      │ detects drift   │                 │                 │
      │                 │                 │                 │
-     │ Publish:        │                 │                 │
-     │ guardian.       │                 │                 │
-     │ intervention    │                 │                 │
+     │ _is_sandbox_task() → TRUE        │                 │
+     │                 │                 │                 │
+     │ POST /sandboxes/{id}/messages    │                 │
+     │ {type: "guardian_intervention"}  │                 │
      │────────────────>│                 │                 │
      │                 │                 │                 │
-     │                 │ Route to        │                 │
-     │                 │ sandbox         │                 │
+     │                 │ Queue message   │                 │
+     │                 │                 │                 │
+     │                 │                 │ Poll GET        │
+     │                 │                 │ /messages       │
+     │                 │<────────────────│                 │
+     │                 │                 │                 │
+     │                 │ Return messages │                 │
      │                 │────────────────>│                 │
      │                 │                 │                 │
-     │                 │                 │ Inject steering │
-     │                 │                 │ message         │
+     │                 │                 │ Inject as       │
+     │                 │                 │ system msg      │
      │                 │                 │────────────────>│
      │                 │                 │                 │
      │                 │                 │                 │ Agent
      │                 │                 │                 │ course-
      │                 │                 │                 │ corrects
-     │                 │                 │                 │
-     │                 │    Also broadcasts to frontend    │
-     │                 │════════════════════════════════════>
-     │                 │    (user sees intervention)       │
      │                 │                 │                 │
 ```
 

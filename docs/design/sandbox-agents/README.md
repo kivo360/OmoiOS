@@ -2,29 +2,124 @@
 
 Documentation for running AI agents in isolated sandbox environments (Daytona) with full Git integration.
 
+**Last Validated**: 2025-12-12 ✅
+
+---
+
+## 🎯 Two-Track Implementation Strategy
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    MVP → FULL INTEGRATION ROADMAP                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  MVP TRACK (Start Here!)             FULL INTEGRATION (Build On MVP)       │
+│  ────────────────────────            ────────────────────────────────       │
+│  Phases 0-3                          Phases 4-7                             │
+│  ~10-13 hours (~1-2 days)            +20-30 hours (~3-5 days)              │
+│                                                                             │
+│  ✅ Event streaming to frontend      ✅ Database persistence                │
+│  ✅ Message injection works          ✅ Branch workflow automation          │
+│  ✅ Basic Guardian intervention      ✅ Full Guardian integration           │
+│  ✅ Task timeout handling            ✅ Heartbeat-based health              │
+│                                      ✅ Fault tolerance integration         │
+│                                      ✅ RestartOrchestrator integration     │
+│                                                                             │
+│  WHY MVP FIRST:                                                             │
+│  • Validates core assumptions quickly                                      │
+│  • Creates extension points for Full Integration                           │
+│  • NOT a parallel system - Full Integration builds on MVP code             │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
 ## Documents
 
-| # | Document | Description |
-|---|----------|-------------|
-| 01 | [Architecture](./01_architecture.md) | System design for real-time agent communication, control, and sandbox introspection |
-| 02 | [Gap Analysis](./02_gap_analysis.md) | What we have vs. what we need analysis |
-| 03 | [Git Branch Workflow](./03_git_branch_workflow.md) | Branch management, PR workflow, and AI conflict resolution (codename: Musubi) |
-| 04 | [Communication Patterns](./04_communication_patterns.md) | HTTP-based communication for reliability (replacing MCP for task management) |
-| 05 | [HTTP API Migration](./05_http_api_migration.md) | **Complete guide**: MCP→HTTP mapping, new routes to add, SDK tool examples |
+| # | Document | Description | Track | Status |
+|---|----------|-------------|-------|--------|
+| 01 | [Architecture](./01_architecture.md) | System design for real-time agent communication | Both | 📋 Design |
+| 02 | [Gap Analysis](./02_gap_analysis.md) | What we have vs. what we need | Both | ✅ Validated |
+| 03 | [Git Branch Workflow](./03_git_branch_workflow.md) | Branch management, PR workflow (Musubi) | Full | 📋 Design |
+| 04 | [Communication Patterns](./04_communication_patterns.md) | HTTP-based communication patterns | Both | 📋 Design |
+| 05 | [HTTP API Migration](./05_http_api_migration.md) | MCP→HTTP mapping, new routes | Both | 📋 Design |
+| 06 | [Implementation Checklist](./06_implementation_checklist.md) | ⭐ **Test-driven implementation plan** | Both | 🆕 NEW |
+| 07 | [Existing Systems Integration](./07_existing_systems_integration.md) | Guardian, Registry, Fault Tolerance | Full | 🆕 NEW |
+
+### Status Legend
+- 📋 Design - Design document, not yet validated
+- ✅ Validated - Cross-referenced against codebase
+- 🆕 NEW - Recently added
+- ⏳ In Progress - Implementation underway
+
+---
 
 ## Reading Order
 
-1. **Architecture** - Understand the overall system design
-2. **Gap Analysis** - See what's already built vs. what needs work
-3. **Git Workflow** - Deep dive into branch/merge automation
-4. **Communication Patterns** - Why HTTP over MCP
-5. **HTTP API Migration** - ⭐ **Start here for implementation** - Complete mapping and code
+### For MVP (Quick Start)
+1. **Gap Analysis** - See what's already built (85% exists!) ✅
+2. **Implementation Checklist** - ⭐ **Start here** - Phases 0-3 only
+3. **Architecture** - Reference as needed
+
+### For Full Integration
+4. **Existing Systems Integration** - Understand Guardian, Fault Tolerance
+5. **Implementation Checklist** - Phases 4-7
+6. **Git Workflow** - Branch/PR automation details
+
+---
+
+## Quick Start for Implementation
+
+```bash
+# 1. Run existing infrastructure tests (Phase 0)
+pytest tests/integration/test_websocket_existing.py -v
+
+# 2. If Phase 0 passes, proceed with Phase 1
+# See 06_implementation_checklist.md for details
+```
+
+---
+
+## Implementation Summary
+
+### MVP Track (Phases 0-3) - Get Working Fast
+
+| Phase | Effort | Description | Gate |
+|-------|--------|-------------|------|
+| Phase 0 | 1-2h | Validate existing infrastructure | Tests pass |
+| Phase 1 | 2-3h | Sandbox event callback endpoint | Tests pass |
+| Phase 2 | 4-6h | Message injection endpoints | Tests pass |
+| Phase 3 | 4h | Worker script updates | 🎉 **MVP Complete** |
+
+**MVP Total**: 10-13 hours (~1-2 days)
+
+### Full Integration Track (Phases 4-7) - Production Ready
+
+| Phase | Effort | Description | Gate |
+|-------|--------|-------------|------|
+| Phase 4 | 4-6h | Database persistence | Tests pass |
+| Phase 5 | 10-15h | Branch workflow service | Tests pass |
+| Phase 6 | 6-8h | Guardian & systems integration | Tests pass |
+| **Phase 7** | 8-12h | Fault tolerance integration | 🎉 **Full Integration** |
+
+**Full Total**: 38-50 hours (~1 week)
+
+---
 
 ## Key Concepts
 
 - **Daytona**: Cloud sandbox technology for isolated agent execution
 - **BranchWorkflowService**: Manages ticket → branch → PR → merge lifecycle
-- **AI Branch Naming**: Generates descriptive branch names from ticket content
-- **Conflict Resolution**: AI-powered merge conflict resolution
 - **HTTP over MCP**: Use simple HTTP for task/status operations (more reliable)
-- **27 MCP Tools → HTTP**: Full mapping of what exists (15) vs. needs adding (12)
+- **MVP Extension Points**: MVP code creates hooks that Full Integration uses
+
+---
+
+## ⚠️ Critical Issues Identified
+
+1. **Missing `sandbox_id` on Task model** - Required for Guardian mode detection
+2. **Guardian can't intervene with sandbox agents** - Needs HTTP routing (Phase 6)
+3. **Fault tolerance not sandbox-aware** - Needs RestartOrchestrator integration (Phase 7)
+
+See [02_gap_analysis.md](./02_gap_analysis.md) for full details.
