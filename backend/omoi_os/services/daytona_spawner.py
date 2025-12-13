@@ -380,12 +380,17 @@ class DaytonaSpawnerService:
         sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVOF")
 
         # Install required packages based on runtime
+        # Use uv for faster installation if available, fallback to pip
         logger.info(f"Installing {runtime} dependencies in sandbox...")
         if runtime == "claude":
-            install_cmd = "pip install claude-agent-sdk httpx"
+            # Claude Agent SDK - per docs/libraries/claude-agent-sdk-python-clean.md
+            install_cmd = "uv pip install claude-agent-sdk httpx 2>/dev/null || pip install claude-agent-sdk httpx"
         else:  # openhands (default)
-            install_cmd = "pip install openhands-ai mcp httpx"
-        sandbox.process.exec(install_cmd, timeout=120)
+            # OpenHands Software Agent SDK - per docs/libraries/software-agent-sdk-clean.md
+            # openhands-sdk: Core SDK (openhands.sdk)
+            # openhands-tools: Built-in tools (openhands.tools)
+            install_cmd = "uv pip install openhands-sdk openhands-tools httpx 2>/dev/null || pip install openhands-sdk openhands-tools httpx"
+        sandbox.process.exec(install_cmd, timeout=180)
 
         # Upload the appropriate worker script
         if runtime == "claude":
