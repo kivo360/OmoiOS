@@ -14,6 +14,7 @@ from omoi_os.models.base import Base
 def _orjson_default(obj):
     """Default handler for types orjson doesn't handle natively."""
     from enum import Enum
+
     if isinstance(obj, Enum):
         return obj.value
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
@@ -21,7 +22,7 @@ def _orjson_default(obj):
 
 def _orjson_serializer(obj):
     """Serialize objects to JSON using orjson.
-    
+
     orjson natively handles UUID, datetime, and other types that
     the standard json module cannot serialize. We add Enum support
     via the default handler.
@@ -51,29 +52,44 @@ class DatabaseService:
         """
         # Sync engine (for backward compatibility)
         # Use orjson for faster JSON serialization and native UUID/datetime support
+        # Pool settings: limit connections, recycle stale ones
         self.engine = create_engine(
             connection_string,
             echo=False,
             json_serializer=_orjson_serializer,
             json_deserializer=_orjson_deserializer,
+            pool_size=5,  # Max persistent connections
+            max_overflow=5,  # Additional connections above pool_size
+            pool_timeout=30,  # Seconds to wait for connection
+            pool_recycle=1800,  # Recycle connections after 30 min
+            pool_pre_ping=True,  # Verify connection before use
         )
-        self.SessionLocal = sessionmaker(bind=self.engine, autocommit=False, autoflush=False)
-        
+        self.SessionLocal = sessionmaker(
+            bind=self.engine, autocommit=False, autoflush=False
+        )
+
         # Async engine (for new auth system)
         # Convert sync URL to async (replace psycopg with psycopg for async support)
-        async_url = connection_string.replace('postgresql+psycopg://', 'postgresql+psycopg://')
+        async_url = connection_string.replace(
+            "postgresql+psycopg://", "postgresql+psycopg://"
+        )
         self.async_engine = create_async_engine(
             async_url,
             echo=False,
             json_serializer=_orjson_serializer,
             json_deserializer=_orjson_deserializer,
+            pool_size=5,
+            max_overflow=5,
+            pool_timeout=30,
+            pool_recycle=1800,
+            pool_pre_ping=True,
         )
         self.AsyncSessionLocal = async_sessionmaker(
             self.async_engine,
             class_=AsyncSession,
             expire_on_commit=False,
             autocommit=False,
-            autoflush=False
+            autoflush=False,
         )
 
     def create_tables(self) -> None:
@@ -104,7 +120,7 @@ class DatabaseService:
             raise
         finally:
             session.close()
-    
+
     @asynccontextmanager
     async def get_async_session(self) -> AsyncGenerator[AsyncSession, None]:
         """
@@ -126,7 +142,16 @@ class DatabaseService:
             raise
         finally:
             await session.close()
-    
+
+    def close(self):
+        """Dispose of sync engine and close all connections."""
+        self.engine.dispose()
+
     async def dispose_async(self):
         """Dispose of async engine (cleanup)."""
+        await self.async_engine.dispose()
+
+    async def close_all(self):
+        """Close both sync and async engines."""
+        self.engine.dispose()
         await self.async_engine.dispose()

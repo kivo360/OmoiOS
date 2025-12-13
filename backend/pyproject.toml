@@ -42,6 +42,7 @@ dependencies = [
     "openhands-workspace>=1.1.0",
     "openhands-agent-server>=1.1.0",
     "daytona-sdk>=0.119.0",
+    "structlog>=24.0.0",
 ]
 
 [build-system]

@@ -1,0 +1,70 @@
+---
+description: Development environment setup and commands for backend services
+globs: ["backend/**/*", "docker-compose*.yml", "Justfile"]
+alwaysApply: false
+---
+
+# Backend Development Mode
+
+## Starting the Development Environment
+
+To run the backend services with hot-reload during development:
+
+```bash
+# From the project root directory
+just watch
+```
+
+This command:
+- Starts PostgreSQL and Redis containers
+- Builds and runs the API, Worker, and Orchestrator services
+- Enables hot-reload via `docker compose watch` - changes to Python files automatically restart services
+
+## Service Architecture
+
+The `just watch` command runs these services:
+- **backend**: FastAPI server (port 8000)
+- **worker**: Background task worker
+- **postgres**: PostgreSQL database (port 15432)
+- **redis**: Redis cache (port 16379)
+
+The **orchestrator loop** runs inside the backend service and:
+- Polls for pending tasks every 10 seconds
+- Spawns Daytona sandboxes (when `DAYTONA_SANDBOX_EXECUTION=true`)
+- Logs heartbeats every 30 seconds (JSON format via structlog)
+
+## Viewing Logs
+
+```bash
+# All services
+docker compose logs -f
+
+# Specific service
+docker compose logs -f backend
+
+# Filter orchestrator JSON logs with jq
+docker compose logs backend 2>&1 | grep -E '^\{' | jq 'select(.event == "heartbeat")'
+```
+
+## Common Issues
+
+### "too many clients already" (PostgreSQL)
+Connection pool exhaustion. Restart services:
+```bash
+docker compose restart postgres
+# or full restart
+docker compose down && just watch
+```
+
+### Multiple Alembic Heads
+```bash
+cd backend
+uv run alembic heads  # Check for multiple heads
+uv run alembic merge <head1> <head2> -m "merge_heads"
+```
+
+## Important Paths
+
+- **Justfile**: `/senior_sandbox/Justfile` (main commands)
+- **Docker Compose**: `/senior_sandbox/backend/docker-compose.yml`
+- **Orchestrator Worker**: `/senior_sandbox/backend/omoi_os/workers/orchestrator_worker.py`
