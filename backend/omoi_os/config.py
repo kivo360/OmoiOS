@@ -166,6 +166,44 @@ class LLMSettings(OmoiBaseSettings):
     fireworks_api_key: Optional[str] = None
 
 
+class AnthropicSettings(OmoiBaseSettings):
+    """
+    Anthropic / Z.AI API configuration for Claude Agent SDK.
+
+    Loads ANTHROPIC_* environment variables:
+      - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN)
+      - ANTHROPIC_BASE_URL (custom API endpoint, e.g., Z.AI)
+      - ANTHROPIC_MODEL (default model to use)
+      - ANTHROPIC_DEFAULT_HAIKU_MODEL
+      - ANTHROPIC_DEFAULT_SONNET_MODEL
+      - ANTHROPIC_DEFAULT_OPUS_MODEL
+
+    Precedence: YAML defaults < environment variables < init kwargs.
+    """
+
+    yaml_section = "anthropic"
+    model_config = SettingsConfigDict(
+        env_prefix="ANTHROPIC_",
+        extra="ignore",
+    )
+
+    # API credentials
+    api_key: Optional[str] = None
+    auth_token: Optional[str] = None  # Alternative to api_key (Z.AI uses this)
+    base_url: str = "https://api.z.ai/api/anthropic"  # Default to Z.AI
+
+    # Model configuration
+    model: str = "glm-4.6v"  # Default model
+    default_model: str = "glm-4.6v"
+    default_haiku_model: str = "glm-4.6v-flash"
+    default_sonnet_model: str = "glm-4.6v"
+    default_opus_model: str = "glm-4.6v"
+
+    def get_api_key(self) -> Optional[str]:
+        """Get API key, preferring api_key over auth_token."""
+        return self.api_key or self.auth_token
+
+
 class DatabaseSettings(OmoiBaseSettings):
     """
     Database configuration settings.
@@ -200,6 +238,10 @@ class RedisSettings(OmoiBaseSettings):
 
 def load_llm_settings() -> LLMSettings:
     return get_app_settings().llm
+
+
+def load_anthropic_settings() -> AnthropicSettings:
+    return get_app_settings().anthropic
 
 
 def load_database_settings() -> DatabaseSettings:
@@ -584,6 +626,7 @@ def load_workspace_settings() -> WorkspaceSettings:
 class AppSettings:
     def __init__(self) -> None:
         self.llm = LLMSettings()
+        self.anthropic = AnthropicSettings()
         self.database = DatabaseSettings()
         self.redis = RedisSettings()
         self.task_queue = TaskQueueSettings()
