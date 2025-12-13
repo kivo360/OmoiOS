@@ -15,9 +15,9 @@ import uuid
 from collections import defaultdict
 from datetime import datetime, timezone
 from threading import Lock
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
@@ -279,7 +279,6 @@ def persist_sandbox_event(
 async def post_sandbox_event(
     sandbox_id: str,
     event: SandboxEventCreate,
-    db: DatabaseService = Depends(get_db_service),
 ) -> SandboxEventResponse:
     """
     Receive event from sandbox worker and broadcast to subscribers.
@@ -288,7 +287,7 @@ async def post_sandbox_event(
     to report progress, tool usage, errors, and other events to the backend.
 
     Events are:
-    - Persisted to database (Phase 4)
+    - Persisted to database (Phase 4) - optional, fails gracefully
     - Broadcast via EventBus to:
       - WebSocket clients (real-time UI updates)
       - Guardian monitoring (trajectory analysis)
@@ -296,7 +295,6 @@ async def post_sandbox_event(
     Args:
         sandbox_id: Unique identifier for the sandbox (from URL path)
         event: Event data from request body
-        db: Database session (injected)
 
     Returns:
         SandboxEventResponse with status, timestamp, and event_id
@@ -309,14 +307,21 @@ async def post_sandbox_event(
             "source": "agent"
         }
     """
-    # Persist to database (Phase 4)
-    event_id = persist_sandbox_event(
-        db=db,
-        sandbox_id=sandbox_id,
-        event_type=event.event_type,
-        event_data=event.event_data,
-        source=event.source,
-    )
+    # Persist to database (Phase 4) - optional, don't fail if DB unavailable
+    # Persist to database (Phase 4) - optional, fails gracefully
+    event_id: str | None = None
+    try:
+        db = get_db_service()
+        event_id = persist_sandbox_event(
+            db=db,
+            sandbox_id=sandbox_id,
+            event_type=event.event_type,
+            event_data=event.event_data,
+            source=event.source,
+        )
+    except Exception:
+        # Persistence is optional - don't fail if DB unavailable
+        pass
 
     # Broadcast via EventBus
     broadcast_sandbox_event(

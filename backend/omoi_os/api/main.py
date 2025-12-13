@@ -1,6 +1,7 @@
 """FastAPI application entry point."""
 
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -731,64 +732,90 @@ async def lifespan(app: FastAPI):
     # NOTE: Database tables should be created via alembic migrations, not create_all()
     # Run: alembic upgrade head (handled in Dockerfile CMD)
 
-    # Start background loops
-    orchestrator_task = asyncio.create_task(orchestrator_loop())
-    heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
-    diagnostic_task = asyncio.create_task(diagnostic_monitoring_loop())
-    anomaly_task = asyncio.create_task(anomaly_monitoring_loop())
-    blocking_detection_task = asyncio.create_task(blocking_detection_loop())
-    approval_timeout_task = asyncio.create_task(approval_timeout_loop())
+    # Check if we're in testing mode - skip background loops
+    is_testing = os.environ.get("TESTING", "").lower() == "true"
 
-    # Start intelligent monitoring loop if available
-    if monitoring_loop:
-        try:
-            await monitoring_loop.start()
-            print("✅ Intelligent Monitoring Loop started")
-        except Exception as e:
-            print(f"⚠️  Failed to start MonitoringLoop: {e}")
+    # Start background loops (skip in test mode to prevent hanging)
+    orchestrator_task = None
+    heartbeat_task = None
+    diagnostic_task = None
+    anomaly_task = None
+    blocking_detection_task = None
+    approval_timeout_task = None
+
+    if not is_testing:
+        orchestrator_task = asyncio.create_task(orchestrator_loop())
+        heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
+        diagnostic_task = asyncio.create_task(diagnostic_monitoring_loop())
+        anomaly_task = asyncio.create_task(anomaly_monitoring_loop())
+        blocking_detection_task = asyncio.create_task(blocking_detection_loop())
+        approval_timeout_task = asyncio.create_task(approval_timeout_loop())
+
+        # Start intelligent monitoring loop if available
+        if monitoring_loop:
+            try:
+                await monitoring_loop.start()
+                print("✅ Intelligent Monitoring Loop started")
+            except Exception as e:
+                print(f"⚠️  Failed to start MonitoringLoop: {e}")
+    else:
+        print("🧪 TESTING mode: Skipping background loops")
 
     yield
 
-    # Cleanup
-    orchestrator_task.cancel()
-    heartbeat_task.cancel()
-    diagnostic_task.cancel()
-    anomaly_task.cancel()
-    blocking_detection_task.cancel()
-    approval_timeout_task.cancel()
+    # Cleanup (only if tasks were started)
+    if orchestrator_task:
+        orchestrator_task.cancel()
+    if heartbeat_task:
+        heartbeat_task.cancel()
+    if diagnostic_task:
+        diagnostic_task.cancel()
+    if anomaly_task:
+        anomaly_task.cancel()
+    if blocking_detection_task:
+        blocking_detection_task.cancel()
+    if approval_timeout_task:
+        approval_timeout_task.cancel()
 
-    # Stop intelligent monitoring loop if running
-    if monitoring_loop:
+    # Stop intelligent monitoring loop if running (and not in test mode)
+    if monitoring_loop and not is_testing:
         try:
             await monitoring_loop.stop()
             print("✅ Intelligent Monitoring Loop stopped")
         except Exception as e:
             print(f"⚠️  Error stopping MonitoringLoop: {e}")
 
-    try:
-        await orchestrator_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await heartbeat_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await diagnostic_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await anomaly_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await blocking_detection_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await approval_timeout_task
-    except asyncio.CancelledError:
-        pass
+    # Await task cancellation (only if tasks were started)
+    if orchestrator_task:
+        try:
+            await orchestrator_task
+        except asyncio.CancelledError:
+            pass
+    if heartbeat_task:
+        try:
+            await heartbeat_task
+        except asyncio.CancelledError:
+            pass
+    if diagnostic_task:
+        try:
+            await diagnostic_task
+        except asyncio.CancelledError:
+            pass
+    if anomaly_task:
+        try:
+            await anomaly_task
+        except asyncio.CancelledError:
+            pass
+    if blocking_detection_task:
+        try:
+            await blocking_detection_task
+        except asyncio.CancelledError:
+            pass
+    if approval_timeout_task:
+        try:
+            await approval_timeout_task
+        except asyncio.CancelledError:
+            pass
 
     # Shutdown MCP server if it has a lifespan
     if "mcp_app" in globals() and mcp_app:
@@ -805,12 +832,18 @@ async def lifespan(app: FastAPI):
 @asynccontextmanager
 async def combined_lifespan(app: FastAPI):
     """Combined lifespan for FastAPI and FastMCP."""
-    # Import here to avoid circular dependencies
-    from omoi_os.mcp.fastmcp_server import mcp_app
+    is_testing = os.environ.get("TESTING", "").lower() == "true"
 
     async with lifespan(app):
-        async with mcp_app.lifespan(app):
+        if is_testing:
+            # Skip MCP server in test mode to prevent hanging
             yield
+        else:
+            # Import here to avoid circular dependencies
+            from omoi_os.mcp.fastmcp_server import mcp_app
+
+            async with mcp_app.lifespan(app):
+                yield
 
 
 # Create FastAPI app
