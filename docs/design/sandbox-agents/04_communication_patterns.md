@@ -667,3 +667,69 @@ If currently using MCP for everything:
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Hook-Based Message Injection Pattern
+
+### Why Hooks?
+
+The polling-based pattern (GET `/messages` after each turn) introduces latency. For time-sensitive interventions like Guardian steering, we need **immediate injection**.
+
+### Pattern: PreToolUse Hook Injection
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    HOOK-BASED INJECTION FLOW                                 │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  1. Guardian/User enqueues intervention                                     │
+│     POST /api/v1/sandboxes/{id}/interventions                              │
+│     { message, source, priority, inject_mode: "immediate" }                 │
+│                                                                             │
+│  2. Server stores in fast-access storage (Redis)                            │
+│     LPUSH sandbox:{id}:interventions {...}                                  │
+│                                                                             │
+│  3. Agent about to execute tool → PreToolUse hook fires                    │
+│                                                                             │
+│  4. Hook checks for pending interventions                                   │
+│     a. In-memory queue (instant)                                            │
+│     b. Server poll (every N calls, fills in-memory queue)                   │
+│                                                                             │
+│  5. If intervention found:                                                  │
+│     Claude: Return {reason, systemMessage} → Claude receives context       │
+│     OpenHands: Call conversation.send_message() → Agent sees on next iter  │
+│                                                                             │
+│  TIMING: Intervention delivered BEFORE tool executes                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### API Addition
+
+```http
+POST /api/v1/sandboxes/{sandbox_id}/interventions
+Authorization: Bearer {sandbox_token}
+
+{
+  "message": "Focus on the API endpoint, not the tests",
+  "source": "guardian",
+  "priority": "normal",
+  "inject_mode": "immediate"
+}
+```
+
+**Response:**
+```json
+{
+  "id": "int-abc123",
+  "status": "queued",
+  "inject_mode": "immediate",
+  "estimated_delivery_ms": 50
+}
+```
+
+### Backward Compatibility
+
+The existing `/messages` endpoint continues to work for polling-based injection.
+The new `/interventions` endpoint is optimized for hook-based immediate injection.

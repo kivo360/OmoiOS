@@ -769,6 +769,73 @@ CREATE TABLE sandbox_ws_connections (
      │                 │                 │                 │
 ```
 
+### 5. Hook-Based Intervention Architecture
+
+> **🚀 Performance Enhancement**: This pattern reduces intervention latency from seconds to milliseconds.
+
+**Current (Polling-Based) vs. Proposed (Hook-Based):**
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│             INTERVENTION INJECTION: POLLING vs HOOK-BASED                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  POLLING-BASED (Current):                                                   │
+│  ────────────────────────                                                   │
+│  Guardian enqueues → Worker finishes turn → Polls → Gets message → Injects │
+│                                          ↑                                   │
+│                                   DELAY (seconds)                           │
+│                                                                             │
+│  HOOK-BASED (Proposed):                                                     │
+│  ──────────────────────                                                     │
+│  Guardian enqueues → PreToolUse fires → Check queue → Inject immediately   │
+│                                       ↑                                      │
+│                                INSTANT (<100ms)                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**SDK-Specific Implementation:**
+
+| SDK | Hook Mechanism | Latency | Control Level |
+|-----|----------------|---------|---------------|
+| Claude Agent SDK | `PreToolUse` hook | <1ms | Full (can block/modify) |
+| OpenHands SDK | Event callback (ActionEvent) | <100ms | Moderate (inject message) |
+
+**Worker Script Hook Pattern (Claude SDK):**
+
+```python
+# Intervention check hook - fires BEFORE every tool execution
+async def check_pending_interventions(input_data, tool_use_id, context):
+    intervention = await fetch_next_intervention()
+    if intervention:
+        return {
+            "reason": intervention["message"],  # Feedback for Claude
+            "systemMessage": f"[{intervention['source'].upper()}] {intervention['message']}",
+        }
+    return {}
+
+options = ClaudeAgentOptions(
+    hooks={
+        "PreToolUse": [HookMatcher(matcher="*", hooks=[check_pending_interventions])],
+    },
+)
+```
+
+**Worker Script Hook Pattern (OpenHands SDK):**
+
+```python
+# Enhanced callback with intervention injection
+def on_event_with_intervention(event):
+    if "Action" in type(event).__name__:
+        intervention = fetch_next_intervention_sync()
+        if intervention:
+            conversation.send_message(
+                f"[{intervention['source'].upper()} INTERVENTION] {intervention['message']}"
+            )
+    # Original event reporting continues...
+```
+
 ---
 
 ## SDK Comparison
