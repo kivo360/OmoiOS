@@ -121,6 +121,9 @@ services:
       # Daytona configuration
       - DAYTONA_SANDBOX_EXECUTION=${DAYTONA_SANDBOX_EXECUTION:-true}
       - DAYTONA_API_KEY=${DAYTONA_API_KEY:-}
+      # MCP Server URL for Daytona sandboxes to connect back
+      # Using production URL since Daytona sandboxes run in remote cloud
+      - INTEGRATIONS_MCP_SERVER_URL=https://omoi-api-production.up.railway.app/mcp
     depends_on:
       postgres:
         condition: service_healthy
@@ -142,6 +145,10 @@ services:
         - action: sync+restart
           path: ./omoi_os/config
           target: /app/omoi_os/config
+        # Sync config directory for YAML settings
+        - action: sync+restart
+          path: ./config
+          target: /app/config
         # Rebuild on dependency changes
         - action: rebuild
           path: ./pyproject.toml
