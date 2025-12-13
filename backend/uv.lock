@@ -2737,6 +2737,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "redis" },
     { name = "sqlalchemy" },
+    { name = "structlog" },
     { name = "supabase" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "whenever" },
@@ -2798,6 +2799,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.0,<7" },
     { name = "redis", specifier = ">=5.0.0,<6" },
     { name = "sqlalchemy", specifier = ">=2.0.0,<3" },
+    { name = "structlog", specifier = ">=24.0.0" },
     { name = "supabase", specifier = ">=2.0.0,<3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
     { name = "whenever", specifier = ">=0.9.3" },
@@ -7299,6 +7301,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/85/ad/430fb60d90e1d112a62ff57bdd1f286ec73a2a0331272febfddd21f330e1/StrEnum-0.4.15.tar.gz", hash = "sha256:878fb5ab705442070e4dd1929bb5e2249511c0bcf2b0eeacf3bcd80875c82eff", size = 23384, upload-time = "2023-06-29T22:02:58.399Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/81/69/297302c5f5f59c862faa31e6cb9a4cd74721cd1e052b38e464c5b402df8b/StrEnum-0.4.15-py3-none-any.whl", hash = "sha256:a30cda4af7cc6b5bf52c8055bc4bf4b2b6b14a93b574626da33df53cf7740659", size = 8851, upload-time = "2023-06-29T22:02:56.947Z" },
+]
+
+[[package]]
+name = "structlog"
+version = "25.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510, upload-time = "2025-10-27T08:28:21.535Z" },
 ]
 
 [[package]]

@@ -12,15 +12,31 @@ Run with: python -m omoi_os.workers.orchestrator_worker
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 import signal
 import sys
+import time
 from typing import TYPE_CHECKING
+
+import structlog
 
 if TYPE_CHECKING:
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.task_queue import TaskQueueService
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
+
+# Configure structlog for JSON output
+structlog.configure(
+    processors=[
+        structlog.stdlib.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+)
+logger = structlog.get_logger("orchestrator")
 
 # Services (initialized in init_services)
 db: DatabaseService | None = None
@@ -30,6 +46,31 @@ registry_service: AgentRegistryService | None = None
 
 # Shutdown flag
 shutdown_event = asyncio.Event()
+
+# Stats tracking (global for heartbeat access)
+stats = {
+    "poll_count": 0,
+    "tasks_processed": 0,
+    "tasks_failed": 0,
+    "start_time": 0.0,
+}
+
+
+async def heartbeat_task():
+    """Log heartbeat every 30 seconds to confirm worker is alive."""
+    heartbeat_num = 0
+    while not shutdown_event.is_set():
+        heartbeat_num += 1
+        uptime = int(time.time() - stats["start_time"])
+        logger.info(
+            "heartbeat",
+            heartbeat_num=heartbeat_num,
+            uptime_seconds=uptime,
+            poll_count=stats["poll_count"],
+            tasks_processed=stats["tasks_processed"],
+            tasks_failed=stats["tasks_failed"],
+        )
+        await asyncio.sleep(30)
 
 
 async def orchestrator_loop():
@@ -42,16 +83,17 @@ async def orchestrator_loop():
     global db, queue, event_bus, registry_service
 
     if not db or not queue or not event_bus:
-        print("❌ Required services not initialized")
+        logger.error("services_not_initialized")
         return
 
-    print("🚀 Orchestrator loop started")
+    logger.info("orchestrator_loop_started")
 
     # Check if sandbox execution is enabled
     from omoi_os.config import get_app_settings
 
     settings = get_app_settings()
     sandbox_execution = settings.daytona.sandbox_execution
+    mode = "sandbox" if sandbox_execution else "legacy"
 
     # Initialize Daytona spawner if sandbox mode enabled
     daytona_spawner = None
@@ -60,16 +102,24 @@ async def orchestrator_loop():
             from omoi_os.services.daytona_spawner import get_daytona_spawner
 
             daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
-            print("✅ Sandbox execution mode ENABLED - will spawn Daytona sandboxes")
+            logger.info("daytona_spawner_initialized", mode=mode)
         except Exception as e:
-            print(f"❌ Failed to initialize Daytona spawner: {e}")
-            print("   Falling back to legacy mode")
+            logger.error("daytona_spawner_failed", error=str(e))
+            logger.warning("falling_back_to_legacy_mode")
             sandbox_execution = False
+            mode = "legacy"
     else:
-        print("ℹ️  Legacy execution mode - workers poll for tasks")
+        logger.info("legacy_mode_enabled", mode=mode)
 
     while not shutdown_event.is_set():
         try:
+            stats["poll_count"] += 1
+            cycle = stats["poll_count"]
+
+            # Create cycle-bound logger
+            log = logger.bind(cycle=cycle, mode=mode)
+            log.debug("poll_started")
+
             # Get next pending task (no agent filter in sandbox mode)
             from omoi_os.models.agent import Agent
             from omoi_os.models.agent_status import AgentStatus
@@ -88,6 +138,7 @@ async def orchestrator_loop():
                         .first()
                     )
                     if not available_agent:
+                        log.debug("no_idle_agents")
                         await asyncio.sleep(5)
                         continue
 
@@ -103,9 +154,55 @@ async def orchestrator_loop():
                 task_id = str(task.id)
                 phase_id = task.phase_id or "PHASE_IMPLEMENTATION"
 
+                # Bind task context to logger
+                log = log.bind(
+                    task_id=task_id, phase=phase_id, ticket_id=str(task.ticket_id)
+                )
+                log.info("task_found")
+
                 if sandbox_execution and daytona_spawner:
                     # Sandbox mode: spawn a Daytona sandbox for this task
                     try:
+                        # Extract user_id, repo info, and ticket info from DB
+                        # This enables per-user credentials and GitHub branch workflow
+                        extra_env: dict[str, str] = {}
+                        with db.get_session() as session:
+                            from omoi_os.models.ticket import Ticket
+
+                            ticket = session.get(Ticket, task.ticket_id)
+                            if ticket:
+                                # Ticket info for branch naming
+                                extra_env["TICKET_ID"] = str(ticket.id)
+                                extra_env["TICKET_TITLE"] = ticket.title or ""
+                                # Determine ticket type from phase or status
+                                ticket_type = "feature"
+                                if ticket.priority == "CRITICAL":
+                                    ticket_type = "hotfix"
+                                elif "bug" in (ticket.title or "").lower():
+                                    ticket_type = "bug"
+                                extra_env["TICKET_TYPE"] = ticket_type
+
+                                if ticket.project:
+                                    if ticket.project.created_by:
+                                        extra_env["USER_ID"] = str(
+                                            ticket.project.created_by
+                                        )
+                                    # Combine owner/repo into GITHUB_REPO format
+                                    owner = ticket.project.github_owner
+                                    repo = ticket.project.github_repo
+                                    if owner and repo:
+                                        extra_env["GITHUB_REPO"] = f"{owner}/{repo}"
+                                        # Also keep separate vars for backwards compat
+                                        extra_env["GITHUB_REPO_OWNER"] = owner
+                                        extra_env["GITHUB_REPO_NAME"] = repo
+
+                        log.debug(
+                            "env_extracted",
+                            user_id=extra_env.get("USER_ID"),
+                            github_repo=extra_env.get("GITHUB_REPO"),
+                            ticket_type=extra_env.get("TICKET_TYPE"),
+                        )
+
                         # Determine agent type from phase
                         from omoi_os.agents.templates import get_template_for_phase
 
@@ -136,19 +233,25 @@ async def orchestrator_loop():
                             session.add(agent)
                             session.commit()
 
-                        # Spawn sandbox
+                        log.info(
+                            "spawning_sandbox", agent_id=agent_id, agent_type=agent_type
+                        )
+
+                        # Spawn sandbox with user/repo context
                         sandbox_id = await daytona_spawner.spawn_for_task(
                             task_id=task_id,
                             agent_id=agent_id,
                             phase_id=phase_id,
                             agent_type=agent_type,
+                            extra_env=extra_env if extra_env else None,
                         )
 
                         # Update task with sandbox info
                         queue.assign_task(task.id, agent_id)
 
-                        print(
-                            f"🚀 Spawned sandbox {sandbox_id} for task {task_id} (agent: {agent_id})"
+                        stats["tasks_processed"] += 1
+                        log.info(
+                            "sandbox_spawned", sandbox_id=sandbox_id, agent_id=agent_id
                         )
 
                         # Publish event
@@ -171,10 +274,12 @@ async def orchestrator_loop():
                         import traceback
 
                         error_details = traceback.format_exc()
-                        print(
-                            f"❌ Failed to spawn sandbox for task {task_id}: {spawn_error}"
+                        stats["tasks_failed"] += 1
+                        log.error(
+                            "sandbox_spawn_failed",
+                            error=str(spawn_error),
+                            traceback=error_details,
                         )
-                        print(f"   Traceback: {error_details}")
                         # Mark task as failed
                         queue.update_task_status(
                             task.id,
@@ -197,16 +302,21 @@ async def orchestrator_loop():
                         )
                     )
 
-                    print(f"📋 Assigned task {task_id} to agent {agent_id}")
+                    stats["tasks_processed"] += 1
+                    log.info("task_assigned", agent_id=agent_id)
+
+            else:
+                log.debug("no_pending_tasks")
 
             # Poll every 10 seconds
             await asyncio.sleep(10)
 
         except asyncio.CancelledError:
-            print("🛑 Orchestrator loop cancelled")
+            logger.info("orchestrator_loop_cancelled")
             break
         except Exception as e:
-            print(f"❌ Error in orchestrator loop: {e}")
+            stats["tasks_failed"] += 1
+            logger.error("orchestrator_loop_error", error=str(e))
             await asyncio.sleep(10)
 
 
@@ -214,7 +324,7 @@ async def init_services():
     """Initialize required services."""
     global db, queue, event_bus, registry_service
 
-    print("🔧 Initializing services...")
+    logger.info("initializing_services")
 
     from omoi_os.config import get_app_settings
     from omoi_os.services.database import DatabaseService
@@ -226,34 +336,46 @@ async def init_services():
 
     # Database - pass connection string, not settings object
     db = DatabaseService(connection_string=app_settings.database.url)
-    print("   ✅ Database connected")
+    logger.info("service_initialized", service="database")
 
     # Task Queue (Redis-backed)
     queue = TaskQueueService(db)
-    print("   ✅ Task queue initialized")
+    logger.info("service_initialized", service="task_queue")
 
     # Event Bus (Redis-backed)
     event_bus = EventBusService(redis_url=app_settings.redis.url)
-    print("   ✅ Event bus connected")
+    logger.info("service_initialized", service="event_bus")
 
     # Agent Registry
     registry_service = AgentRegistryService(db)
-    print("   ✅ Agent registry initialized")
+    logger.info("service_initialized", service="agent_registry")
 
-    print("✅ All services initialized")
+    logger.info("all_services_initialized")
 
 
 async def shutdown():
     """Graceful shutdown."""
-    print("\n🛑 Shutting down orchestrator worker...")
+    uptime = int(time.time() - stats["start_time"]) if stats["start_time"] else 0
+    logger.info(
+        "shutting_down",
+        uptime_seconds=uptime,
+        total_polls=stats["poll_count"],
+        tasks_processed=stats["tasks_processed"],
+        tasks_failed=stats["tasks_failed"],
+    )
     shutdown_event.set()
+
+    # Close database connections
+    if db:
+        db.close()
+        logger.info("service_closed", service="database")
 
     # Close event bus
     if event_bus:
         event_bus.close()
-        print("   ✅ Event bus closed")
+        logger.info("service_closed", service="event_bus")
 
-    print("👋 Orchestrator worker stopped")
+    logger.info("orchestrator_stopped")
 
 
 def signal_handler(sig, frame):
@@ -263,9 +385,13 @@ def signal_handler(sig, frame):
 
 async def main():
     """Main entry point."""
-    print("=" * 60)
-    print("🎭 OmoiOS Orchestrator Worker")
-    print("=" * 60)
+    stats["start_time"] = time.time()
+
+    logger.info(
+        "orchestrator_starting",
+        version="1.0.0",
+        pid=os.getpid(),
+    )
 
     # Setup signal handlers
     loop = asyncio.get_event_loop()
@@ -274,11 +400,15 @@ async def main():
 
     try:
         await init_services()
-        await orchestrator_loop()
+        # Run heartbeat and orchestrator loop concurrently
+        await asyncio.gather(
+            heartbeat_task(),
+            orchestrator_loop(),
+        )
     except KeyboardInterrupt:
         await shutdown()
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        logger.error("fatal_error", error=str(e))
         await shutdown()
         sys.exit(1)
 

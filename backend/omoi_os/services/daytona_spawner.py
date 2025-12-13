@@ -99,7 +99,6 @@ class DaytonaSpawnerService:
         # In-memory tracking of active sandboxes
         self._sandboxes: Dict[str, SandboxInfo] = {}
         self._task_to_sandbox: Dict[str, str] = {}  # task_id -> sandbox_id
-        print("Something aint right here")
 
     async def spawn_for_task(
         self,
@@ -771,16 +770,16 @@ async def main():
     logger.info(f"OpenHands Worker starting for task {TASK_ID}")
     logger.info(f"Sandbox ID: {SANDBOX_ID}")
     logger.info(f"Backend URL: {BASE_URL}")
-
+    
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
         return
-
+    
     if not LLM_API_KEY:
         logger.error("LLM_API_KEY required")
         await update_task_status("failed", "Missing LLM_API_KEY")
         return
-
+    
     # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
     await setup_github_workspace()
 
@@ -1294,16 +1293,16 @@ async def main():
     logger.info(f"Backend URL: {BASE_URL}")
     logger.info(f"Anthropic Base URL: {ANTHROPIC_BASE_URL or 'default'}")
     logger.info(f"Model: {ANTHROPIC_MODEL}")
-
+    
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
         return
-
+    
     if not ANTHROPIC_API_KEY:
         logger.error("ANTHROPIC_API_KEY required")
         await report_status("failed", "Missing ANTHROPIC_API_KEY")
         return
-
+    
     # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
     await setup_github_workspace()
 
@@ -1313,7 +1312,7 @@ async def main():
         os.environ["ANTHROPIC_BASE_URL"] = ANTHROPIC_BASE_URL
         logger.info(f"Using custom Anthropic API: {ANTHROPIC_BASE_URL}")
     logger.info(f"Using model: {ANTHROPIC_MODEL}")
-
+    
     task = await fetch_task()
     if not task:
         await report_status("failed", "Could not fetch task")
