@@ -12,7 +12,6 @@ Usage:
 """
 
 import asyncio
-import os
 import sys
 import time
 from pathlib import Path
@@ -56,7 +55,7 @@ async def main():
     phase_id = "PHASE_TEST"
 
     print(f"\n📦 Spawning sandbox for task: {task_id}")
-    print(f"   Runtime: claude")
+    print("   Runtime: claude")
 
     try:
         # Spawn sandbox with Claude runtime
@@ -86,20 +85,28 @@ async def main():
         sandbox = None
         if info and "daytona_sandbox" in info.extra_data:
             sandbox = info.extra_data["daytona_sandbox"]
-            print(f"   Got sandbox from spawner: {info.extra_data.get('daytona_sandbox_id')}")
+            print(
+                f"   Got sandbox from spawner: {info.extra_data.get('daytona_sandbox_id')}"
+            )
 
         if sandbox:
             print(f"   Found sandbox: {sandbox.id}")
 
             # Check environment variables from the saved file
-            result = sandbox.process.exec("cat /tmp/.sandbox_env 2>/dev/null || echo 'File not found'")
+            result = sandbox.process.exec(
+                "cat /tmp/.sandbox_env 2>/dev/null || echo 'File not found'"
+            )
             print("\n   Saved environment variables:")
             for line in result.result.strip().split("\n")[:10]:  # Show first 10
                 if "ANTHROPIC" in line or "TASK" in line:
                     # Mask API key
                     if "API_KEY" in line and "=" in line:
                         key, val = line.split("=", 1)
-                        val = val.strip('"')[:20] + "..." if len(val.strip('"')) > 20 else val
+                        val = (
+                            val.strip('"')[:20] + "..."
+                            if len(val.strip('"')) > 20
+                            else val
+                        )
                         print(f"   {key}={val}")
                     else:
                         print(f"   {line}")
@@ -113,7 +120,22 @@ async def main():
             # Now run a simple Claude Agent SDK test
             print("\n🚀 Testing Claude Agent SDK with Z.AI...")
 
-            sdk_test = """
+            # Multi-step math problem that REQUIRES writing and running a Python script
+            # Expected answer: 1060 (sum of squares of first 10 primes: 2,3,5,7,11,13,17,19,23,29)
+            # 4+9+25+49+121+169+289+361+529+841 = 2397
+
+            math_task = """Create a Python script called "prime_calc.py" that:
+1. Finds the first 10 prime numbers
+2. Calculates the square of each prime
+3. Sums all the squares together
+4. Prints each step showing: the prime, its square, and running total
+5. Prints the final sum
+
+Then RUN the script with "python prime_calc.py" and show me the output.
+
+DO NOT use python -c. You MUST write a .py file first, then run it."""
+
+            sdk_test = f"""
 import os
 import asyncio
 
@@ -136,35 +158,71 @@ async def test():
         base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
         api_key = os.environ.get("ANTHROPIC_API_KEY", "")
         
-        print(f"Model: {model}")
-        print(f"Base URL: {base_url}")
-        print(f"API Key: {api_key[:20]}..." if api_key else "API Key: NOT SET")
+        print(f"Model: {{model}}")
+        print(f"Base URL: {{base_url}}")
+        print(f"API Key: {{api_key[:20]}}..." if api_key else "API Key: NOT SET")
+        
+        # Create workspace directory
+        workspace = Path("/workspace")
+        workspace.mkdir(exist_ok=True)
+        os.chdir(workspace)
+        print(f"Working directory: {{os.getcwd()}}")
         
         options = ClaudeAgentOptions(
-            allowed_tools=["Bash"],
+            allowed_tools=["Read", "Write", "Edit", "Bash", "LS"],
             permission_mode="acceptEdits",
-            system_prompt="Be concise.",
-            cwd=Path("/tmp"),
-            max_turns=3,
-            max_budget_usd=0.50,
+            system_prompt="You are a helpful assistant. Always write code to files before running them. Use relative paths.",
+            cwd=workspace,
+            max_turns=10,
+            max_budget_usd=1.00,
             model=model,
         )
         
+        task = '''{math_task}'''
+        
         async with ClaudeSDKClient(options=options) as client:
-            await client.query("Calculate 42 * 37 using python -c. Just show the answer.")
+            await client.query(task)
             
             async for msg in client.receive_response():
                 msg_type = type(msg).__name__
-                if msg_type == "ResultMessage":
+                
+                # Print all message types for visibility
+                if msg_type == "AssistantMessage":
+                    if hasattr(msg, 'content'):
+                        print(f"\\n[ASSISTANT] {{msg.content[:200]}}...")
+                        
+                elif msg_type == "ToolUseBlock":
+                    tool_name = getattr(msg, 'name', 'unknown')
+                    tool_input = getattr(msg, 'input', {{}})
+                    print(f"\\n[TOOL CALL] {{tool_name}}")
+                    if tool_name == "Write":
+                        print(f"  File: {{tool_input.get('file_path', 'unknown')}}")
+                        content = tool_input.get('content', '')
+                        print(f"  Content preview: {{content[:100]}}...")
+                    elif tool_name == "Bash":
+                        print(f"  Command: {{tool_input.get('command', '')}}")
+                        
+                elif msg_type == "ToolResultBlock":
+                    print(f"[TOOL RESULT] {{getattr(msg, 'content', '')[:300]}}")
+                    
+                elif msg_type == "ResultMessage":
                     if hasattr(msg, 'result'):
-                        print(f"Result: {msg.result}")
+                        print(f"\\n[FINAL RESULT] {{msg.result}}")
                     if hasattr(msg, 'subtype'):
-                        print(f"Status: {msg.subtype}")
+                        print(f"[STATUS] {{msg.subtype}}")
         
-        print("SDK test completed!")
+        # Verify the file was created
+        if (workspace / "prime_calc.py").exists():
+            print("\\n✅ prime_calc.py was created!")
+            with open(workspace / "prime_calc.py") as f:
+                print("--- File contents ---")
+                print(f.read())
+                print("--- End file ---")
+        
+        print("\\nSDK test completed!")
         return True
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Error: {{e}}")
         import traceback
         traceback.print_exc()
         return False
@@ -173,7 +231,9 @@ asyncio.run(test())
 """
             # First install the SDK
             print("   Installing claude-agent-sdk...")
-            sandbox.process.exec("pip install claude-agent-sdk --quiet 2>/dev/null || pip install claude-agent-sdk")
+            sandbox.process.exec(
+                "pip install claude-agent-sdk --quiet 2>/dev/null || pip install claude-agent-sdk"
+            )
 
             # Run the test
             sandbox.process.exec(f"cat > /tmp/sdk_test.py << 'EOF'\n{sdk_test}\nEOF")
@@ -183,11 +243,37 @@ asyncio.run(test())
             for line in result.result.strip().split("\n"):
                 print(f"   {line}")
 
-            # Check for success
-            if "1554" in result.result:  # 42 * 37 = 1554
-                print("\n🎉 SUCCESS! Agent computed 42 × 37 = 1554")
-            elif "Result:" in result.result:
-                print("\n✅ Agent returned a result!")
+            # Check for success - sum of squares of first 10 primes = 2397
+            # Primes: 2,3,5,7,11,13,17,19,23,29
+            # Squares: 4+9+25+49+121+169+289+361+529+841 = 2397
+            if "2397" in result.result:
+                print(
+                    "\n🎉 SUCCESS! Agent computed sum of squares of first 10 primes = 2397"
+                )
+            elif "prime_calc.py was created" in result.result:
+                print("\n✅ Agent wrote and ran the Python script!")
+            elif "SDK test completed" in result.result:
+                print("\n✅ Agent completed the task!")
+
+            # Show worker logs
+            print("\n📜 Worker logs (/tmp/worker.log):")
+            print("-" * 50)
+            worker_log = sandbox.process.exec(
+                "cat /tmp/worker.log 2>/dev/null || echo 'No worker.log found'"
+            )
+            for line in worker_log.result.strip().split("\n"):
+                print(f"   {line}")
+            print("-" * 50)
+
+            # Show any other relevant logs
+            print("\n📜 Daytona logs:")
+            print("-" * 50)
+            daytona_log = sandbox.process.exec(
+                "cat /tmp/daytona-daemon.log 2>/dev/null | tail -20 || echo 'No daytona log'"
+            )
+            for line in daytona_log.result.strip().split("\n"):
+                print(f"   {line}")
+            print("-" * 50)
 
         else:
             print("   ⚠️  Could not find sandbox to verify environment")
