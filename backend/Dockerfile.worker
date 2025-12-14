@@ -10,16 +10,14 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies into .venv (without installing project itself)
-# Note: Railway requires id= in cache mounts
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-editable
+# Note: Railway cache mounts require hardcoded service IDs, so we skip caching for portability
+RUN uv sync --locked --no-install-project --no-editable
 
 # Copy project source code
 COPY . /app
 
 # Install project in non-editable mode
-RUN --mount=type=cache,id=uv-cache,target=/root/.cache/uv \
-    uv sync --locked --no-editable
+RUN uv sync --locked --no-editable
 
 # Stage 2: Runtime image
 FROM python:3.12-slim
