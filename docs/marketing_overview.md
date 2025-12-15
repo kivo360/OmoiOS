@@ -389,6 +389,46 @@ Example for 20-engineer team:
 
 ## Messaging Framework
 
+### One-Liners (Copy-Paste Ready)
+
+**For general use:**
+- "Turn feature requests into reviewed PRs with autonomous, spec-driven workflows."
+- "Ship more with the team you have—without babysitting agents."
+- "Adaptive workflows: when reality changes, the plan branches instead of breaking."
+
+**For CTOs:**
+- "Increase engineering output 2-3X without proportional headcount growth."
+- "Autonomous execution with the governance enterprise requires."
+
+**For EMs:**
+- "Know what's blocked and why—without another standup."
+- "Stop coordinating work. Start shipping it."
+
+**For engineers:**
+- "Offload the scaffolding. Keep the interesting problems."
+- "PRs you can actually review, from tickets you didn't have to implement."
+
+**For social media:**
+- "What if your backlog could execute itself? (With your approval, of course.)"
+- "AI assistants help you code faster. OmoiOS helps your team ship faster."
+
+### 30-Second Pitch
+
+> "Connect your repo, describe a feature, and OmoiOS generates a requirements/design/task plan, then runs parallel agents to implement and test in isolated branches. When agents discover missing requirements, bugs, or optimizations, OmoiOS spawns and links the right follow-up work instead of stalling. You stay in control at phase gates and PR review—with full visibility into progress and blockers."
+
+### 2-Minute Demo Talk Track
+
+1. "Here's a feature request from a real backlog."
+2. "OmoiOS turns it into a spec: requirements, design, tasks."
+3. "Now execution starts: multiple agents pick up unblocked tasks."
+4. "Watch: tickets move across phases; dependencies unblock automatically."
+5. "A discovery happens—OmoiOS spawns a new task and links the reasoning."
+6. "Phase gate triggers: artifacts/tests are checked; I approve."
+7. "A PR is opened; I review like normal."
+8. "From feature request to reviewable PR in [X] minutes."
+
+---
+
 ### By Persona
 
 #### For CTOs / Heads of Engineering

@@ -18,19 +18,20 @@
 7. [Pricing Strategy](#7-pricing-strategy)
 8. [Pre-Launch Validation](#8-pre-launch-validation)
 9. [Customer Acquisition Playbook](#9-customer-acquisition-playbook)
-10. [Outbound Sales Playbook](#10-outbound-sales-playbook)
-11. [Inbound & Product-Led Growth](#11-inbound--product-led-growth)
-12. [Launch Sequence](#12-launch-sequence)
-13. [Channel Playbook](#13-channel-playbook)
-14. [Partnerships Strategy](#14-partnerships-strategy)
-15. [Customer Success Playbook](#15-customer-success-playbook)
-16. [Onboarding Playbook](#16-onboarding-playbook)
-17. [Retention & Expansion](#17-retention--expansion)
-18. [Metrics & Milestones](#18-metrics--milestones)
-19. [Risk Mitigation](#19-risk-mitigation)
-20. [Open Source Strategy](#20-open-source-strategy)
-21. [90-Day Execution Plan](#21-90-day-execution-plan)
-22. [Appendix: Templates & Scripts](#22-appendix-templates--scripts)
+10. [Warm Outreach Playbook](#10-warm-outreach-playbook) ⭐ **Start Here**
+11. [Cold Outbound (Supplemental)](#11-cold-outbound-supplemental)
+12. [Inbound & Product-Led Growth](#12-inbound--product-led-growth)
+13. [Launch Sequence](#13-launch-sequence)
+14. [Channel Playbook](#14-channel-playbook)
+15. [Partnerships Strategy](#15-partnerships-strategy)
+16. [Customer Success Playbook](#16-customer-success-playbook)
+17. [Onboarding Playbook](#17-onboarding-playbook)
+18. [Retention & Expansion](#18-retention--expansion)
+19. [Metrics & Milestones](#19-metrics--milestones)
+20. [Risk Mitigation](#20-risk-mitigation)
+21. [Open Source Strategy](#21-open-source-strategy)
+22. [90-Day Execution Plan](#22-90-day-execution-plan)
+23. [Appendix: Templates & Scripts](#23-appendix-templates--scripts)
 
 ---
 
@@ -410,7 +411,643 @@ Blog/HN    Website       Battle cards  Sign-up   Free trial  Sales call
 
 ---
 
-## 10. Outbound Sales Playbook
+## 10. Warm Outreach Playbook
+
+> **Why warm outreach first**: Cold calling and cold emailing have 1-3% response rates. Warm outreach—where you've built some relationship or provided value first—has 20-40% response rates. Invest here first.
+
+### The Warm Outreach Hierarchy
+
+| Method | Conversion Rate | Effort | Best For |
+|--------|-----------------|--------|----------|
+| **Warm introductions** | 30-50% | Low (per intro) | Fastest closes |
+| **Build in public followers** | 15-30% | High (ongoing) | Compounding pipeline |
+| **Community relationships** | 15-25% | Medium | Trust + credibility |
+| **Content engagement** | 10-20% | Medium | Scale + positioning |
+| **Event connections** | 20-35% | High (per event) | Deep relationships |
+| **Cold outreach** | 1-3% | Low (per touch) | Volume when needed |
+
+---
+
+### Strategy 1: Warm Introductions (Highest Conversion)
+
+**The math**: 10 warm intros → 3-5 meetings → 1-2 customers  
+**Compare to cold**: 100 cold emails → 2-3 meetings → 0-1 customers
+
+#### How to Generate Warm Intros
+
+**Step 1: Map your network**
+Create a spreadsheet with:
+- Your LinkedIn connections (export)
+- Investors you know or can reach
+- Advisors, mentors, former colleagues
+- Other founders in your space
+- People who've used your content
+
+**Step 2: Identify who knows your ICP**
+For each connection, ask:
+- Do they work at a target company?
+- Do they know CTOs/engineering leaders?
+- Are they investors in SaaS companies?
+- Are they in engineering communities?
+
+**Step 3: Request intros systematically**
+
+**Template: Asking a friend for an intro**
+```
+Hey [Name],
+
+I'm working on OmoiOS—we help engineering teams ship 2-3X more by
+automating workflow execution (like a spec-driven AI that turns
+feature requests into PRs).
+
+I noticed you're connected to [Target Person] at [Company]. Given
+their role, I think they might find this relevant—especially if
+[specific pain point like "they're scaling the team" or "hiring
+a lot right now"].
+
+Would you be comfortable making an intro? I've drafted something
+below you can forward if helpful:
+
+---
+
+"Hey [Target], I wanted to introduce you to [Your Name]. They're
+building OmoiOS, which helps engineering teams ship more without
+scaling headcount proportionally. Given [Company]'s growth, thought
+it might be worth a conversation. I'll let [Your Name] follow up
+from here if you're interested."
+
+---
+
+Totally understand if the timing isn't right. Thanks either way!
+```
+
+**Template: Asking an investor for intros**
+```
+Hi [Investor Name],
+
+Quick update on OmoiOS: we're seeing [traction metric] and are
+now looking for design partners to pilot with.
+
+Our ideal profile is:
+- Mid-market SaaS (10-100 engineers)
+- GitHub-first
+- Feeling hiring/velocity pressure
+
+Looking at your portfolio, [Company A], [Company B], and [Company C]
+seem like potential fits. Would you be comfortable making intros to
+their engineering leaders?
+
+Happy to share a brief deck or demo video you can forward.
+```
+
+**Template: Asking a former colleague**
+```
+Hey [Name], hope you're doing well at [Company]!
+
+I've been building OmoiOS—it's an autonomous engineering execution
+platform that helps teams ship more without scaling headcount.
+
+Given [Company]'s growth, I thought [CTO/VP Eng Name] might find it
+interesting. Any chance you could connect us? Happy to send you a
+quick overview to share.
+
+(Also genuinely curious how things are going there—would love to
+catch up regardless!)
+```
+
+#### Intro Request Tracking
+
+| Contact | Relationship | Target Person | Company | Asked | Status | Follow-up |
+|---------|--------------|---------------|---------|-------|--------|-----------|
+| [Name] | Former colleague | [Target] | [Co] | [Date] | Pending | [Date] |
+
+**Goal**: Ask 5-10 people per week for intros. Expect 30-40% to help.
+
+---
+
+### Strategy 2: Build in Public (Compounding Pipeline)
+
+**The concept**: Share your journey building OmoiOS publicly. People who follow along become warm leads when they have the problem you solve.
+
+#### Where to Build in Public
+
+| Platform | Best For | Frequency | Content Type |
+|----------|----------|-----------|--------------|
+| **Twitter/X** | Tech audience, developers | Daily | Insights, learnings, progress |
+| **LinkedIn** | Decision-makers, CTOs | 3-5x/week | Professional insights |
+| **YouTube** | Deep dives, demos | Weekly | Tutorials, behind-scenes |
+| **Newsletter** | Nurturing interested leads | Weekly | Updates, insights |
+| **Blog** | SEO, credibility | 1-2x/week | Educational content |
+
+#### Content Ideas for Building in Public
+
+**Weekly rhythm:**
+- **Monday**: Problem insight ("Here's what I learned talking to 10 CTOs...")
+- **Tuesday**: Product progress ("Shipped discovery branching this week...")
+- **Wednesday**: Customer story ("[Company] just merged their first PR...")
+- **Thursday**: Tactical advice ("3 tickets that work best for AI execution...")
+- **Friday**: Week recap + metrics ("Week 12: 5 pilots, 23 merged PRs...")
+
+**High-engagement post templates:**
+
+**The "Aha Moment" post:**
+```
+I used to think AI coding tools would replace developers.
+
+After 6 months building OmoiOS, I realized I was wrong.
+
+The bottleneck isn't coding speed. It's coordination overhead.
+
+Engineering teams spend 30-40% of their time on:
+- Planning meetings
+- Status updates
+- Unblocking work
+- Context switching
+
+AI assistants make individuals faster.
+But they don't solve the systemic problem.
+
+That's why we built OmoiOS differently: [brief explanation]
+
+Anyone else seeing this pattern?
+```
+
+**The "Counter-intuitive insight" post:**
+```
+Hot take: Your AI coding assistant isn't making your team ship faster.
+
+Here's why:
+
+[Individual productivity] ≠ [Team throughput]
+
+When every developer is 30% faster at coding, you'd expect 30% more output.
+
+But coordination overhead scales with team size.
+More people = more meetings, more handoffs, more "quick questions."
+
+The real leverage is reducing coordination—not coding speed.
+
+We've seen teams ship 2-3X more by automating the execution workflow,
+not just the coding.
+
+Curious if others are seeing the same pattern?
+```
+
+**The "Behind the curtain" post:**
+```
+Real numbers from OmoiOS pilot #7:
+
+- Ticket selected: "Add Stripe webhook handling"
+- Time to first PR: 47 minutes
+- CI pass on first submit: Yes
+- Human interventions needed: 1 (clarifying a field name)
+- PR merged: Yes, after 2 comment cycles
+
+6 months ago, this would have taken a developer half a day.
+
+Here's what the workflow looked like: [screenshot or breakdown]
+
+Not perfect yet, but getting there. What would you want to see improved?
+```
+
+#### Converting Followers to Customers
+
+**The funnel:**
+1. **Follow** → They see your content regularly
+2. **Engage** → They comment, like, share
+3. **DM conversation** → Natural dialogue starts
+4. **Problem emerges** → They mention relevant pain
+5. **Offer help** → "Happy to show you how we solved this"
+
+**DM templates after engagement:**
+
+**After they comment on your post:**
+```
+Hey [Name], thanks for the thoughtful comment on my post about
+[topic]. Sounds like you're dealing with [pain they mentioned]
+at [Company].
+
+Curious—how are you handling [specific challenge] right now?
+```
+
+**After they share your content:**
+```
+Hey [Name], really appreciate you sharing that post! Noticed
+you're [role] at [Company]—is [topic of post] something you're
+actively thinking about?
+```
+
+**After multiple engagements:**
+```
+Hey [Name], I've noticed you engaging with a lot of my content
+about [topic]. Seems like this is top of mind for you.
+
+Would love to hear more about what you're dealing with at [Company].
+Coffee chat sometime?
+```
+
+---
+
+### Strategy 3: Community-First Outreach
+
+**The concept**: Become a valuable member of communities where your ICP hangs out. Relationships lead to opportunities.
+
+#### Target Communities
+
+| Community | Where | Your ICP There | How to Engage |
+|-----------|-------|----------------|---------------|
+| **Hacker News** | news.ycombinator.com | Senior engineers, CTOs | Thoughtful comments, occasional posts |
+| **r/ExperiencedDevs** | Reddit | Senior engineers | Answer questions, share experiences |
+| **Engineering Twitter** | Twitter/X | All levels | Conversations, threads |
+| **CTO Craft Slack** | Slack | CTOs | Private discussions |
+| **Rands Leadership Slack** | Slack | Engineering managers | Advice, discussions |
+| **Local tech meetups** | In-person | Mixed | Conversations, talks |
+| **Discord servers** | Discord | Developers | Ongoing conversations |
+
+#### Community Engagement Rules
+
+**DO:**
+- Provide value first (answer questions, share insights)
+- Be genuinely helpful without pitching
+- Share your honest experiences and learnings
+- Engage consistently over weeks/months
+- Remember people and reference past conversations
+
+**DON'T:**
+- Drop links to your product unprompted
+- Pitch in every conversation
+- Only show up when you want something
+- Treat people as leads, not humans
+- Disappear after getting what you want
+
+#### Community → Conversation Templates
+
+**When someone asks about your problem space:**
+```
+[Answer their question genuinely with useful advice]
+
+We've been thinking about this a lot at OmoiOS since we're building
+in this space. Happy to share more about what we've learned if helpful.
+```
+
+**When someone mentions a pain you solve:**
+```
+Oof, I feel this. We talked to 30+ engineering teams about exactly
+this problem. The pattern we kept seeing was [insight].
+
+One thing that helped some teams: [actionable advice that doesn't
+require your product]
+
+If you want to chat more about it, DM me—I'm always happy to
+share what we've learned.
+```
+
+**After helping someone via DM:**
+```
+Glad that was helpful! By the way, this is exactly the problem
+we're solving with OmoiOS. We're running pilots right now if
+you ever want to try it—no pressure, but figured I'd mention it.
+```
+
+---
+
+### Strategy 4: Content-First Outreach
+
+**The concept**: Lead with value. Share useful content before asking for anything.
+
+#### The Content-First Sequence
+
+**Instead of:**
+"Hi, I'm selling X. Want a demo?"
+
+**Do this:**
+1. **Day 0**: Share valuable content with no ask
+2. **Day 3**: Follow up with more related value
+3. **Day 7**: Ask a genuine question about their situation
+4. **Day 14**: Offer to help (not pitch)
+
+#### Content-First Email Sequence
+
+**Email 1: Pure value (Day 0)**
+
+Subject: Thought you'd find this useful—[topic]
+
+```
+Hi [Name],
+
+I've been researching how engineering teams are handling [specific
+challenge] and put together [a guide/analysis/framework].
+
+Given [Company]'s growth, thought you might find it relevant:
+[link to genuinely useful content]
+
+Key takeaway: [one actionable insight]
+
+No ask here—just thought it'd be useful.
+
+—[Your name]
+```
+
+**Email 2: Related value (Day 3)**
+
+Subject: Re: Thought you'd find this useful—[topic]
+
+```
+Hi [Name],
+
+Following up with one more thing on this topic—
+
+[Interesting data point or insight related to first email]
+
+We've seen teams like [Company] address this by [specific approach].
+
+Here's a quick breakdown: [2-3 bullet points of actionable advice]
+
+—[Your name]
+```
+
+**Email 3: Genuine question (Day 7)**
+
+Subject: Quick question about [Company]
+
+```
+Hi [Name],
+
+Curious—how is [Company] currently handling [specific challenge
+related to your content]?
+
+I'm talking to a lot of engineering leaders about this and trying
+to understand the different approaches.
+
+Would love to hear your perspective if you have a minute.
+
+—[Your name]
+```
+
+**Email 4: Offer to help (Day 14)**
+
+Subject: Offer to help with [specific challenge]
+
+```
+Hi [Name],
+
+Based on what I've been learning, it sounds like a lot of teams
+like [Company] are struggling with [specific challenge].
+
+We've been working on an approach that [brief value prop]. A few
+teams have seen [specific result].
+
+Would it be helpful to show you how they did it? Happy to share
+what's working—even if OmoiOS isn't the right fit, the approach
+might be useful.
+
+15 minutes this week?
+
+—[Your name]
+```
+
+---
+
+### Strategy 5: Event-Based Relationship Building
+
+**The concept**: Meet people in person at events. Follow up to build relationships.
+
+#### Before the Event
+
+**Research attendees:**
+- Check speaker list for targets
+- Look at attendee list if available
+- Search "[Event name]" + "attending" on LinkedIn/Twitter
+- Identify 5-10 specific people to meet
+
+**Prepare conversation starters:**
+- "What brings you to [event]?"
+- "What's the biggest challenge your team is facing right now?"
+- "I loved your talk on [topic]—we're seeing similar patterns with [insight]"
+
+#### At the Event
+
+**Goal**: Have 5-10 meaningful conversations, not 50 card exchanges.
+
+**Conversation flow:**
+1. **Open**: Genuine interest in them ("What are you working on?")
+2. **Listen**: Understand their situation and challenges
+3. **Share**: Relate with your experience (not a pitch)
+4. **Exchange**: Get their contact for follow-up
+5. **Note**: Write down what you discussed immediately after
+
+**What to say when asked what you do:**
+```
+"I'm building OmoiOS—we help engineering teams ship more without
+scaling headcount. Basically, you describe a feature, and the
+system handles the execution workflow: planning, implementation,
+testing, and opens PRs. You approve at strategic points.
+
+The insight that led to it was that AI coding tools help individuals,
+but don't solve the coordination problem teams face. [pause for
+their reaction]"
+```
+
+#### After the Event (Critical)
+
+**Within 24 hours:**
+
+```
+Subject: Great meeting you at [Event]
+
+Hi [Name],
+
+Really enjoyed our conversation at [Event] about [specific topic
+you discussed].
+
+[Reference something specific they said]: I've been thinking about
+that and wanted to share [relevant resource or insight].
+
+Would love to continue the conversation—coffee or call sometime?
+
+—[Your name]
+```
+
+**Within 1 week:**
+
+```
+Subject: Following up from [Event]
+
+Hi [Name],
+
+Hope the week's been good since [Event].
+
+I mentioned we're running pilots with engineering teams on the
+workflow automation side. Given what you shared about [their
+challenge], I thought it might be worth showing you what we're doing.
+
+Would 20 minutes be useful to see if there's a fit?
+
+—[Your name]
+```
+
+---
+
+### Strategy 6: Podcast & Speaking (Borrowed Audiences)
+
+**The concept**: Get in front of other people's audiences to build credibility and pipeline.
+
+#### Podcast Outreach
+
+**Target podcasts:**
+- Engineering leadership podcasts
+- SaaS/startup podcasts
+- Developer productivity podcasts
+- AI/automation podcasts
+
+**Pitch template:**
+```
+Subject: Podcast guest pitch: [Your topic angle]
+
+Hi [Host name],
+
+I'm [Your name], founder of OmoiOS. I've been listening to [Podcast]
+and loved the episode on [specific episode].
+
+I'd love to come on and discuss: [specific topic with a hook]
+
+For example:
+- Why AI coding assistants aren't actually making teams ship faster
+- The coordination tax that grows faster than your engineering team
+- How we're seeing teams 3X their output without hiring
+
+I can share specific stories and data from [X] engineering teams
+we've worked with.
+
+Here's a bit more about me: [brief bio or link]
+
+Worth a conversation?
+
+—[Your name]
+```
+
+#### Speaking Opportunities
+
+**Where to speak:**
+- Local tech meetups (easiest to start)
+- Engineering manager meetups
+- Platform engineering events
+- Company engineering all-hands (reach out to targets)
+- Virtual conferences
+
+**Topic angles:**
+- "The Coordination Tax: Why Scaling Teams Doesn't Scale Output"
+- "Beyond AI Assistants: What Engineering Automation Actually Looks Like"
+- "Spec-Driven Development: Structured Autonomy for Engineering Teams"
+
+---
+
+### Strategy 7: Strategic Commenting
+
+**The concept**: Add value in comments on other people's content. Get noticed by the right people.
+
+#### Where to Comment
+
+| Platform | What to Comment On |
+|----------|-------------------|
+| **LinkedIn** | Posts by CTOs, VPs Eng, engineering influencers |
+| **Twitter/X** | Threads about engineering productivity, AI, team scaling |
+| **Hacker News** | Stories about AI coding, engineering management |
+| **Substack** | Engineering newsletters |
+
+#### Good vs. Bad Comments
+
+**Bad comments (ignored):**
+- "Great post!" 
+- "This is so true!"
+- "Check out our product that solves this!"
+
+**Good comments (get noticed):**
+```
+This resonates. We've seen the same pattern with teams we work with.
+
+The insight that surprised me: [specific data point or experience]
+
+One thing I'd add: [genuine additional value]
+
+Curious if you've seen [related question]?
+```
+
+#### Comment → Relationship Flow
+
+1. **Comment thoughtfully** on 3-5 of their posts over 2 weeks
+2. **Get noticed** when they respond or like your comments
+3. **Connect** with a personalized request referencing your engagement
+4. **Continue** engaging after connecting
+5. **Natural conversation** emerges from mutual interest
+
+---
+
+### Strategy 8: The "Trojan Horse" Value Offer
+
+**The concept**: Offer something valuable for free that naturally leads to showing your product.
+
+#### Value Offers That Work
+
+| Offer | What You Provide | Natural Segue |
+|-------|------------------|---------------|
+| **Workflow audit** | Review their development workflow | "Based on what I see, here's where OmoiOS could help..." |
+| **ROI calculation** | Calculate their coordination overhead | "Here's how much you'd save with automation..." |
+| **Best practices guide** | Share what top teams are doing | "We built OmoiOS around these patterns..." |
+| **Architecture review** | Review their codebase structure | "This would be a great fit for spec-driven execution..." |
+
+#### Workflow Audit Offer
+
+**Outreach:**
+```
+Subject: Free workflow audit for [Company]
+
+Hi [Name],
+
+I've been researching engineering productivity patterns and would
+love to offer [Company] a free development workflow audit.
+
+I'll analyze:
+- Where time is going (coordination vs. execution)
+- Common bottlenecks in your ticket-to-PR flow
+- Opportunities to automate without adding complexity
+
+Takes about 30 minutes of your time. You get actionable insights
+regardless of whether you use any tools.
+
+Interested?
+
+—[Your name]
+
+P.S. I'm doing this to learn more about how different teams work,
+and to test some hypotheses. Zero pitch—just value.
+```
+
+---
+
+### Weekly Warm Outreach Rhythm
+
+| Day | Activity | Goal |
+|-----|----------|------|
+| **Monday** | Ask 3 people for warm intros | 1-2 new intro requests |
+| **Tuesday** | Build in public post + engage with 10 posts | Visibility + relationships |
+| **Wednesday** | Community participation (HN, Reddit, Discord) | 3-5 helpful interactions |
+| **Thursday** | Follow up on open conversations | Move relationships forward |
+| **Friday** | Content-first outreach to 5 new prospects | Start new relationships |
+
+### Warm Outreach Tracking
+
+| Prospect | Source | Stage | Last Touch | Next Action | Notes |
+|----------|--------|-------|------------|-------------|-------|
+| [Name] | Twitter engage | Engaged | 12/10 | DM conversation | Liked 3 posts |
+| [Name] | Intro from [X] | Meeting scheduled | 12/12 | Demo on 12/15 | Pain: backlog |
+| [Name] | Event | Connected | 12/8 | Follow-up email | CTO, 50 engs |
+
+---
+
+## 11. Cold Outbound (Supplemental)
+
+> **Note**: Cold outreach should supplement warm strategies, not replace them. Use cold outreach to fill gaps and scale when warm channels are working.
 
 ### Prospecting Criteria
 
@@ -575,7 +1212,7 @@ I'd love to show you a quick demo. Would 15 minutes this week work?"
 
 ---
 
-## 11. Inbound & Product-Led Growth
+## 12. Inbound & Product-Led Growth
 
 ### PLG Funnel
 
@@ -641,7 +1278,7 @@ To keep shipping at this pace, upgrade to Team:
 
 ---
 
-## 12. Launch Sequence
+## 13. Launch Sequence
 
 ### Phase 0: Pre-Launch Preparation (Weeks 1-4)
 
@@ -737,7 +1374,7 @@ To keep shipping at this pace, upgrade to Team:
 
 ---
 
-## 13. Channel Playbook
+## 14. Channel Playbook
 
 ### Founder-Led Outbound (Primary Channel)
 
@@ -809,7 +1446,7 @@ To keep shipping at this pace, upgrade to Team:
 
 ---
 
-## 14. Partnerships Strategy
+## 15. Partnerships Strategy
 
 ### Partnership Types
 
@@ -863,7 +1500,7 @@ You sell the implementation, we provide the execution capacity.
 
 ---
 
-## 15. Customer Success Playbook
+## 16. Customer Success Playbook
 
 ### Success Framework
 
@@ -909,7 +1546,7 @@ You sell the implementation, we provide the execution capacity.
 
 ---
 
-## 16. Onboarding Playbook
+## 17. Onboarding Playbook
 
 ### Onboarding Goals
 
@@ -982,7 +1619,7 @@ You sell the implementation, we provide the execution capacity.
 
 ---
 
-## 17. Retention & Expansion
+## 18. Retention & Expansion
 
 ### Retention Levers
 
@@ -1050,7 +1687,7 @@ so you can [specific benefit]?"
 
 ---
 
-## 18. Metrics & Milestones
+## 19. Metrics & Milestones
 
 ### North Star Metrics
 
@@ -1116,7 +1753,7 @@ so you can [specific benefit]?"
 
 ---
 
-## 19. Risk Mitigation
+## 20. Risk Mitigation
 
 ### Risk Matrix
 
@@ -1152,7 +1789,7 @@ so you can [specific benefit]?"
 
 ---
 
-## 20. Open Source Strategy
+## 21. Open Source Strategy
 
 ### Strategic Context
 
@@ -1221,7 +1858,7 @@ Software value is compressing while usage expands. This pushes toward monetizing
 
 ---
 
-## 21. 90-Day Execution Plan
+## 22. 90-Day Execution Plan
 
 ### Month 1: Foundation
 
@@ -1314,7 +1951,7 @@ Software value is compressing while usage expands. This pushes toward monetizing
 
 ---
 
-## 22. Appendix: Templates & Scripts
+## 23. Appendix: Templates & Scripts
 
 ### Cold Email Templates
 
