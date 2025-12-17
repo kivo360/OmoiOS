@@ -75,12 +75,19 @@ from uuid import uuid4
 import httpx
 
 # Try to import pydantic v2 for agent model serialization
-try:
-    from pydantic import BaseModel, ConfigDict
+# Define dataclass for agent definitions at module level (required for SDK's asdict())
+from dataclasses import dataclass
 
-    PYDANTIC_AVAILABLE = True
-except ImportError:
-    PYDANTIC_AVAILABLE = False
+
+@dataclass
+class AgentDefinition:
+    """Agent definition dataclass for SDK compatibility."""
+
+    description: str
+    prompt: str
+    tools: list[str]
+    model: Optional[str] = None
+
 
 # Try to import Claude Agent SDK
 try:
@@ -372,25 +379,12 @@ Systematically investigate issues:
             },
         }
 
-        # Convert to pydantic v2 models if available (allows model_dump() instead of asdict())
-        if PYDANTIC_AVAILABLE:
-
-            class AgentDefinition(BaseModel):
-                model_config = ConfigDict(extra="allow")  # Pydantic v2 syntax
-
-                description: str
-                prompt: str
-                tools: list[str]
-                model: Optional[str] = None
-
-            # Convert each agent dict to a pydantic model
-            return {
-                name: AgentDefinition(**agent_data)
-                for name, agent_data in agent_defs.items()
-            }
-
-        # Fallback to plain dicts if pydantic not available
-        return agent_defs
+        # Convert to dataclass instances - SDK's asdict() requires dataclass instances
+        # Must use module-level dataclass for proper serialization
+        return {
+            name: AgentDefinition(**agent_data)
+            for name, agent_data in agent_defs.items()
+        }
 
     def to_sdk_options(
         self, pre_tool_hook=None, post_tool_hook=None
