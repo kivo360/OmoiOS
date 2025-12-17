@@ -455,6 +455,9 @@ class DaytonaSpawnerService:
         # Rebuild env_exports with any new variables (like WORKSPACE_PATH)
         env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
 
+        # Create workspace directory (even if no repo cloned)
+        sandbox.process.exec("mkdir -p /workspace")
+
         # Start the worker
         logger.info("Starting sandbox worker...")
         start_cmd = f"""
