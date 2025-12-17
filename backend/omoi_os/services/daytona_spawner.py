@@ -1370,7 +1370,7 @@ async def run_agent(task_description: str):
     )
     
     tools_server, tool_names = create_tools()
-        global _should_stop
+    global _should_stop
     
     # PostToolUse hook: Report tool usage for Guardian observation
     async def track_tool_use(input_data, tool_use_id, context):
