@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.utils.datetime import utc_now
 from omoi_os.services.message_queue import (
     InMemoryMessageQueue,
     RedisMessageQueue,
@@ -220,6 +221,9 @@ def persist_sandbox_event(
 
     Phase 4: Database persistence for audit trails.
 
+    For agent.completed events with session_id, also saves the session transcript
+    to claude_session_transcripts table for cross-sandbox resumption.
+
     Args:
         db: Database service
         sandbox_id: Unique identifier for the sandbox
@@ -242,7 +246,120 @@ def persist_sandbox_event(
         session.add(db_event)
         session.commit()
         session.refresh(db_event)
+
+        # Save session transcript for cross-sandbox resumption
+        if event_type == "agent.completed" and event_data.get("session_id"):
+            save_session_transcript(
+                db=db,
+                session_id=event_data["session_id"],
+                sandbox_id=sandbox_id,
+                task_id=event_data.get("task_id"),  # Get task_id from event_data
+                transcript_b64=event_data.get("transcript_b64"),
+                metadata={
+                    "turns": event_data.get("turns"),
+                    "cost_usd": event_data.get("cost_usd"),
+                    "stop_reason": event_data.get("stop_reason"),
+                    "input_tokens": event_data.get("input_tokens"),
+                    "output_tokens": event_data.get("output_tokens"),
+                    "cache_read_tokens": event_data.get("cache_read_tokens"),
+                    "cache_write_tokens": event_data.get("cache_write_tokens"),
+                },
+            )
+
         return db_event.id
+
+
+def save_session_transcript(
+    db: DatabaseService,
+    session_id: str,
+    sandbox_id: str,
+    task_id: str | None = None,
+    transcript_b64: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """
+    Save Claude session transcript to database for cross-sandbox resumption.
+
+    Args:
+        db: Database service
+        session_id: Claude Code session ID
+        sandbox_id: Daytona sandbox ID
+        task_id: Optional task ID associated with this session
+        transcript_b64: Base64-encoded transcript content (optional)
+        metadata: Additional metadata dictionary (stored as session_metadata)
+    """
+    if not transcript_b64:
+        # No transcript provided - skip saving
+        return
+
+    try:
+        from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+
+        with db.get_session() as session:
+            # Check if transcript already exists
+            existing = (
+                session.query(ClaudeSessionTranscript)
+                .filter_by(session_id=session_id)
+                .first()
+            )
+
+            if existing:
+                # Update existing transcript
+                existing.transcript_b64 = transcript_b64
+                existing.sandbox_id = sandbox_id
+                if task_id:
+                    existing.task_id = task_id
+                existing.session_metadata = metadata or {}
+                existing.updated_at = utc_now()
+            else:
+                # Create new transcript
+                transcript = ClaudeSessionTranscript(
+                    session_id=session_id,
+                    transcript_b64=transcript_b64,
+                    sandbox_id=sandbox_id,
+                    task_id=task_id,
+                    session_metadata=metadata or {},
+                )
+                session.add(transcript)
+
+            session.commit()
+    except Exception as e:
+        # Log but don't fail - transcript saving is optional
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to save session transcript {session_id}: {e}")
+
+
+def get_session_transcript(db: DatabaseService, session_id: str) -> str | None:
+    """
+    Retrieve Claude session transcript from database.
+
+    Args:
+        db: Database service
+        session_id: Claude Code session ID
+
+    Returns:
+        Base64-encoded transcript content, or None if not found
+    """
+    try:
+        from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+
+        with db.get_session() as session:
+            transcript = (
+                session.query(ClaudeSessionTranscript)
+                .filter_by(session_id=session_id)
+                .first()
+            )
+            if transcript:
+                return transcript.transcript_b64
+    except Exception as e:
+        import logging
+
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to retrieve session transcript {session_id}: {e}")
+
+    return None
 
 
 @router.post("/{sandbox_id}/events", response_model=SandboxEventResponse)

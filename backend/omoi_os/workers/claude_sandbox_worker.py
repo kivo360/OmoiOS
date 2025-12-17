@@ -45,6 +45,12 @@ Environment Variables (optional - GitHub):
     GITHUB_REPO         - Repository in owner/repo format
     BRANCH_NAME         - Branch to checkout
 
+Environment Variables (optional - session resumption):
+    RESUME_SESSION_ID   - Session ID to resume a previous conversation
+    FORK_SESSION        - Set to "true" to fork from session (creates new branch)
+    SESSION_TRANSCRIPT_B64 - Base64-encoded session transcript for cross-sandbox resumption
+    CONVERSATION_CONTEXT - Text context/summary for conversation hydration (alternative)
+
 Example with GLM:
     SANDBOX_ID=my-sandbox \\
     CALLBACK_URL=http://localhost:8000 \\
@@ -55,6 +61,7 @@ Example with GLM:
 """
 
 import asyncio
+import base64
 import os
 import signal
 import subprocess
@@ -142,13 +149,25 @@ Use subagents and skills when they can help accomplish the task more effectively
 
         self.system_prompt = os.environ.get("SYSTEM_PROMPT", default_system_prompt)
 
+        # Append conversation context to system prompt if provided (for hydration)
+        if self.conversation_context:
+            self.system_prompt = f"""{self.system_prompt}
+
+## Previous Conversation Context
+You are resuming a previous conversation. Here's what happened before:
+{self.conversation_context}
+
+Continue from where we left off, acknowledging the previous context."""
+
         # Tools - parse comma-separated list
         default_tools = "Read,Write,Bash,Edit,Glob,Grep"
         self.allowed_tools = os.environ.get("ALLOWED_TOOLS", default_tools).split(",")
 
         # Skills and subagents
         self.enable_skills = os.environ.get("ENABLE_SKILLS", "true").lower() == "true"
-        self.enable_subagents = os.environ.get("ENABLE_SUBAGENTS", "true").lower() == "true"
+        self.enable_subagents = (
+            os.environ.get("ENABLE_SUBAGENTS", "true").lower() == "true"
+        )
 
         # Add Task and Skill to allowed tools if enabled
         if self.enable_subagents and "Task" not in self.allowed_tools:
@@ -158,12 +177,29 @@ Use subagents and skills when they can help accomplish the task more effectively
 
         # Setting sources for loading skills
         setting_sources_str = os.environ.get("SETTING_SOURCES", "user,project")
-        self.setting_sources = [s.strip() for s in setting_sources_str.split(",") if s.strip()]
+        self.setting_sources = [
+            s.strip() for s in setting_sources_str.split(",") if s.strip()
+        ]
 
         # GitHub config
         self.github_token = os.environ.get("GITHUB_TOKEN", "")
         self.github_repo = os.environ.get("GITHUB_REPO", "")
         self.branch_name = os.environ.get("BRANCH_NAME", "")
+
+        # Session resumption - pass a session_id to continue a previous conversation
+        self.resume_session_id = os.environ.get("RESUME_SESSION_ID")
+        # Fork session - if True, creates a new branch from the resumed session
+        # If False (default), continues the exact same session
+        self.fork_session = os.environ.get("FORK_SESSION", "false").lower() == "true"
+
+        # Session transcript for cross-sandbox resumption (Base64 encoded JSONL)
+        # If provided, this transcript will be written to the local session store
+        # before resuming, enabling session portability across sandboxes
+        self.session_transcript_b64 = os.environ.get("SESSION_TRANSCRIPT_B64")
+
+        # Conversation context for hydration (alternative to full transcript)
+        # Use this to provide a summary of previous conversation
+        self.conversation_context = os.environ.get("CONVERSATION_CONTEXT", "")
 
     def validate(self) -> list[str]:
         """Validate configuration, return list of errors."""
@@ -194,6 +230,10 @@ Use subagents and skills when they can help accomplish the task more effectively
             "enable_subagents": self.enable_subagents,
             "setting_sources": self.setting_sources,
             "cwd": self.cwd,
+            "resume_session_id": self.resume_session_id or "none",
+            "fork_session": self.fork_session,
+            "has_session_transcript": bool(self.session_transcript_b64),
+            "has_conversation_context": bool(self.conversation_context),
         }
 
     def get_custom_agents(self) -> dict:
@@ -209,7 +249,7 @@ When reviewing code:
 - Suggest specific, actionable improvements
 Be thorough but concise in your feedback.""",
                 "tools": ["Read", "Grep", "Glob"],
-                "model": "sonnet"
+                "model": "sonnet",
             },
             "test-runner": {
                 "description": "Runs and analyzes test suites. Use for test execution and coverage analysis.",
@@ -241,7 +281,7 @@ Systematically investigate issues:
 - Identify root causes
 - Propose and test fixes""",
                 "tools": ["Read", "Bash", "Edit", "Grep"],
-            }
+            },
         }
 
     def to_sdk_options(self, post_tool_hook=None) -> "ClaudeAgentOptions":
@@ -274,6 +314,11 @@ Systematically investigate issues:
         if self.enable_subagents:
             options_kwargs["agents"] = self.get_custom_agents()
 
+        # Add session resumption options
+        if self.resume_session_id:
+            options_kwargs["resume"] = self.resume_session_id
+            options_kwargs["fork_session"] = self.fork_session
+
         # Add hooks
         if post_tool_hook:
             options_kwargs["hooks"] = {
@@ -281,6 +326,72 @@ Systematically investigate issues:
             }
 
         return ClaudeAgentOptions(**options_kwargs)
+
+    def get_session_transcript_path(self, session_id: str) -> Path:
+        """Get the path where session transcripts are stored.
+
+        Claude Code stores sessions in ~/.claude/projects/<project-key>/<session-id>.jsonl
+        The project key is derived from cwd, replacing slashes with dashes.
+        """
+        # Convert cwd to project key format (e.g., /workspace -> -workspace)
+        project_key = self.cwd.replace("/", "-")
+        if not project_key.startswith("-"):
+            project_key = "-" + project_key
+        return (
+            Path.home() / ".claude" / "projects" / project_key / f"{session_id}.jsonl"
+        )
+
+    def import_session_transcript(self) -> bool:
+        """Import a session transcript from base64-encoded content.
+
+        This enables session portability across sandboxes by:
+        1. Decoding the base64 transcript content
+        2. Writing it to the correct local path
+        3. Enabling the resume option to find and use it
+
+        Returns True if import succeeded, False otherwise.
+        """
+        if not self.session_transcript_b64 or not self.resume_session_id:
+            return False
+
+        try:
+            # Decode the transcript
+            transcript_content = base64.b64decode(self.session_transcript_b64).decode(
+                "utf-8"
+            )
+
+            # Get the target path and ensure directory exists
+            transcript_path = self.get_session_transcript_path(self.resume_session_id)
+            transcript_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Write the transcript
+            transcript_path.write_text(transcript_content)
+            print(f"[SessionImport] Imported session {self.resume_session_id}")
+            print(f"[SessionImport] Transcript path: {transcript_path}")
+            return True
+
+        except Exception as e:
+            print(f"[SessionImport] Failed to import session: {e}")
+            return False
+
+    def export_session_transcript(self, session_id: str) -> Optional[str]:
+        """Export a session transcript as base64-encoded content.
+
+        This can be used to save the session for later resumption on
+        a different sandbox.
+
+        Returns base64-encoded transcript content, or None if not found.
+        """
+        transcript_path = self.get_session_transcript_path(session_id)
+        if not transcript_path.exists():
+            return None
+
+        try:
+            transcript_content = transcript_path.read_text()
+            return base64.b64encode(transcript_content.encode("utf-8")).decode("utf-8")
+        except Exception as e:
+            print(f"[SessionExport] Failed to export session: {e}")
+            return None
 
 
 # =============================================================================
@@ -337,7 +448,9 @@ class EventReporter:
             )
             success = response.status_code == 200
             if not success:
-                print(f"[EventReporter] Event {event_type} failed: {response.status_code}")
+                print(
+                    f"[EventReporter] Event {event_type} failed: {response.status_code}"
+                )
             return success
         except Exception as e:
             print(f"[EventReporter] Failed to report {event_type}: {e}")
@@ -410,17 +523,19 @@ def setup_github_workspace(config: WorkerConfig) -> bool:
         return True
 
     # Configure git user
-    subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
-    subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
+    subprocess.run(
+        ["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False
+    )
+    subprocess.run(
+        ["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False
+    )
 
     # Clone with token
     clone_url = f"https://x-access-token:{config.github_token}@github.com/{config.github_repo}.git"
     print(f"[GitHub] Cloning {config.github_repo}...")
 
     result = subprocess.run(
-        ["git", "clone", clone_url, config.cwd],
-        capture_output=True,
-        text=True
+        ["git", "clone", clone_url, config.cwd], capture_output=True, text=True
     )
 
     if result.returncode != 0:
@@ -491,7 +606,9 @@ class SandboxWorker:
                 await reporter.report("agent.subagent_completed", event_data)
             # Special tracking for skills
             elif tool_name == "Skill":
-                event_data["skill_name"] = tool_input.get("name") or tool_input.get("skill_name")
+                event_data["skill_name"] = tool_input.get("name") or tool_input.get(
+                    "skill_name"
+                )
                 await reporter.report("agent.skill_completed", event_data)
             else:
                 await reporter.report("agent.tool_completed", event_data)
@@ -513,20 +630,26 @@ class SandboxWorker:
                     self.turn_count += 1
 
                     # Report assistant message metadata
-                    await self.reporter.report("agent.assistant_message", {
-                        "turn": self.turn_count,
-                        "model": getattr(msg, "model", self.config.model),
-                        "stop_reason": getattr(msg, "stop_reason", None),
-                        "block_count": len(msg.content),
-                    })
+                    await self.reporter.report(
+                        "agent.assistant_message",
+                        {
+                            "turn": self.turn_count,
+                            "model": getattr(msg, "model", self.config.model),
+                            "stop_reason": getattr(msg, "stop_reason", None),
+                            "block_count": len(msg.content),
+                        },
+                    )
 
                     for block in msg.content:
                         if isinstance(block, ThinkingBlock):
-                            await self.reporter.report("agent.thinking", {
-                                "turn": self.turn_count,
-                                "content": block.text,  # Full content
-                                "thinking_type": "extended_thinking",
-                            })
+                            await self.reporter.report(
+                                "agent.thinking",
+                                {
+                                    "turn": self.turn_count,
+                                    "content": block.text,  # Full content
+                                    "thinking_type": "extended_thinking",
+                                },
+                            )
                             print(f"🤔 Thinking: {block.text[:100]}...")
 
                         elif isinstance(block, ToolUseBlock):
@@ -540,17 +663,31 @@ class SandboxWorker:
                             # Special handling for subagent dispatch
                             if block.name == "Task":
                                 tool_event["event_subtype"] = "subagent_invoked"
-                                tool_event["subagent_type"] = block.input.get("subagent_type")
-                                tool_event["subagent_description"] = block.input.get("description")
-                                tool_event["subagent_prompt"] = block.input.get("prompt")
-                                await self.reporter.report("agent.subagent_invoked", tool_event)
-                                print(f"🤖 Subagent: {block.input.get('subagent_type')}")
+                                tool_event["subagent_type"] = block.input.get(
+                                    "subagent_type"
+                                )
+                                tool_event["subagent_description"] = block.input.get(
+                                    "description"
+                                )
+                                tool_event["subagent_prompt"] = block.input.get(
+                                    "prompt"
+                                )
+                                await self.reporter.report(
+                                    "agent.subagent_invoked", tool_event
+                                )
+                                print(
+                                    f"🤖 Subagent: {block.input.get('subagent_type')}"
+                                )
 
                             # Special handling for skill invocation
                             elif block.name == "Skill":
                                 tool_event["event_subtype"] = "skill_invoked"
-                                tool_event["skill_name"] = block.input.get("name") or block.input.get("skill_name")
-                                await self.reporter.report("agent.skill_invoked", tool_event)
+                                tool_event["skill_name"] = block.input.get(
+                                    "name"
+                                ) or block.input.get("skill_name")
+                                await self.reporter.report(
+                                    "agent.skill_invoked", tool_event
+                                )
                                 print(f"⚡ Skill: {tool_event['skill_name']}")
 
                             # Standard tool use
@@ -561,70 +698,121 @@ class SandboxWorker:
 
                         elif isinstance(block, ToolResultBlock):
                             result_content = str(block.content)
-                            await self.reporter.report("agent.tool_result", {
-                                "turn": self.turn_count,
-                                "tool_use_id": block.tool_use_id,
-                                "result": result_content[:5000] if len(result_content) > 5000 else result_content,
-                                "result_truncated": len(result_content) > 5000,
-                                "result_full_length": len(result_content),
-                                "is_error": getattr(block, "is_error", False),
-                            })
+                            await self.reporter.report(
+                                "agent.tool_result",
+                                {
+                                    "turn": self.turn_count,
+                                    "tool_use_id": block.tool_use_id,
+                                    "result": result_content[:5000]
+                                    if len(result_content) > 5000
+                                    else result_content,
+                                    "result_truncated": len(result_content) > 5000,
+                                    "result_full_length": len(result_content),
+                                    "is_error": getattr(block, "is_error", False),
+                                },
+                            )
                             status = "❌" if getattr(block, "is_error", False) else "✅"
                             print(f"   {status} Result: {result_content[:80]}...")
 
                         elif isinstance(block, TextBlock):
-                            await self.reporter.report("agent.message", {
-                                "turn": self.turn_count,
-                                "content": block.text,  # Full content
-                                "content_length": len(block.text),
-                            })
+                            await self.reporter.report(
+                                "agent.message",
+                                {
+                                    "turn": self.turn_count,
+                                    "content": block.text,  # Full content
+                                    "content_length": len(block.text),
+                                },
+                            )
                             final_output.append(block.text)
                             print(f"💬 {block.text[:100]}...")
 
                 elif isinstance(msg, UserMessage):
                     for block in msg.content:
                         if isinstance(block, TextBlock):
-                            await self.reporter.report("agent.user_message", {
-                                "turn": self.turn_count,
-                                "content": block.text,
-                                "content_length": len(block.text),
-                            })
+                            await self.reporter.report(
+                                "agent.user_message",
+                                {
+                                    "turn": self.turn_count,
+                                    "content": block.text,
+                                    "content_length": len(block.text),
+                                },
+                            )
                         elif isinstance(block, ToolResultBlock):
                             result_content = str(block.content)
-                            await self.reporter.report("agent.user_tool_result", {
-                                "turn": self.turn_count,
-                                "tool_use_id": block.tool_use_id,
-                                "result": result_content[:5000] if len(result_content) > 5000 else result_content,
-                                "result_truncated": len(result_content) > 5000,
-                            })
+                            await self.reporter.report(
+                                "agent.user_tool_result",
+                                {
+                                    "turn": self.turn_count,
+                                    "tool_use_id": block.tool_use_id,
+                                    "result": result_content[:5000]
+                                    if len(result_content) > 5000
+                                    else result_content,
+                                    "result_truncated": len(result_content) > 5000,
+                                },
+                            )
 
                 elif isinstance(msg, SystemMessage):
-                    await self.reporter.report("agent.system_message", {
-                        "turn": self.turn_count,
-                        "metadata": getattr(msg, "metadata", {}),
-                    })
+                    await self.reporter.report(
+                        "agent.system_message",
+                        {
+                            "turn": self.turn_count,
+                            "metadata": getattr(msg, "metadata", {}),
+                        },
+                    )
 
                 elif isinstance(msg, ResultMessage):
                     usage = getattr(msg, "usage", None)
-                    await self.reporter.report("agent.completed", {
-                        "success": True,
-                        "turns": msg.num_turns,
-                        "cost_usd": msg.total_cost_usd,
-                        "session_id": msg.session_id,
-                        "stop_reason": getattr(msg, "stop_reason", None),
-                        "input_tokens": usage.input_tokens if usage else None,
-                        "output_tokens": usage.output_tokens if usage else None,
-                        "cache_read_tokens": getattr(usage, "cache_read_input_tokens", None) if usage else None,
-                        "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", None) if usage else None,
-                    })
-                    print(f"📊 Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}")
+
+                    # Export session transcript for cross-sandbox resumption
+                    transcript_b64 = None
+                    if msg.session_id:
+                        try:
+                            transcript_b64 = self.config.export_session_transcript(
+                                msg.session_id
+                            )
+                            if transcript_b64:
+                                print(
+                                    f"📦 Exported session transcript ({len(transcript_b64)} bytes base64)"
+                                )
+                        except Exception as e:
+                            print(f"⚠️  Failed to export session transcript: {e}")
+
+                    await self.reporter.report(
+                        "agent.completed",
+                        {
+                            "success": True,
+                            "turns": msg.num_turns,
+                            "cost_usd": msg.total_cost_usd,
+                            "session_id": msg.session_id,
+                            "transcript_b64": transcript_b64,  # Include transcript for server storage
+                            "stop_reason": getattr(msg, "stop_reason", None),
+                            "input_tokens": usage.input_tokens if usage else None,
+                            "output_tokens": usage.output_tokens if usage else None,
+                            "cache_read_tokens": getattr(
+                                usage, "cache_read_input_tokens", None
+                            )
+                            if usage
+                            else None,
+                            "cache_write_tokens": getattr(
+                                usage, "cache_creation_input_tokens", None
+                            )
+                            if usage
+                            else None,
+                        },
+                    )
+                    print(
+                        f"📊 Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}"
+                    )
                     return msg, final_output
 
         except Exception as e:
-            await self.reporter.report("agent.stream_error", {
-                "error": str(e),
-                "turn": self.turn_count,
-            })
+            await self.reporter.report(
+                "agent.stream_error",
+                {
+                    "error": str(e),
+                    "turn": self.turn_count,
+                },
+            )
             print(f"❌ Stream error: {e}")
 
         return None, final_output
@@ -659,6 +847,15 @@ class SandboxWorker:
         Path(self.config.cwd).mkdir(parents=True, exist_ok=True)
         setup_github_workspace(self.config)
 
+        # Import session transcript if provided (for cross-sandbox resumption)
+        if self.config.session_transcript_b64 and self.config.resume_session_id:
+            print("\n📥 Importing session transcript for cross-sandbox resumption...")
+            if self.config.import_session_transcript():
+                print("✅ Session transcript imported successfully")
+            else:
+                print("⚠️  Session transcript import failed, starting fresh")
+                self.config.resume_session_id = None  # Reset to avoid resume failure
+
         async with EventReporter(self.config) as reporter:
             self.reporter = reporter
 
@@ -674,8 +871,12 @@ class SandboxWorker:
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "sdk": "claude_agent_sdk",
                         "model": self.config.model or "default",
-                        "task": self.config.initial_prompt or self.config.ticket_description,
+                        "task": self.config.initial_prompt
+                        or self.config.ticket_description,
                         "ticket_title": self.config.ticket_title,
+                        "resumed_session_id": self.config.resume_session_id,
+                        "is_resuming": bool(self.config.resume_session_id),
+                        "fork_session": self.config.fork_session,
                     },
                     source="worker",
                 )
@@ -710,10 +911,13 @@ class SandboxWorker:
                                 # Check for stop
                                 if self._should_stop:
                                     await client.interrupt()
-                                    await reporter.report("agent.interrupted", {
-                                        "reason": "shutdown_signal",
-                                        "turn": self.turn_count,
-                                    })
+                                    await reporter.report(
+                                        "agent.interrupted",
+                                        {
+                                            "reason": "shutdown_signal",
+                                            "turn": self.turn_count,
+                                        },
+                                    )
                                     break
 
                                 # Poll for messages
@@ -735,23 +939,29 @@ class SandboxWorker:
                                     if msg_type == "interrupt":
                                         self._should_stop = True
                                         await client.interrupt()
-                                        await reporter.report("agent.interrupted", {
-                                            "reason": content,
-                                            "sender_id": sender_id,
-                                            "turn": self.turn_count,
-                                        })
+                                        await reporter.report(
+                                            "agent.interrupted",
+                                            {
+                                                "reason": content,
+                                                "sender_id": sender_id,
+                                                "turn": self.turn_count,
+                                            },
+                                        )
                                         break
 
                                     # Report message injection
-                                    await reporter.report("agent.message_injected", {
-                                        "message_type": msg_type,
-                                        "content": content,  # Full content
-                                        "content_length": len(content),
-                                        "sender_id": sender_id,
-                                        "message_id": message_id,
-                                        "intervention_number": intervention_count,
-                                        "turn": self.turn_count,
-                                    })
+                                    await reporter.report(
+                                        "agent.message_injected",
+                                        {
+                                            "message_type": msg_type,
+                                            "content": content,  # Full content
+                                            "content_length": len(content),
+                                            "sender_id": sender_id,
+                                            "message_id": message_id,
+                                            "intervention_number": intervention_count,
+                                            "turn": self.turn_count,
+                                        },
+                                    )
 
                                     # Process message
                                     await client.query(content)
@@ -765,7 +975,10 @@ class SandboxWorker:
 
                                 # Heartbeat
                                 now = asyncio.get_event_loop().time()
-                                if now - last_heartbeat >= self.config.heartbeat_interval:
+                                if (
+                                    now - last_heartbeat
+                                    >= self.config.heartbeat_interval
+                                ):
                                     await reporter.heartbeat()
                                     last_heartbeat = now
 

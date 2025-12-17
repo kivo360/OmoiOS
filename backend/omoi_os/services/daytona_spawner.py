@@ -219,7 +219,31 @@ class DaytonaSpawnerService:
 
         logger.debug(f"Using {creds.source} credentials for sandbox")
 
-        # Add extra env vars
+        # Handle session resumption for Claude runtime
+        if runtime == "claude" and self.db:
+            resume_session_id = None
+            if extra_env and extra_env.get("RESUME_SESSION_ID"):
+                resume_session_id = extra_env["RESUME_SESSION_ID"]
+            elif extra_env and extra_env.get("resume_session_id"):
+                resume_session_id = extra_env["resume_session_id"]
+
+            if resume_session_id:
+                # Retrieve session transcript from database
+                from omoi_os.api.routes.sandbox import get_session_transcript
+
+                transcript_b64 = get_session_transcript(self.db, resume_session_id)
+                if transcript_b64:
+                    env_vars["RESUME_SESSION_ID"] = resume_session_id
+                    env_vars["SESSION_TRANSCRIPT_B64"] = transcript_b64
+                    logger.info(
+                        f"Retrieved session transcript for resumption: {resume_session_id[:8]}..."
+                    )
+                else:
+                    logger.warning(
+                        f"Session transcript not found for {resume_session_id}, starting fresh session"
+                    )
+
+        # Add extra env vars (can override transcript if explicitly provided)
         if extra_env:
             env_vars.update(extra_env)
 
@@ -962,7 +986,9 @@ if __name__ == "__main__":
         - Custom model/API support (Z.AI GLM, etc.)
         """
         # Try to read from file first (development mode)
-        worker_file = Path(__file__).parent.parent / "workers" / "claude_sandbox_worker.py"
+        worker_file = (
+            Path(__file__).parent.parent / "workers" / "claude_sandbox_worker.py"
+        )
         if worker_file.exists():
             logger.info(f"Loading Claude worker script from {worker_file}")
             return worker_file.read_text()
