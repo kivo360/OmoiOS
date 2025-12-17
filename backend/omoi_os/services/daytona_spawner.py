@@ -12,6 +12,7 @@ The spawner:
 
 import asyncio
 import logging
+import shlex
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -403,15 +404,30 @@ class DaytonaSpawnerService:
         github_repo_name = env_vars.pop("GITHUB_REPO_NAME", None)
 
         # Build environment export string (without sensitive token)
-        env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
+        # Properly escape values to handle quotes and special characters
+        def escape_env_value(v: str) -> str:
+            """Escape environment variable value for shell export."""
+            # Use shlex.quote to properly escape shell values
+            return shlex.quote(str(v))
+
+        env_exports = " ".join(
+            [f"export {k}={escape_env_value(v)}" for k, v in env_vars.items()]
+        )
 
         # Also write env vars to a file for persistence and debugging
-        env_file_content = "\n".join([f'{k}="{v}"' for k, v in env_vars.items()])
+        # For the file, we can use simpler escaping since it's not in a shell command
+        env_file_content = "\n".join(
+            [
+                f'{k}="{v.replace(chr(34), chr(92) + chr(34))}"'
+                for k, v in env_vars.items()
+            ]
+        )
         sandbox.process.exec(
-            f"cat > /tmp/.sandbox_env << 'ENVEOF'\n{env_file_content}\nENVOF"
+            f"cat > /tmp/.sandbox_env << 'ENVEOF'\n{env_file_content}\nENVEOF"
         )
         # Export to current shell profile for all future commands
-        sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVOF")
+        # Use proper heredoc delimiter
+        sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVEOF")
 
         # Install required packages based on runtime
         # Use uv for faster installation if available, fallback to pip
@@ -483,20 +499,24 @@ class DaytonaSpawnerService:
         sandbox.fs.upload_file(worker_script.encode("utf-8"), "/tmp/sandbox_worker.py")
 
         # Rebuild env_exports with any new variables (like WORKSPACE_PATH)
-        env_exports = " ".join([f'export {k}="{v}"' for k, v in env_vars.items()])
+        # Use the same escape function defined above
+        env_exports = " ".join(
+            [f"export {k}={escape_env_value(v)}" for k, v in env_vars.items()]
+        )
 
         # Create workspace directory (even if no repo cloned)
         sandbox.process.exec("mkdir -p /workspace")
 
         # Start the worker
         logger.info("Starting sandbox worker...")
-        start_cmd = f"""
-        {env_exports}
-        cd /tmp && python sandbox_worker.py
-        """
+        # Use proper escaping for the bash -c command
+        # Since env_exports is already properly escaped, we can use it directly
+        start_cmd = f"{env_exports} && cd /tmp && python sandbox_worker.py"
 
         # Run in background and capture output
-        sandbox.process.exec(f"nohup bash -c '{start_cmd}' > /tmp/worker.log 2>&1 &")
+        # Escape the command properly for bash -c
+        escaped_cmd = shlex.quote(start_cmd)
+        sandbox.process.exec(f"nohup bash -c {escaped_cmd} > /tmp/worker.log 2>&1 &")
         logger.info("Sandbox worker started, check /tmp/worker.log for output")
 
     def _get_worker_script(self) -> str:
