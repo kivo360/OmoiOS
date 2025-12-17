@@ -418,7 +418,8 @@ class DaytonaSpawnerService:
         logger.info(f"Installing {runtime} dependencies in sandbox...")
         if runtime == "claude":
             # Claude Agent SDK - per docs/libraries/claude-agent-sdk-python-clean.md
-            install_cmd = "uv pip install claude-agent-sdk httpx 2>/dev/null || pip install claude-agent-sdk httpx"
+            # Include pydantic for model serialization (model_dump support)
+            install_cmd = "uv pip install claude-agent-sdk httpx pydantic 2>/dev/null || pip install claude-agent-sdk httpx pydantic"
         else:  # openhands (default)
             # OpenHands Software Agent SDK - per docs/libraries/software-agent-sdk-clean.md
             # openhands-sdk: Core SDK (openhands.sdk)
