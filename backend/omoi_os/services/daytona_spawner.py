@@ -1348,46 +1348,29 @@ def create_tools():
 
 
 # ============================================================================
-# AGENT EXECUTION WITH HOOKS (Phase 3)
+# AGENT EXECUTION WITH MULTI-TURN MESSAGE INJECTION (Fixed Pattern)
 # ============================================================================
 
 async def run_agent(task_description: str):
-    """Run the Claude Agent SDK with message injection hooks."""
-    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
+    """Run the Claude Agent SDK with proper multi-turn message injection.
+    
+    FIXED: Uses receive_messages() for indefinite streaming and client.query()
+    for real message injection (matching Claude Code web behavior).
+    """
+    from claude_agent_sdk import (
+        ClaudeAgentOptions, 
+        ClaudeSDKClient, 
+        HookMatcher,
+        AssistantMessage,
+        TextBlock,
+        ThinkingBlock,
+        ToolUseBlock,
+        ToolResultBlock,
+        ResultMessage,
+    )
     
     tools_server, tool_names = create_tools()
-    
-    # PreToolUse hook: Check for pending messages before each tool call
-    # This provides sub-second intervention latency
-    async def check_pending_messages(input_data, tool_use_id, context):
-        """PreToolUse hook for immediate message injection."""
         global _should_stop
-        
-        # Poll for any pending messages
-        messages = await poll_messages()
-        
-        if messages:
-            injected_context = process_messages(messages)
-            
-            if _should_stop:
-                # Interrupt received - stop execution
-                await report_event("agent.interrupted", {"reason": "interrupt_message"})
-                return {
-                    "continue_": False,
-                    "stopReason": "Interrupt received from user/guardian",
-                    "systemMessage": injected_context,
-                }
-            
-            if injected_context:
-                # Inject context as system message
-                await report_event("agent.message_injected", {"message_count": len(messages)})
-                return {
-                    "continue_": True,
-                    "systemMessage": injected_context,
-                    "reason": "Injected guidance from message queue",
-                }
-        
-        return {"continue_": True}
     
     # PostToolUse hook: Report tool usage for Guardian observation
     async def track_tool_use(input_data, tool_use_id, context):
@@ -1399,26 +1382,132 @@ async def run_agent(task_description: str):
     options = ClaudeAgentOptions(
         allowed_tools=tool_names + ["Read", "Write", "Bash", "Edit", "Glob", "Grep"],
         permission_mode="acceptEdits",
-        system_prompt=f"You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes. If you receive guidance messages, incorporate them into your work.",
+        system_prompt=f"You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.",
         cwd=Path("/workspace"),
         max_turns=50,
         max_budget_usd=10.0,
-        model=ANTHROPIC_MODEL,  # Use configured model (e.g., glm-4.6v via Z.AI)
+        model=ANTHROPIC_MODEL,
         mcp_servers={"workspace": tools_server},
         hooks={
-            "PreToolUse": [HookMatcher(matcher=None, hooks=[check_pending_messages])],
             "PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool_use])],
         },
     )
     
     try:
         async with ClaudeSDKClient(options=options) as client:
+            # Start with initial task
             await client.query(task_description)
-            outputs = []
-            async for msg in client.receive_response():
-                outputs.append(str(msg)[:500])
-            return True, "\\n".join(outputs[-5:])
+            await report_event("agent.started", {"task": task_description[:200]})
+            
+            # Message queue for streaming
+            message_queue = asyncio.Queue()
+            agent_done = asyncio.Event()
+            final_output = []
+            
+            async def message_stream():
+                """Stream messages from Claude and map to our event types."""
+                try:
+                    async for msg in client.receive_messages():  # Indefinite streaming
+                        # Map SDK messages to our event types
+                        if isinstance(msg, AssistantMessage):
+                            for block in msg.content:
+                                if isinstance(block, ThinkingBlock):
+                                    await report_event("agent.thinking", {
+                                        "content": block.text[:500]
+                                    })
+                                elif isinstance(block, ToolUseBlock):
+                                    await report_event("agent.tool_use", {
+                                        "tool": block.name,
+                                        "input": str(block.input)[:200]
+                                    })
+                                elif isinstance(block, ToolResultBlock):
+                                    await report_event("agent.tool_result", {
+                                        "tool_use_id": block.tool_use_id,
+                                        "result": str(block.content)[:500]
+                                    })
+                                elif isinstance(block, TextBlock):
+                                    await report_event("agent.message", {
+                                        "content": block.text[:500]
+                                    })
+                                    final_output.append(block.text[:200])
+                        
+                        elif isinstance(msg, ResultMessage):
+                            await report_event("agent.completed", {
+                                "turns": msg.num_turns,
+                                "cost_usd": msg.total_cost_usd,
+                                "session_id": msg.session_id
+                            })
+                            final_output.append(f"Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}")
+                            agent_done.set()
+                            break
+                        
+                        await message_queue.put(msg)
     except Exception as e:
+                    logger.error(f"Message stream error: {e}")
+                    agent_done.set()
+            
+            async def intervention_handler():
+                """Poll for interventions and inject as new user messages."""
+                poll_interval = 0.5  # Poll every 500ms
+                
+                while not agent_done.is_set():
+                    try:
+                        # Check for interrupt first
+                        if _should_stop:
+                            logger.warning("Interrupt received, stopping agent")
+                            await client.interrupt()
+                            await report_event("agent.interrupted", {"reason": "user_interrupt"})
+                            agent_done.set()
+                            break
+                        
+                        # Poll for new messages
+                        messages = await poll_messages()
+                        if messages:
+                            for msg in messages:
+                                msg_type = msg.get("message_type", "user_message")
+                                content = msg.get("content", "")
+                                
+                                if msg_type == "interrupt":
+                                    logger.warning(f"INTERRUPT: {content}")
+                                    _should_stop = True
+                                    await client.interrupt()
+                                    await report_event("agent.interrupted", {"reason": content})
+                                    agent_done.set()
+                                    break
+                                
+                                elif msg_type in ["user_message", "guardian_nudge"]:
+                                    # Inject as NEW USER MESSAGE (like Claude Code web)
+                                    logger.info(f"Injecting message: {content[:100]}")
+                                    await report_event("agent.message_injected", {
+                                        "message_type": msg_type,
+                                        "content": content[:200]
+                                    })
+                                    await client.query(content)  # ← Real message injection
+                        
+                        await asyncio.sleep(poll_interval)
+                    except Exception as e:
+                        logger.error(f"Intervention handler error: {e}")
+                        await asyncio.sleep(poll_interval)
+            
+            # Run message streaming and intervention handling concurrently
+            await asyncio.gather(
+                message_stream(),
+                intervention_handler(),
+                return_exceptions=True
+            )
+            
+            # Wait a bit for final messages
+            try:
+                await asyncio.wait_for(agent_done.wait(), timeout=5.0)
+            except asyncio.TimeoutError:
+                pass
+            
+            result_text = "\\n".join(final_output[-10:]) if final_output else "No output"
+            return True, result_text
+            
+    except Exception as e:
+        logger.error(f"Agent execution failed: {e}")
+        await report_event("agent.error", {"error": str(e)})
         return False, str(e)
 
 

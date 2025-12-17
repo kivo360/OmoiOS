@@ -252,20 +252,20 @@ I'm implementing Phase 3: Worker Script Updates. I need to:
 Show me how to modify the worker script template in daytona_spawner.py.
 ```
 
-**For OpenHands worker:**
+**For Claude Agent SDK worker:**
 
 ```
 @docs/design/sandbox-agents/06_implementation_checklist.md
 @docs/libraries/software-agent-sdk-clean.md
 @backend/omoi_os/services/daytona_spawner.py
 
-Now update the OpenHands worker script similarly:
+Now update the Claude Agent SDK worker script similarly:
 
 1. Add HTTP callbacks for event reporting
 2. Implement hook-based message injection
 3. Follow the same patterns as the Claude worker
 
-Show me the OpenHands-specific modifications.
+Show me the Claude Agent SDK-specific modifications.
 ```
 
 ### Phase 3.5: GitHub Clone Integration
@@ -460,7 +460,7 @@ I need to inject a check for pending messages before each tool call.
 ```
 @docs/libraries/software-agent-sdk-clean.md
 
-Show me how OpenHands/Software Agent SDK handles tool execution hooks.
+Show me how Claude Agent SDK handles tool execution hooks.
 I need to add message injection similar to what I did for Claude.
 ```
 
@@ -649,7 +649,7 @@ Copy this checklist into your notes and update as you progress:
 
 ## Phase 3: Worker Script Updates
 - [ ] Update Claude worker script for HTTP callbacks
-- [ ] Update OpenHands worker script for HTTP callbacks
+- [ ] Update Claude Agent SDK worker script for HTTP callbacks
 - [ ] Add hook-based message injection
 - [ ] **GATE**: Phase 3 tests pass
 

@@ -145,12 +145,15 @@ interface TicketNodeData {
   [key: string]: unknown
 }
 
+// Default fallback for unknown status
+const defaultStatus = { label: "Unknown", color: "#9ca3af", bgColor: "#f3f4f6", icon: Clock }
+
 // Custom node component
 function TicketNode({ data, selected }: NodeProps) {
   const nodeData = data as TicketNodeData
-  const status = statusConfig[nodeData.status as keyof typeof statusConfig]
+  const status = statusConfig[nodeData.status as keyof typeof statusConfig] ?? defaultStatus
   const StatusIcon = status.icon
-  const priorityColor = priorityColors[nodeData.priority as keyof typeof priorityColors]
+  const priorityColor = priorityColors[nodeData.priority as keyof typeof priorityColors] ?? "#6b7280"
 
   return (
     <TooltipProvider>

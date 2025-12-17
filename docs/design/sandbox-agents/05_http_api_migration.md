@@ -676,16 +676,14 @@ async def get_discoveries_by_type(
 
 ## Part 3: Agent SDK Tools (HTTP-based)
 
-### OpenHands SDK Example
+### Claude Agent SDK Example
 
 ```python
-"""OpenHands tools that use HTTP instead of MCP."""
+"""Claude Agent SDK tools that use HTTP instead of MCP."""
 
 import httpx
 from typing import Any, Dict, Optional
 from pydantic import Field
-from openhands.sdk.tool import ToolDefinition, ToolExecutor
-from openhands.sdk.tool.schema import Action, Observation
 
 
 # Configuration
@@ -1055,7 +1053,7 @@ def create_agent_with_tools(agent_id: str, task_id: str):
 - [ ] Register new router in `api/main.py`
 
 ### Phase 2: Create SDK Tools (1-2 hours)
-- [ ] Create `backend/omoi_os/tools/http_tools.py` (OpenHands)
+- [ ] Create `backend/omoi_os/tools/http_tools.py` (Claude Agent SDK)
 - [ ] Create `backend/omoi_os/tools/claude_http_tools.py` (Claude)
 - [ ] Test tools against running backend
 
@@ -1072,6 +1070,7 @@ def create_agent_with_tools(agent_id: str, task_id: str):
 3. **Simplicity**: Standard REST patterns everyone knows
 4. **Retries**: Built-in retry logic with httpx/requests
 5. **Logging**: Easy to log all requests/responses
+
 
 
 

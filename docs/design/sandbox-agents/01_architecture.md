@@ -40,7 +40,7 @@
 
 ## Executive Summary
 
-This document describes the architecture for spawning AI coding agents (using **Claude Agent SDK** or **OpenHands SDK**) inside isolated **Daytona Cloud sandboxes**, with **real-time bidirectional communication** via WebSockets that allows users to:
+This document describes the architecture for spawning AI coding agents (using **Claude Agent SDK**) inside isolated **Daytona Cloud sandboxes**, with **real-time bidirectional communication** via WebSockets that allows users to:
 
 1. **See what's happening inside sandboxes** (file changes, commands, agent thoughts)
 2. **Control conversations** (send messages, interrupt, provide guidance)
@@ -111,16 +111,15 @@ This document describes the architecture for spawning AI coding agents (using **
 │   │  ┌─────────────────────────────────────────────────────────────────┐   │   │
 │   │  │                   Agent Runtime (Choice)                         │   │   │
 │   │  │                                                                  │   │   │
-│   │  │   ┌─────────────────────┐    OR    ┌─────────────────────┐      │   │   │
-│   │  │   │  Claude Agent SDK   │          │   OpenHands SDK      │      │   │   │
-│   │  │   │                     │          │                      │      │   │   │
-│   │  │   │ • ClaudeSDKClient   │          │ • LocalConversation  │      │   │   │
-│   │  │   │ • @tool decorator   │          │ • Agent + Workspace  │      │   │   │
-│   │  │   │ • Pre/PostToolUse   │          │ • Event Callbacks    │      │   │   │
-│   │  │   │ • Streaming msgs    │          │ • Tool Registry      │      │   │   │
-│   │  │   └──────────┬──────────┘          └──────────┬───────────┘      │   │   │
-│   │  │              │                                │                  │   │   │
-│   │  │              └────────────────┬───────────────┘                  │   │   │
+│   │  │   ┌─────────────────────┐                                        │   │   │
+│   │  │   │  Claude Agent SDK   │                                        │   │   │
+│   │  │   │                     │                                        │   │   │
+│   │  │   │ • ClaudeSDKClient   │                                        │   │   │
+│   │  │   │ • @tool decorator   │                                        │   │   │
+│   │  │   │ • Pre/PostToolUse   │                                        │   │   │
+│   │  │   │ • Streaming msgs    │                                        │   │   │
+│   │  │   └──────────┬──────────┘                                        │   │   │
+│   │  │              │                                                    │   │   │
 │   │  │                               │                                  │   │   │
 │   │  └───────────────────────────────┼──────────────────────────────────┘   │   │
 │   │                                  │                                      │   │
@@ -311,7 +310,7 @@ CREATE TABLE sandbox_sessions (
     conversation_id VARCHAR(255),
     
     -- Runtime configuration
-    runtime VARCHAR(50) NOT NULL DEFAULT 'openhands',  -- 'openhands' | 'claude'
+    runtime VARCHAR(50) NOT NULL DEFAULT 'claude',  -- 'claude'
     status VARCHAR(50) NOT NULL DEFAULT 'creating',    -- creating | running | paused | completed | failed | terminated
     
     -- Daytona metadata
@@ -415,7 +414,7 @@ CREATE TABLE sandbox_ws_connections (
 │ task_id (FK → tasks)                                                │
 │ agent_id (FK → agents)                                              │
 │ conversation_id                                                     │
-│ runtime ('openhands' | 'claude')                                    │
+│ runtime ('claude')                                                   │
 │ status                                                              │
 │ daytona_sandbox_id                                                  │
 │ preview_url                                                         │
@@ -453,7 +452,7 @@ CREATE TABLE sandbox_ws_connections (
 │  ├─ Description: Spawn a new sandbox for a task                            │
 │  ├─ Body: {                                                                 │
 │  │     task_id: string,                                                    │
-│  │     runtime: "openhands" | "claude",                                    │
+│  │     runtime: "claude",                                                  │
 │  │     agent_type?: string,                                                │
 │  │     env?: Record<string, string>                                        │
 │  │  }                                                                       │
@@ -776,9 +775,9 @@ CREATE TABLE sandbox_ws_connections (
 │  │  }                        │                      │                 │   │
 │  │         │                 │                      │                 │   │
 │  │         ▼                 │                      ▼                 │   │
-│  │  Worker polls             │             OpenHands Conversation     │   │
-│  │  GET /messages            │             object loads state         │   │
-│  │  and receives it          │             and injects message        │   │
+│  │  Worker polls             │             Claude Agent SDK            │   │
+│  │  GET /messages            │             client receives message     │   │
+│  │  and receives it          │             and processes it             │   │
 │  │                           │                                        │   │
 │  └───────────────────────────┴────────────────────────────────────────┘   │
 │                                                                             │
@@ -846,53 +845,50 @@ CREATE TABLE sandbox_ws_connections (
 │                                                                             │
 │  HOOK-BASED (Proposed):                                                     │
 │  ──────────────────────                                                     │
-│  Guardian enqueues → PreToolUse fires → Check queue → Inject immediately   │
+│  Guardian enqueues → Poll loop detects → client.query(message) → New turn  │
 │                                       ↑                                      │
-│                                INSTANT (<100ms)                              │
+│                              ~500ms polling interval                         │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **SDK-Specific Implementation:**
 
-| SDK | Hook Mechanism | Latency | Control Level |
-|-----|----------------|---------|---------------|
-| Claude Agent SDK | `PreToolUse` hook | <1ms | Full (can block/modify) |
-| OpenHands SDK | Event callback (ActionEvent) | <100ms | Moderate (inject message) |
+| SDK | Message Injection | Latency | Pattern |
+|-----|-------------------|---------|---------|
+| Claude Agent SDK | `client.query(new_message)` | ~500ms | Multi-turn conversation |
 
-**Worker Script Hook Pattern (Claude SDK):**
-
-```python
-# Intervention check hook - fires BEFORE every tool execution
-async def check_pending_interventions(input_data, tool_use_id, context):
-    intervention = await fetch_next_intervention()
-    if intervention:
-        return {
-            "reason": intervention["message"],  # Feedback for Claude
-            "systemMessage": f"[{intervention['source'].upper()}] {intervention['message']}",
-        }
-    return {}
-
-options = ClaudeAgentOptions(
-    hooks={
-        "PreToolUse": [HookMatcher(matcher="*", hooks=[check_pending_interventions])],
-    },
-)
-```
-
-**Worker Script Hook Pattern (OpenHands SDK):**
+**Worker Script Multi-Turn Pattern (Claude SDK - CORRECTED):**
 
 ```python
-# Enhanced callback with intervention injection
-def on_event_with_intervention(event):
-    if "Action" in type(event).__name__:
-        intervention = fetch_next_intervention_sync()
-        if intervention:
-            conversation.send_message(
-                f"[{intervention['source'].upper()} INTERVENTION] {intervention['message']}"
-            )
-    # Original event reporting continues...
+# FIXED: Multi-turn pattern matching Claude Code web behavior
+async with ClaudeSDKClient(options=options) as client:
+    # Start with initial task
+    await client.query(task_description)
+    
+    # Stream messages indefinitely (not receive_response which stops at ResultMessage)
+    async def message_stream():
+        async for msg in client.receive_messages():  # Indefinite streaming
+            # Map SDK messages to events
+            if isinstance(msg, AssistantMessage):
+                # Process text, tool use, thinking blocks...
+                pass
+    
+    # Poll for interventions and inject as NEW USER MESSAGES
+    async def intervention_handler():
+        while True:
+            messages = await poll_messages()
+            if messages:
+                for msg in messages:
+                    # Real message injection: call client.query() with new message
+                    await client.query(msg["content"])  # ← Like Claude Code web
+    
+    # Run both concurrently
+    await asyncio.gather(message_stream(), intervention_handler())
 ```
+
+**Key Fix**: Hooks cannot inject messages. Real injection requires `client.query(new_message)`.
+
 
 ---
 
@@ -901,81 +897,51 @@ def on_event_with_intervention(event):
 > **SDK Documentation References:**
 > - **Claude Agent SDK**: `docs/libraries/claude-agent-sdk-python-clean.md`
 >   - GitHub: https://github.com/anthropics/claude-agent-sdk-python
-> - **OpenHands SDK**: `docs/libraries/software-agent-sdk-clean.md`
->   - GitHub: https://github.com/OpenHands/software-agent-sdk
-
-### Claude Agent SDK vs OpenHands SDK
+### Claude Agent SDK
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         SDK Feature Comparison                              │
+│                         Claude Agent SDK Features                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  ┌───────────────────────────────┬───────────────────────────────────────┐  │
-│  │       Claude Agent SDK        │         OpenHands SDK                 │  │
-│  ├───────────────────────────────┼───────────────────────────────────────┤  │
-│  │                               │                                       │  │
-│  │  ARCHITECTURE:                │  ARCHITECTURE:                        │  │
-│  │  ┌─────────────────────────┐  │  ┌─────────────────────────────────┐  │  │
-│  │  │ ClaudeSDKClient         │  │  │ Conversation                    │  │  │
-│  │  │   └── Claude CLI        │  │  │   ├── Agent                     │  │  │
-│  │  │       └── Tool Use      │  │  │   │     └── LLM (separate!)     │  │  │
-│  │  └─────────────────────────┘  │  │   ├── Workspace                 │  │  │
-│  │                               │  │   └── Tools[...]                │  │  │
-│  │                               │  └─────────────────────────────────┘  │  │
-│  │                               │                                       │  │
-│  │  STREAMING:                   │  STREAMING:                           │  │
-│  │  • async for in receive_*()   │  • callbacks=[fn]                     │  │
-│  │  • StreamEvent messages       │  • WebSocket /events/socket           │  │
-│  │  • Partial message updates    │  • Event handlers                     │  │
-│  │                               │                                       │  │
-│  │  HOOKS:                       │  HOOKS:                               │  │
-│  │  • PreToolUse                 │  • callbacks=[fn]                     │  │
-│  │  • PostToolUse                │  • Event handlers                     │  │
-│  │  • can_use_tool callback      │                                       │  │
-│  │                               │                                       │  │
-│  │  TOOLS:                       │  TOOLS:                               │  │
-│  │  • @tool decorator            │  • Tool(name=ToolName.name)           │  │
-│  │  • create_sdk_mcp_server()    │  • TerminalTool, FileEditorTool       │  │
-│  │  • mcp_servers={} option      │  • TaskTrackerTool                    │  │
-│  │                               │                                       │  │
-│  │  CONVERSATION CONTROL:        │  CONVERSATION CONTROL:                │  │
-│  │  • client.query()             │  • conversation.send_message()        │  │
-│  │  • client.interrupt()         │  • conversation.run()                 │  │
-│  │  • Multi-turn sessions        │  • REST API + WebSocket               │  │
-│  │                               │                                       │  │
-│  │  COST TRACKING:               │  COST TRACKING:                       │  │
-│  │  • max_budget_usd option      │  • llm.metrics.accumulated_cost       │  │
-│  │  • ResultMessage.total_cost   │  • llm.metrics.accumulated_tokens     │  │
-│  │                               │                                       │  │
-│  │  SETUP:                       │  SETUP:                               │  │
-│  │  ┌─────────────────────────┐  │  ┌─────────────────────────────────┐  │  │
-│  │  │ options = ClaudeAgent   │  │  │ llm = LLM(model=..., api_key=.) │  │  │
-│  │  │   Options(...)          │  │  │ agent = Agent(llm=llm,          │  │  │
-│  │  │ client = ClaudeSDK      │  │  │               tools=[...])      │  │  │
-│  │  │   Client(options)       │  │  │ conv = Conversation(agent,      │  │  │
-│  │  │ client.query(prompt)    │  │  │               workspace="/w")   │  │  │
-│  │  └─────────────────────────┘  │  └─────────────────────────────────┘  │  │
-│  │                               │                                       │  │
-│  └───────────────────────────────┴───────────────────────────────────────┘  │
-│                                                                             │
-│  RECOMMENDATION:                                                            │
+│  ARCHITECTURE:                                                              │  │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
-│  │                                                                     │   │
-│  │  Use CLAUDE AGENT SDK when:                                         │   │
-│  │  • You want simpler architecture (fewer layers)                     │   │
-│  │  • You need native Claude tool_use                                  │   │
-│  │  • You want fine-grained hook control                              │   │
-│  │  • MCP server integration is important                              │   │
-│  │                                                                     │   │
-│  │  Use OPENHANDS SDK when:                                            │   │
-│  │  • You need the rich tool ecosystem (file_editor, terminal)         │   │
-│  │  • You want built-in workspace isolation                            │   │
-│  │  • You need the Agent Server with WebSocket support                 │   │
-│  │  • You're building a code-generation focused system                 │   │
-│  │                                                                     │   │
-│  │  FOR OMOIOS: Support BOTH with runtime selection                    │   │
-│  │                                                                     │   │
+│  │ ClaudeSDKClient                                                    │   │
+│  │   └── Claude CLI                                                   │   │
+│  │       └── Tool Use                                                 │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│  STREAMING:                                                                 │
+│  • async for in receive_*()                                                 │
+│  • StreamEvent messages                                                     │
+│  • Partial message updates                                                 │
+│                                                                             │
+│  HOOKS:                                                                     │
+│  • PreToolUse (modify tool execution, NOT message injection)               │
+│  • PostToolUse (track tool usage)                                          │
+│  • can_use_tool callback (permission control)                               │
+│  NOTE: Hooks cannot inject new user messages - use client.query() instead  │
+│                                                                             │
+│  TOOLS:                                                                     │
+│  • @tool decorator                                                          │
+│  • create_sdk_mcp_server()                                                  │
+│  • mcp_servers={} option                                                    │
+│                                                                             │
+│  CONVERSATION CONTROL:                                                      │
+│  • client.query(message) - Send new user message (for message injection)  │
+│  • client.receive_messages() - Stream indefinitely (not receive_response) │
+│  • client.interrupt() - Stop current operation                             │
+│  • Multi-turn sessions - Maintain conversation state                       │
+│                                                                             │
+│  COST TRACKING:                                                             │
+│  • max_budget_usd option                                                    │
+│  • ResultMessage.total_cost_usd                                             │
+│                                                                             │
+│  SETUP:                                                                     │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ options = ClaudeAgentOptions(...)                                   │   │
+│  │ client = ClaudeSDKClient(options)                                   │   │
+│  │ client.query(prompt)                                                │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -1113,7 +1079,7 @@ This architecture enables:
 
 1. **Real-time visibility** into sandbox agent execution via WebSockets
 2. **Bidirectional control** - users can send messages, interrupt, guide agents
-3. **SDK flexibility** - support both Claude Agent SDK and OpenHands SDK
+3. **SDK integration** - using Claude Agent SDK
 4. **Scalability** - Redis Pub/Sub for multi-server deployments
 5. **Audit trail** - all events stored in database for replay
 6. **Guardian integration** - interventions flow through the same event system
