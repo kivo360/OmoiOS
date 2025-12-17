@@ -30,7 +30,7 @@ load_dotenv(Path(__file__).parent.parent / ".env.local")
 
 # Configuration
 API_BASE_URL = "http://localhost:18000"
-USER_ID = "ffa6776e-b2bc-4e10-b553-f7b915df0896"  # kivo360@gmail.com
+USER_ID = "f5d0b1a5-da18-46dc-8713-0d9820c65565"  # kivo360@gmail.com
 GITHUB_OWNER = "kivo360"
 GITHUB_REPO = "OmoiOS"
 
