@@ -34,14 +34,17 @@ USER_ID = "f5d0b1a5-da18-46dc-8713-0d9820c65565"  # kivo360@gmail.com
 GITHUB_OWNER = "kivo360"
 GITHUB_REPO = "OmoiOS"
 
-# Complex math task - binomial coefficient C(50,25)
+# Complex math task with file creation and modification - tests file diff tracking
 # Result: 126,410,606,437,752 (easy for Python, hard for LLMs)
 TASK_DESCRIPTION = """Calculate the binomial coefficient C(50,25) which equals:
     factorial(50) / (factorial(25) * factorial(25))
 
 Use Python to compute this exactly. The answer should be: 126410606437752
 
-Write a simple Python script that computes this and prints the result."""
+Step 1: Create a file called binomial.py with a function to calculate C(n, k)
+Step 2: Then modify the file to add a main() function that calls the function with n=50, k=25 and prints the result
+
+This will test file creation and modification tracking."""
 
 
 async def check_api_health(client: httpx.AsyncClient) -> bool:
@@ -184,47 +187,40 @@ async def poll_for_task(
     return None
 
 
-async def poll_sandbox_events(
-    client: httpx.AsyncClient, sandbox_id: str, timeout: int = 300
+async def get_sandbox_events(
+    client: httpx.AsyncClient, sandbox_id: str, seen_event_ids: set[str]
 ) -> list[dict]:
-    """Poll sandbox events until completion or timeout."""
-    start_time = time.time()
-    seen_events = set()
-    all_events = []
+    """Get new sandbox events (ones we haven't seen before)."""
+    response = await client.get(
+        f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/events?limit=50"
+    )
+    if response.status_code == 200:
+        data = response.json()
+        events = data.get("events", [])
+        new_events = []
 
-    while time.time() - start_time < timeout:
-        response = await client.get(
-            f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/events"
-        )
-        if response.status_code == 200:
-            data = response.json()
-            events = data.get("events", [])
+        for event in events:
+            event_id = event.get("id")
+            if event_id and event_id not in seen_event_ids:
+                seen_event_ids.add(event_id)
+                new_events.append(event)
 
-            for event in events:
-                event_id = event.get("id")
-                if event_id not in seen_events:
-                    seen_events.add(event_id)
-                    all_events.append(event)
+                event_type = event.get("event_type", "unknown")
 
-                    event_type = event.get("event_type", "unknown")
-                    print(f"   📬 Event: {event_type}")
+                # Track file edit events for testing
+                if event_type == "agent.file_edited":
+                    event_data = event.get("event_data", {})
+                    file_path = event_data.get("file_path", "unknown")
+                    change_type = event_data.get("change_type", "unknown")
+                    lines_added = event_data.get("lines_added", 0)
+                    lines_removed = event_data.get("lines_removed", 0)
+                    print(
+                        f"   📝 File edit: {file_path} ({change_type}, +{lines_added} -{lines_removed})"
+                    )
 
-                    # Check for completion
-                    if event_type in [
-                        "agent.completed",
-                        "task.completed",
-                        "sandbox.completed",
-                    ]:
-                        return all_events
+        return new_events
 
-                    # Check for errors
-                    if "error" in event_type.lower() or "fail" in event_type.lower():
-                        event_data = event.get("event_data", {})
-                        print(f"      Error: {event_data.get('error', 'Unknown')}")
-
-        await asyncio.sleep(3)
-
-    return all_events
+    return []
 
 
 async def find_sandbox_for_task(client: httpx.AsyncClient, task_id: str) -> str | None:
@@ -329,21 +325,51 @@ async def main():
         # Step 6: Monitor sandbox events
         print("\n[6/6] Monitoring sandbox events (max 5 min)...")
         print("   Waiting for agent to compute C(50,25) = 126,410,606,437,752")
+        print(
+            "   Also watching for file edit events (agent.file_edited) to test diff tracking"
+        )
         print()
 
-        # We need to find the sandbox ID - it should be in the task's extra data
-        # or we can poll events for SANDBOX_SPAWNED
-        # For now, let's just wait and check task status
+        # Get sandbox_id from task (it's set after sandbox is spawned)
+        sandbox_id = None
         start_time = time.time()
         max_wait = 300  # 5 minutes
+        file_edit_events = []
+        seen_event_ids = set()
 
         while time.time() - start_time < max_wait:
+            # Get task status and sandbox_id
             response = await client.get(f"{API_BASE_URL}/api/v1/tasks/{task_id}")
             if response.status_code == 200:
                 task_data = response.json()
                 status = task_data.get("status")
                 result = task_data.get("result")
                 error = task_data.get("error_message")
+
+                # Get sandbox_id if available
+                if not sandbox_id:
+                    sandbox_id = task_data.get("sandbox_id")
+                    if sandbox_id:
+                        print(f"   📦 Found sandbox_id: {sandbox_id}")
+                        print("   Polling sandbox events for file edits...")
+                        print()
+
+                # If we have sandbox_id, check for new events
+                if sandbox_id:
+                    new_events = await get_sandbox_events(
+                        client, sandbox_id, seen_event_ids
+                    )
+                    for event in new_events:
+                        if event.get("event_type") == "agent.file_edited":
+                            event_data = event.get("event_data", {})
+                            file_edit_events.append(
+                                {
+                                    "file_path": event_data.get("file_path"),
+                                    "change_type": event_data.get("change_type"),
+                                    "lines_added": event_data.get("lines_added", 0),
+                                    "lines_removed": event_data.get("lines_removed", 0),
+                                }
+                            )
 
                 if status == "completed":
                     print("   🎉 Task COMPLETED!")
@@ -355,6 +381,22 @@ async def main():
                         print(
                             "\n✅ SUCCESS! Agent computed C(50,25) = 126,410,606,437,752"
                         )
+
+                    # Report file edit events
+                    if file_edit_events:
+                        print(
+                            f"\n   📝 File Edit Events Detected: {len(file_edit_events)}"
+                        )
+                        for i, fe in enumerate(file_edit_events, 1):
+                            print(
+                                f"      {i}. {fe['file_path']} ({fe['change_type']}, +{fe['lines_added']} -{fe['lines_removed']})"
+                            )
+                        print("   ✅ File diff tracking is working correctly!")
+                    else:
+                        print(
+                            "   ⚠️  No file edit events detected - agent may not have created/modified files"
+                        )
+
                     break
 
                 elif status == "failed":
@@ -364,6 +406,13 @@ async def main():
             await asyncio.sleep(5)
         else:
             print("   ⏰ Timeout waiting for task completion")
+
+        # Final summary of file edit events
+        if file_edit_events:
+            print(
+                f"\n   📊 Summary: {len(file_edit_events)} file edit event(s) detected"
+            )
+            print("   ✅ File diff tracking feature is working!")
 
     print("\n" + "=" * 70)
     print("🏁 API TEST COMPLETE")
