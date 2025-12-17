@@ -145,10 +145,14 @@ class DaytonaSpawnerService:
         sandbox_id = f"omoios-{task_id[:8]}-{uuid4().hex[:6]}"
 
         # Build environment variables
+        # Derive base URL from MCP server URL (remove /mcp suffix if present)
+        base_url = self.mcp_server_url.replace("/mcp", "").rstrip("/")
+
         env_vars = {
             "AGENT_ID": agent_id,
             "TASK_ID": task_id,
             "MCP_SERVER_URL": self.mcp_server_url,
+            "CALLBACK_URL": base_url,  # For EventReporter to use correct API URL
             "PHASE_ID": phase_id,
             "SANDBOX_ID": sandbox_id,
         }
