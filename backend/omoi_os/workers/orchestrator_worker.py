@@ -123,6 +123,7 @@ async def orchestrator_loop():
             # Get next pending task (no agent filter in sandbox mode)
             from omoi_os.models.agent import Agent
             from omoi_os.models.agent_status import AgentStatus
+            from omoi_os.models.task import Task
 
             available_agent_id = None
 
@@ -315,6 +316,18 @@ async def orchestrator_loop():
 
                         # Update task with sandbox info
                         queue.assign_task(task.id, agent_id)
+
+                        # Also update task.sandbox_id directly (assign_task doesn't set it)
+                        with db.get_session() as session:
+                            task_obj = (
+                                session.query(Task).filter(Task.id == task.id).first()
+                            )
+                            if task_obj:
+                                task_obj.sandbox_id = sandbox_id
+                                session.commit()
+                                log.debug(
+                                    "task_sandbox_id_updated", sandbox_id=sandbox_id
+                                )
 
                         stats["tasks_processed"] += 1
                         log.info(
