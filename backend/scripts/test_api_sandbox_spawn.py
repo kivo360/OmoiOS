@@ -29,7 +29,10 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).parent.parent / ".env.local")
 
 # Configuration
-API_BASE_URL = "http://localhost:18000"
+# Use remote Railway API if API_BASE_URL env var is set, otherwise default to localhost
+import os
+
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:18000")
 USER_ID = "f5d0b1a5-da18-46dc-8713-0d9820c65565"  # kivo360@gmail.com
 GITHUB_OWNER = "kivo360"
 GITHUB_REPO = "OmoiOS"
