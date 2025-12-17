@@ -14,6 +14,7 @@ Usage:
 """
 
 import asyncio
+import os
 import sys
 import time
 from pathlib import Path
@@ -30,7 +31,6 @@ load_dotenv(Path(__file__).parent.parent / ".env.local")
 
 # Configuration
 # Use remote Railway API if API_BASE_URL env var is set, otherwise default to localhost
-import os
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:18000")
 USER_ID = "f5d0b1a5-da18-46dc-8713-0d9820c65565"  # kivo360@gmail.com
@@ -167,7 +167,7 @@ async def get_ticket_tasks(
 
 
 async def poll_for_task(
-    client: httpx.AsyncClient, ticket_id: str, timeout: int = 120
+    client: httpx.AsyncClient, ticket_id: str, timeout: int = 180
 ) -> dict | None:
     """Poll until a task is created and picked up."""
     start_time = time.time()
@@ -177,13 +177,56 @@ async def poll_for_task(
         tasks = await get_ticket_tasks(client, ticket_id)
         if tasks:
             task = tasks[0]
+            task_id = task.get("id")
             status = task.get("status")
-            if status != last_status:
-                print(f"   Task {task['id'][:8]}... status: {status}")
+
+            # Get full task details - API might not include sandbox_id, so check DB directly
+            response = await client.get(f"{API_BASE_URL}/api/v1/tasks/{task_id}")
+            if response.status_code == 200:
+                full_task = response.json()
+                sandbox_id = full_task.get("sandbox_id")
+            else:
+                full_task = task
+                sandbox_id = None
+
+            # If API doesn't have sandbox_id, check database directly
+            if not sandbox_id:
+                try:
+                    from omoi_os.config import get_app_settings
+                    from omoi_os.services.database import DatabaseService
+                    from omoi_os.models.task import Task as TaskModel
+
+                    settings = get_app_settings()
+                    db = DatabaseService(settings.database.url)
+                    with db.get_session() as session:
+                        db_task = (
+                            session.query(TaskModel)
+                            .filter(TaskModel.id == task_id)
+                            .first()
+                        )
+                        if db_task and db_task.sandbox_id:
+                            sandbox_id = db_task.sandbox_id
+                            # Add to full_task for return
+                            if isinstance(full_task, dict):
+                                full_task["sandbox_id"] = sandbox_id
+                except Exception:
+                    pass  # If DB check fails, continue without sandbox_id
+
+            if status != last_status or sandbox_id:
+                status_msg = f"   Task {task_id[:8]}... status: {status}"
+                if sandbox_id:
+                    status_msg += f" (sandbox: {sandbox_id[:20]}...)"
+                print(status_msg)
                 last_status = status
 
+            # Task is picked up if:
+            # 1. Status is in_progress/running/completed/failed, OR
+            # 2. Status is assigned AND sandbox_id exists (sandbox spawned, worker initializing)
             if status in ["in_progress", "running", "completed", "failed"]:
-                return task
+                return full_task if sandbox_id else task
+            elif status == "assigned" and sandbox_id:
+                print("   ✅ Task assigned with sandbox - worker initializing...")
+                return full_task
 
         await asyncio.sleep(2)
 
@@ -273,9 +316,58 @@ async def main():
     print("=" * 70)
     print(f"\nUser ID: {USER_ID}")
     print(f"Repository: {GITHUB_OWNER}/{GITHUB_REPO}")
+
+    # Show configuration
+    print("\n📋 Configuration:")
+    print(f"   API Base URL: {API_BASE_URL}")
+
+    # Show database URL from app_settings (masked for security)
+    try:
+        from omoi_os.config import get_app_settings
+
+        settings = get_app_settings()
+        db_url = settings.database.url
+        # Mask password in URL
+        if "@" in db_url:
+            parts = db_url.split("@")
+            if ":" in parts[0]:
+                user_pass = parts[0].split("://")[1] if "://" in parts[0] else parts[0]
+                if ":" in user_pass:
+                    user, _ = user_pass.split(":", 1)
+                    protocol = parts[0].split("://")[0] if "://" in parts[0] else ""
+                    masked_url = f"{protocol}://{user}:***@{parts[1]}"
+                else:
+                    masked_url = db_url
+            else:
+                masked_url = db_url
+        else:
+            masked_url = db_url
+        print(f"   Database URL: {masked_url}")
+
+        redis_url = settings.redis.url
+        if "@" in redis_url:
+            parts = redis_url.split("@")
+            if ":" in parts[0]:
+                user_pass = parts[0].split("://")[1] if "://" in parts[0] else parts[0]
+                if ":" in user_pass:
+                    user, _ = user_pass.split(":", 1)
+                    protocol = parts[0].split("://")[0] if "://" in parts[0] else ""
+                    masked_redis = f"{protocol}://{user}:***@{parts[1]}"
+                else:
+                    masked_redis = redis_url
+            else:
+                masked_redis = redis_url
+        else:
+            masked_redis = redis_url
+        print(f"   Redis URL: {masked_redis}")
+    except Exception as e:
+        print(f"   ⚠️  Could not load settings: {e}")
+
     print()
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    # Use longer timeout for remote Railway API (network latency)
+    timeout = httpx.Timeout(60.0, connect=10.0)  # 60s total, 10s connect
+    async with httpx.AsyncClient(timeout=timeout) as client:
         # Step 1: Check API availability
         print("[1/6] Checking API availability...")
         if not await check_api_health(client):
@@ -303,8 +395,8 @@ async def main():
         print(f"   ✅ Ticket created: {ticket_id}")
 
         # Step 4: Wait for task dispatch
-        print("\n[4/6] Waiting for task dispatch (max 2 min)...")
-        task = await poll_for_task(client, ticket_id, timeout=120)
+        print("\n[4/6] Waiting for task dispatch (max 3 min)...")
+        task = await poll_for_task(client, ticket_id, timeout=180)
         if not task:
             print("   ❌ No task picked up within timeout")
             print(
@@ -314,8 +406,13 @@ async def main():
 
         task_id = task.get("id")
         assigned_agent = task.get("assigned_agent_id")
-        print(f"   ✅ Task assigned: {task_id[:8]}...")
+        sandbox_id = task.get("sandbox_id")
+        task_status = task.get("status")
+        print(f"   ✅ Task picked up: {task_id[:8]}...")
+        print(f"   Status: {task_status}")
         print(f"   Agent: {assigned_agent}")
+        if sandbox_id:
+            print(f"   Sandbox: {sandbox_id}")
 
         # Step 5: Try to create branch (optional, may fail if no GitHub token)
         print("\n[5/6] Creating feature branch...")

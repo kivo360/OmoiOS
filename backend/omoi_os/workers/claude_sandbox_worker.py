@@ -700,12 +700,18 @@ class SandboxWorker:
 
     async def _create_post_tool_hook(self):
         """Create PostToolUse hook for comprehensive tool tracking."""
-        reporter = self.reporter
+        # Capture references - reporter may be None initially, check before use
+        reporter_ref = self.reporter
         file_tracker = self.file_tracker
         turn_count = self.turn_count
 
         async def track_tool_use(input_data, tool_use_id, context):
             """PostToolUse hook for comprehensive event reporting."""
+            # Get current reporter (may have been set after hook creation)
+            reporter = self.reporter or reporter_ref
+            if not reporter:
+                return {}  # Skip reporting if reporter not available
+
             tool_name = input_data.get("tool_name", "unknown")
             tool_input = input_data.get("tool_input", {})
             tool_response = input_data.get("tool_response", "")
@@ -715,22 +721,27 @@ class SandboxWorker:
                 file_path = tool_input.get("file_path")
                 new_content = tool_input.get("content", "")
                 if file_path and new_content:
-                    diff_info = file_tracker.generate_diff(file_path, new_content)
-                    await reporter.report(
-                        "agent.file_edited",
-                        {
-                            "turn": turn_count,
-                            "tool_use_id": tool_use_id,
-                            **diff_info,
-                        },
-                    )
+                    try:
+                        diff_info = file_tracker.generate_diff(file_path, new_content)
+                        await reporter.report(
+                            "agent.file_edited",
+                            {
+                                "turn": turn_count,
+                                "tool_use_id": tool_use_id,
+                                **diff_info,
+                            },
+                        )
+                    except Exception as e:
+                        print(
+                            f"[FileTracker] Failed to generate diff for {file_path}: {e}"
+                        )
 
             elif tool_name == "Edit":
                 file_path = tool_input.get("file_path")
                 if file_path:
-                    file_path = Path(file_path)
-                    if file_path.exists():
-                        try:
+                    try:
+                        file_path = Path(file_path)
+                        if file_path.exists():
                             new_content = file_path.read_text()
                             diff_info = file_tracker.generate_diff(
                                 str(file_path), new_content
@@ -743,10 +754,10 @@ class SandboxWorker:
                                     **diff_info,
                                 },
                             )
-                        except Exception as e:
-                            print(
-                                f"[FileTracker] Failed to read {file_path} after edit: {e}"
-                            )
+                    except Exception as e:
+                        print(
+                            f"[FileTracker] Failed to read {file_path} after edit: {e}"
+                        )
 
             # Full tool tracking
             event_data = {
@@ -811,32 +822,39 @@ class SandboxWorker:
         """Process streaming messages with comprehensive event tracking."""
         final_output = []
 
+        # Ensure reporter is available
+        if not self.reporter:
+            print("[Warning] Reporter not available, skipping event reporting")
+            # Still process messages but without reporting
+
         try:
             async for msg in client.receive_messages():
                 if isinstance(msg, AssistantMessage):
                     self.turn_count += 1
 
                     # Report assistant message metadata
-                    await self.reporter.report(
-                        "agent.assistant_message",
-                        {
-                            "turn": self.turn_count,
-                            "model": getattr(msg, "model", self.config.model),
-                            "stop_reason": getattr(msg, "stop_reason", None),
-                            "block_count": len(msg.content),
-                        },
-                    )
+                    if self.reporter:
+                        await self.reporter.report(
+                            "agent.assistant_message",
+                            {
+                                "turn": self.turn_count,
+                                "model": getattr(msg, "model", self.config.model),
+                                "stop_reason": getattr(msg, "stop_reason", None),
+                                "block_count": len(msg.content),
+                            },
+                        )
 
                     for block in msg.content:
                         if isinstance(block, ThinkingBlock):
-                            await self.reporter.report(
-                                "agent.thinking",
-                                {
-                                    "turn": self.turn_count,
-                                    "content": block.text,  # Full content
-                                    "thinking_type": "extended_thinking",
-                                },
-                            )
+                            if self.reporter:
+                                await self.reporter.report(
+                                    "agent.thinking",
+                                    {
+                                        "turn": self.turn_count,
+                                        "content": block.text,  # Full content
+                                        "thinking_type": "extended_thinking",
+                                    },
+                                )
                             print(f"🤔 Thinking: {block.text[:100]}...")
 
                         elif isinstance(block, ToolUseBlock):
@@ -859,9 +877,10 @@ class SandboxWorker:
                                 tool_event["subagent_prompt"] = block.input.get(
                                     "prompt"
                                 )
-                                await self.reporter.report(
-                                    "agent.subagent_invoked", tool_event
-                                )
+                                if self.reporter:
+                                    await self.reporter.report(
+                                        "agent.subagent_invoked", tool_event
+                                    )
                                 print(
                                     f"🤖 Subagent: {block.input.get('subagent_type')}"
                                 )
@@ -872,80 +891,89 @@ class SandboxWorker:
                                 tool_event["skill_name"] = block.input.get(
                                     "name"
                                 ) or block.input.get("skill_name")
-                                await self.reporter.report(
-                                    "agent.skill_invoked", tool_event
-                                )
+                                if self.reporter:
+                                    await self.reporter.report(
+                                        "agent.skill_invoked", tool_event
+                                    )
                                 print(f"⚡ Skill: {tool_event['skill_name']}")
 
                             # Standard tool use
                             else:
                                 tool_event["event_subtype"] = "tool_use"
-                                await self.reporter.report("agent.tool_use", tool_event)
+                                if self.reporter:
+                                    await self.reporter.report(
+                                        "agent.tool_use", tool_event
+                                    )
                                 print(f"🔧 Tool: {block.name}")
 
                         elif isinstance(block, ToolResultBlock):
                             result_content = str(block.content)
-                            await self.reporter.report(
-                                "agent.tool_result",
-                                {
-                                    "turn": self.turn_count,
-                                    "tool_use_id": block.tool_use_id,
-                                    "result": result_content[:5000]
-                                    if len(result_content) > 5000
-                                    else result_content,
-                                    "result_truncated": len(result_content) > 5000,
-                                    "result_full_length": len(result_content),
-                                    "is_error": getattr(block, "is_error", False),
-                                },
-                            )
+                            if self.reporter:
+                                await self.reporter.report(
+                                    "agent.tool_result",
+                                    {
+                                        "turn": self.turn_count,
+                                        "tool_use_id": block.tool_use_id,
+                                        "result": result_content[:5000]
+                                        if len(result_content) > 5000
+                                        else result_content,
+                                        "result_truncated": len(result_content) > 5000,
+                                        "result_full_length": len(result_content),
+                                        "is_error": getattr(block, "is_error", False),
+                                    },
+                                )
                             status = "❌" if getattr(block, "is_error", False) else "✅"
                             print(f"   {status} Result: {result_content[:80]}...")
 
                         elif isinstance(block, TextBlock):
-                            await self.reporter.report(
-                                "agent.message",
-                                {
-                                    "turn": self.turn_count,
-                                    "content": block.text,  # Full content
-                                    "content_length": len(block.text),
-                                },
-                            )
+                            if self.reporter:
+                                await self.reporter.report(
+                                    "agent.message",
+                                    {
+                                        "turn": self.turn_count,
+                                        "content": block.text,  # Full content
+                                        "content_length": len(block.text),
+                                    },
+                                )
                             final_output.append(block.text)
                             print(f"💬 {block.text[:100]}...")
 
                 elif isinstance(msg, UserMessage):
                     for block in msg.content:
                         if isinstance(block, TextBlock):
-                            await self.reporter.report(
-                                "agent.user_message",
-                                {
-                                    "turn": self.turn_count,
-                                    "content": block.text,
-                                    "content_length": len(block.text),
-                                },
-                            )
+                            if self.reporter:
+                                await self.reporter.report(
+                                    "agent.user_message",
+                                    {
+                                        "turn": self.turn_count,
+                                        "content": block.text,
+                                        "content_length": len(block.text),
+                                    },
+                                )
                         elif isinstance(block, ToolResultBlock):
                             result_content = str(block.content)
-                            await self.reporter.report(
-                                "agent.user_tool_result",
-                                {
-                                    "turn": self.turn_count,
-                                    "tool_use_id": block.tool_use_id,
-                                    "result": result_content[:5000]
-                                    if len(result_content) > 5000
-                                    else result_content,
-                                    "result_truncated": len(result_content) > 5000,
-                                },
-                            )
+                            if self.reporter:
+                                await self.reporter.report(
+                                    "agent.user_tool_result",
+                                    {
+                                        "turn": self.turn_count,
+                                        "tool_use_id": block.tool_use_id,
+                                        "result": result_content[:5000]
+                                        if len(result_content) > 5000
+                                        else result_content,
+                                        "result_truncated": len(result_content) > 5000,
+                                    },
+                                )
 
                 elif isinstance(msg, SystemMessage):
-                    await self.reporter.report(
-                        "agent.system_message",
-                        {
-                            "turn": self.turn_count,
-                            "metadata": getattr(msg, "metadata", {}),
-                        },
-                    )
+                    if self.reporter:
+                        await self.reporter.report(
+                            "agent.system_message",
+                            {
+                                "turn": self.turn_count,
+                                "metadata": getattr(msg, "metadata", {}),
+                            },
+                        )
 
                 elif isinstance(msg, ResultMessage):
                     usage = getattr(msg, "usage", None)
@@ -964,42 +992,44 @@ class SandboxWorker:
                         except Exception as e:
                             print(f"⚠️  Failed to export session transcript: {e}")
 
-                    await self.reporter.report(
-                        "agent.completed",
-                        {
-                            "success": True,
-                            "turns": msg.num_turns,
-                            "cost_usd": msg.total_cost_usd,
-                            "session_id": msg.session_id,
-                            "transcript_b64": transcript_b64,  # Include transcript for server storage
-                            "stop_reason": getattr(msg, "stop_reason", None),
-                            "input_tokens": usage.input_tokens if usage else None,
-                            "output_tokens": usage.output_tokens if usage else None,
-                            "cache_read_tokens": getattr(
-                                usage, "cache_read_input_tokens", None
-                            )
-                            if usage
-                            else None,
-                            "cache_write_tokens": getattr(
-                                usage, "cache_creation_input_tokens", None
-                            )
-                            if usage
-                            else None,
-                        },
-                    )
+                    if self.reporter:
+                        await self.reporter.report(
+                            "agent.completed",
+                            {
+                                "success": True,
+                                "turns": msg.num_turns,
+                                "cost_usd": msg.total_cost_usd,
+                                "session_id": msg.session_id,
+                                "transcript_b64": transcript_b64,  # Include transcript for server storage
+                                "stop_reason": getattr(msg, "stop_reason", None),
+                                "input_tokens": usage.input_tokens if usage else None,
+                                "output_tokens": usage.output_tokens if usage else None,
+                                "cache_read_tokens": getattr(
+                                    usage, "cache_read_input_tokens", None
+                                )
+                                if usage
+                                else None,
+                                "cache_write_tokens": getattr(
+                                    usage, "cache_creation_input_tokens", None
+                                )
+                                if usage
+                                else None,
+                            },
+                        )
                     print(
                         f"📊 Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}"
                     )
                     return msg, final_output
 
         except Exception as e:
-            await self.reporter.report(
-                "agent.stream_error",
-                {
-                    "error": str(e),
-                    "turn": self.turn_count,
-                },
-            )
+            if self.reporter:
+                await self.reporter.report(
+                    "agent.stream_error",
+                    {
+                        "error": str(e),
+                        "turn": self.turn_count,
+                    },
+                )
             print(f"❌ Stream error: {e}")
 
         return None, final_output
@@ -1089,10 +1119,25 @@ class SandboxWorker:
                             or f"Analyze ticket: {self.config.ticket_title}"
                         )
 
-                        if initial_task:
+                        if initial_task and initial_task.strip():
                             print(f"\n📤 Initial task: {initial_task[:100]}...")
-                            await client.query(initial_task)
-                            await self._process_messages(client)
+                            try:
+                                await client.query(initial_task)
+                                await self._process_messages(client)
+                            except Exception as e:
+                                print(f"❌ Failed to process initial task: {e}")
+                                if self.reporter:
+                                    await self.reporter.report(
+                                        "agent.error",
+                                        {
+                                            "error": f"Initial task failed: {str(e)}",
+                                            "phase": "initial_task",
+                                        },
+                                    )
+                        else:
+                            print(
+                                "⚠️  No initial task provided - worker will wait for messages"
+                            )
 
                         # Report ready
                         await reporter.report(
@@ -1163,8 +1208,20 @@ class SandboxWorker:
                                     )
 
                                     # Process message
-                                    await client.query(content)
-                                    await self._process_messages(client)
+                                    try:
+                                        await client.query(content)
+                                        await self._process_messages(client)
+                                    except Exception as e:
+                                        print(f"❌ Failed to process message: {e}")
+                                        if self.reporter:
+                                            await self.reporter.report(
+                                                "agent.error",
+                                                {
+                                                    "error": f"Message processing failed: {str(e)}",
+                                                    "message_type": msg_type,
+                                                    "content_length": len(content),
+                                                },
+                                            )
 
                                     # Report ready
                                     await reporter.report(

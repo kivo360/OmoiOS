@@ -12,10 +12,12 @@ supabase:
   db_url: null
 
 database:
-  url: postgresql+psycopg://postgres:postgres@localhost:15432/app_db
+  # Remote Railway PostgreSQL database (default for local development)
+  url: postgresql+psycopg://postgres:YFee-Rwr9VMfze8Y~SYhMLNhPXkNbXsp@trolley.proxy.rlwy.net:56037/railway
 
 redis:
-  url: redis://localhost:16379
+  # Remote Railway Redis instance (default for local development)
+  url: redis://default:qPwXIhWmwvfdBLgVrIIihMUHGoSJFHqg@crossover.proxy.rlwy.net:23902
 
 workspace:
   root: ./workspaces

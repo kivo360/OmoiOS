@@ -252,6 +252,34 @@ class DaytonaSpawnerService:
         if extra_env:
             env_vars.update(extra_env)
 
+            # If TASK_DATA_BASE64 is provided, decode it and extract ticket info
+            # This ensures TICKET_DESCRIPTION and TICKET_TITLE are set for the worker
+            if extra_env.get("TASK_DATA_BASE64"):
+                try:
+                    import json
+                    import base64
+
+                    task_json = base64.b64decode(extra_env["TASK_DATA_BASE64"]).decode()
+                    task_data = json.loads(task_json)
+
+                    # Set ticket info as direct env vars for WorkerConfig
+                    if task_data.get("ticket_title"):
+                        env_vars["TICKET_TITLE"] = task_data["ticket_title"]
+                    if task_data.get("ticket_description"):
+                        env_vars["TICKET_DESCRIPTION"] = task_data["ticket_description"]
+                    if task_data.get("ticket_id"):
+                        env_vars["TICKET_ID"] = task_data["ticket_id"]
+                    if task_data.get("ticket_type"):
+                        env_vars["TICKET_TYPE"] = task_data["ticket_type"]
+
+                    logger.debug(
+                        f"Extracted ticket info from TASK_DATA_BASE64: title={task_data.get('ticket_title')[:50] if task_data.get('ticket_title') else None}..."
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to decode TASK_DATA_BASE64 for ticket info: {e}"
+                    )
+
         # Build labels
         sandbox_labels = {
             "project": "omoios",
