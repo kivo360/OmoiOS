@@ -292,8 +292,15 @@ async def orchestrator_loop():
                             session.add(agent)
                             session.commit()
 
+                        # Determine sandbox runtime: "claude" (Claude Agent SDK) or "openhands"
+                        # Default to "claude" for the new Claude Agent SDK worker
+                        sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "claude")
+
                         log.info(
-                            "spawning_sandbox", agent_id=agent_id, agent_type=agent_type
+                            "spawning_sandbox",
+                            agent_id=agent_id,
+                            agent_type=agent_type,
+                            runtime=sandbox_runtime,
                         )
 
                         # Spawn sandbox with user/repo context
@@ -303,6 +310,7 @@ async def orchestrator_loop():
                             phase_id=phase_id,
                             agent_type=agent_type,
                             extra_env=extra_env if extra_env else None,
+                            runtime=sandbox_runtime,
                         )
 
                         # Update task with sandbox info
