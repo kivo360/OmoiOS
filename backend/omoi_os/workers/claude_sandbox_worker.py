@@ -74,6 +74,14 @@ from uuid import uuid4
 
 import httpx
 
+# Try to import pydantic v2 for agent model serialization
+try:
+    from pydantic import BaseModel, ConfigDict
+
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    PYDANTIC_AVAILABLE = False
+
 # Try to import Claude Agent SDK
 try:
     from claude_agent_sdk import (
@@ -313,8 +321,12 @@ Continue from where we left off, acknowledging the previous context."""
         }
 
     def get_custom_agents(self) -> dict:
-        """Return custom subagent definitions."""
-        return {
+        """Return custom subagent definitions.
+
+        Returns pydantic BaseModel instances if available, otherwise plain dicts.
+        This allows the SDK to use model_dump() instead of asdict() for serialization.
+        """
+        agent_defs = {
             "code-reviewer": {
                 "description": "Expert code review specialist. Use for security, quality, and maintainability reviews.",
                 "prompt": """You are a code review specialist with expertise in security, performance, and best practices.
@@ -360,6 +372,26 @@ Systematically investigate issues:
             },
         }
 
+        # Convert to pydantic v2 models if available (allows model_dump() instead of asdict())
+        if PYDANTIC_AVAILABLE:
+
+            class AgentDefinition(BaseModel):
+                model_config = ConfigDict(extra="allow")  # Pydantic v2 syntax
+
+                description: str
+                prompt: str
+                tools: list[str]
+                model: Optional[str] = None
+
+            # Convert each agent dict to a pydantic model
+            return {
+                name: AgentDefinition(**agent_data)
+                for name, agent_data in agent_defs.items()
+            }
+
+        # Fallback to plain dicts if pydantic not available
+        return agent_defs
+
     def to_sdk_options(
         self, pre_tool_hook=None, post_tool_hook=None
     ) -> "ClaudeAgentOptions":
@@ -392,6 +424,7 @@ Systematically investigate issues:
             options_kwargs["setting_sources"] = self.setting_sources
 
         # Add custom subagents
+        # Convert agent dicts to pydantic models so SDK can use model_dump() instead of asdict()
         if self.enable_subagents:
             options_kwargs["agents"] = self.get_custom_agents()
 
