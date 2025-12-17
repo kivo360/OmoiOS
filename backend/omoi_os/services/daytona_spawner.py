@@ -1364,12 +1364,16 @@ async def run_agent(task_description: str):
         ClaudeAgentOptions, 
         ClaudeSDKClient, 
         HookMatcher,
+        # Message types
         AssistantMessage,
+        UserMessage,
+        SystemMessage,
+        ResultMessage,
+        # Content blocks
         TextBlock,
         ThinkingBlock,
         ToolUseBlock,
         ToolResultBlock,
-        ResultMessage,
     )
     
     tools_server, tool_names = create_tools()
@@ -1377,20 +1381,107 @@ async def run_agent(task_description: str):
     
     # PostToolUse hook: Report tool usage for Guardian observation
     async def track_tool_use(input_data, tool_use_id, context):
-        """PostToolUse hook for event reporting."""
+        """PostToolUse hook for comprehensive event reporting."""
         tool_name = input_data.get("tool_name", "unknown")
-        await report_event("agent.tool_use", {"tool": tool_name})
+        tool_input = input_data.get("tool_input", {})
+        tool_response = input_data.get("tool_response", "")
+        
+        # Comprehensive tool tracking with full details
+        event_data = {
+            "tool": tool_name,
+            "tool_input": tool_input,  # Full input, no truncation
+            "tool_response": str(tool_response)[:2000] if tool_response else None,  # Reasonable limit for responses
+        }
+        
+        # Special tracking for subagents
+        if tool_name == "Task":
+            event_data["subagent_type"] = tool_input.get("subagent_type")
+            event_data["description"] = tool_input.get("description")
+            event_data["prompt"] = tool_input.get("prompt")
+            await report_event("agent.subagent_completed", event_data)
+        # Special tracking for skills
+        elif tool_name == "Skill":
+            event_data["skill_name"] = tool_input.get("name") or tool_input.get("skill_name")
+            await report_event("agent.skill_completed", event_data)
+        else:
+            await report_event("agent.tool_completed", event_data)
+        
         return {}
     
+    # Define custom subagents for specialized tasks
+    custom_agents = {
+        "code-reviewer": {
+            "description": "Expert code review specialist. Use for security, quality, and maintainability reviews.",
+            "prompt": """You are a code review specialist with expertise in security, performance, and best practices.
+When reviewing code:
+- Identify security vulnerabilities and injection risks
+- Check for performance issues and memory leaks
+- Verify adherence to coding standards
+- Suggest specific, actionable improvements
+Be thorough but concise in your feedback.""",
+            "tools": ["Read", "Grep", "Glob"],
+            "model": "sonnet"
+        },
+        "test-runner": {
+            "description": "Runs and analyzes test suites. Use for test execution and coverage analysis.",
+            "prompt": """You are a test execution specialist. Run tests and provide clear analysis of results.
+Focus on:
+- Running test commands (pytest, npm test, etc.)
+- Analyzing test output and identifying patterns
+- Identifying failing tests and their root causes
+- Suggesting fixes for test failures""",
+            "tools": ["Bash", "Read", "Grep"],
+        },
+        "architect": {
+            "description": "Software architecture specialist. Use for design decisions and codebase structure.",
+            "prompt": """You are a software architecture specialist.
+Analyze code structure, identify patterns, suggest architectural improvements.
+Focus on:
+- Module organization and dependencies
+- Design patterns and anti-patterns
+- Scalability and maintainability concerns
+- API design and contracts""",
+            "tools": ["Read", "Grep", "Glob"],
+        },
+        "debugger": {
+            "description": "Debugging specialist. Use for investigating bugs and unexpected behavior.",
+            "prompt": """You are a debugging specialist.
+Systematically investigate issues:
+- Reproduce the problem
+- Add logging/tracing to narrow down the cause
+- Identify root causes
+- Propose and test fixes""",
+            "tools": ["Read", "Bash", "Edit", "Grep"],
+        }
+    }
+    
     options = ClaudeAgentOptions(
-        allowed_tools=tool_names + ["Read", "Write", "Bash", "Edit", "Glob", "Grep"],
+        # Core tools + Subagents + Skills
+        allowed_tools=tool_names + [
+            "Read", "Write", "Bash", "Edit", "Glob", "Grep",  # Standard tools
+            "Task",  # Subagent dispatch
+            "Skill",  # Skill invocation
+        ],
         permission_mode="acceptEdits",
-        system_prompt=f"You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.",
+        system_prompt=f"""You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.
+
+You have access to specialized subagents:
+- code-reviewer: For security and quality code reviews
+- test-runner: For running and analyzing tests
+- architect: For design decisions and structure analysis
+- debugger: For investigating bugs
+
+You also have access to Skills loaded from .claude/skills/ directories.
+Use subagents and skills when they can help accomplish the task more effectively.""",
         cwd=Path("/workspace"),
         max_turns=50,
         max_budget_usd=10.0,
         model=ANTHROPIC_MODEL,
         mcp_servers={"workspace": tools_server},
+        # Enable skills loading
+        setting_sources=["user", "project"],
+        # Custom subagents
+        agents=custom_agents,
         hooks={
             "PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool_use])],
         },
@@ -1400,45 +1491,134 @@ async def run_agent(task_description: str):
         async with ClaudeSDKClient(options=options) as client:
             # Start with initial task
             await client.query(task_description)
-            await report_event("agent.started", {"task": task_description[:200]})
+            await report_event("agent.started", {
+                "task": task_description,  # Full task description
+                "model": ANTHROPIC_MODEL,
+                "sandbox_id": SANDBOX_ID,
+                "agent_id": AGENT_ID,
+                "task_id": TASK_ID,
+            })
             
             # Message queue for streaming
             message_queue = asyncio.Queue()
             agent_done = asyncio.Event()
             final_output = []
+            turn_count = 0
             
             async def message_stream():
-                """Stream messages from Claude and map to our event types."""
+                """Stream messages from Claude and map to our event types with full details."""
+                nonlocal turn_count
                 try:
                     async for msg in client.receive_messages():  # Indefinite streaming
                         # Map SDK messages to our event types
                         if isinstance(msg, AssistantMessage):
+                            turn_count += 1
+                            # Report full assistant message metadata
+                            await report_event("agent.assistant_message", {
+                                "turn": turn_count,
+                                "model": getattr(msg, "model", ANTHROPIC_MODEL),
+                                "stop_reason": getattr(msg, "stop_reason", None),
+                                "block_count": len(msg.content),
+                            })
+                            
                             for block in msg.content:
                                 if isinstance(block, ThinkingBlock):
+                                    # Full thinking content
                                     await report_event("agent.thinking", {
-                                        "content": block.text[:500]
+                                        "turn": turn_count,
+                                        "content": block.text,  # Full content, no truncation
+                                        "thinking_type": "extended_thinking",
                                     })
+                                    
                                 elif isinstance(block, ToolUseBlock):
-                                    await report_event("agent.tool_use", {
+                                    # Comprehensive tool use tracking
+                                    tool_event = {
+                                        "turn": turn_count,
                                         "tool": block.name,
-                                        "input": str(block.input)[:200]
+                                        "tool_use_id": block.id,
+                                        "input": block.input,  # Full input dict, no truncation
+                                    }
+                                    
+                                    # Special handling for subagent dispatch
+                                    if block.name == "Task":
+                                        tool_event["event_subtype"] = "subagent_invoked"
+                                        tool_event["subagent_type"] = block.input.get("subagent_type")
+                                        tool_event["subagent_description"] = block.input.get("description")
+                                        tool_event["subagent_prompt"] = block.input.get("prompt")
+                                        await report_event("agent.subagent_invoked", tool_event)
+                                    
+                                    # Special handling for skill invocation
+                                    elif block.name == "Skill":
+                                        tool_event["event_subtype"] = "skill_invoked"
+                                        tool_event["skill_name"] = block.input.get("name") or block.input.get("skill_name")
+                                        await report_event("agent.skill_invoked", tool_event)
+                                    
+                                    # Standard tool use
+                                    else:
+                                        tool_event["event_subtype"] = "tool_use"
+                                        await report_event("agent.tool_use", tool_event)
+                                
+                                elif isinstance(block, ToolResultBlock):
+                                    # Full tool result with reasonable limit for very large outputs
+                                    result_content = str(block.content)
+                                    await report_event("agent.tool_result", {
+                                        "turn": turn_count,
+                                        "tool_use_id": block.tool_use_id,
+                                        "result": result_content[:5000] if len(result_content) > 5000 else result_content,
+                                        "result_truncated": len(result_content) > 5000,
+                                        "result_full_length": len(result_content),
+                                        "is_error": getattr(block, "is_error", False),
+                                    })
+                                
+                                elif isinstance(block, TextBlock):
+                                    # Full text content
+                                    await report_event("agent.message", {
+                                        "turn": turn_count,
+                                        "content": block.text,  # Full content, no truncation
+                                        "content_length": len(block.text),
+                                    })
+                                    final_output.append(block.text)
+                        
+                        elif isinstance(msg, UserMessage):
+                            # Track user messages (tool results, injected messages)
+                            for block in msg.content:
+                                if isinstance(block, TextBlock):
+                                    await report_event("agent.user_message", {
+                                        "turn": turn_count,
+                                        "content": block.text,
+                                        "content_length": len(block.text),
                                     })
                                 elif isinstance(block, ToolResultBlock):
-                                    await report_event("agent.tool_result", {
+                                    result_content = str(block.content)
+                                    await report_event("agent.user_tool_result", {
+                                        "turn": turn_count,
                                         "tool_use_id": block.tool_use_id,
-                                        "result": str(block.content)[:500]
+                                        "result": result_content[:5000] if len(result_content) > 5000 else result_content,
+                                        "result_truncated": len(result_content) > 5000,
                                     })
-                                elif isinstance(block, TextBlock):
-                                    await report_event("agent.message", {
-                                        "content": block.text[:500]
-                                    })
-                                    final_output.append(block.text[:200])
+                        
+                        elif isinstance(msg, SystemMessage):
+                            # Track system messages
+                            await report_event("agent.system_message", {
+                                "turn": turn_count,
+                                "metadata": getattr(msg, "metadata", {}),
+                            })
                         
                         elif isinstance(msg, ResultMessage):
+                            # Comprehensive completion event
+                            usage = getattr(msg, "usage", None)
                             await report_event("agent.completed", {
+                                "success": True,
                                 "turns": msg.num_turns,
                                 "cost_usd": msg.total_cost_usd,
-                                "session_id": msg.session_id
+                                "session_id": msg.session_id,
+                                "stop_reason": getattr(msg, "stop_reason", None),
+                                "input_tokens": usage.input_tokens if usage else None,
+                                "output_tokens": usage.output_tokens if usage else None,
+                                "cache_read_tokens": getattr(usage, "cache_read_input_tokens", None) if usage else None,
+                                "cache_write_tokens": getattr(usage, "cache_creation_input_tokens", None) if usage else None,
+                                "task_id": TASK_ID,
+                                "agent_id": AGENT_ID,
                             })
                             final_output.append(f"Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}")
                             agent_done.set()
@@ -1447,12 +1627,18 @@ async def run_agent(task_description: str):
                         await message_queue.put(msg)
                 except Exception as e:
                     logger.error(f"Message stream error: {e}")
+                    await report_event("agent.stream_error", {
+                        "error": str(e),
+                        "turn": turn_count,
+                        "task_id": TASK_ID,
+                    })
                     agent_done.set()
             
             async def intervention_handler():
                 """Poll for interventions and inject as new user messages."""
                 global _should_stop
                 poll_interval = 0.5  # Poll every 500ms
+                intervention_count = 0
                 
                 while not agent_done.is_set():
                     try:
@@ -1460,7 +1646,12 @@ async def run_agent(task_description: str):
                         if _should_stop:
                             logger.warning("Interrupt received, stopping agent")
                             await client.interrupt()
-                            await report_event("agent.interrupted", {"reason": "user_interrupt"})
+                            await report_event("agent.interrupted", {
+                                "reason": "user_interrupt",
+                                "turn": turn_count,
+                                "task_id": TASK_ID,
+                                "agent_id": AGENT_ID,
+                            })
                             agent_done.set()
                             break
                         
@@ -1468,14 +1659,23 @@ async def run_agent(task_description: str):
                         messages = await poll_messages()
                         if messages:
                             for msg in messages:
+                                intervention_count += 1
                                 msg_type = msg.get("message_type", "user_message")
                                 content = msg.get("content", "")
+                                sender_id = msg.get("sender_id")
+                                message_id = msg.get("message_id")
                                 
                                 if msg_type == "interrupt":
                                     logger.warning(f"INTERRUPT: {content}")
                                     _should_stop = True
                                     await client.interrupt()
-                                    await report_event("agent.interrupted", {"reason": content})
+                                    await report_event("agent.interrupted", {
+                                        "reason": content,
+                                        "sender_id": sender_id,
+                                        "turn": turn_count,
+                                        "task_id": TASK_ID,
+                                        "agent_id": AGENT_ID,
+                                    })
                                     agent_done.set()
                                     break
                                 
@@ -1484,7 +1684,14 @@ async def run_agent(task_description: str):
                                     logger.info(f"Injecting message: {content[:100]}")
                                     await report_event("agent.message_injected", {
                                         "message_type": msg_type,
-                                        "content": content[:200]
+                                        "content": content,  # Full content, no truncation
+                                        "content_length": len(content),
+                                        "sender_id": sender_id,
+                                        "message_id": message_id,
+                                        "intervention_number": intervention_count,
+                                        "turn": turn_count,
+                                        "task_id": TASK_ID,
+                                        "agent_id": AGENT_ID,
                                     })
                                     await client.query(content)  # ← Real message injection
                         
