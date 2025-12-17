@@ -224,16 +224,6 @@ Use subagents and skills when they can help accomplish the task more effectively
 
         self.system_prompt = os.environ.get("SYSTEM_PROMPT", default_system_prompt)
 
-        # Append conversation context to system prompt if provided (for hydration)
-        if self.conversation_context:
-            self.system_prompt = f"""{self.system_prompt}
-
-## Previous Conversation Context
-You are resuming a previous conversation. Here's what happened before:
-{self.conversation_context}
-
-Continue from where we left off, acknowledging the previous context."""
-
         # Tools - parse comma-separated list
         default_tools = "Read,Write,Bash,Edit,Glob,Grep"
         self.allowed_tools = os.environ.get("ALLOWED_TOOLS", default_tools).split(",")
@@ -275,6 +265,17 @@ Continue from where we left off, acknowledging the previous context."""
         # Conversation context for hydration (alternative to full transcript)
         # Use this to provide a summary of previous conversation
         self.conversation_context = os.environ.get("CONVERSATION_CONTEXT", "")
+
+        # Append conversation context to system prompt if provided (for hydration)
+        # NOTE: Must be after conversation_context is initialized above
+        if self.conversation_context:
+            self.system_prompt = f"""{self.system_prompt}
+
+## Previous Conversation Context
+You are resuming a previous conversation. Here's what happened before:
+{self.conversation_context}
+
+Continue from where we left off, acknowledging the previous context."""
 
     def validate(self) -> list[str]:
         """Validate configuration, return list of errors."""

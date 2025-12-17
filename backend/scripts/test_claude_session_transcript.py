@@ -50,44 +50,44 @@ async def check_api_health(client: httpx.AsyncClient) -> bool:
 
 async def create_test_task(client: httpx.AsyncClient) -> Optional[str]:
     """Create a simple test task for Claude agent."""
-    task_data = {
-        "description": "Create a Python file called hello.py that prints 'Hello from session test!' and run it.",
-        "phase_id": "PHASE_IMPLEMENTATION",
-        "priority": "MEDIUM",
-        "task_type": "test_task",
-    }
-
-    # First, we need a ticket. Let's use a minimal approach
-    # In a real scenario, you'd create/find a ticket first
+    # Create a ticket - tasks are automatically created when tickets are created
     ticket_response = await client.post(
         f"{API_BASE_URL}/api/v1/tickets",
         json={
             "title": "Session Transcript Test",
-            "description": "Testing cross-sandbox session resumption",
+            "description": "Create a Python file called hello.py that prints 'Hello from session test!' and run it.",
             "ticket_type": "feature",
             "phase_id": "PHASE_IMPLEMENTATION",
+            "priority": "MEDIUM",
+            "force_create": True,  # Skip duplicate check for test
         },
     )
 
     if ticket_response.status_code != 200:
         print(f"❌ Failed to create ticket: {ticket_response.status_code}")
+        print(f"   Response: {ticket_response.text}")
         return None
 
     ticket_id = ticket_response.json().get("id")
     print(f"✅ Created ticket: {ticket_id}")
 
-    # Create task
-    task_response = await client.post(
-        f"{API_BASE_URL}/api/v1/tasks",
-        json={**task_data, "ticket_id": ticket_id},
-    )
+    # Wait a moment for task to be created
+    await asyncio.sleep(1)
 
-    if task_response.status_code == 200:
-        task_id = task_response.json().get("id")
-        print(f"✅ Created task: {task_id}")
-        return task_id
+    # Find the task associated with this ticket
+    # Tasks are automatically created when a ticket is created
+    tasks_response = await client.get(f"{API_BASE_URL}/api/v1/tasks")
+    if tasks_response.status_code == 200:
+        tasks = tasks_response.json()
+        # Find task for this ticket
+        for task in tasks:
+            if task.get("ticket_id") == ticket_id:
+                task_id = task.get("id")
+                print(f"✅ Found task: {task_id}")
+                return task_id
 
-    print(f"❌ Failed to create task: {task_response.status_code}")
+    print(f"⚠️  No task found for ticket {ticket_id}, but continuing anyway...")
+    print(f"   (Task may be created asynchronously)")
     return None
 
 
