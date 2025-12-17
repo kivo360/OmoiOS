@@ -138,12 +138,26 @@ def wait_for_model_ready(timeout: Optional[float] = None) -> bool:
     Returns:
         True if model is ready, False if timeout occurred.
     """
+    # If model is already loaded, return immediately
+    if _local_model_instance is not None:
+        return True
+    # Otherwise wait for the loading event
     return _local_model_loading.wait(timeout=timeout)
 
 
 def is_model_loaded() -> bool:
     """Check if the embedding model is already loaded."""
     return _local_model_instance is not None
+
+
+def get_local_model_instance() -> Optional["TextEmbedding"]:
+    """
+    Get the current local model instance if it's loaded.
+
+    Returns:
+        The TextEmbedding instance if loaded, None otherwise.
+    """
+    return _local_model_instance
 
 
 class EmbeddingService:

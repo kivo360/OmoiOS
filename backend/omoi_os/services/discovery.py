@@ -104,7 +104,7 @@ class DiscoveryService:
         Record discovery and immediately spawn a branch task.
 
         This implements the Hephaestus pattern: discovery → automatic branching.
-        
+
         **IMPORTANT**: This method bypasses PhaseModel.allowed_transitions restrictions
         for discovery-based spawning, enabling Hephaestus-style free-form branching.
         Normal phase transitions still enforce allowed_transitions, but discoveries can
@@ -328,10 +328,10 @@ class DiscoveryService:
         max_tasks: int = 5,
     ) -> List[Task]:
         """Spawn diagnostic recovery tasks using Discovery pattern.
-        
+
         Creates a diagnostic discovery and spawns recovery tasks to help
         stuck workflows progress toward their goal.
-        
+
         Args:
             session: Database session.
             ticket_id: Workflow (ticket) that is stuck.
@@ -340,7 +340,7 @@ class DiscoveryService:
             suggested_phase: Phase for recovery task(s).
             suggested_priority: Priority for recovery task(s).
             max_tasks: Maximum number of recovery tasks to spawn.
-            
+
         Returns:
             List of spawned recovery Tasks.
         """
@@ -356,9 +356,9 @@ class DiscoveryService:
             raise ValueError(f"No tasks found for ticket {ticket_id}")
 
         spawned_tasks = []
-        
+
         # Spawn single recovery task (can be extended to spawn multiple based on analysis)
-        discovery, spawned_task = self.record_discovery_and_branch(
+        _discovery, spawned_task = self.record_discovery_and_branch(
             session=session,
             source_task_id=last_task.id,
             discovery_type=DiscoveryType.DIAGNOSTIC_NO_RESULT,
@@ -369,9 +369,9 @@ class DiscoveryService:
             priority_boost=True,
             spawn_metadata={"diagnostic_run_id": diagnostic_run_id},
         )
-        
+
         spawned_tasks.append(spawned_task)
-        
+
         # Limit to max_tasks
         if len(spawned_tasks) > max_tasks:
             spawned_tasks = spawned_tasks[:max_tasks]
