@@ -38,8 +38,10 @@ import {
   ExternalLink,
   Wifi,
   WifiOff,
+  FileCode,
 } from "lucide-react"
 import { useEvents, type SystemEvent } from "@/hooks/useEvents"
+import { FileChangeCard } from "@/components/custom/FileChangeCard"
 
 // Activity type derived from system events
 interface Activity {
@@ -87,6 +89,9 @@ const activityTypeConfig: Record<string, { icon: typeof Plus; color: string; bg:
   blocking_added: { icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-100", label: "Blocking" },
   tasks_generated: { icon: Zap, color: "text-violet-600", bg: "bg-violet-100", label: "Generated" },
   spec_approved: { icon: FileText, color: "text-teal-600", bg: "bg-teal-100", label: "Approved" },
+  // File edit events
+  "SANDBOX_agent.file_edited": { icon: FileCode, color: "text-blue-600", bg: "bg-blue-100", label: "File Edit" },
+  "agent.file_edited": { icon: FileCode, color: "text-blue-600", bg: "bg-blue-100", label: "File Edit" },
   // Default for unknown types
   default: { icon: Zap, color: "text-gray-600", bg: "bg-gray-100", label: "Event" },
 }
@@ -112,7 +117,18 @@ function eventToActivity(event: SystemEvent, index: number): Activity {
   
   // Build description from event type and payload
   let description = event.event_type.replace(/_/g, " ").toLowerCase()
-  if (payload.message) {
+  
+  // Special handling for file edit events
+  if (event.event_type === "SANDBOX_agent.file_edited" || payload.original_event_type === "agent.file_edited") {
+    const filePath = payload.file_path as string
+    const changeType = payload.change_type as string
+    const linesAdded = payload.lines_added as number
+    const linesRemoved = payload.lines_removed as number
+    if (filePath) {
+      const filename = filePath.split("/").pop() || filePath
+      description = `${changeType === "created" ? "Created" : "Modified"} ${filename} (+${linesAdded} -${linesRemoved})`
+    }
+  } else if (payload.message) {
     description = payload.message as string
   } else if (event.entity_type && event.entity_id) {
     description = `${event.event_type} on ${event.entity_type} ${event.entity_id}`
@@ -174,7 +190,12 @@ export default function ActivityPage() {
         activity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         activity.description.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesType =
-        typeFilter === "all" || activity.type === typeFilter
+        typeFilter === "all" || 
+        activity.type === typeFilter ||
+        (typeFilter === "SANDBOX_agent.file_edited" && 
+         (activity.type === "SANDBOX_agent.file_edited" || 
+          activity.type === "agent.file_edited" ||
+          activity.metadata?.original_event_type === "agent.file_edited"))
       const matchesActor =
         actorFilter === "all" || activity.actor.type === actorFilter
       const matchesProject =
@@ -325,6 +346,7 @@ export default function ActivityPage() {
               <SelectItem value="discovery">Discoveries</SelectItem>
               <SelectItem value="blocking_added">Blocking</SelectItem>
               <SelectItem value="ticket_status">Status Changes</SelectItem>
+              <SelectItem value="SANDBOX_agent.file_edited">File Edits</SelectItem>
             </SelectContent>
           </Select>
 
@@ -438,6 +460,31 @@ export default function ActivityPage() {
                               </Badge>
                               {activity.project && (
                                 <Badge variant="outline">{activity.project}</Badge>
+                              )}
+
+                              {/* File edit event - render FileChangeCard */}
+                              {(activity.type === "SANDBOX_agent.file_edited" || 
+                                activity.type === "agent.file_edited" ||
+                                activity.metadata?.original_event_type === "agent.file_edited") && (
+                                <div className="mt-3 w-full">
+                                  <FileChangeCard
+                                    event={{
+                                      event_type: activity.type as "agent.file_edited" | "SANDBOX_agent.file_edited",
+                                      event_data: {
+                                        file_path: activity.metadata?.file_path || "",
+                                        change_type: activity.metadata?.change_type || "modified",
+                                        lines_added: activity.metadata?.lines_added || 0,
+                                        lines_removed: activity.metadata?.lines_removed || 0,
+                                        diff_preview: activity.metadata?.diff_preview || "",
+                                        full_diff: activity.metadata?.full_diff,
+                                        full_diff_available: activity.metadata?.full_diff_available || false,
+                                        full_diff_size: activity.metadata?.full_diff_size,
+                                        turn: activity.metadata?.turn,
+                                        tool_use_id: activity.metadata?.tool_use_id,
+                                      },
+                                    }}
+                                  />
+                                </div>
                               )}
 
                               {/* Type-specific metadata */}

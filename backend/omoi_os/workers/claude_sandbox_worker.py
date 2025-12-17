@@ -62,6 +62,7 @@ Example with GLM:
 
 import asyncio
 import base64
+import difflib
 import os
 import signal
 import subprocess
@@ -90,11 +91,85 @@ try:
         ClaudeAgentOptions,
         ClaudeSDKClient,
         HookMatcher,
+        HookInput,
+        HookContext,
+        HookJSONOutput,
     )
 
     SDK_AVAILABLE = True
 except ImportError:
     SDK_AVAILABLE = False
+
+
+# =============================================================================
+# File Change Tracking
+# =============================================================================
+
+
+class FileChangeTracker:
+    """Tracks file changes for diff generation."""
+
+    def __init__(self):
+        self.file_cache: dict[str, str] = {}  # path → content before edit
+
+    def cache_file_before_edit(self, path: str, content: str):
+        """Cache file content before Write/Edit tool executes."""
+        self.file_cache[path] = content
+
+    def generate_diff(self, path: str, new_content: str) -> dict:
+        """Generate unified diff after edit completes."""
+        old_content = self.file_cache.pop(path, "")
+
+        # Handle new file vs modified file
+        if not old_content:
+            # New file
+            new_lines = new_content.splitlines(keepends=True)
+            lines_added = len(new_lines)
+            lines_removed = 0
+            diff = ["--- /dev/null\n", f"+++ b/{path}\n"]
+            for line in new_lines:
+                diff.append(f"+{line}")
+            change_type = "created"
+        else:
+            # Modified file
+            old_lines = old_content.splitlines(keepends=True)
+            new_lines = new_content.splitlines(keepends=True)
+            diff = list(
+                difflib.unified_diff(
+                    old_lines,
+                    new_lines,
+                    fromfile=f"a/{path}",
+                    tofile=f"b/{path}",
+                    lineterm="",
+                )
+            )
+            lines_added = sum(
+                1
+                for line in diff
+                if line.startswith("+") and not line.startswith("+++")
+            )
+            lines_removed = sum(
+                1
+                for line in diff
+                if line.startswith("-") and not line.startswith("---")
+            )
+            change_type = "modified"
+
+        diff_text = "".join(diff)
+        diff_preview = "\n".join(diff[:100])
+        if len(diff) > 100:
+            diff_preview += f"\n... ({len(diff) - 100} more lines)"
+
+        return {
+            "file_path": path,
+            "change_type": change_type,
+            "lines_added": lines_added,
+            "lines_removed": lines_removed,
+            "diff_preview": diff_preview[:5000],
+            "full_diff": diff_text if len(diff_text) <= 50000 else None,
+            "full_diff_available": len(diff_text) > 5000,
+            "full_diff_size": len(diff_text),
+        }
 
 
 # =============================================================================
@@ -284,7 +359,9 @@ Systematically investigate issues:
             },
         }
 
-    def to_sdk_options(self, post_tool_hook=None) -> "ClaudeAgentOptions":
+    def to_sdk_options(
+        self, pre_tool_hook=None, post_tool_hook=None
+    ) -> "ClaudeAgentOptions":
         """Create ClaudeAgentOptions from config."""
         # Build environment variables for the CLI subprocess
         env = {"ANTHROPIC_API_KEY": self.api_key}
@@ -320,10 +397,19 @@ Systematically investigate issues:
             options_kwargs["fork_session"] = self.fork_session
 
         # Add hooks
+        hooks = {}
+        if pre_tool_hook:
+            hooks["PreToolUse"] = [
+                HookMatcher(matcher="Write", hooks=[pre_tool_hook]),
+                HookMatcher(matcher="Edit", hooks=[pre_tool_hook]),
+            ]
         if post_tool_hook:
-            options_kwargs["hooks"] = {
-                "PostToolUse": [HookMatcher(matcher=None, hooks=[post_tool_hook])],
-            }
+            hooks["PostToolUse"] = [
+                HookMatcher(matcher=None, hooks=[post_tool_hook]),
+            ]
+
+        if hooks:
+            options_kwargs["hooks"] = hooks
 
         return ClaudeAgentOptions(**options_kwargs)
 
@@ -568,6 +654,7 @@ class SandboxWorker:
         self._should_stop = False
         self.turn_count = 0
         self.reporter: Optional[EventReporter] = None
+        self.file_tracker = FileChangeTracker()
 
     def _setup_signal_handlers(self):
         """Setup graceful shutdown on SIGTERM/SIGINT."""
@@ -583,6 +670,8 @@ class SandboxWorker:
     async def _create_post_tool_hook(self):
         """Create PostToolUse hook for comprehensive tool tracking."""
         reporter = self.reporter
+        file_tracker = self.file_tracker
+        turn_count = self.turn_count
 
         async def track_tool_use(input_data, tool_use_id, context):
             """PostToolUse hook for comprehensive event reporting."""
@@ -590,9 +679,47 @@ class SandboxWorker:
             tool_input = input_data.get("tool_input", {})
             tool_response = input_data.get("tool_response", "")
 
+            # NEW: File diff generation for Write/Edit
+            if tool_name == "Write":
+                file_path = tool_input.get("file_path")
+                new_content = tool_input.get("content", "")
+                if file_path and new_content:
+                    diff_info = file_tracker.generate_diff(file_path, new_content)
+                    await reporter.report(
+                        "agent.file_edited",
+                        {
+                            "turn": turn_count,
+                            "tool_use_id": tool_use_id,
+                            **diff_info,
+                        },
+                    )
+
+            elif tool_name == "Edit":
+                file_path = tool_input.get("file_path")
+                if file_path:
+                    file_path = Path(file_path)
+                    if file_path.exists():
+                        try:
+                            new_content = file_path.read_text()
+                            diff_info = file_tracker.generate_diff(
+                                str(file_path), new_content
+                            )
+                            await reporter.report(
+                                "agent.file_edited",
+                                {
+                                    "turn": turn_count,
+                                    "tool_use_id": tool_use_id,
+                                    **diff_info,
+                                },
+                            )
+                        except Exception as e:
+                            print(
+                                f"[FileTracker] Failed to read {file_path} after edit: {e}"
+                            )
+
             # Full tool tracking
             event_data = {
-                "turn": self.turn_count,
+                "turn": turn_count,
                 "tool": tool_name,
                 "tool_input": tool_input,
                 "tool_response": str(tool_response)[:2000] if tool_response else None,
@@ -616,6 +743,35 @@ class SandboxWorker:
             return {}
 
         return track_tool_use
+
+    async def _create_pre_tool_hook(self):
+        """Create PreToolUse hook for file caching."""
+        file_tracker = self.file_tracker
+
+        async def pre_tool_use_file_cache(
+            input_data: HookInput,
+            tool_use_id: str | None,
+            context: HookContext,
+        ) -> HookJSONOutput:
+            tool_name = input_data.get("tool_name", "")
+            tool_input = input_data.get("tool_input", {})
+
+            if tool_name in ["Write", "Edit"]:
+                file_path = tool_input.get("file_path")
+                if file_path:
+                    file_path = Path(file_path)
+                    if file_path.exists():
+                        try:
+                            old_content = file_path.read_text()
+                            file_tracker.cache_file_before_edit(
+                                str(file_path), old_content
+                            )
+                        except Exception as e:
+                            print(f"[FileTracker] Failed to cache {file_path}: {e}")
+
+            return {}
+
+        return pre_tool_use_file_cache
 
     async def _process_messages(
         self,
@@ -860,9 +1016,13 @@ class SandboxWorker:
             self.reporter = reporter
 
             async with MessagePoller(self.config) as poller:
-                # Create hook and options
+                # Create hooks and options
+                pre_tool_hook = await self._create_pre_tool_hook()
                 post_tool_hook = await self._create_post_tool_hook()
-                sdk_options = self.config.to_sdk_options(post_tool_hook=post_tool_hook)
+                sdk_options = self.config.to_sdk_options(
+                    pre_tool_hook=pre_tool_hook,
+                    post_tool_hook=post_tool_hook,
+                )
 
                 # Report startup
                 await reporter.report(
