@@ -1451,6 +1451,7 @@ async def run_agent(task_description: str):
             
             async def intervention_handler():
                 """Poll for interventions and inject as new user messages."""
+                global _should_stop
                 poll_interval = 0.5  # Poll every 500ms
                 
                 while not agent_done.is_set():
