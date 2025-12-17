@@ -1442,7 +1442,7 @@ async def run_agent(task_description: str):
                             break
                         
                         await message_queue.put(msg)
-    except Exception as e:
+                except Exception as e:
                     logger.error(f"Message stream error: {e}")
                     agent_done.set()
             
