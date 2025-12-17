@@ -250,7 +250,7 @@ export default function AnalyticsPage() {
       {/* Quick Actions */}
       <Card>
         <CardContent className="p-6">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4">
             <Button asChild>
               <Link href="/projects/new">
                 <Plus className="mr-2 h-4 w-4" /> New Spec

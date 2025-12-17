@@ -174,9 +174,15 @@ class AnthropicSettings(OmoiBaseSettings):
       - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN)
       - ANTHROPIC_BASE_URL (custom API endpoint, e.g., Z.AI)
       - ANTHROPIC_MODEL (default model to use)
+      - ANTHROPIC_MAX_TOKENS (max output tokens per response)
+      - ANTHROPIC_CONTEXT_LENGTH (model context window size)
       - ANTHROPIC_DEFAULT_HAIKU_MODEL
       - ANTHROPIC_DEFAULT_SONNET_MODEL
       - ANTHROPIC_DEFAULT_OPUS_MODEL
+
+    Default Configuration (Z.AI / GLM-4.6v):
+      - GLM-4.6v has 128k context length
+      - GLM-4.6v-flash is the fast/cheap variant
 
     Precedence: YAML defaults < environment variables < init kwargs.
     """
@@ -198,6 +204,10 @@ class AnthropicSettings(OmoiBaseSettings):
     default_haiku_model: str = "glm-4.6v-flash"
     default_sonnet_model: str = "glm-4.6v"
     default_opus_model: str = "glm-4.6v"
+
+    # Token limits
+    max_tokens: int = 16384  # Max output tokens per response
+    context_length: int = 128000  # GLM-4.6v context window (128k)
 
     def get_api_key(self) -> Optional[str]:
         """Get API key, preferring api_key over auth_token."""

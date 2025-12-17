@@ -31,7 +31,7 @@
 | **"Guardian agents automatically detect and fix stuck workflows"** | Phase 3.4 Hook-Based Intervention, Guardian Integration Tests |
 | **"Real-Time Visibility: Complete transparency into agent activity"** | Phase 1 Sandbox Event Callback → WebSocket streaming |
 | **"Self-Healing System: Guardian monitors every 60 seconds"** | Integration with existing `MonitoringLoop`, `IntelligentGuardian` |
-| **"Autonomous execution within phases"** | Phase 3 Worker Scripts for Claude/OpenHands agents |
+| **"Autonomous execution within phases"** | Phase 3 Worker Scripts for Claude Agent SDK |
 | **"PR generation and review"** | Phase 5 Branch Workflow Service |
 | **"Agents spawn with pre-loaded memories"** | Future: Memory preload (not MVP) |
 
@@ -2048,7 +2048,7 @@ Update `_get_worker_script()` and `_get_claude_worker_script()` to:
 | 3.3 | Write `test_worker_script_handles_interrupt` | ⬜ | — |
 | 3.4 | Write `test_end_to_end_worker_event_flow` | ⬜ | — |
 | 3.5 | Run tests - verify they FAIL | ⬜ | — |
-| 3.6 | Update OpenHands worker script | ⬜ | — |
+| 3.6 | Update Claude Agent SDK worker script | ⬜ | — |
 | 3.7 | Update Claude worker script | ⬜ | — |
 | 3.8 | Add `report_event()` helper function | ⬜ | — |
 | 3.9 | Add `poll_for_messages()` helper function | ⬜ | — |
@@ -2062,7 +2062,7 @@ Update `_get_worker_script()` and `_get_claude_worker_script()` to:
 
 ### 3.4 Hook Integration in Worker Scripts (Enhancement)
 
-**Goal**: Add PreToolUse hooks (Claude) / enhanced callbacks (OpenHands) for immediate intervention delivery.
+**Goal**: Add PreToolUse hooks for immediate intervention delivery.
 
 **Estimated Effort**: 2-3 hours
 
@@ -2087,9 +2087,9 @@ def test_claude_worker_has_pretooluse_hook():
     assert "check_pending_interventions" in script or "intervention" in script.lower()
 
 
-def test_openhands_worker_has_intervention_callback():
+def test_claude_worker_has_intervention_hook():
     """
-    SPEC: OpenHands worker should check for interventions in event callback.
+    SPEC: Claude Agent SDK worker should check for interventions in PreToolUse hook.
     """
     from omoi_os.services.daytona_spawner import DaytonaSpawnerService
     
@@ -2168,7 +2168,7 @@ options = ClaudeAgentOptions(
 )
 ```
 
-**OpenHands SDK Worker Updates** (in `_get_worker_script()`):
+**Claude Agent SDK Worker Updates** (in `_get_worker_script()`):
 
 ```python
 # Add to worker script - Intervention handling
@@ -2220,13 +2220,13 @@ def on_event_with_intervention(event):
 | # | Task | Status | Test |
 |---|------|--------|------|
 | 3.13 | Write `test_claude_worker_has_pretooluse_hook` | ⬜ | — |
-| 3.14 | Write `test_openhands_worker_has_intervention_callback` | ⬜ | — |
+| 3.14 | Write `test_claude_worker_has_intervention_hook` | ⬜ | — |
 | 3.15 | Write `test_worker_fetches_interventions_from_api` | ⬜ | — |
 | 3.16 | Run tests - verify FAIL | ⬜ | — |
 | 3.17 | Add `check_pending_interventions` hook to Claude worker | ⬜ | — |
 | 3.18 | Add `fetch_pending_interventions()` to Claude worker | ⬜ | — |
-| 3.19 | Add `on_event_with_intervention` to OpenHands worker | ⬜ | — |
-| 3.20 | Add `fetch_interventions_sync()` to OpenHands worker | ⬜ | — |
+| 3.19 | Add `PreToolUse` hook to Claude Agent SDK worker | ⬜ | — |
+| 3.20 | Add `fetch_interventions_async()` to Claude Agent SDK worker | ⬜ | — |
 | 3.21 | Run tests - confirm PASS | ⬜ | ✅ All green |
 | 3.22 | Run full Phase 0-3 tests - confirm no regression | ⬜ | ✅ All green |
 
@@ -2927,7 +2927,7 @@ Track which assumptions have been validated:
 │  SANDBOX AGENTS:                                                            │
 │  ─────────────────────────────────────────────────────────────              │
 │  - Task has sandbox_id (which we need to ADD to the model)                 │
-│  - Conversation state is in /tmp/openhands INSIDE the sandbox              │
+│  - Conversation state is in /tmp/claude INSIDE the sandbox                 │
 │  - Local persistence_dir doesn't exist or is empty                         │
 │  - Guardian CANNOT inject messages using current mechanism                  │
 │                                                                             │
@@ -2988,7 +2988,7 @@ async def test_guardian_detects_sandbox_mode():
     legacy_task = Task(
         id="task-legacy",
         conversation_id="conv-123",
-        persistence_dir="/tmp/openhands/conv-123",
+        persistence_dir="/tmp/claude/conv-123",
     )
     assert guardian._is_sandbox_task(legacy_task) is False
     
@@ -3053,7 +3053,7 @@ async def test_guardian_intervention_uses_legacy_for_non_sandbox():
     legacy_task = Task(
         id="task-123",
         conversation_id="conv-456",
-        persistence_dir="/tmp/openhands/conv-456",
+        persistence_dir="/tmp/claude/conv-456",
         agent_id="agent-789",
     )
     
@@ -3497,7 +3497,7 @@ async def _restart_sandbox_agent(self, task: Task, reason: str) -> RestartEvent:
         task_id=str(task.id),
         agent_id=task.assigned_agent_id,
         phase_id=task.phase_id,
-        agent_type=task.agent_type or "openhands",
+        agent_type=task.agent_type or "claude",
     )
     
     # Step 3: Update task with new sandbox_id
@@ -3743,7 +3743,7 @@ event_bus.publish(SystemEvent(
 # Task model (backend/omoi_os/models/task.py) - as of deep dive analysis
 class Task(Base):
     # ...existing fields...
-    conversation_id: Mapped[Optional[str]]    # ✅ EXISTS - OpenHands conversation ID
+    conversation_id: Mapped[Optional[str]]    # ✅ EXISTS - Claude Agent SDK conversation ID
     persistence_dir: Mapped[Optional[str]]    # ✅ EXISTS - For intervention resumption
     # sandbox_id: ❌ MISSING - Must be added in Phase 6!
 ```
@@ -3764,7 +3764,7 @@ POST /api/v1/sandboxes/{sandbox_id}/interventions  # Guardian/user interventions
 
 # Server → sandbox communication (already exists via):
 # - ConversationInterventionService.send_intervention()
-# - OpenHands conversation.send_message()
+# - Claude Agent SDK client.query() or message injection
 ```
 
 ### Test Dependencies

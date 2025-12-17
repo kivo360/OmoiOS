@@ -38,7 +38,7 @@ This document describes the **architectural changes** required to support a rich
 | **File Diff Generation** | Can't show inline code changes | [3. Diff Capture](#3-file-diff-capture) |
 | **Message Streaming** | Can't show typewriter effect | [4. Message Streaming](#4-message-streaming-architecture) |
 | **Tool Event Persistence** | Can't replay/audit tool history | [5. Event Storage](#5-event-storage-strategy) |
-| **SDK Abstraction** | Different patterns for Claude/OpenHands | [6. SDK Integration](#6-sdk-integration-layer) |
+| **SDK Integration** | Claude Agent SDK patterns | [6. SDK Integration](#6-sdk-integration-layer) |
 
 ---
 
@@ -397,11 +397,11 @@ Current design renders complete agent messages. Users want to see messages as th
 │          # Stream each text chunk                                           │
 │          await report_chunk(event.text)                                     │
 │                                                                             │
-│  OpenHands SDK (event-based):                                               │
-│  ───────────────────────────────                                            │
-│  # Messages arrive complete, no native streaming                            │
-│  # Option 1: Fake streaming (split complete message into chunks)            │
-│  # Option 2: Accept complete messages for OpenHands                         │
+│  Claude Agent SDK (streaming-based):                                        │
+│  ──────────────────────────────────                                          │
+│  # Messages stream via receive_*() methods                                  │
+│  # Option 1: Stream chunks as they arrive                                    │
+│  # Option 2: Accept complete messages for Claude Agent SDK                    │
 │                                                                             │
 │  Backend Relay:                                                             │
 │  ──────────────                                                             │
@@ -568,7 +568,7 @@ class ToolEventStore:
 
 ### Problem
 
-Claude SDK and OpenHands SDK have different hook/callback mechanisms. We need a unified abstraction.
+Claude Agent SDK uses PreToolUse/PostToolUse hooks for intervention and event reporting.
 
 ### Solution: Agent Event Adapter
 
@@ -586,7 +586,7 @@ Claude SDK and OpenHands SDK have different hook/callback mechanisms. We need a 
 │               │                   │                   │                     │
 │               ▼                   ▼                   ▼                     │
 │  ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐   │
-│  │ ClaudeSDKAdapter    │ │ OpenHandsAdapter    │ │ FutureSDKAdapter    │   │
+│  │ ClaudeSDKAdapter    │ │ FutureSDKAdapter    │   │
 │  │                     │ │                     │ │                     │   │
 │  │ • PreToolUse hook   │ │ • Event callback    │ │ • ...               │   │
 │  │ • PostToolUse hook  │ │ • Action intercept  │ │                     │   │
@@ -794,7 +794,7 @@ websocket_message_size = Histogram("websocket_message_bytes", ["event_type"])
 
 - [ ] Event batching infrastructure
 - [ ] Redis event storage
-- [ ] OpenHands adapter
+- [x] Claude Agent SDK adapter
 - [ ] Frontend virtualization
 - [ ] Session replay capability
 
@@ -820,7 +820,7 @@ websocket_message_size = Histogram("websocket_message_bytes", ["event_type"])
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  WORKER CHANGES:                                                            │
-│  ├─ SDK adapter layer (ClaudeSDKAdapter, OpenHandsAdapter)                 │
+│  ├─ SDK adapter layer (ClaudeSDKAdapter)                                    │
 │  ├─ PreToolUse + PostToolUse hook registration                             │
 │  ├─ FileChangeTracker for diff capture                                     │
 │  └─ Streaming message chunking                                              │

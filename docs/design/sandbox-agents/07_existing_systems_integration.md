@@ -79,19 +79,19 @@ async def execute_steering_intervention(self, intervention, task=None):
     )
 ```
 
-**Key Dependency**: Requires `persistence_dir` to be a **local filesystem path** where OpenHands conversation state is stored.
+**Key Dependency**: Requires `persistence_dir` to be a **local filesystem path** where Claude Agent SDK conversation state is stored.
 
 ### Problem with Sandbox Agents
 
-Sandbox agents run inside Daytona containers. Their conversation state (`persistence_dir`) is at `/tmp/openhands/` **inside the sandbox**, not on the local filesystem.
+Sandbox agents run inside Daytona containers. Their conversation state (`persistence_dir`) is at `/tmp/claude/` **inside the sandbox**, not on the local filesystem.
 
 ```
 LOCAL SERVER FILESYSTEM          DAYTONA SANDBOX
 ─────────────────────────        ────────────────
                                  ┌─────────────────────────┐
-/tmp/openhands/ ← EMPTY!         │ /tmp/openhands/         │
-                                 │   ├── conv-abc123/      │
-                                 │   │   ├── state.json    │
+/tmp/claude/ ← EMPTY!            │ /tmp/claude/            │
+                                 │   ├── conv-abc123/     │
+                                 │   │   ├── state.json   │
                                  │   │   └── history/      │
                                  │   └── ...               │
                                  └─────────────────────────┘
@@ -129,7 +129,7 @@ async def execute_steering_intervention(self, intervention, task=None):
 
 **Location**: `backend/omoi_os/services/conversation_intervention.py`
 
-This service is specifically designed to inject messages into running OpenHands conversations by:
+This service is specifically designed to inject messages into running Claude Agent SDK conversations by:
 1. Loading conversation state from local `persistence_dir`
 2. Creating a `Conversation` object
 3. Calling `conversation.send_message()`
@@ -435,7 +435,7 @@ class Task(Base):
     phase_id: Mapped[str] = mapped_column(...)
     status: Mapped[str] = mapped_column(...)
     assigned_agent_id: Mapped[Optional[str]] = mapped_column(...)
-    conversation_id: Mapped[Optional[str]] = mapped_column(...)  # OpenHands conv ID
+    conversation_id: Mapped[Optional[str]] = mapped_column(...)  # Claude Agent SDK conv ID
     persistence_dir: Mapped[Optional[str]] = mapped_column(...)  # Local path (legacy)
     # sandbox_id is MISSING!
 ```
@@ -642,7 +642,7 @@ async def collect_forensics(self, agent_id: str) -> str:
         bundle = {
             'events': await self._get_all_sandbox_events(task.sandbox_id),
             'logs': await self.daytona_spawner.download_file(
-                task.sandbox_id, "/tmp/openhands/agent.log"
+                task.sandbox_id, "/tmp/claude/agent.log"
             ),
             # Note: Some data may not be accessible
         }

@@ -577,6 +577,35 @@ wheels = [
 ]
 
 [[package]]
+name = "claude-agent-sdk"
+version = "0.1.17"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "mcp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/5c/e4/565dd62b0795427b4f6a0a8221948eef09545aaa44256af4b36a32e866b1/claude_agent_sdk-0.1.17.tar.gz", hash = "sha256:85d0818b7259b65ea0ee3103ae736f2b359243de81540ab1eee771d8cae0d8ac", size = 56157, upload-time = "2025-12-16T00:27:58.008Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/d8/c673cf7533d3489cf516dac078d0fda353d89fb5446973dc9252281ebaff/claude_agent_sdk-0.1.17-py3-none-macosx_11_0_arm64.whl", hash = "sha256:46fd904ce90a183414f979d359519cff347f52c1906d50f1e247551c786a3613", size = 51713924, upload-time = "2025-12-16T00:27:43.409Z" },
+    { url = "https://files.pythonhosted.org/packages/8f/cb/c556f499b0195b98ede53a6c4eb78957725a508335f6c20da25018fb0a4a/claude_agent_sdk-0.1.17-py3-none-manylinux_2_17_aarch64.whl", hash = "sha256:08c41656da3ec7930cb966b35df23da6f68fa0fc0a32c61e73d6450c40c0e17e", size = 65993911, upload-time = "2025-12-16T00:27:48.765Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/1f/84dce02915972f0bf0f482a948add4e1a7642c5730ad1106529445a00f1c/claude_agent_sdk-0.1.17-py3-none-manylinux_2_17_x86_64.whl", hash = "sha256:be5fe696e50829348b031106dc926bb459c94804a13584a52a483a35ebd1c388", size = 67691009, upload-time = "2025-12-16T00:27:52.1Z" },
+    { url = "https://files.pythonhosted.org/packages/65/d5/ea6fbf27da6bdafa8a1c6d7a778a0f8ced146260a5fc2c74ce606aa28993/claude_agent_sdk-0.1.17-py3-none-win_amd64.whl", hash = "sha256:f2f4e05785a42525cf8026f0bba69bce359b83a57856f0b7349cd311a0d644be", size = 69883013, upload-time = "2025-12-16T00:27:55.514Z" },
+]
+
+[[package]]
+name = "claude-code-sdk"
+version = "0.0.25"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "mcp" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ec/0d/0f4a71415826578a5ace16817c52df84d76ffbda5cdad02f520a2b963bde/claude_code_sdk-0.0.25.tar.gz", hash = "sha256:0d9e1eba432d4fe8a2f75f06ec9bb4c310f39b1d55246e7e4b2c69bfdd69eab3", size = 41273, upload-time = "2025-09-29T20:14:51.882Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f5/41/c934058080f3233bbc95bc9abac5e0191bf336ad5f69a33b5f54a4737e88/claude_code_sdk-0.0.25-py3-none-any.whl", hash = "sha256:3d6a4ef958182f311d6050776d2675d9b39650a2db221c582a0a5156472dcee3", size = 31031, upload-time = "2025-09-29T20:14:50.687Z" },
+]
+
+[[package]]
 name = "click"
 version = "8.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2705,6 +2734,8 @@ source = { editable = "." }
 dependencies = [
     { name = "alembic" },
     { name = "anthropic" },
+    { name = "claude-agent-sdk" },
+    { name = "claude-code-sdk" },
     { name = "cryptography" },
     { name = "daytona" },
     { name = "daytona-sdk" },
@@ -2767,6 +2798,8 @@ test = [
 requires-dist = [
     { name = "alembic", specifier = ">=1.13.0,<2" },
     { name = "anthropic", specifier = ">=0.73.0" },
+    { name = "claude-agent-sdk", specifier = ">=0.1.17" },
+    { name = "claude-code-sdk", specifier = ">=0.0.25" },
     { name = "cryptography", specifier = ">=43.0.0,<44" },
     { name = "daytona", specifier = ">=0.112.0" },
     { name = "daytona-sdk", specifier = ">=0.119.0" },

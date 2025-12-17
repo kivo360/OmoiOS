@@ -690,17 +690,17 @@ The polling-based pattern (GET `/messages` after each turn) introduces latency. 
 │  2. Server stores in fast-access storage (Redis)                            │
 │     LPUSH sandbox:{id}:interventions {...}                                  │
 │                                                                             │
-│  3. Agent about to execute tool → PreToolUse hook fires                    │
+│  3. Agent running → Concurrent polling loop checks for interventions       │
 │                                                                             │
-│  4. Hook checks for pending interventions                                   │
-│     a. In-memory queue (instant)                                            │
-│     b. Server poll (every N calls, fills in-memory queue)                   │
+│  4. Polling loop (every 500ms):                                            │
+│     a. Check message queue via GET /api/v1/sandboxes/{id}/messages        │
+│     b. If messages found, inject via client.query()                         │
 │                                                                             │
 │  5. If intervention found:                                                  │
-│     Claude: Return {reason, systemMessage} → Claude receives context       │
-│     OpenHands: Call conversation.send_message() → Agent sees on next iter  │
+│     Claude: Call client.query(intervention_message) → New user message     │
+│     (This creates a new conversation turn, like Claude Code web)          │
 │                                                                             │
-│  TIMING: Intervention delivered BEFORE tool executes                        │
+│  TIMING: Intervention delivered within ~500ms (polling interval)           │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```

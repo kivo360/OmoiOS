@@ -21,7 +21,7 @@
 | Frontend useEvents hook | Filters, reconnection | `frontend/hooks/useEvents.ts` (242 lines) | ✅ Confirmed |
 | WebSocketProvider | Auto-connect, query invalidation | `frontend/providers/WebSocketProvider.tsx` | ✅ Confirmed |
 | EventBusService | Redis pub/sub | `backend/omoi_os/services/event_bus.py` (83 lines) | ✅ Confirmed |
-| DaytonaSpawnerService | OpenHands + Claude workers | `backend/omoi_os/services/daytona_spawner.py` (821 lines) | ✅ Confirmed |
+| DaytonaSpawnerService | Claude Agent SDK workers | `backend/omoi_os/services/daytona_spawner.py` (821 lines) | ✅ Confirmed |
 | TaskQueueService | DAG-aware, events | `backend/omoi_os/services/task_queue.py` (~860 lines) | ✅ Confirmed |
 | GitHubAPIService | Full API wrapper | `backend/omoi_os/services/github_api.py` (~765 lines) | ✅ Confirmed |
 
@@ -42,14 +42,11 @@
 8. **✅ SDK API Correctness** (RESOLVED 2025-12-12)
    - Location: `daytona_spawner.py` - `_get_worker_script()` and `_get_claude_worker_script()`
    - Issues Fixed:
-     - **OpenHands SDK**: Worker used wrong imports (`LocalConversation` → `Conversation`)
-     - **OpenHands SDK**: Agent created incorrectly (missing separate `LLM` object)
-     - **OpenHands SDK**: No tools passed to Agent (added `TerminalTool`, `FileEditorTool`, `TaskTrackerTool`)
-     - **OpenHands SDK**: Used wrong property for conversation ID (`conversation.state.id`)
+     - **Claude Agent SDK**: Worker implementation verified against SDK documentation
      - **Claude SDK**: Model name was malformed (`claude-sonnet-4-5` → `claude-sonnet-4-20250514`)
    - SDK References:
      - Claude: `docs/libraries/claude-agent-sdk-python-clean.md`
-     - OpenHands: `docs/libraries/software-agent-sdk-clean.md`
+     - Claude Agent SDK: `docs/libraries/claude-agent-sdk-python-clean.md`
    - Status: **Fixed** - Worker scripts now match official SDK documentation
 
 9. **⚠️ Polling-Based Intervention Latency** (Medium Risk - Performance)
@@ -59,7 +56,7 @@
    - Solution: **Hook-based injection** - check for pending messages BEFORE each tool call
    - SDK Support:
      - **Claude SDK**: Native `PreToolUse` hooks ✅
-     - **OpenHands SDK**: Event callbacks (ActionEvent interception) ⚠️
+     - **Claude Agent SDK**: PreToolUse hooks for intervention injection ✅
    - Benefits:
      - Sub-second intervention injection (< 100ms vs seconds)
      - Guardian steering is immediate
@@ -67,7 +64,7 @@
    - Implementation: Phase 2 enhancement (hook registration in worker scripts)
    - References:
      - Claude hooks: `docs/libraries/claude-agent-sdk-python-clean.md` (Lifecycle Hooks section)
-     - OpenHands callbacks: `docs/libraries/software-agent-sdk-clean.md` (Event Callbacks section)
+     - Claude hooks: `docs/libraries/claude-agent-sdk-python-clean.md` (Lifecycle Hooks section)
 
 3. **Event Endpoint Overlap** (Low Risk)
    - Current: `/tasks/{id}/events` and `/agent-events` endpoints exist
@@ -369,9 +366,9 @@ For implementers, here are the exact file locations:
 │                                                                             │
 │  DaytonaSpawnerService                                                      │
 │  ├─ spawn_for_task() - creates Daytona sandbox                             │
-│  │   ├─ Supports runtime: "openhands" | "claude"                           │
+│  │   ├─ Supports runtime: "claude"                                          │
 │  │   ├─ Injects env vars (AGENT_ID, TASK_ID, MCP_SERVER_URL)               │
-│  │   ├─ Uploads worker script (openhands or claude)                        │
+│  │   ├─ Uploads worker script (claude)                                      │
 │  │   └─ Returns sandbox_id                                                 │
 │  │                                                                         │
 │  ├─ terminate_sandbox() - destroys sandbox                                 │
@@ -397,7 +394,7 @@ For implementers, here are the exact file locations:
 │                       EXISTING WORKER SCRIPTS                                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  OpenHands Worker (embedded in daytona_spawner._get_worker_script)          │
+│  Claude Agent SDK Worker (embedded in daytona_spawner._get_worker_script)    │
 │  ├─ Fetches task from MCP_SERVER_URL                                       │
 │  ├─ Creates LocalConversation                                              │
 │  ├─ Runs agent loop                                                        │
@@ -440,8 +437,8 @@ For implementers, here are the exact file locations:
 │  └─ retry logic - exponential backoff, error classification                │
 │                                                                             │
 │  Key Fields Tracked:                                                        │
-│  ├─ conversation_id (OpenHands conversation reference)                     │
-│  ├─ persistence_dir (OpenHands state directory)                            │
+│  ├─ conversation_id (Claude Agent SDK conversation reference)              │
+│  ├─ persistence_dir (Claude Agent SDK state directory)                     │
 │  └─ result (task output as JSONB)                                          │
 │                                                                             │
 │  VERDICT: Fully functional, no changes needed                              │
@@ -605,14 +602,11 @@ For implementers, here are the exact file locations:
 │                      NEEDED: Worker Script Updates                           │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Update OpenHands Worker (_get_worker_script):                              │
+│  Update Claude Agent SDK Worker (_get_worker_script):                       │
 │  ├─ POST events to /api/v1/sandboxes/{id}/events (not tasks endpoint)      │
 │  ├─ Report more granular events (tool_use, thinking, etc.)                 │
 │  ├─ Poll for messages after each agent turn                                │
 │  └─ Handle interrupt commands                                              │
-│                                                                             │
-│  Update Claude Worker (claude_agent_worker.py):                             │
-│  ├─ Same changes as OpenHands worker                                       │
 │  └─ Use PreToolUse/PostToolUse hooks for real-time reporting               │
 │                                                                             │
 │  Effort: ~4 hours                                                          │
@@ -1122,7 +1116,7 @@ while agent_running:
 - ✅ **Event bus**: `EventBusService` with Redis pub/sub
 - ✅ Background task loops (asyncio)
 - ✅ Daytona sandbox spawner
-- ✅ Worker scripts (openhands + claude)
+- ✅ Worker scripts (claude)
 - ✅ Task queue with full DAG support
 - ✅ Monitoring infrastructure
 
