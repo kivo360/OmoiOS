@@ -14,6 +14,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
@@ -949,20 +950,25 @@ if __name__ == "__main__":
     def _get_claude_worker_script(self) -> str:
         """Get the Claude Agent SDK worker script content.
 
-        SDK Reference: docs/libraries/claude-agent-sdk-python-clean.md
-        GitHub: https://github.com/anthropics/claude-agent-sdk-python
+        Reads from backend/omoi_os/workers/claude_sandbox_worker.py
+        This makes the script easier to edit and test independently.
 
-        Phase 3 Updates:
-        - Uses /api/v1/sandboxes/{id}/events for event callbacks
-        - Polls /api/v1/sandboxes/{id}/messages for message injection
-        - PreToolUse hook for sub-second intervention delivery
-        - Handles interrupt messages to stop execution
-
-        Phase 3.5 Updates:
-        - Clones GitHub repository on startup if credentials provided
-        - Checks out feature branch if BRANCH_NAME specified
-        - Configures git user for commits
+        Features:
+        - Comprehensive event tracking (full content, no truncation)
+        - Subagent support (code-reviewer, test-runner, architect, debugger)
+        - Skills support (loads from .claude/skills/)
+        - GitHub repo cloning
+        - Message injection and intervention handling
+        - Custom model/API support (Z.AI GLM, etc.)
         """
+        # Try to read from file first (development mode)
+        worker_file = Path(__file__).parent.parent / "workers" / "claude_sandbox_worker.py"
+        if worker_file.exists():
+            logger.info(f"Loading Claude worker script from {worker_file}")
+            return worker_file.read_text()
+
+        # Fallback to inline script if file not found (should not happen in normal operation)
+        logger.warning("Claude worker file not found, using minimal fallback")
         return '''#!/usr/bin/env python3
 """Standalone sandbox worker - runs Claude Agent SDK for a task.
 
