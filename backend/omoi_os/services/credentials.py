@@ -19,7 +19,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from omoi_os.config import get_app_settings, load_anthropic_settings
+from omoi_os.config import load_anthropic_settings
 from omoi_os.models.user_credentials import UserCredential
 from omoi_os.services.database import DatabaseService
 
@@ -106,9 +106,7 @@ class CredentialsService:
             "base_url": "OPENAI_BASE_URL",
             "model": "OPENAI_MODEL",
         },
-        "github": {
-            "api_key": "GITHUB_TOKEN",  # System default token
-        },
+        # GitHub intentionally excluded - must come from user OAuth, no system fallback
         "z_ai": {
             # Z.AI uses Anthropic-compatible endpoint, so ANTHROPIC_* vars work
             "api_key": "ANTHROPIC_API_KEY",
@@ -152,6 +150,9 @@ class CredentialsService:
     def check_default_credentials(self) -> Dict[str, bool]:
         """Check which default credentials are configured.
 
+        Note: GitHub is not included here because it comes from user OAuth,
+        not system defaults.
+
         Returns:
             Dict mapping provider -> bool (True if API key is available)
         """
@@ -159,11 +160,8 @@ class CredentialsService:
 
         return {
             "anthropic": bool(settings.get_api_key()),
-            "github": bool(
-                os.environ.get("GITHUB_TOKEN")
-                or get_app_settings().integration.github_token
-            ),
             "openai": bool(os.environ.get("OPENAI_API_KEY")),
+            # GitHub intentionally not checked - must come from user OAuth
         }
 
     def get_user_credential(
@@ -269,78 +267,67 @@ class CredentialsService:
         user_id: Optional[UUID] = None,
         session: Optional[Session] = None,
     ) -> GitHubCredentials:
-        """Get GitHub credentials, preferring user OAuth token if available.
+        """Get GitHub credentials from user's OAuth token.
 
-        Fallback order:
-        1. User's OAuth access token (from User model via github_access_token)
-        2. User's stored credential (provider="github")
-        3. System default (GITHUB_TOKEN env var or integration settings)
+        NO SYSTEM FALLBACK - GitHub tokens must come from user OAuth login.
+        This ensures users can only access repos they have permission for.
+
+        Sources (in order):
+        1. User's OAuth access token (from User.attributes.github_access_token)
+        2. User's stored credential (provider="github" in UserCredential table)
 
         Args:
-            user_id: Optional user ID to check for OAuth/stored credentials
+            user_id: User ID to fetch credentials for (required for valid token)
             session: Optional existing database session
 
         Returns:
-            GitHubCredentials with token and source info
+            GitHubCredentials with token and source info, or empty if not found
         """
-        # Try user's OAuth token first (stored on User model)
-        if user_id:
-            from omoi_os.models.user import User
+        if not user_id:
+            logger.warning("No user_id provided - GitHub token requires user context")
+            return GitHubCredentials(source="none")
 
-            def _get_user_oauth(sess: Session) -> Optional[GitHubCredentials]:
-                user = sess.get(User, user_id)
-                if (
-                    user
-                    and hasattr(user, "github_access_token")
-                    and user.github_access_token
-                ):
+        # Try user's OAuth token first (stored in User.attributes from OAuth login)
+        from omoi_os.models.user import User
+
+        def _get_user_oauth(sess: Session) -> Optional[GitHubCredentials]:
+            user = sess.get(User, user_id)
+            if user:
+                # Token is stored in user.attributes JSONB column (from OAuth)
+                attrs = user.attributes or {}
+                github_token = attrs.get("github_access_token")
+                if github_token:
                     logger.debug(f"Using GitHub OAuth token for user {user_id}")
                     return GitHubCredentials(
-                        access_token=user.github_access_token,
-                        username=getattr(user, "github_username", None),
+                        access_token=github_token,
+                        username=attrs.get("github_username"),
                         source="oauth",
                     )
-                return None
+            return None
 
-            if session:
-                oauth_creds = _get_user_oauth(session)
+        if session:
+            oauth_creds = _get_user_oauth(session)
+            if oauth_creds:
+                return oauth_creds
+        else:
+            with self.db.get_session() as sess:
+                oauth_creds = _get_user_oauth(sess)
                 if oauth_creds:
                     return oauth_creds
-            else:
-                with self.db.get_session() as sess:
-                    oauth_creds = _get_user_oauth(sess)
-                    if oauth_creds:
-                        return oauth_creds
 
-            # Try user's stored credential
-            user_cred = self.get_user_credential(user_id, "github", session)
-            if user_cred and user_cred.api_key:
-                logger.debug(f"Using stored GitHub credential for user {user_id}")
-                config = user_cred.config_data or {}
-                return GitHubCredentials(
-                    access_token=user_cred.api_key,
-                    username=config.get("username"),
-                    source="user",
-                )
-
-        # Fall back to system default
-        system_token = os.environ.get("GITHUB_TOKEN")
-        if not system_token:
-            # Try integration settings
-            try:
-                settings = get_app_settings()
-                system_token = settings.integration.github_token
-            except Exception:
-                pass
-
-        if system_token:
-            logger.debug("Using system default GitHub token")
+        # Try user's stored credential as fallback (provider="github")
+        user_cred = self.get_user_credential(user_id, "github", session)
+        if user_cred and user_cred.api_key:
+            logger.debug(f"Using stored GitHub credential for user {user_id}")
+            config = user_cred.config_data or {}
             return GitHubCredentials(
-                access_token=system_token,
-                source="config",
+                access_token=user_cred.api_key,
+                username=config.get("username"),
+                source="user",
             )
 
-        logger.warning("No GitHub credentials available")
+        # No fallback to system token - user must have OAuth token
+        logger.warning(f"No GitHub credentials found for user {user_id}")
         return GitHubCredentials(source="none")
 
     def get_credentials(
@@ -520,6 +507,7 @@ class CredentialsService:
             )
             sess.add(cred)
             sess.flush()
+            sess.expunge(cred)
             return cred
 
         if session:
