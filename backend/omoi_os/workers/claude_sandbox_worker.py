@@ -370,13 +370,16 @@ Systematically investigate issues:
             env["ANTHROPIC_BASE_URL"] = self.api_base_url
 
         # Build options dict
+        # Convert cwd to Path if it's a string (SDK expects Path)
+        cwd_path = Path(self.cwd) if isinstance(self.cwd, str) else self.cwd
+
         options_kwargs = {
             "system_prompt": self.system_prompt,
             "allowed_tools": self.allowed_tools,
             "permission_mode": self.permission_mode,
             "max_turns": self.max_turns,
             "max_budget_usd": self.max_budget_usd,
-            "cwd": self.cwd,
+            "cwd": cwd_path,
             "env": env,
         }
 
@@ -1043,6 +1046,14 @@ class SandboxWorker:
                 )
 
                 try:
+                    # Debug: Print options structure before creating client
+                    print("[DEBUG] Creating SDK client with options...")
+                    print(f"[DEBUG] Options type: {type(sdk_options)}")
+                    if hasattr(sdk_options, "hooks") and sdk_options.hooks:
+                        print(
+                            f"[DEBUG] Hooks present: {list(sdk_options.hooks.keys())}"
+                        )
+
                     async with ClaudeSDKClient(options=sdk_options) as client:
                         # Process initial prompt
                         initial_task = (
@@ -1153,10 +1164,45 @@ class SandboxWorker:
                                 await asyncio.sleep(1)
 
                 except Exception as e:
+                    import traceback
+
                     print(f"❌ SDK initialization error: {e}")
+                    print(f"❌ Error type: {type(e).__name__}")
+                    print("❌ Full traceback:")
+                    traceback.print_exc()
+
+                    # Try to identify what's causing the asdict() error
+                    if "asdict()" in str(e):
+                        print(
+                            "\n[DEBUG] asdict() error detected - checking options structure:"
+                        )
+                        print(f"  - Options type: {type(sdk_options)}")
+                        if hasattr(sdk_options, "__dict__"):
+                            print(
+                                f"  - Options dict keys: {list(sdk_options.__dict__.keys())}"
+                            )
+                            if hasattr(sdk_options, "hooks"):
+                                print(f"  - Hooks type: {type(sdk_options.hooks)}")
+                                if sdk_options.hooks:
+                                    for (
+                                        hook_type,
+                                        hook_list,
+                                    ) in sdk_options.hooks.items():
+                                        print(
+                                            f"    - {hook_type}: {type(hook_list)}, length={len(hook_list) if isinstance(hook_list, list) else 'N/A'}"
+                                        )
+                                        if isinstance(hook_list, list) and hook_list:
+                                            print(
+                                                f"      - First item type: {type(hook_list[0])}"
+                                            )
+
                     await reporter.report(
                         "agent.error",
-                        {"error": str(e), "phase": "initialization"},
+                        {
+                            "error": str(e),
+                            "phase": "initialization",
+                            "traceback": traceback.format_exc(),
+                        },
                     )
                     return 1
 
