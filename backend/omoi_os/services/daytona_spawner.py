@@ -1962,6 +1962,86 @@ if __name__ == "__main__":
             return self._sandboxes.get(sandbox_id)
         return None
 
+    async def get_sandbox_logs(
+        self, sandbox_id: str, lines: int = 100, follow: bool = False
+    ) -> Optional[str]:
+        """Get logs from a Daytona sandbox.
+
+        Args:
+            sandbox_id: Sandbox ID to get logs from
+            lines: Number of recent lines to retrieve (default: 100)
+            follow: If True, continuously stream logs (not implemented yet)
+
+        Returns:
+            Log content as string, or None if sandbox not found or error
+        """
+        info = self._sandboxes.get(sandbox_id)
+        if not info:
+            logger.warning(f"Sandbox {sandbox_id} not found in tracked sandboxes")
+            return None
+
+        try:
+            from daytona import Daytona, DaytonaConfig
+
+            daytona_settings = load_daytona_settings()
+            config = DaytonaConfig(
+                api_key=self.daytona_api_key or daytona_settings.api_key,
+                api_url=self.daytona_api_url or daytona_settings.api_url,
+                target="us",
+            )
+
+            daytona = Daytona(config)
+            sandbox = daytona.get(sandbox_id)
+
+            # Get recent log lines
+            result = sandbox.process.exec(
+                f"tail -n {lines} /tmp/worker.log 2>/dev/null || echo '[Log file not found or empty]'"
+            )
+            output = result.result if hasattr(result, "result") else str(result)
+            return output if output.strip() != "[Log file not found or empty]" else None
+
+        except Exception as e:
+            logger.error(f"Failed to get logs for sandbox {sandbox_id}: {e}")
+            return None
+
+    async def get_full_sandbox_logs(self, sandbox_id: str) -> Optional[str]:
+        """Get full logs from a Daytona sandbox.
+
+        Args:
+            sandbox_id: Sandbox ID to get logs from
+
+        Returns:
+            Full log content as string, or None if sandbox not found or error
+        """
+        info = self._sandboxes.get(sandbox_id)
+        if not info:
+            logger.warning(f"Sandbox {sandbox_id} not found in tracked sandboxes")
+            return None
+
+        try:
+            from daytona import Daytona, DaytonaConfig
+
+            daytona_settings = load_daytona_settings()
+            config = DaytonaConfig(
+                api_key=self.daytona_api_key or daytona_settings.api_key,
+                api_url=self.daytona_api_url or daytona_settings.api_url,
+                target="us",
+            )
+
+            daytona = Daytona(config)
+            sandbox = daytona.get(sandbox_id)
+
+            # Get full log file
+            result = sandbox.process.exec(
+                "cat /tmp/worker.log 2>/dev/null || echo '[Log file not found]'"
+            )
+            output = result.result if hasattr(result, "result") else str(result)
+            return output if output.strip() != "[Log file not found]" else None
+
+        except Exception as e:
+            logger.error(f"Failed to get full logs for sandbox {sandbox_id}: {e}")
+            return None
+
     def list_active_sandboxes(self) -> List[SandboxInfo]:
         """List all active (creating or running) sandboxes."""
         return [

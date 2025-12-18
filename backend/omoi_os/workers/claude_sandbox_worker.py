@@ -993,6 +993,30 @@ class SandboxWorker:
                             print(f"⚠️  Failed to export session transcript: {e}")
 
                     if self.reporter:
+                        # Handle usage as dict or object
+                        input_tokens = None
+                        output_tokens = None
+                        cache_read_tokens = None
+                        cache_write_tokens = None
+
+                        if usage:
+                            if isinstance(usage, dict):
+                                input_tokens = usage.get("input_tokens")
+                                output_tokens = usage.get("output_tokens")
+                                cache_read_tokens = usage.get("cache_read_input_tokens")
+                                cache_write_tokens = usage.get(
+                                    "cache_creation_input_tokens"
+                                )
+                            else:
+                                input_tokens = getattr(usage, "input_tokens", None)
+                                output_tokens = getattr(usage, "output_tokens", None)
+                                cache_read_tokens = getattr(
+                                    usage, "cache_read_input_tokens", None
+                                )
+                                cache_write_tokens = getattr(
+                                    usage, "cache_creation_input_tokens", None
+                                )
+
                         await self.reporter.report(
                             "agent.completed",
                             {
@@ -1002,18 +1026,10 @@ class SandboxWorker:
                                 "session_id": msg.session_id,
                                 "transcript_b64": transcript_b64,  # Include transcript for server storage
                                 "stop_reason": getattr(msg, "stop_reason", None),
-                                "input_tokens": usage.input_tokens if usage else None,
-                                "output_tokens": usage.output_tokens if usage else None,
-                                "cache_read_tokens": getattr(
-                                    usage, "cache_read_input_tokens", None
-                                )
-                                if usage
-                                else None,
-                                "cache_write_tokens": getattr(
-                                    usage, "cache_creation_input_tokens", None
-                                )
-                                if usage
-                                else None,
+                                "input_tokens": input_tokens,
+                                "output_tokens": output_tokens,
+                                "cache_read_tokens": cache_read_tokens,
+                                "cache_write_tokens": cache_write_tokens,
                             },
                         )
                     print(

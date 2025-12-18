@@ -338,6 +338,57 @@ async def get_sandbox_events(
     return []
 
 
+async def get_sandbox_logs(
+    sandbox_id: str, last_line_count: int = 0
+) -> tuple[str, int]:
+    """Get logs from Daytona sandbox and return new lines.
+
+    Args:
+        sandbox_id: Sandbox ID to get logs from
+        last_line_count: Number of lines we've already seen (to only show new ones)
+
+    Returns:
+        Tuple of (new_log_lines, total_line_count)
+    """
+    try:
+        from omoi_os.config import load_daytona_settings
+        from daytona import Daytona, DaytonaConfig
+
+        daytona_settings = load_daytona_settings()
+        if not daytona_settings.api_key:
+            return "", last_line_count
+
+        config = DaytonaConfig(
+            api_key=daytona_settings.api_key,
+            api_url=daytona_settings.api_url,
+            target="us",
+        )
+
+        daytona = Daytona(config)
+        sandbox = daytona.get(sandbox_id)
+
+        # Get all log lines
+        result = sandbox.process.exec("cat /tmp/worker.log 2>/dev/null || echo ''")
+        output = result.result if hasattr(result, "result") else str(result)
+
+        if not output or not output.strip():
+            return "", last_line_count
+
+        # Split into lines and get new ones
+        all_lines = output.splitlines()
+        total_lines = len(all_lines)
+
+        if total_lines > last_line_count:
+            new_lines = all_lines[last_line_count:]
+            return "\n".join(new_lines), total_lines
+
+        return "", total_lines
+
+    except Exception:
+        # Silently fail - logs might not be available yet, sandbox might not be ready, etc.
+        return "", last_line_count
+
+
 async def find_sandbox_for_task(client: httpx.AsyncClient, task_id: str) -> str | None:
     """Find sandbox ID for a task by checking recent events."""
     # Check agent assignments
@@ -560,6 +611,8 @@ async def main():
         max_wait = 300  # 5 minutes
         file_edit_events = []
         seen_event_ids = set()
+        last_log_line_count = 0
+        log_poll_count = 0
 
         while time.time() - start_time < max_wait:
             # Get task status and sandbox_id
@@ -576,10 +629,15 @@ async def main():
                     if sandbox_id:
                         print(f"   📦 Found sandbox_id: {sandbox_id}")
                         print("   Polling sandbox events for file edits...")
+                        print(
+                            "   📋 Worker logs will be displayed below as they appear:"
+                        )
+                        print("   " + "-" * 60)
                         print()
 
-                # If we have sandbox_id, check for new events
+                # If we have sandbox_id, check for new events and logs
                 if sandbox_id:
+                    # Poll for new events
                     new_events = await get_sandbox_events(
                         client, sandbox_id, seen_event_ids
                     )
@@ -595,8 +653,40 @@ async def main():
                                 }
                             )
 
+                    # Poll for new log lines (every 3 iterations to avoid too much output)
+                    log_poll_count += 1
+                    if (
+                        log_poll_count >= 3
+                    ):  # Poll logs every ~15 seconds (3 * 5s sleep)
+                        log_poll_count = 0
+                        try:
+                            new_logs, total_lines = await get_sandbox_logs(
+                                sandbox_id, last_log_line_count
+                            )
+                            if new_logs:
+                                # Print new log lines with indentation
+                                for line in new_logs.splitlines():
+                                    print(f"   [LOG] {line}")
+                                last_log_line_count = total_lines
+                        except Exception:
+                            # Silently fail - logs might not be available yet
+                            pass
+
                 if status == "completed":
-                    print("   🎉 Task COMPLETED!")
+                    # Get final logs before completion
+                    if sandbox_id:
+                        try:
+                            final_logs, _ = await get_sandbox_logs(
+                                sandbox_id, last_log_line_count
+                            )
+                            if final_logs:
+                                print("\n   [LOG] Final worker output:")
+                                for line in final_logs.splitlines():
+                                    print(f"   [LOG] {line}")
+                        except Exception:
+                            pass
+
+                    print("\n   🎉 Task COMPLETED!")
                     if result:
                         print(f"   Result: {result}")
 
@@ -624,6 +714,19 @@ async def main():
                     break
 
                 elif status == "failed":
+                    # Get final logs on failure
+                    if sandbox_id:
+                        try:
+                            final_logs, _ = await get_sandbox_logs(
+                                sandbox_id, last_log_line_count
+                            )
+                            if final_logs:
+                                print("\n   [LOG] Worker output before failure:")
+                                for line in final_logs.splitlines():
+                                    print(f"   [LOG] {line}")
+                        except Exception:
+                            pass
+
                     print(f"   ❌ Task FAILED: {error}")
                     break
 
