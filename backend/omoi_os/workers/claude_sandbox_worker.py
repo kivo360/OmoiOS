@@ -565,12 +565,27 @@ class EventReporter:
             )
             success = response.status_code == 200
             if not success:
-                print(
-                    f"[EventReporter] Event {event_type} failed: {response.status_code}"
-                )
+                # Only log non-200 status codes, but don't spam for 502s (server issues)
+                if response.status_code != 502:
+                    print(
+                        f"[EventReporter] Event {event_type} failed: {response.status_code}"
+                    )
+                # For 502s, server might be temporarily down - this is non-critical
             return success
+        except httpx.HTTPStatusError as e:
+            # Handle HTTP errors (like 502 Bad Gateway)
+            status_code = e.response.status_code if hasattr(e, "response") else None
+            if status_code == 502:
+                # Server temporarily unavailable - don't spam logs
+                pass
+            else:
+                print(f"[EventReporter] HTTP error for {event_type}: {status_code}")
+            return False
         except Exception as e:
-            print(f"[EventReporter] Failed to report {event_type}: {e}")
+            # Only log unexpected errors, not network timeouts or 502s
+            error_str = str(e)
+            if "502" not in error_str and "Bad Gateway" not in error_str:
+                print(f"[EventReporter] Failed to report {event_type}: {e}")
             return False
 
     async def heartbeat(self) -> bool:
@@ -980,7 +995,7 @@ class SandboxWorker:
 
                     # Export session transcript for cross-sandbox resumption
                     transcript_b64 = None
-                    if msg.session_id:
+                    if hasattr(msg, "session_id") and msg.session_id:
                         try:
                             transcript_b64 = self.config.export_session_transcript(
                                 msg.session_id
@@ -991,6 +1006,12 @@ class SandboxWorker:
                                 )
                         except Exception as e:
                             print(f"⚠️  Failed to export session transcript: {e}")
+
+                    # Safely extract message attributes (handle both object and dict)
+                    num_turns = getattr(msg, "num_turns", None)
+                    total_cost_usd = getattr(msg, "total_cost_usd", 0.0)
+                    session_id = getattr(msg, "session_id", None)
+                    stop_reason = getattr(msg, "stop_reason", None)
 
                     if self.reporter:
                         # Handle usage as dict or object
@@ -1017,24 +1038,50 @@ class SandboxWorker:
                                     usage, "cache_creation_input_tokens", None
                                 )
 
-                        await self.reporter.report(
-                            "agent.completed",
-                            {
-                                "success": True,
-                                "turns": msg.num_turns,
-                                "cost_usd": msg.total_cost_usd,
-                                "session_id": msg.session_id,
-                                "transcript_b64": transcript_b64,  # Include transcript for server storage
-                                "stop_reason": getattr(msg, "stop_reason", None),
-                                "input_tokens": input_tokens,
-                                "output_tokens": output_tokens,
-                                "cache_read_tokens": cache_read_tokens,
-                                "cache_write_tokens": cache_write_tokens,
-                            },
-                        )
-                    print(
-                        f"📊 Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}"
-                    )
+                        # Build completion event with final output
+                        completion_event = {
+                            "success": True,
+                            "turns": num_turns,
+                            "cost_usd": total_cost_usd,
+                            "session_id": session_id,
+                            "transcript_b64": transcript_b64,  # Include transcript for server storage
+                            "stop_reason": stop_reason,
+                            "input_tokens": input_tokens,
+                            "output_tokens": output_tokens,
+                            "cache_read_tokens": cache_read_tokens,
+                            "cache_write_tokens": cache_write_tokens,
+                            "final_output": "\n".join(final_output)
+                            if final_output
+                            else None,  # Include final output for task result
+                        }
+
+                        # Try to report completion with retries (critical for task finalization)
+                        max_retries = 3
+                        retry_delay = 1.0
+                        reported = False
+
+                        for attempt in range(max_retries):
+                            reported = await self.reporter.report(
+                                "agent.completed",
+                                completion_event,
+                            )
+                            if reported:
+                                break
+                            if attempt < max_retries - 1:
+                                print(
+                                    f"   [Retry {attempt + 1}/{max_retries}] Retrying completion event..."
+                                )
+                                await asyncio.sleep(retry_delay)
+                                retry_delay *= 2  # Exponential backoff
+
+                        if not reported:
+                            print(
+                                "   ⚠️  WARNING: Failed to report completion after retries - task status may not update"
+                            )
+                            print(
+                                "   This is non-critical - task completed successfully, but status update may be delayed"
+                            )
+                    print(f"📊 Completed: {num_turns} turns, ${total_cost_usd:.4f}")
                     return msg, final_output
 
         except Exception as e:

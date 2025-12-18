@@ -410,6 +410,65 @@ async def post_sandbox_event(
         # Persistence is optional - don't fail if DB unavailable
         pass
 
+    # Handle task finalization for completion/failure events
+    if event.event_type in ("agent.completed", "agent.failed", "agent.error"):
+        try:
+            db = get_db_service()
+            from omoi_os.models.task import Task
+            from omoi_os.services.task_queue import TaskQueueService
+
+            task_id = event.event_data.get("task_id")
+            if not task_id:
+                # Try to find task by sandbox_id as fallback
+                with db.get_session() as session:
+                    task = (
+                        session.query(Task)
+                        .filter(Task.sandbox_id == sandbox_id)
+                        .filter(Task.status.in_(["assigned", "running"]))
+                        .first()
+                    )
+                    if task:
+                        task_id = task.id
+
+            if task_id:
+                task_queue = TaskQueueService(db)
+                if event.event_type == "agent.completed":
+                    # Extract result from event_data
+                    result = {
+                        "success": event.event_data.get("success", True),
+                        "turns": event.event_data.get("turns"),
+                        "cost_usd": event.event_data.get("cost_usd"),
+                        "session_id": event.event_data.get("session_id"),
+                        "stop_reason": event.event_data.get("stop_reason"),
+                    }
+                    # Include final output if available
+                    if "final_output" in event.event_data:
+                        result["output"] = event.event_data["final_output"]
+                    task_queue.update_task_status(
+                        task_id=task_id,
+                        status="completed",
+                        result=result,
+                    )
+                elif event.event_type in ("agent.failed", "agent.error"):
+                    error_message = event.event_data.get(
+                        "error", "Task execution failed"
+                    )
+                    task_queue.update_task_status(
+                        task_id=task_id,
+                        status="failed",
+                        error_message=error_message,
+                    )
+        except Exception as e:
+            # Task finalization is important but shouldn't break event processing
+            # Log error but continue
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Failed to finalize task for sandbox {sandbox_id}: {e}",
+                exc_info=True,
+            )
+
     # Broadcast via EventBus
     broadcast_sandbox_event(
         sandbox_id=sandbox_id,
