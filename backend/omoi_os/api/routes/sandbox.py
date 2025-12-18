@@ -19,7 +19,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
@@ -366,6 +366,7 @@ def get_session_transcript(db: DatabaseService, session_id: str) -> str | None:
 async def post_sandbox_event(
     sandbox_id: str,
     event: SandboxEventCreate,
+    request: Request = None,
 ) -> SandboxEventResponse:
     """
     Receive event from sandbox worker and broadcast to subscribers.
@@ -382,6 +383,7 @@ async def post_sandbox_event(
     Args:
         sandbox_id: Unique identifier for the sandbox (from URL path)
         event: Event data from request body
+        request: FastAPI Request object for logging
 
     Returns:
         SandboxEventResponse with status, timestamp, and event_id
@@ -394,6 +396,16 @@ async def post_sandbox_event(
             "source": "agent"
         }
     """
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Log incoming request for debugging 502 issues
+    logger.info(
+        f"[SandboxEvent] Received {event.event_type} from sandbox {sandbox_id[:20]}... "
+        f"(source: {event.source})"
+    )
+
     # Persist to database (Phase 4) - optional, don't fail if DB unavailable
     # Persist to database (Phase 4) - optional, fails gracefully
     event_id: str | None = None
@@ -406,9 +418,14 @@ async def post_sandbox_event(
             event_data=event.event_data,
             source=event.source,
         )
-    except Exception:
+        logger.debug(
+            f"[SandboxEvent] Persisted event {event_id} for {event.event_type}"
+        )
+    except Exception as e:
         # Persistence is optional - don't fail if DB unavailable
-        pass
+        logger.warning(
+            f"[SandboxEvent] Failed to persist event {event.event_type} for sandbox {sandbox_id}: {e}"
+        )
 
     # Handle task finalization for completion/failure events
     if event.event_type in ("agent.completed", "agent.failed", "agent.error"):
@@ -591,6 +608,26 @@ def query_sandbox_events(
             }
             for e in events
         ], total_count
+
+
+@router.get("/health", response_model=dict)
+async def sandbox_health():
+    """Health check endpoint for sandbox API.
+
+    This helps diagnose 502 errors - if this endpoint works but
+    POST /{sandbox_id}/events doesn't, the issue is likely with
+    request processing (DB, Redis, etc.)
+    """
+    import logging
+
+    logger = logging.getLogger(__name__)
+    logger.info("[SandboxHealth] Health check requested")
+
+    return {
+        "status": "ok",
+        "service": "sandbox-api",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
 
 
 @router.get("/{sandbox_id}/events", response_model=SandboxEventsListResponse)
