@@ -539,7 +539,10 @@ class DaytonaSpawnerService:
         logger.info("Starting sandbox worker...")
         # Use proper escaping for the bash -c command
         # Since env_exports is already properly escaped, we can use it directly
-        start_cmd = f"{env_exports} && cd /tmp && python sandbox_worker.py"
+        # Add PYTHONUNBUFFERED=1 to ensure output is not buffered
+        start_cmd = (
+            f"{env_exports} && cd /tmp && PYTHONUNBUFFERED=1 python sandbox_worker.py"
+        )
 
         # Run in background and capture output
         # Escape the command properly for bash -c

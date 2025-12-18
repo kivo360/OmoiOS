@@ -74,9 +74,44 @@ def get_sandbox_logs(sandbox_id: str):
             result = target_sandbox.process.exec(
                 "cat /tmp/worker.log 2>/dev/null || echo '[No log file yet]'"
             )
-            print(result.result if hasattr(result, "result") else result)
+            output = result.result if hasattr(result, "result") else str(result)
+            if output.strip() and output.strip() != "[No log file yet]":
+                print(output)
+            else:
+                print("[Log file is empty or doesn't exist]")
+                # Check if file exists and its size
+                size_result = target_sandbox.process.exec(
+                    "ls -lh /tmp/worker.log 2>/dev/null || echo 'File does not exist'"
+                )
+                print(
+                    f"File info: {size_result.result if hasattr(size_result, 'result') else size_result}"
+                )
         except Exception as e:
             print(f"Error reading log: {e}")
+
+        # Check for any Python errors in stderr
+        print("\n=== Checking for Python errors ===")
+        try:
+            result = target_sandbox.process.exec(
+                "ps aux | grep -E 'python.*sandbox_worker' | grep -v grep || echo '[No worker process]'"
+            )
+            print(result.result if hasattr(result, "result") else result)
+        except Exception as e:
+            print(f"Error checking process: {e}")
+
+        # Try to see recent output from the process
+        print("\n=== Recent stdout/stderr (last 50 lines) ===")
+        try:
+            result = target_sandbox.process.exec(
+                "tail -50 /tmp/worker.log 2>/dev/null || echo '[Cannot read log]'"
+            )
+            output = result.result if hasattr(result, "result") else str(result)
+            if output.strip() and output.strip() != "[Cannot read log]":
+                print(output)
+            else:
+                print("[No recent output]")
+        except Exception as e:
+            print(f"Error reading recent output: {e}")
 
         # Check if worker process is running
         print("\n=== Worker Process Status ===")

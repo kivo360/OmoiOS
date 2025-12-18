@@ -156,13 +156,21 @@ async def get_ticket_tasks(
     client: httpx.AsyncClient, ticket_id: str
 ) -> list[dict] | None:
     """Get tasks for a ticket."""
-    response = await client.get(f"{API_BASE_URL}/api/v1/tasks")
-    if response.status_code == 200:
-        data = response.json()
-        # API returns a list directly, not a dict with "tasks" key
-        tasks_list = data if isinstance(data, list) else data.get("tasks", [])
-        tasks = [t for t in tasks_list if t.get("ticket_id") == ticket_id]
-        return tasks
+    try:
+        response = await client.get(f"{API_BASE_URL}/api/v1/tasks")
+        if response.status_code == 200:
+            data = response.json()
+            # API returns a list directly, not a dict with "tasks" key
+            tasks_list = data if isinstance(data, list) else data.get("tasks", [])
+            tasks = [t for t in tasks_list if t.get("ticket_id") == ticket_id]
+            return tasks
+        else:
+            if hasattr(response, "text"):
+                print(
+                    f"   [DEBUG] Failed to get tasks: {response.status_code} - {response.text[:200]}"
+                )
+    except Exception as e:
+        print(f"   [DEBUG] Exception getting tasks: {e}")
     return None
 
 
@@ -172,64 +180,125 @@ async def poll_for_task(
     """Poll until a task is created and picked up."""
     start_time = time.time()
     last_status = None
+    poll_count = 0
+    task_created = False
+
+    print(f"   [DEBUG] Starting poll loop (timeout: {timeout}s)")
 
     while time.time() - start_time < timeout:
+        elapsed = int(time.time() - start_time)
+        poll_count += 1
+
+        if poll_count == 1:
+            print(
+                f"   [DEBUG] Poll #{poll_count} (elapsed: {elapsed}s) - Checking for tasks..."
+            )
+
         tasks = await get_ticket_tasks(client, ticket_id)
-        if tasks:
-            task = tasks[0]
-            task_id = task.get("id")
-            status = task.get("status")
 
-            # Get full task details - API might not include sandbox_id, so check DB directly
-            response = await client.get(f"{API_BASE_URL}/api/v1/tasks/{task_id}")
-            if response.status_code == 200:
-                full_task = response.json()
-                sandbox_id = full_task.get("sandbox_id")
-            else:
-                full_task = task
-                sandbox_id = None
+        if not tasks:
+            if not task_created:
+                if poll_count % 5 == 0:  # Log every 5th poll when no tasks
+                    print(
+                        f"   [DEBUG] Poll #{poll_count} (elapsed: {elapsed}s) - No tasks found yet"
+                    )
+            await asyncio.sleep(2)
+            continue
 
-            # If API doesn't have sandbox_id, check database directly
-            if not sandbox_id:
-                try:
-                    from omoi_os.config import get_app_settings
-                    from omoi_os.services.database import DatabaseService
-                    from omoi_os.models.task import Task as TaskModel
+        task_created = True
+        task = tasks[0]
+        task_id = task.get("id")
+        status = task.get("status")
+        assigned_agent = task.get("assigned_agent_id")
+        phase_id = task.get("phase_id")
 
-                    settings = get_app_settings()
-                    db = DatabaseService(settings.database.url)
-                    with db.get_session() as session:
-                        db_task = (
-                            session.query(TaskModel)
-                            .filter(TaskModel.id == task_id)
-                            .first()
-                        )
-                        if db_task and db_task.sandbox_id:
+        # Get full task details - API might not include sandbox_id, so check DB directly
+        response = await client.get(f"{API_BASE_URL}/api/v1/tasks/{task_id}")
+        if response.status_code == 200:
+            full_task = response.json()
+            sandbox_id = full_task.get("sandbox_id")
+        else:
+            print(f"   [DEBUG] Failed to get full task details: {response.status_code}")
+            full_task = task
+            sandbox_id = None
+
+        # If API doesn't have sandbox_id, check database directly
+        if not sandbox_id:
+            try:
+                from omoi_os.config import get_app_settings
+                from omoi_os.services.database import DatabaseService
+                from omoi_os.models.task import Task as TaskModel
+
+                settings = get_app_settings()
+                db = DatabaseService(settings.database.url)
+                with db.get_session() as session:
+                    db_task = (
+                        session.query(TaskModel).filter(TaskModel.id == task_id).first()
+                    )
+                    if db_task:
+                        if db_task.sandbox_id:
                             sandbox_id = db_task.sandbox_id
+                            print(
+                                f"   [DEBUG] Found sandbox_id in DB: {sandbox_id[:20]}..."
+                            )
                             # Add to full_task for return
                             if isinstance(full_task, dict):
                                 full_task["sandbox_id"] = sandbox_id
-                except Exception:
-                    pass  # If DB check fails, continue without sandbox_id
+                        else:
+                            if poll_count % 10 == 0:  # Log every 10th poll
+                                print(
+                                    f"   [DEBUG] Task exists but no sandbox_id yet (status: {status})"
+                                )
+            except Exception as e:
+                if poll_count % 10 == 0:
+                    print(f"   [DEBUG] DB check failed: {e}")
 
-            if status != last_status or sandbox_id:
-                status_msg = f"   Task {task_id[:8]}... status: {status}"
-                if sandbox_id:
-                    status_msg += f" (sandbox: {sandbox_id[:20]}...)"
-                print(status_msg)
-                last_status = status
+        # Log status changes or new information
+        if status != last_status or sandbox_id or poll_count % 10 == 0:
+            status_msg = (
+                f"   [Poll #{poll_count}] Task {task_id[:8]}... | Status: {status}"
+            )
+            if assigned_agent:
+                status_msg += f" | Agent: {assigned_agent[:8]}..."
+            if phase_id:
+                status_msg += f" | Phase: {phase_id}"
+            if sandbox_id:
+                status_msg += f" | Sandbox: {sandbox_id[:20]}..."
+            print(status_msg)
+            last_status = status
 
-            # Task is picked up if:
-            # 1. Status is in_progress/running/completed/failed, OR
-            # 2. Status is assigned AND sandbox_id exists (sandbox spawned, worker initializing)
-            if status in ["in_progress", "running", "completed", "failed"]:
-                return full_task if sandbox_id else task
-            elif status == "assigned" and sandbox_id:
-                print("   ✅ Task assigned with sandbox - worker initializing...")
-                return full_task
+        # Task is picked up if:
+        # 1. Status is in_progress/running/completed/failed, OR
+        # 2. Status is assigned AND sandbox_id exists (sandbox spawned, worker initializing)
+        if status in ["in_progress", "running", "completed", "failed"]:
+            print(f"   ✅ Task picked up! Status: {status}")
+            if sandbox_id:
+                print(f"   ✅ Sandbox ID: {sandbox_id}")
+            return full_task if sandbox_id else task
+        elif status == "assigned" and sandbox_id:
+            print("   ✅ Task assigned with sandbox - worker initializing...")
+            print(f"   ✅ Sandbox ID: {sandbox_id}")
+            return full_task
+        elif status == "assigned" and not sandbox_id:
+            if poll_count % 10 == 0:
+                print(
+                    "   [DEBUG] Task assigned but no sandbox yet - orchestrator may not be running"
+                )
+                print(
+                    "   [DEBUG] Check: ORCHESTRATOR_ENABLED should be 'true' and orchestrator worker should be running"
+                )
 
         await asyncio.sleep(2)
 
+    elapsed_total = int(time.time() - start_time)
+    print(f"\n   ❌ Polling timeout after {elapsed_total}s ({poll_count} polls)")
+    print(f"   [DEBUG] Last seen status: {last_status}")
+    print("   [DEBUG] Make sure:")
+    print(
+        "      - Orchestrator worker is running: python -m omoi_os.workers.orchestrator_worker"
+    )
+    print("      - ORCHESTRATOR_ENABLED=true in environment")
+    print("      - DAYTONA_SANDBOX_EXECUTION=true in environment")
     return None
 
 
@@ -360,6 +429,26 @@ async def main():
         else:
             masked_redis = redis_url
         print(f"   Redis URL: {masked_redis}")
+
+        # Check orchestrator settings
+        orchestrator_enabled = (
+            os.environ.get("ORCHESTRATOR_ENABLED", "false").lower() == "true"
+        )
+        sandbox_execution = (
+            os.environ.get("DAYTONA_SANDBOX_EXECUTION", "false").lower() == "true"
+        )
+        print("\n   🔧 Orchestrator Settings:")
+        print(f"      ORCHESTRATOR_ENABLED: {orchestrator_enabled}")
+        print(f"      DAYTONA_SANDBOX_EXECUTION: {sandbox_execution}")
+        if not orchestrator_enabled:
+            print(
+                "      ⚠️  WARNING: Orchestrator is DISABLED - tasks won't be picked up!"
+            )
+        if not sandbox_execution:
+            print(
+                "      ⚠️  WARNING: Sandbox execution is DISABLED - sandboxes won't spawn!"
+            )
+
     except Exception as e:
         print(f"   ⚠️  Could not load settings: {e}")
 
@@ -386,33 +475,68 @@ async def main():
 
         # Step 3: Create ticket with complex math task
         print("\n[3/6] Creating ticket with binomial coefficient task...")
+        ticket_start = time.time()
         ticket = await create_ticket(client, project_id)
         if not ticket:
             print("   ❌ Failed to create ticket")
             return
 
         ticket_id = ticket.get("id")
-        print(f"   ✅ Ticket created: {ticket_id}")
+        ticket_elapsed = time.time() - ticket_start
+        print(f"   ✅ Ticket created: {ticket_id} (took {ticket_elapsed:.2f}s)")
+        print(f"   [DEBUG] Ticket title: {ticket.get('title', 'N/A')}")
+        print(
+            f"   [DEBUG] Ticket description length: {len(ticket.get('description', ''))} chars"
+        )
 
         # Step 4: Wait for task dispatch
         print("\n[4/6] Waiting for task dispatch (max 3 min)...")
+        print(f"   [DEBUG] Ticket ID: {ticket_id}")
+        print(f"   [DEBUG] Polling for tasks with ticket_id={ticket_id}")
+        task_start = time.time()
         task = await poll_for_task(client, ticket_id, timeout=180)
+        task_elapsed = time.time() - task_start
+
         if not task:
-            print("   ❌ No task picked up within timeout")
-            print(
-                "   Make sure DAYTONA_SANDBOX_EXECUTION=true and orchestrator is running"
-            )
+            print(f"\n   ❌ No task picked up within timeout ({task_elapsed:.1f}s)")
+            print("\n   [DEBUG] Troubleshooting steps:")
+            print("      1. Check if orchestrator worker is running:")
+            print("         python -m omoi_os.workers.orchestrator_worker")
+            print("      2. Verify environment variables:")
+            print("         - ORCHESTRATOR_ENABLED=true")
+            print("         - DAYTONA_SANDBOX_EXECUTION=true")
+            print("      3. Check orchestrator logs for errors")
+            print("      4. Verify database connection is working")
+            print("      5. Check if tasks are being created in the database")
+
+            # Try to get tasks one more time for debugging
+            print("\n   [DEBUG] Final task check...")
+            tasks = await get_ticket_tasks(client, ticket_id)
+            if tasks:
+                print(f"   [DEBUG] Found {len(tasks)} task(s) in database:")
+                for t in tasks:
+                    print(
+                        f"      - Task {t.get('id', 'N/A')[:8]}... | Status: {t.get('status', 'N/A')}"
+                    )
+            else:
+                print("   [DEBUG] No tasks found in database for this ticket")
             return
 
         task_id = task.get("id")
         assigned_agent = task.get("assigned_agent_id")
         sandbox_id = task.get("sandbox_id")
         task_status = task.get("status")
-        print(f"   ✅ Task picked up: {task_id[:8]}...")
-        print(f"   Status: {task_status}")
-        print(f"   Agent: {assigned_agent}")
+        phase_id = task.get("phase_id")
+
+        print(f"\n   ✅ Task picked up! (took {task_elapsed:.1f}s)")
+        print(f"   [DEBUG] Task ID: {task_id}")
+        print(f"   [DEBUG] Status: {task_status}")
+        print(f"   [DEBUG] Assigned Agent: {assigned_agent or 'None'}")
+        print(f"   [DEBUG] Phase ID: {phase_id or 'None'}")
         if sandbox_id:
-            print(f"   Sandbox: {sandbox_id}")
+            print(f"   [DEBUG] Sandbox ID: {sandbox_id}")
+        else:
+            print("   [DEBUG] Sandbox ID: None (sandbox may not be spawned yet)")
 
         # Step 5: Try to create branch (optional, may fail if no GitHub token)
         print("\n[5/6] Creating feature branch...")
