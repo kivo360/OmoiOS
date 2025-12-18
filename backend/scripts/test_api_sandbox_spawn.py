@@ -18,6 +18,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -267,18 +268,42 @@ async def poll_for_task(
             print(status_msg)
             last_status = status
 
+        # Check for activity indicators (worker is working even if status hasn't updated)
+        activity = await check_task_activity(client, task_id, sandbox_id)
+
         # Task is picked up if:
         # 1. Status is in_progress/running/completed/failed, OR
-        # 2. Status is assigned AND sandbox_id exists (sandbox spawned, worker initializing)
+        # 2. Status is assigned AND sandbox_id exists (sandbox spawned, worker initializing), OR
+        # 3. Status is assigned AND activity detected (worker is active even if status not updated)
         if status in ["in_progress", "running", "completed", "failed"]:
             print(f"   ✅ Task picked up! Status: {status}")
             if sandbox_id:
                 print(f"   ✅ Sandbox ID: {sandbox_id}")
+            if activity["has_activity"]:
+                print(
+                    f"   ✅ Activity detected: {', '.join(activity['activity_types'][:3])}"
+                )
             return full_task if sandbox_id else task
         elif status == "assigned" and sandbox_id:
-            print("   ✅ Task assigned with sandbox - worker initializing...")
-            print(f"   ✅ Sandbox ID: {sandbox_id}")
+            if activity["has_activity"]:
+                print("   ✅ Task assigned with sandbox - worker is active!")
+                print(f"   ✅ Sandbox ID: {sandbox_id}")
+                print(
+                    f"   ✅ Activity: {', '.join(activity['activity_types'][:3])} ({activity['event_count']} events)"
+                )
+            else:
+                print("   ✅ Task assigned with sandbox - worker initializing...")
+                print(f"   ✅ Sandbox ID: {sandbox_id}")
             return full_task
+        elif status == "assigned" and activity["has_activity"]:
+            # Worker is active even though sandbox_id might not be set yet
+            print("   ✅ Task assigned - worker activity detected!")
+            print(
+                f"   ✅ Activity: {', '.join(activity['activity_types'][:3])} ({activity['event_count']} events)"
+            )
+            if sandbox_id:
+                print(f"   ✅ Sandbox ID: {sandbox_id}")
+            return full_task if sandbox_id else task
         elif status == "assigned" and not sandbox_id:
             if poll_count % 10 == 0:
                 print(
@@ -336,6 +361,78 @@ async def get_sandbox_events(
         return new_events
 
     return []
+
+
+async def check_task_activity(
+    client: httpx.AsyncClient, task_id: str, sandbox_id: str | None = None
+) -> dict[str, Any]:
+    """Check for activity indicators that task is being worked on.
+
+    Returns dict with:
+    - has_activity: bool - True if any activity detected
+    - activity_types: list[str] - Types of activity found
+    - event_count: int - Number of events found
+    - latest_event_type: str | None - Most recent event type
+    """
+    activity = {
+        "has_activity": False,
+        "activity_types": [],
+        "event_count": 0,
+        "latest_event_type": None,
+    }
+
+    # Check sandbox events if we have a sandbox_id
+    if sandbox_id:
+        try:
+            response = await client.get(
+                f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/events?limit=20"
+            )
+            if response.status_code == 200:
+                data = response.json()
+                events = data.get("events", [])
+                activity["event_count"] = len(events)
+
+                # Activity indicators - events that show the worker is active
+                activity_indicators = [
+                    "agent.started",
+                    "agent.message",
+                    "agent.thinking",
+                    "agent.tool_use",
+                    "agent.tool_completed",
+                    "agent.tool_result",
+                    "agent.file_edited",
+                    "agent.assistant_message",
+                    "agent.heartbeat",
+                    "agent.subagent_invoked",
+                    "agent.skill_invoked",
+                ]
+
+                for event in events:
+                    event_type = event.get("event_type", "")
+                    if event_type in activity_indicators:
+                        activity["has_activity"] = True
+                        if event_type not in activity["activity_types"]:
+                            activity["activity_types"].append(event_type)
+                        if not activity["latest_event_type"]:
+                            activity["latest_event_type"] = event_type
+        except Exception:
+            # Silently fail - events might not be available yet
+            pass
+
+    # Also check task conversation_id - if it exists, worker has started
+    try:
+        response = await client.get(f"{API_BASE_URL}/api/v1/tasks/{task_id}")
+        if response.status_code == 200:
+            task_data = response.json()
+            conversation_id = task_data.get("conversation_id")
+            if conversation_id:
+                activity["has_activity"] = True
+                if "conversation_started" not in activity["activity_types"]:
+                    activity["activity_types"].append("conversation_started")
+    except Exception:
+        pass
+
+    return activity
 
 
 async def get_sandbox_logs(
