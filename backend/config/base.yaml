@@ -95,8 +95,12 @@ daytona:
   api_url: https://app.daytona.io/api
   target: us
   image: nikolaik/python-nodejs:python3.12-nodejs22
-  snapshot: python:3.12
+  snapshot: claude-agent-sdk-medium  # Default snapshot for sandbox creation
   timeout: 300
+  # Sandbox resource limits (for preventing OOM kills)
+  sandbox_memory_gb: 4  # Memory in GiB (max: 8)
+  sandbox_cpu: 2  # CPU cores (max: 4)
+  sandbox_disk_gb: 8  # Disk space in GiB (max: 10)
 
 integrations:
   mcp_server_url: http://localhost:18000/mcp

@@ -73,8 +73,12 @@ class DaytonaSpawnerService:
         mcp_server_url: str = "http://localhost:18000/mcp/",
         daytona_api_key: Optional[str] = None,
         daytona_api_url: str = "https://app.daytona.io/api",
-        sandbox_image: str = "nikolaik/python-nodejs:python3.12-nodejs22",
+        sandbox_image: Optional[str] = "nikolaik/python-nodejs:python3.12-nodejs22",
+        sandbox_snapshot: Optional[str] = None,
         auto_cleanup: bool = True,
+        sandbox_memory_gb: int = 4,
+        sandbox_cpu: int = 2,
+        sandbox_disk_gb: int = 8,
     ):
         """Initialize the spawner service.
 
@@ -84,19 +88,37 @@ class DaytonaSpawnerService:
             mcp_server_url: URL of the MCP server sandboxes connect to
             daytona_api_key: Daytona API key (or from settings)
             daytona_api_url: Daytona API URL
-            sandbox_image: Docker image for sandboxes
+            sandbox_image: Docker image for sandboxes (used if sandbox_snapshot is None)
+            sandbox_snapshot: Snapshot name to create sandbox from (takes precedence over image)
             auto_cleanup: Automatically cleanup sandboxes on completion
+            sandbox_memory_gb: Memory allocation in GiB (default: 4, max: 8)
+            sandbox_cpu: CPU cores (default: 2, max: 4)
+            sandbox_disk_gb: Disk space in GiB (default: 8, max: 10)
         """
         self.db = db
         self.event_bus = event_bus
         self.mcp_server_url = mcp_server_url
         self.sandbox_image = sandbox_image
+        self.sandbox_snapshot = sandbox_snapshot
         self.auto_cleanup = auto_cleanup
-
-        # Load Daytona settings
+        # Load Daytona settings for defaults
         daytona_settings = load_daytona_settings()
         self.daytona_api_key = daytona_api_key or daytona_settings.api_key
         self.daytona_api_url = daytona_api_url or daytona_settings.api_url
+
+        # Use config file values if not explicitly provided
+        if self.sandbox_snapshot is None:
+            self.sandbox_snapshot = daytona_settings.snapshot
+        if self.sandbox_image is None:
+            self.sandbox_image = (
+                daytona_settings.image or "nikolaik/python-nodejs:python3.12-nodejs22"
+            )
+
+        # Override resource limits from config file (config takes precedence over parameter defaults)
+        # This allows YAML config to override the default parameter values
+        self.sandbox_memory_gb = min(daytona_settings.sandbox_memory_gb, 8)
+        self.sandbox_cpu = min(daytona_settings.sandbox_cpu, 4)
+        self.sandbox_disk_gb = min(daytona_settings.sandbox_disk_gb, 10)
 
         # In-memory tracking of active sandboxes
         self._sandboxes: Dict[str, SandboxInfo] = {}
@@ -374,7 +396,13 @@ class DaytonaSpawnerService:
             runtime: Agent runtime - "openhands" or "claude"
         """
         try:
-            from daytona import Daytona, DaytonaConfig, CreateSandboxFromImageParams
+            from daytona import (
+                Daytona,
+                DaytonaConfig,
+                CreateSandboxFromImageParams,
+                CreateSandboxFromSnapshotParams,
+                Resources,
+            )
 
             daytona_config = DaytonaConfig(
                 api_key=self.daytona_api_key,
@@ -383,13 +411,41 @@ class DaytonaSpawnerService:
             )
             daytona = Daytona(daytona_config)
 
-            # Create sandbox with our worker image
-            params = CreateSandboxFromImageParams(
-                image=self.sandbox_image,
-                labels=labels or None,
-                ephemeral=True,  # Auto-delete when stopped
-                public=False,
+            # Configure resources for sandbox (memory, CPU, disk)
+            # Higher memory helps prevent OOM kills (exit code -9)
+            resources = Resources(
+                cpu=self.sandbox_cpu,
+                memory=self.sandbox_memory_gb,
+                disk=self.sandbox_disk_gb,
             )
+
+            # Create sandbox from snapshot if provided, otherwise use image
+            if self.sandbox_snapshot:
+                logger.info(
+                    f"Creating sandbox from snapshot: {self.sandbox_snapshot} "
+                    f"with resources: {self.sandbox_cpu} CPU, "
+                    f"{self.sandbox_memory_gb} GiB RAM, {self.sandbox_disk_gb} GiB disk"
+                )
+                params = CreateSandboxFromSnapshotParams(
+                    snapshot=self.sandbox_snapshot,
+                    labels=labels or None,
+                    ephemeral=True,  # Auto-delete when stopped
+                    public=False,
+                    resources=resources,
+                )
+            else:
+                logger.info(
+                    f"Creating sandbox from image: {self.sandbox_image} "
+                    f"with resources: {self.sandbox_cpu} CPU, "
+                    f"{self.sandbox_memory_gb} GiB RAM, {self.sandbox_disk_gb} GiB disk"
+                )
+                params = CreateSandboxFromImageParams(
+                    image=self.sandbox_image,
+                    labels=labels or None,
+                    ephemeral=True,  # Auto-delete when stopped
+                    public=False,
+                    resources=resources,
+                )
 
             sandbox = daytona.create(params=params, timeout=120)
 
@@ -2083,18 +2139,88 @@ def get_daytona_spawner(
     db: Optional[DatabaseService] = None,
     event_bus: Optional[EventBusService] = None,
     mcp_server_url: Optional[str] = None,
+    sandbox_memory_gb: Optional[int] = None,
+    sandbox_cpu: Optional[int] = None,
+    sandbox_disk_gb: Optional[int] = None,
+    sandbox_snapshot: Optional[str] = None,
+    sandbox_image: Optional[str] = None,
 ) -> DaytonaSpawnerService:
-    """Get or create the global Daytona spawner service."""
+    """Get or create the global Daytona spawner service.
+
+    Args:
+        db: Database service
+        event_bus: Event bus service
+        mcp_server_url: MCP server URL
+        sandbox_memory_gb: Memory in GiB (default: 4, max: 8). Can also be set via SANDBOX_MEMORY_GB env var.
+        sandbox_cpu: CPU cores (default: 2, max: 4). Can also be set via SANDBOX_CPU env var.
+        sandbox_disk_gb: Disk space in GiB (default: 8, max: 10). Can also be set via SANDBOX_DISK_GB env var.
+        sandbox_snapshot: Snapshot name to create sandbox from (takes precedence over image). Can also be set via SANDBOX_SNAPSHOT env var.
+        sandbox_image: Docker image for sandboxes (used if snapshot is None). Can also be set via SANDBOX_IMAGE env var.
+    """
     global _spawner_service
 
     if _spawner_service is None:
         settings = get_app_settings()
         url = mcp_server_url or settings.integrations.mcp_server_url
 
+        # Load resource limits and source from config file, then environment variables, then defaults
+        # Priority: explicit param > env var > config file > default
+        import os
+
+        daytona_settings = load_daytona_settings()
+
+        # Memory: explicit param > env var > config file > default
+        if sandbox_memory_gb is not None:
+            memory = sandbox_memory_gb
+        elif "SANDBOX_MEMORY_GB" in os.environ:
+            memory = int(os.environ.get("SANDBOX_MEMORY_GB", "4"))
+        else:
+            memory = daytona_settings.sandbox_memory_gb
+
+        # CPU: explicit param > env var > config file > default
+        if sandbox_cpu is not None:
+            cpu = sandbox_cpu
+        elif "SANDBOX_CPU" in os.environ:
+            cpu = int(os.environ.get("SANDBOX_CPU", "2"))
+        else:
+            cpu = daytona_settings.sandbox_cpu
+
+        # Disk: explicit param > env var > config file > default
+        if sandbox_disk_gb is not None:
+            disk = sandbox_disk_gb
+        elif "SANDBOX_DISK_GB" in os.environ:
+            disk = int(os.environ.get("SANDBOX_DISK_GB", "8"))
+        else:
+            disk = daytona_settings.sandbox_disk_gb
+
+        # Snapshot takes precedence over image
+        # Priority: explicit param > env var > config file > None
+        if sandbox_snapshot is not None:
+            snapshot = sandbox_snapshot
+        elif "SANDBOX_SNAPSHOT" in os.environ:
+            snapshot = os.environ.get("SANDBOX_SNAPSHOT")
+        else:
+            snapshot = daytona_settings.snapshot
+
+        # Image: explicit param > env var > config file > default
+        if sandbox_image is not None:
+            image = sandbox_image
+        elif "SANDBOX_IMAGE" in os.environ:
+            image = os.environ.get("SANDBOX_IMAGE")
+        else:
+            image = (
+                daytona_settings.image or "nikolaik/python-nodejs:python3.12-nodejs22"
+            )
+
         _spawner_service = DaytonaSpawnerService(
             db=db,
             event_bus=event_bus,
             mcp_server_url=url,
+            sandbox_memory_gb=memory,
+            sandbox_cpu=cpu,
+            sandbox_disk_gb=disk,
+            sandbox_snapshot=snapshot,
+            sandbox_image=image,
         )
 
     return _spawner_service

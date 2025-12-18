@@ -522,13 +522,20 @@ class DaytonaSettings(OmoiBaseSettings):
     api_url: str = "https://app.daytona.io/api"  # DAYTONA_API_URL
     target: str = "us"  # DAYTONA_TARGET (us, eu)
     image: Optional[str] = None  # DAYTONA_IMAGE (custom Docker image)
-    snapshot: str = "python:3.12"  # DAYTONA_SNAPSHOT (fallback language)
+    snapshot: Optional[str] = (
+        "claude-agent-sdk-medium"  # DAYTONA_SNAPSHOT (default snapshot name)
+    )
     timeout: int = 300  # DAYTONA_TIMEOUT (seconds)
 
     # Sandbox execution mode
     # When True: orchestrator spawns Daytona sandboxes per task
     # When False: legacy mode - workers poll for tasks
     sandbox_execution: bool = False  # DAYTONA_SANDBOX_EXECUTION
+
+    # Sandbox resource limits
+    sandbox_memory_gb: int = 4  # DAYTONA_SANDBOX_MEMORY_GB (default: 4, max: 8)
+    sandbox_cpu: int = 2  # DAYTONA_SANDBOX_CPU (default: 2, max: 4)
+    sandbox_disk_gb: int = 8  # DAYTONA_SANDBOX_DISK_GB (default: 8, max: 10)
 
 
 def load_daytona_settings() -> DaytonaSettings:

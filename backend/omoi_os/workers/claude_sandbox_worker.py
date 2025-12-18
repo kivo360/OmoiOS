@@ -862,7 +862,24 @@ class SandboxWorker:
             # Still process messages but without reporting
 
         try:
-            async for msg in client.receive_messages():
+            # Wrap receive_messages() with better error handling for SIGKILL (-9) errors
+            try:
+                message_stream = client.receive_messages()
+            except Exception as stream_init_error:
+                error_msg = str(stream_init_error)
+                print(f"❌ Failed to initialize message stream: {error_msg}")
+                if self.reporter:
+                    await self.reporter.report(
+                        "agent.stream_error",
+                        {
+                            "error": f"Stream initialization failed: {error_msg}",
+                            "turn": self.turn_count,
+                            "error_type": "stream_init",
+                        },
+                    )
+                raise
+
+            async for msg in message_stream:
                 if isinstance(msg, AssistantMessage):
                     self.turn_count += 1
 
@@ -1104,15 +1121,41 @@ class SandboxWorker:
                     return msg, final_output
 
         except Exception as e:
+            error_str = str(e)
+            error_type = "unknown"
+
+            # Detect specific error types
+            if "exit code -9" in error_str or "SIGKILL" in error_str:
+                error_type = "sigkill"
+                print("❌ Stream error: Process killed (SIGKILL/exit -9)")
+                print("   This usually indicates:")
+                print("   - Out of memory (OOM killer)")
+                print("   - Resource limits exceeded")
+                print("   - Process timeout")
+                print("   - System resource constraints")
+            elif "Command failed" in error_str:
+                error_type = "command_failed"
+                print("❌ Stream error: Command failed in message reader")
+                print(f"   Error: {error_str}")
+            else:
+                print(f"❌ Stream error: {e}")
+
             if self.reporter:
                 await self.reporter.report(
                     "agent.stream_error",
                     {
-                        "error": str(e),
+                        "error": error_str,
+                        "error_type": error_type,
                         "turn": self.turn_count,
+                        "final_output_length": len("\n".join(final_output))
+                        if final_output
+                        else 0,
                     },
                 )
-            print(f"❌ Stream error: {e}")
+
+            # If we have partial output, return it instead of None
+            if final_output:
+                print(f"⚠️  Returning partial output ({len(final_output)} blocks)")
 
         return None, final_output
 
