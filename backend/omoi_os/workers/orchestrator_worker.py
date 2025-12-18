@@ -82,6 +82,14 @@ async def orchestrator_loop():
     """
     global db, queue, event_bus, registry_service
 
+    # Check if orchestrator is disabled via environment variable
+    if os.getenv("ORCHESTRATOR_ENABLED", "true").lower() in ("false", "0", "no"):
+        logger.info("orchestrator_disabled_via_env", env_var="ORCHESTRATOR_ENABLED")
+        # Sleep indefinitely to keep process alive but not process tasks
+        while not shutdown_event.is_set():
+            await asyncio.sleep(60)
+        return
+
     if not db or not queue or not event_bus:
         logger.error("services_not_initialized")
         return
