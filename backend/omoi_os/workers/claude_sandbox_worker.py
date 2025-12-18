@@ -1039,7 +1039,7 @@ class SandboxWorker:
                                 )
 
                         # Build completion event with final output
-                        completion_event = {
+                        completion_event: dict[str, Any] = {
                             "success": True,
                             "turns": num_turns,
                             "cost_usd": total_cost_usd,
@@ -1057,11 +1057,11 @@ class SandboxWorker:
 
                         # Try to report completion with retries (critical for task finalization)
                         max_retries = 3
-                        retry_delay = 1.0
+                        retry_delay: float = 1.0
                         reported = False
 
                         for attempt in range(max_retries):
-                            reported = await self.reporter.report(
+                            reported: bool = await self.reporter.report(
                                 "agent.completed",
                                 completion_event,
                             )
