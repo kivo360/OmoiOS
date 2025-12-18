@@ -565,26 +565,45 @@ class EventReporter:
             )
             success = response.status_code == 200
             if not success:
-                # Only log non-200 status codes, but don't spam for 502s (server issues)
-                if response.status_code != 502:
-                    print(
-                        f"[EventReporter] Event {event_type} failed: {response.status_code}"
-                    )
-                # For 502s, server might be temporarily down - this is non-critical
+                # Suppress 502 errors (Bad Gateway) - server temporarily unavailable
+                # This is common during server restarts, load balancer issues, or DB timeouts
+                if response.status_code == 502:
+                    # Silently fail - heartbeats are non-critical and 502s are transient
+                    return False
+                # Log other non-200 status codes
+                print(
+                    f"[EventReporter] Event {event_type} failed: {response.status_code}"
+                )
             return success
         except httpx.HTTPStatusError as e:
             # Handle HTTP errors (like 502 Bad Gateway)
             status_code = e.response.status_code if hasattr(e, "response") else None
             if status_code == 502:
                 # Server temporarily unavailable - don't spam logs
-                pass
+                # Heartbeats are non-critical, so we silently fail
+                return False
             else:
                 print(f"[EventReporter] HTTP error for {event_type}: {status_code}")
             return False
+        except httpx.RequestError as e:
+            # Network-level errors (connection refused, timeout, etc.)
+            # Check if it's a 502-related error
+            error_str = str(e).lower()
+            if "502" in error_str or "bad gateway" in error_str:
+                # Silently fail for 502-related network errors
+                return False
+            # Log other network errors (but not for heartbeats to reduce spam)
+            if event_type != "agent.heartbeat":
+                print(f"[EventReporter] Network error for {event_type}: {e}")
+            return False
         except Exception as e:
             # Only log unexpected errors, not network timeouts or 502s
-            error_str = str(e)
-            if "502" not in error_str and "Bad Gateway" not in error_str:
+            error_str = str(e).lower()
+            if "502" in error_str or "bad gateway" in error_str:
+                # Silently fail for 502-related errors
+                return False
+            # Log other unexpected errors (but not for heartbeats)
+            if event_type != "agent.heartbeat":
                 print(f"[EventReporter] Failed to report {event_type}: {e}")
             return False
 
