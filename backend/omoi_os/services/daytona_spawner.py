@@ -246,6 +246,61 @@ class DaytonaSpawnerService:
 
         logger.debug(f"Using {creds.source} credentials for sandbox")
 
+        # Create GitHub branch BEFORE sandbox creation (if we have ticket/repo info)
+        # This ensures the branch exists before we clone the repo in the sandbox
+        branch_name = None
+        if extra_env and self.db:
+            github_repo = extra_env.get("GITHUB_REPO")
+            ticket_id = extra_env.get("TICKET_ID")
+            user_id = extra_env.get("USER_ID")
+            ticket_title = extra_env.get("TICKET_TITLE", "")
+            ticket_type = extra_env.get("TICKET_TYPE", "feature")
+
+            # If we have all required info, create branch via BranchWorkflowService
+            if github_repo and ticket_id and user_id:
+                try:
+                    from omoi_os.services.branch_workflow import BranchWorkflowService
+                    from omoi_os.services.github_api import GitHubAPIService
+
+                    # Parse owner/repo
+                    parts = github_repo.split("/")
+                    if len(parts) == 2:
+                        repo_owner, repo_name = parts
+
+                        # Initialize services
+                        github_service = GitHubAPIService(self.db)
+                        branch_workflow = BranchWorkflowService(github_service)
+
+                        # Create branch using user's GitHub token (from user.attributes)
+                        result = await branch_workflow.start_work_on_ticket(
+                            ticket_id=ticket_id,
+                            ticket_title=ticket_title,
+                            repo_owner=repo_owner,
+                            repo_name=repo_name,
+                            user_id=user_id,
+                            ticket_type=ticket_type,
+                        )
+
+                        if result.get("success"):
+                            branch_name = result.get("branch_name")
+                            logger.info(
+                                f"✅ Created branch '{branch_name}' for ticket {ticket_id} "
+                                f"before sandbox creation"
+                            )
+                            # Add branch name to extra_env so it gets passed to sandbox
+                            if extra_env:
+                                extra_env["BRANCH_NAME"] = branch_name
+                        else:
+                            error = result.get("error", "Unknown error")
+                            logger.warning(
+                                f"⚠️  Failed to create branch for ticket {ticket_id}: {error}"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"Exception creating branch before sandbox spawn: {e}",
+                        exc_info=True,
+                    )
+
         # Handle session resumption for Claude runtime
         if runtime == "claude" and self.db:
             resume_session_id = None
@@ -273,6 +328,11 @@ class DaytonaSpawnerService:
         # Add extra env vars (can override transcript if explicitly provided)
         if extra_env:
             env_vars.update(extra_env)
+
+            # Set branch name if we created one
+            if branch_name:
+                env_vars["BRANCH_NAME"] = branch_name
+                logger.debug(f"Set BRANCH_NAME={branch_name} for sandbox")
 
             # If TASK_DATA_BASE64 is provided, decode it and extract ticket info
             # This ensures TICKET_DESCRIPTION and TICKET_TITLE are set for the worker
