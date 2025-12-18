@@ -1,15 +1,34 @@
 # Worker & Sandbox Monitoring System - TODO
 
 **Created:** 2025-12-18  
-**Status:** Planning phase
+**Status:** Planning phase  
+**Related:** [Product Vision - Adaptive Monitoring Loop](../../product_vision.md#adaptive-monitoring-loop-architecture), [Monitoring Architecture](../../design/monitoring/monitoring_architecture.md)
 
 ## Overview
 
-The monitoring system needs to track the health, performance, and lifecycle of:
-- **Orchestrator Workers** - Task dispatch and assignment
-- **Sandbox Workers** - Agent execution within Daytona sandboxes
-- **Sandboxes** - Resource usage, status, lifecycle
-- **Tasks** - Progress, completion, failures
+**Note:** This document focuses on **infrastructure/operational monitoring** (worker health, sandbox lifecycle, resource usage). For **task trajectory monitoring and steering** (Guardian/Conductor services), see the existing monitoring system documented in:
+- `docs/product_vision.md` - Adaptive Monitoring Loop (Guardian agents, trajectory analysis, steering interventions)
+- `docs/design/monitoring/monitoring_architecture.md` - Full monitoring architecture
+- `backend/omoi_os/services/monitoring_loop.py` - Monitoring loop implementation
+- `backend/omoi_os/services/intelligent_guardian.py` - Guardian service for trajectory analysis
+- `backend/omoi_os/workers/monitoring_worker.py` - Monitoring worker process
+
+### Existing Trajectory Monitoring System ✅
+
+The system already has comprehensive **task trajectory monitoring**:
+- **Guardian Service**: Monitors individual agent trajectories every 60 seconds, analyzes alignment with goals, provides steering interventions
+- **Conductor Service**: System-wide coherence analysis, duplicate detection
+- **Trajectory Context Builder**: Builds accumulated understanding from conversation history
+- **Memory System**: Semantic memory for pattern storage and retrieval
+- **Monitoring Loop**: Runs every 60 seconds, coordinates Guardian and Conductor
+
+### What's Missing: Infrastructure Monitoring
+
+This TODO focuses on **operational/infrastructure monitoring** that's needed for:
+- **Orchestrator Workers** - Task dispatch and assignment health
+- **Sandbox Workers** - Remote worker process health (running in Daytona sandboxes)
+- **Sandboxes** - Resource usage, status, lifecycle (Daytona sandbox management)
+- **Infrastructure Health** - Database connections, Redis, event delivery
 
 ## 🎯 Core Monitoring Requirements
 
@@ -77,12 +96,14 @@ The monitoring system needs to track the health, performance, and lifecycle of:
   - Cleanup of completed/failed task sandboxes
   - Cost tracking (sandbox hours)
 
-### 3. Task Monitoring
+### 3. Task Monitoring (Operational)
+
+**Note:** Task trajectory monitoring (alignment, steering, drift detection) is handled by the existing Guardian/Conductor system. This section focuses on operational metrics.
 
 - [ ] **Task Status Dashboard**
   - Tasks by status (pending/assigned/running/completed/failed)
   - Task age (time in current status)
-  - Stuck tasks detection (assigned but no progress)
+  - Stuck tasks detection (assigned but no progress) - *complements Guardian's stuck detection*
 - [ ] **Task Performance Metrics**
   - Average task duration by type
   - Task completion rate
@@ -274,8 +295,19 @@ ORDER BY hour DESC, count DESC;
 
 ## 📝 Notes
 
+### Integration with Existing Monitoring
+
+- **Trajectory Monitoring**: Guardian/Conductor system handles task alignment, steering, and drift detection
+- **Infrastructure Monitoring**: This TODO focuses on operational health (workers, sandboxes, infrastructure)
+- **Complementary Systems**: Both systems work together:
+  - Guardian detects when agents drift/get stuck → Infrastructure monitoring detects if worker/sandbox is down
+  - Trajectory monitoring analyzes agent behavior → Infrastructure monitoring tracks resource usage and health
+
+### Implementation Strategy
+
 - Start with basic health monitoring (Phase 1)
 - Metrics can be added incrementally
 - Consider using existing tools (Sentry) before building custom
 - Dashboard can be built in frontend using existing API endpoints
 - Automated cleanup should be conservative initially (long timeouts)
+- Leverage existing monitoring worker (`monitoring_worker.py`) for infrastructure checks
