@@ -342,18 +342,18 @@ class FileChangeTracker:
             change_type = "created"
         else:
             # Existing file modification
-            old_lines = old_content.splitlines(keepends=True)
-            new_lines = new_content.splitlines(keepends=True)
-            
-            diff = list(difflib.unified_diff(
-                old_lines, new_lines,
-                fromfile=f"a/{path}",
-                tofile=f"b/{path}",
+        old_lines = old_content.splitlines(keepends=True)
+        new_lines = new_content.splitlines(keepends=True)
+        
+        diff = list(difflib.unified_diff(
+            old_lines, new_lines,
+            fromfile=f"a/{path}",
+            tofile=f"b/{path}",
                 lineterm='',
-            ))
-            
-            lines_added = sum(1 for l in diff if l.startswith('+') and not l.startswith('+++'))
-            lines_removed = sum(1 for l in diff if l.startswith('-') and not l.startswith('---'))
+        ))
+        
+        lines_added = sum(1 for l in diff if l.startswith('+') and not l.startswith('+++'))
+        lines_removed = sum(1 for l in diff if l.startswith('-') and not l.startswith('---'))
             change_type = "modified"
         
         # Truncate diff preview (first 100 lines)
@@ -595,7 +595,7 @@ async def _create_post_tool_hook(self):
             file_path = tool_input.get("file_path")
             new_content = tool_input.get("content", "")
             if file_path and new_content:
-                diff_info = file_tracker.generate_diff(file_path, new_content)
+        diff_info = file_tracker.generate_diff(file_path, new_content)
                 await reporter.report("agent.file_edited", {
                     "turn": turn_count,
                     "tool_use_id": tool_use_id,
@@ -1114,10 +1114,10 @@ class ClaudeSDKAdapter(AgentEventAdapter):
                 if file_path:
                     file_path = Path(file_path)
                     if file_path.exists():
-                        try:
+                try:
                             content = file_path.read_text()
                             self.file_tracker.cache_file_before_edit(str(file_path), content)
-                        except FileNotFoundError:
+                except FileNotFoundError:
                             pass  # New file, nothing to cache
                         except Exception as e:
                             print(f"[FileTracker] Failed to cache {file_path}: {e}")
