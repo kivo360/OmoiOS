@@ -2008,40 +2008,97 @@ if __name__ == "__main__":
             True if terminated successfully
         """
         info = self._sandboxes.get(sandbox_id)
-        if not info:
-            logger.warning(f"Sandbox {sandbox_id} not found")
-            return False
+        task_id = None
 
-        if info.status in ("completed", "failed", "terminated"):
-            logger.info(f"Sandbox {sandbox_id} already stopped")
-            return True
+        # Case 1: Sandbox is in memory - use cached info
+        if info:
+            if info.status in ("completed", "failed", "terminated"):
+                logger.info(f"Sandbox {sandbox_id} already stopped")
+                return True
+
+            task_id = info.task_id
+
+            try:
+                # Get Daytona sandbox reference from cache
+                daytona_sandbox = info.extra_data.get("daytona_sandbox")
+
+                if daytona_sandbox:
+                    # Terminate via cached Daytona object
+                    daytona_sandbox.stop()
+                    logger.info(f"Daytona sandbox {sandbox_id} terminated via cached reference")
+
+                info.status = "terminated"
+                info.completed_at = utc_now()
+
+                if self.event_bus:
+                    self.event_bus.publish(
+                        SystemEvent(
+                            event_type="sandbox.terminated",
+                            entity_type="sandbox",
+                            entity_id=sandbox_id,
+                            payload={"task_id": task_id},
+                        )
+                    )
+
+                return True
+
+            except Exception as e:
+                logger.error(f"Failed to terminate sandbox {sandbox_id} via cache: {e}")
+                # Fall through to direct API termination below
+
+        # Case 2: Sandbox NOT in memory (e.g., after worker restart)
+        # or Case 1 failed - use Daytona API directly
+        logger.info(f"Attempting direct Daytona API termination for {sandbox_id}")
 
         try:
-            # Get Daytona sandbox reference
-            daytona_sandbox = info.extra_data.get("daytona_sandbox")
+            from daytona import Daytona, DaytonaConfig
 
-            if daytona_sandbox:
-                # Terminate via Daytona
-                daytona_sandbox.stop()
-                logger.info(f"Daytona sandbox {sandbox_id} terminated")
+            daytona_settings = load_daytona_settings()
+            config = DaytonaConfig(
+                api_key=self.daytona_api_key or daytona_settings.api_key,
+                api_url=self.daytona_api_url or daytona_settings.api_url,
+                target="us",
+            )
 
-            info.status = "terminated"
-            info.completed_at = utc_now()
+            daytona = Daytona(config)
 
-            if self.event_bus:
-                self.event_bus.publish(
-                    SystemEvent(
-                        event_type="sandbox.terminated",
-                        entity_type="sandbox",
-                        entity_id=sandbox_id,
-                        payload={"task_id": info.task_id},
+            try:
+                sandbox = daytona.get(sandbox_id)
+                sandbox.stop()
+                logger.info(f"Daytona sandbox {sandbox_id} terminated via direct API")
+
+                # Update in-memory cache if it exists
+                if info:
+                    info.status = "terminated"
+                    info.completed_at = utc_now()
+
+                if self.event_bus:
+                    self.event_bus.publish(
+                        SystemEvent(
+                            event_type="sandbox.terminated",
+                            entity_type="sandbox",
+                            entity_id=sandbox_id,
+                            payload={"task_id": task_id},
+                        )
                     )
-                )
 
-            return True
+                return True
+
+            except Exception as get_err:
+                # Sandbox doesn't exist in Daytona - might already be terminated
+                error_str = str(get_err).lower()
+                if "not found" in error_str or "404" in error_str:
+                    logger.info(f"Sandbox {sandbox_id} not found in Daytona (already terminated?)")
+                    # Update in-memory cache if it exists
+                    if info:
+                        info.status = "terminated"
+                        info.completed_at = utc_now()
+                    return True
+                else:
+                    raise
 
         except Exception as e:
-            logger.error(f"Failed to terminate sandbox {sandbox_id}: {e}")
+            logger.error(f"Failed to terminate sandbox {sandbox_id} via direct API: {e}")
             return False
 
     def mark_completed(self, sandbox_id: str, result: Optional[Dict] = None) -> None:
