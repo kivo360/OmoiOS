@@ -4,12 +4,13 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from omoi_os.api.dependencies import get_db_service, get_current_user
+from omoi_os.logging import get_logger
 from omoi_os.models.user import User
 from omoi_os.models.project import Project
 from omoi_os.services.database import DatabaseService
-from sqlalchemy import select
 from omoi_os.services.github_api import (
     GitHubAPIService,
     GitHubRepo,
@@ -24,7 +25,7 @@ from omoi_os.services.github_api import (
     PullRequestCreateResult,
 )
 
-
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -77,9 +78,6 @@ def verify_github_connected(current_user: User = Depends(get_current_user)) -> U
     user_id = attrs.get("github_user_id")
 
     # Debug logging
-    import logging
-
-    logger = logging.getLogger(__name__)
     logger.debug(f"Verifying GitHub connection for user {current_user.id}")
     logger.debug(f"Has access_token: {access_token is not None}")
     logger.debug(f"Has user_id: {user_id is not None}")
@@ -128,10 +126,6 @@ async def test_list_repos(
     Simple test endpoint to debug repository listing.
     Returns step-by-step information about what's happening.
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     attrs = current_user.attributes or {}
     token_from_attrs = attrs.get("github_access_token")
 
@@ -190,10 +184,7 @@ async def diagnostic_list_repos(
     - Token scopes (if available)
     - Sample repository data
     """
-    import logging
     import httpx
-
-    logger = logging.getLogger(__name__)
 
     attrs = current_user.attributes or {}
     token = attrs.get("github_access_token")
@@ -346,30 +337,16 @@ async def list_repos(
     github_service: GitHubAPIService = Depends(get_github_api_service),
 ):
     """List repositories for the authenticated user."""
-    import logging
-    import sys
-
-    logger = logging.getLogger(__name__)
-
-    # FORCE LOGGING - print to stderr so it always shows
-    print(
-        f"[list_repos] FUNCTION CALLED! User: {current_user.id}",
-        file=sys.stderr,
-        flush=True,
-    )
-
     # Debug: Log user and connection status
     attrs = current_user.attributes or {}
     has_token = attrs.get("github_access_token") is not None
-    print(
-        f"[list_repos] Called for user {current_user.id}: "
-        f"has_token={has_token}, visibility={visibility}, sort={sort}, per_page={per_page}",
-        file=sys.stderr,
-        flush=True,
-    )
     logger.info(
-        f"[list_repos] Called for user {current_user.id}: "
-        f"has_token={has_token}, visibility={visibility}, sort={sort}, per_page={per_page}"
+        "list_repos called",
+        user_id=str(current_user.id),
+        has_token=has_token,
+        visibility=visibility,
+        sort=sort,
+        per_page=per_page,
     )
 
     try:

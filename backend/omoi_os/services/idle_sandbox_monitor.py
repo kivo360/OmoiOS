@@ -12,12 +12,10 @@ See docs/design/sandbox-agents/02_gap_analysis.md for design details.
 
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
 from typing import TYPE_CHECKING, Optional, Set
 
-import structlog
-
+from omoi_os.logging import get_logger
 from omoi_os.models.sandbox_event import SandboxEvent
 from omoi_os.models.task import Task
 from omoi_os.services.event_bus import EventBusService, SystemEvent
@@ -27,7 +25,7 @@ if TYPE_CHECKING:
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.daytona_spawner import DaytonaSpawnerService
 
-logger = structlog.get_logger("idle_sandbox_monitor")
+logger = get_logger("idle_sandbox_monitor")
 
 
 class IdleSandboxMonitor:

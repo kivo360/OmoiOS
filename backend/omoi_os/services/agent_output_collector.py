@@ -8,11 +8,11 @@ various sources since we're not using tmux sessions:
 - Agent registry status updates
 """
 
-import logging
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 from pathlib import Path
+from typing import Dict, List, Optional, Any
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_log import AgentLog
 from omoi_os.models.sandbox_event import SandboxEvent
@@ -21,7 +21,7 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AgentOutputCollector:

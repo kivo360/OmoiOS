@@ -23,6 +23,7 @@ from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
+from omoi_os.logging import get_logger
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -32,6 +33,7 @@ from omoi_os.services.message_queue import (
     get_message_queue,
 )
 
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -325,9 +327,6 @@ def save_session_transcript(
             session.commit()
     except Exception as e:
         # Log but don't fail - transcript saving is optional
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.warning(f"Failed to save session transcript {session_id}: {e}")
 
 
@@ -354,9 +353,6 @@ def get_session_transcript(db: DatabaseService, session_id: str) -> str | None:
             if transcript:
                 return transcript.transcript_b64
     except Exception as e:
-        import logging
-
-        logger = logging.getLogger(__name__)
         logger.warning(f"Failed to retrieve session transcript {session_id}: {e}")
 
     return None
@@ -396,10 +392,6 @@ async def post_sandbox_event(
             "source": "agent"
         }
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     # Log incoming request for debugging 502 issues
     logger.info(
         f"[SandboxEvent] Received {event.event_type} from sandbox {sandbox_id[:20]}... "
@@ -433,9 +425,6 @@ async def post_sandbox_event(
             db = get_db_service()
             from omoi_os.models.task import Task
             from omoi_os.services.task_queue import TaskQueueService
-            import logging
-
-            logger = logging.getLogger(__name__)
 
             task_id = event.event_data.get("task_id")
             logger.debug(
@@ -508,9 +497,6 @@ async def post_sandbox_event(
         except Exception as e:
             # Task finalization is important but shouldn't break event processing
             # Log error but continue
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.error(
                 f"Failed to finalize task for sandbox {sandbox_id}, event_type={event.event_type}: {e}",
                 exc_info=True,
@@ -554,6 +540,30 @@ class SandboxEventsListResponse(BaseModel):
     events: list[SandboxEventItem]
     total_count: int
     sandbox_id: str
+
+
+class HeartbeatSummary(BaseModel):
+    """Summary of heartbeat events (instead of listing all of them)."""
+
+    count: int
+    first_heartbeat: Optional[datetime] = None
+    last_heartbeat: Optional[datetime] = None
+
+
+class TrajectorySummaryResponse(BaseModel):
+    """Response model for trajectory summary with heartbeat aggregation.
+
+    This provides a cleaner view of sandbox activity by:
+    - Excluding heartbeat events from the main event list
+    - Providing a summary of heartbeats (count, first, last)
+    - Filtering out noise to show meaningful trajectory events
+    """
+
+    sandbox_id: str
+    events: list[SandboxEventItem]
+    heartbeat_summary: HeartbeatSummary
+    total_events: int  # Total including heartbeats
+    trajectory_events: int  # Count excluding heartbeats
 
 
 def query_sandbox_events(
@@ -618,9 +628,6 @@ async def sandbox_health():
     POST /{sandbox_id}/events doesn't, the issue is likely with
     request processing (DB, Redis, etc.)
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
     logger.info("[SandboxHealth] Health check requested")
 
     return {
@@ -675,6 +682,157 @@ async def get_sandbox_events(
             events=[],
             total_count=0,
             sandbox_id=sandbox_id,
+        )
+
+
+def query_trajectory_summary(
+    db: DatabaseService,
+    sandbox_id: str,
+    limit: int = 100,
+) -> dict:
+    """
+    Query trajectory events with heartbeat aggregation.
+
+    This provides a cleaner view by:
+    - Excluding heartbeat events from the main list
+    - Aggregating heartbeat info (count, first, last)
+    - Returning only meaningful trajectory events
+
+    Args:
+        db: Database service
+        sandbox_id: Sandbox identifier
+        limit: Maximum non-heartbeat events to return
+
+    Returns:
+        Dict with events, heartbeat_summary, and counts
+    """
+    from sqlalchemy import func
+
+    from omoi_os.models.sandbox_event import SandboxEvent
+
+    with db.get_session() as session:
+        # Define heartbeat event types to exclude from main list
+        heartbeat_types = ["agent.heartbeat", "heartbeat"]
+
+        # Get total count of all events
+        total_count = (
+            session.query(func.count(SandboxEvent.id))
+            .filter(SandboxEvent.sandbox_id == sandbox_id)
+            .scalar()
+        )
+
+        # Get heartbeat summary (count, first, last)
+        heartbeat_stats = (
+            session.query(
+                func.count(SandboxEvent.id).label("count"),
+                func.min(SandboxEvent.created_at).label("first"),
+                func.max(SandboxEvent.created_at).label("last"),
+            )
+            .filter(SandboxEvent.sandbox_id == sandbox_id)
+            .filter(SandboxEvent.event_type.in_(heartbeat_types))
+            .first()
+        )
+
+        heartbeat_count = heartbeat_stats.count if heartbeat_stats else 0
+        first_heartbeat = heartbeat_stats.first if heartbeat_stats else None
+        last_heartbeat = heartbeat_stats.last if heartbeat_stats else None
+
+        # Get non-heartbeat events (the actual trajectory)
+        trajectory_events = (
+            session.query(SandboxEvent)
+            .filter(SandboxEvent.sandbox_id == sandbox_id)
+            .filter(~SandboxEvent.event_type.in_(heartbeat_types))
+            .order_by(SandboxEvent.created_at.asc())  # Chronological order
+            .limit(limit)
+            .all()
+        )
+
+        trajectory_count = len(trajectory_events)
+
+        return {
+            "sandbox_id": sandbox_id,
+            "events": [
+                {
+                    "id": str(e.id),
+                    "sandbox_id": e.sandbox_id,
+                    "event_type": e.event_type,
+                    "event_data": e.event_data,
+                    "source": e.source,
+                    "created_at": e.created_at,
+                }
+                for e in trajectory_events
+            ],
+            "heartbeat_summary": {
+                "count": heartbeat_count,
+                "first_heartbeat": first_heartbeat,
+                "last_heartbeat": last_heartbeat,
+            },
+            "total_events": total_count,
+            "trajectory_events": trajectory_count,
+        }
+
+
+@router.get("/{sandbox_id}/trajectory", response_model=TrajectorySummaryResponse)
+async def get_sandbox_trajectory(
+    sandbox_id: str,
+    limit: int = Query(default=100, le=500, ge=1, description="Max events to return"),
+) -> TrajectorySummaryResponse:
+    """
+    Get trajectory summary for a sandbox with heartbeat aggregation.
+
+    This endpoint is optimized for viewing agent activity by:
+    - Excluding heartbeat events from the main event list
+    - Providing a summary of heartbeats (count, first timestamp, last timestamp)
+    - Returning events in chronological order (oldest to newest)
+
+    Much faster than fetching all events when there are many heartbeats.
+
+    Args:
+        sandbox_id: Sandbox identifier (from URL path)
+        limit: Maximum number of trajectory events to return (default: 100, max: 500)
+
+    Returns:
+        TrajectorySummaryResponse with filtered events and heartbeat summary
+
+    Example:
+        GET /api/v1/sandboxes/sandbox-abc123/trajectory?limit=50
+
+        Response:
+        {
+            "sandbox_id": "sandbox-abc123",
+            "events": [...],  // Non-heartbeat events only
+            "heartbeat_summary": {
+                "count": 150,
+                "first_heartbeat": "2025-12-19T10:00:00Z",
+                "last_heartbeat": "2025-12-19T10:25:00Z"
+            },
+            "total_events": 165,
+            "trajectory_events": 15
+        }
+    """
+    try:
+        db = get_db_service()
+        result = query_trajectory_summary(
+            db=db,
+            sandbox_id=sandbox_id,
+            limit=limit,
+        )
+        return TrajectorySummaryResponse(
+            sandbox_id=result["sandbox_id"],
+            events=[SandboxEventItem(**e) for e in result["events"]],
+            heartbeat_summary=HeartbeatSummary(**result["heartbeat_summary"]),
+            total_events=result["total_events"],
+            trajectory_events=result["trajectory_events"],
+        )
+    except Exception as e:
+        logger.error(f"Failed to get trajectory for sandbox {sandbox_id}: {e}")
+        # Return empty response if error
+        return TrajectorySummaryResponse(
+            sandbox_id=sandbox_id,
+            events=[],
+            heartbeat_summary=HeartbeatSummary(count=0),
+            total_events=0,
+            trajectory_events=0,
         )
 
 

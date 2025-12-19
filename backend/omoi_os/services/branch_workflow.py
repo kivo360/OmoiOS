@@ -18,14 +18,13 @@ Follows standard GitFlow naming conventions:
 """
 
 import asyncio
-import logging
 import re
 from typing import Any, Optional
 
+from omoi_os.logging import get_logger
 from omoi_os.services.github_api import GitHubAPIService
 
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # Type prefix mapping from ticket type to branch prefix

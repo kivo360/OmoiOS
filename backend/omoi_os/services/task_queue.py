@@ -1,10 +1,10 @@
 """Task queue service for managing task assignment and retrieval."""
 
 from typing import List, Optional, TYPE_CHECKING
-import logging
 
 from sqlalchemy import or_
 
+from omoi_os.logging import get_logger
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_scorer import TaskScorer
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session
     from omoi_os.services.event_bus import EventBusService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TaskQueueService:
@@ -436,9 +436,6 @@ class TaskQueueService:
         # All required capabilities must be present
         if not required.issubset(agent_caps):
             missing = required - agent_caps
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.warning(
                 f"Capability mismatch for task {task.id}: "
                 f"missing {missing}, agent has {agent_capabilities}"

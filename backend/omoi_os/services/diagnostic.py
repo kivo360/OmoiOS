@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import logging
-from typing import TYPE_CHECKING, Dict, List, Optional
-
 import os
+from typing import TYPE_CHECKING, Dict, List, Optional
 
 import httpx
 from sqlalchemy import desc, or_
 
+from omoi_os.logging import get_logger
 from omoi_os.models.diagnostic_run import DiagnosticRun
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
@@ -20,7 +19,7 @@ from omoi_os.services.llm_service import get_llm_service
 from omoi_os.schemas.diagnostic_analysis import DiagnosticAnalysis
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from omoi_os.services.discovery import DiscoveryService

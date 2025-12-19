@@ -7,7 +7,10 @@ from typing import List, Optional, Set
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from omoi_os.logging import get_logger
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -88,7 +91,7 @@ class WebSocketEventManager:
         except asyncio.CancelledError:
             pass
         except Exception as e:
-            print(f"Error in Redis listener: {e}")
+            logger.error("Error in Redis listener", error=str(e), exc_info=True)
         finally:
             if self.redis_pubsub:
 
@@ -119,7 +122,7 @@ class WebSocketEventManager:
                     }
                 )
             except Exception as e:
-                print(f"Error sending event to WebSocket client: {e}")
+                logger.error("Error sending event to WebSocket client", error=str(e))
                 disconnected.add(websocket)
 
         # Clean up disconnected clients

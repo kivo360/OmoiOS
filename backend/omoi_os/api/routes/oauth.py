@@ -9,12 +9,13 @@ from sqlalchemy import select
 
 from omoi_os.api.dependencies import get_db_service, get_current_user
 from omoi_os.config import get_app_settings
+from omoi_os.logging import get_logger
 from omoi_os.models.user import User
 from omoi_os.services.auth_service import AuthService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.oauth_service import OAuthService
 
-
+logger = get_logger(__name__)
 router = APIRouter()
 
 
@@ -158,10 +159,6 @@ async def list_connected_providers(
     current_user: User = Depends(get_current_user),
 ):
     """List OAuth providers connected to the current user's account."""
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     try:
         # Log that we reached the handler
         logger.info(f"list_connected_providers called for user {current_user.id}")

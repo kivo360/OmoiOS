@@ -9,12 +9,12 @@ This service orchestrates the complete monitoring workflow:
 """
 
 import asyncio
-import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
 
+from omoi_os.logging import get_logger
 from omoi_os.models.trajectory_analysis import (
     SystemHealthResponse,
     TrajectoryAnalysisResponse,
@@ -27,7 +27,7 @@ from omoi_os.services.conductor import ConductorService
 from omoi_os.services.agent_output_collector import AgentOutputCollector
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

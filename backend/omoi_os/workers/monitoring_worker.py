@@ -19,6 +19,10 @@ import signal
 import sys
 from typing import TYPE_CHECKING
 
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
+
 if TYPE_CHECKING:
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.task_queue import TaskQueueService
@@ -60,10 +64,10 @@ async def heartbeat_monitoring_loop():
         agent_status_manager
 
     if not db or not heartbeat_protocol_service:
-        print("⚠️  Heartbeat monitoring: Required services not available")
+        logger.warning("Heartbeat monitoring: Required services not available")
         return
 
-    print("   ✅ Heartbeat monitoring loop started")
+    logger.info("Heartbeat monitoring loop started")
 
     from omoi_os.services.restart_orchestrator import RestartOrchestrator
     from omoi_os.models.guardian_action import AuthorityLevel
@@ -83,8 +87,10 @@ async def heartbeat_monitoring_loop():
             for agent_data, missed_count in agents_with_missed:
                 agent_id = agent_data["id"]
                 if missed_count >= 3:
-                    print(
-                        f"🚨 Agent {agent_id} UNRESPONSIVE ({missed_count} missed heartbeats)"
+                    logger.warning(
+                        "Agent unresponsive - missed heartbeats",
+                        agent_id=agent_id,
+                        missed_count=missed_count,
                     )
 
                     try:
@@ -95,23 +101,26 @@ async def heartbeat_monitoring_loop():
                         )
 
                         if restart_result:
-                            print(
-                                f"✅ Agent {agent_id} restarted. Replacement: {restart_result['replacement_agent_id']}"
+                            logger.info(
+                                "Agent restarted successfully",
+                                agent_id=agent_id,
+                                replacement_agent_id=restart_result["replacement_agent_id"],
                             )
                         else:
-                            print(
-                                f"⚠️  Restart for agent {agent_id} blocked (cooldown or max attempts)"
+                            logger.warning(
+                                "Restart blocked for agent (cooldown or max attempts)",
+                                agent_id=agent_id,
                             )
 
                     except Exception as e:
-                        print(f"❌ Error initiating restart for agent {agent_id}: {e}")
+                        logger.error("Error initiating restart for agent", agent_id=agent_id, error=str(e), exc_info=True)
 
             await asyncio.sleep(10)
 
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"❌ Error in heartbeat monitoring loop: {e}")
+            logger.error("Error in heartbeat monitoring loop", error=str(e), exc_info=True)
             await asyncio.sleep(10)
 
 
@@ -120,7 +129,7 @@ async def diagnostic_monitoring_loop():
     global db, diagnostic_service, event_bus
 
     if not db or not diagnostic_service or not event_bus:
-        print("⚠️  Diagnostic monitoring: Required services not available")
+        logger.warning("Diagnostic monitoring: Required services not available")
         return
 
     from omoi_os.config import get_app_settings
@@ -129,10 +138,10 @@ async def diagnostic_monitoring_loop():
     diagnostic_settings = app_settings.diagnostic
 
     if not diagnostic_settings.enabled:
-        print("   ℹ️  Diagnostic agent system disabled")
+        logger.info("Diagnostic agent system disabled")
         return
 
-    print("   ✅ Diagnostic monitoring loop started")
+    logger.info("Diagnostic monitoring loop started")
 
     while not shutdown_event.is_set():
         try:
@@ -145,7 +154,7 @@ async def diagnostic_monitoring_loop():
                 workflow_id = workflow_info["workflow_id"]
                 time_stuck = workflow_info["time_stuck_seconds"]
 
-                print(f"🚨 WORKFLOW STUCK DETECTED - {time_stuck}s no progress")
+                logger.warning("Workflow stuck detected", workflow_id=workflow_id, time_stuck_seconds=time_stuck)
 
                 context = diagnostic_service.build_diagnostic_context(
                     workflow_id=workflow_id,
@@ -160,8 +169,10 @@ async def diagnostic_monitoring_loop():
                     max_tasks=diagnostic_settings.max_tasks_per_run,
                 )
 
-                print(
-                    f"✅ Diagnostic run {diagnostic_run.id} created for workflow {workflow_id}"
+                logger.info(
+                    "Diagnostic run created",
+                    diagnostic_run_id=str(diagnostic_run.id),
+                    workflow_id=workflow_id,
                 )
 
             await asyncio.sleep(60)
@@ -169,7 +180,7 @@ async def diagnostic_monitoring_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"❌ Error in diagnostic monitoring loop: {e}")
+            logger.error("Error in diagnostic monitoring loop", error=str(e), exc_info=True)
             await asyncio.sleep(60)
 
 
@@ -178,18 +189,19 @@ async def approval_timeout_loop():
     global db, approval_service
 
     if not db or not approval_service:
-        print("⚠️  Approval timeout: Required services not available")
+        logger.warning("Approval timeout: Required services not available")
         return
 
-    print("   ✅ Approval timeout loop started")
+    logger.info("Approval timeout loop started")
 
     while not shutdown_event.is_set():
         try:
             timed_out_ids = approval_service.check_timeouts()
 
             for ticket_id in timed_out_ids:
-                print(
-                    f"⏰ TICKET TIMEOUT - Ticket {ticket_id} approval deadline exceeded"
+                logger.warning(
+                    "Ticket approval deadline exceeded",
+                    ticket_id=ticket_id,
                 )
 
             await asyncio.sleep(10)
@@ -197,7 +209,7 @@ async def approval_timeout_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"❌ Error in approval timeout loop: {e}")
+            logger.error("Error in approval timeout loop", error=str(e), exc_info=True)
             await asyncio.sleep(10)
 
 
@@ -211,10 +223,10 @@ async def blocking_detection_loop():
         or not phase_gate_service
         or not ticket_workflow_orchestrator
     ):
-        print("⚠️  Blocking detection: Required services not available")
+        logger.warning("Blocking detection: Required services not available")
         return
 
-    print("   ✅ Blocking detection loop started")
+    logger.info("Blocking detection loop started")
 
     while not shutdown_event.is_set():
         try:
@@ -222,9 +234,11 @@ async def blocking_detection_loop():
 
             for result in results:
                 if result["should_block"]:
-                    print(
-                        f"🚫 BLOCKING DETECTED - Ticket {result['ticket_id']} "
-                        f"blocked ({result['blocker_type']}, {result['time_in_state_minutes']:.1f} min)"
+                    logger.warning(
+                        "Blocking detected - marking ticket as blocked",
+                        ticket_id=result["ticket_id"],
+                        blocker_type=result["blocker_type"],
+                        time_in_state_minutes=result["time_in_state_minutes"],
                     )
 
                     ticket_workflow_orchestrator.mark_blocked(
@@ -238,7 +252,7 @@ async def blocking_detection_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"❌ Error in blocking detection loop: {e}")
+            logger.error("Error in blocking detection loop", error=str(e), exc_info=True)
             await asyncio.sleep(300)
 
 
@@ -247,10 +261,10 @@ async def anomaly_monitoring_loop():
     global db, monitor_service, diagnostic_service, event_bus
 
     if not db or not monitor_service or not diagnostic_service:
-        print("⚠️  Anomaly monitoring: Required services not available")
+        logger.warning("Anomaly monitoring: Required services not available")
         return
 
-    print("   ✅ Anomaly monitoring loop started")
+    logger.info("Anomaly monitoring loop started")
 
     triggered_agents = set()
 
@@ -271,7 +285,7 @@ async def anomaly_monitoring_loop():
                     and consecutive_readings >= 3
                     and agent_id not in triggered_agents
                 ):
-                    print(f"🚨 AGENT ANOMALY - {agent_id} score={anomaly_score:.3f}")
+                    logger.warning("Agent anomaly detected", agent_id=agent_id, anomaly_score=anomaly_score)
 
                     with db.get_session() as session:
                         from omoi_os.models.task import Task
@@ -311,8 +325,10 @@ async def anomaly_monitoring_loop():
                                 )
                             )
 
-                            print(
-                                f"✅ Diagnostic run {diagnostic_run.id} for agent {agent_id} anomaly"
+                            logger.info(
+                                "Diagnostic run created for agent anomaly",
+                                diagnostic_run_id=str(diagnostic_run.id),
+                                agent_id=agent_id,
                             )
                             triggered_agents.add(agent_id)
 
@@ -324,7 +340,7 @@ async def anomaly_monitoring_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            print(f"❌ Error in anomaly monitoring loop: {e}")
+            logger.error("Error in anomaly monitoring loop", error=str(e), exc_info=True)
             await asyncio.sleep(60)
 
 
@@ -335,7 +351,7 @@ async def init_services():
     global phase_gate_service, monitor_service, diagnostic_service
     global ticket_workflow_orchestrator, monitoring_loop
 
-    print("🔧 Initializing services...")
+    logger.info("Initializing services...")
 
     from omoi_os.config import get_app_settings
     from omoi_os.services.database import DatabaseService
@@ -355,7 +371,7 @@ async def init_services():
     db = DatabaseService(connection_string=app_settings.database.url)
     event_bus = EventBusService(redis_url=app_settings.redis.url)
     queue = TaskQueueService(db, event_bus=event_bus)
-    print("   ✅ Core services (DB, Redis, Queue)")
+    logger.info("Core services initialized (DB, Redis, Queue)")
 
     # Agent services
     agent_status_manager = AgentStatusManager(db, event_bus)
@@ -364,21 +380,21 @@ async def init_services():
         db, event_bus, agent_status_manager
     )
     registry_service = AgentRegistryService(db, event_bus, agent_status_manager)
-    print("   ✅ Agent services")
+    logger.info("Agent services initialized")
 
     # Approval and phase services
     approval_service = ApprovalService(db, event_bus)
     phase_gate_service = PhaseGateService(db)
-    print("   ✅ Approval and phase services")
+    logger.info("Approval and phase services initialized")
 
     # Monitor service
     try:
         from omoi_os.services.monitor import MonitorService
 
         monitor_service = MonitorService(db, event_bus)
-        print("   ✅ Monitor service")
+        logger.info("Monitor service initialized")
     except ImportError:
-        print("   ⚠️  Monitor service not available")
+        logger.warning("Monitor service not available")
         monitor_service = None
 
     # Diagnostic service
@@ -398,9 +414,9 @@ async def init_services():
             monitor=monitor_service,
             event_bus=event_bus,
         )
-        print("   ✅ Diagnostic service")
+        logger.info("Diagnostic service initialized")
     except ImportError as e:
-        print(f"   ⚠️  Diagnostic service not available: {e}")
+        logger.warning("Diagnostic service not available", error=str(e))
         diagnostic_service = None
 
     # Ticket workflow orchestrator
@@ -410,7 +426,7 @@ async def init_services():
         phase_gate=phase_gate_service,
         event_bus=event_bus,
     )
-    print("   ✅ Ticket workflow orchestrator")
+    logger.info("Ticket workflow orchestrator initialized")
 
     # Intelligent Monitoring Loop
     try:
@@ -430,43 +446,41 @@ async def init_services():
             event_bus=event_bus,
             config=monitoring_config,
         )
-        print("   ✅ Intelligent Monitoring Loop")
+        logger.info("Intelligent Monitoring Loop initialized")
     except ImportError as e:
-        print(f"   ⚠️  MonitoringLoop not available: {e}")
+        logger.warning("MonitoringLoop not available", error=str(e))
         monitoring_loop = None
     except Exception as e:
-        print(f"   ⚠️  Failed to initialize MonitoringLoop: {e}")
+        logger.warning("Failed to initialize MonitoringLoop", error=str(e))
         monitoring_loop = None
 
-    print("✅ All services initialized")
+    logger.info("All services initialized")
 
 
 async def shutdown():
     """Graceful shutdown."""
-    print("\n🛑 Shutting down monitoring worker...")
+    logger.info("Shutting down monitoring worker")
     shutdown_event.set()
 
     # Stop intelligent monitoring loop
     if monitoring_loop:
         try:
             await monitoring_loop.stop()
-            print("   ✅ Intelligent Monitoring Loop stopped")
+            logger.info("Intelligent Monitoring Loop stopped")
         except Exception as e:
-            print(f"   ⚠️  Error stopping MonitoringLoop: {e}")
+            logger.warning("Error stopping MonitoringLoop", error=str(e))
 
     # Close event bus
     if event_bus:
         event_bus.close()
-        print("   ✅ Event bus closed")
+        logger.info("Event bus closed")
 
-    print("👋 Monitoring worker stopped")
+    logger.info("Monitoring worker stopped")
 
 
 async def main():
     """Main entry point."""
-    print("=" * 60)
-    print("📊 OmoiOS Monitoring Worker")
-    print("=" * 60)
+    logger.info("OmoiOS Monitoring Worker starting")
 
     # Setup signal handlers
     loop = asyncio.get_event_loop()
@@ -476,7 +490,7 @@ async def main():
     try:
         await init_services()
 
-        print("\n🚀 Starting monitoring loops...")
+        logger.info("Starting monitoring loops")
 
         # Create all monitoring tasks
         tasks = [
@@ -491,12 +505,11 @@ async def main():
         if monitoring_loop:
             try:
                 tasks.append(asyncio.create_task(monitoring_loop.start()))
-                print("   ✅ Intelligent Monitoring Loop started")
+                logger.info("Intelligent Monitoring Loop started")
             except Exception as e:
-                print(f"   ⚠️  Failed to start MonitoringLoop: {e}")
+                logger.warning("Failed to start MonitoringLoop", error=str(e))
 
-        print("\n✅ All monitoring loops running")
-        print("   Press Ctrl+C to stop\n")
+        logger.info("All monitoring loops running")
 
         # Wait for shutdown
         await shutdown_event.wait()
@@ -511,7 +524,7 @@ async def main():
     except KeyboardInterrupt:
         await shutdown()
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        logger.error("Fatal error in monitoring worker", error=str(e), exc_info=True)
         await shutdown()
         sys.exit(1)
 

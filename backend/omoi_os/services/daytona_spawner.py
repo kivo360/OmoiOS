@@ -11,7 +11,6 @@ The spawner:
 """
 
 import asyncio
-import logging
 import shlex
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -20,11 +19,12 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from omoi_os.config import load_daytona_settings, get_app_settings
+from omoi_os.logging import get_logger
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

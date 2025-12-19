@@ -11,15 +11,16 @@ Phase 6 Updates:
 - Interventions now route based on task.sandbox_id
 """
 
-import logging
+import os
 import uuid
 from datetime import timedelta
 from typing import Dict, List, Optional, Any
-import os
+
 import httpx
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.models.phase import PhaseModel
@@ -38,7 +39,7 @@ from omoi_os.services.conversation_intervention import ConversationInterventionS
 from omoi_os.services.template_service import get_template_service
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TrajectoryAnalysis:

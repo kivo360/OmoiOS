@@ -1,12 +1,13 @@
 """Memory service for task pattern learning and similarity search."""
 
 import re
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
 
 from sqlalchemy import select, text, func
 from sqlalchemy.orm import Session
 
+from omoi_os.logging import get_logger
 from omoi_os.models.task_memory import TaskMemory
 from omoi_os.models.learned_pattern import LearnedPattern, TaskPattern
 from omoi_os.models.memory_type import MemoryType
@@ -15,6 +16,8 @@ from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.schemas.memory_analysis import MemoryClassification, PatternExtraction
 from omoi_os.utils.datetime import utc_now
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -98,8 +101,6 @@ class MemoryService:
             )
         except Exception as e:
             # If structured output fails, fall back to sync method
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(f"Structured output failed for memory classification: {e}")
             return self.classify_memory_type_sync(execution_summary, task_description)
 

@@ -4,15 +4,21 @@ import asyncio
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
 from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.exceptions import RequestValidationError
-import logging
 
 from omoi_os.config import get_app_settings
+from omoi_os.logging import configure_logging, get_logger, bind_context, clear_context
+
+# Configure structured logging at module load time
+# This ensures logging is configured before any other imports that might log
+_env = os.environ.get("OMOIOS_ENV", "development")
+configure_logging(env=_env)  # type: ignore[arg-type]
 from omoi_os.mcp.fastmcp_server import mcp_app
 from omoi_os.api.routes import (
     agents,
@@ -100,7 +106,7 @@ async def orchestrator_loop():
     if not db or not queue or not event_bus:
         return
 
-    print("Orchestrator loop started")
+    logger.info("Orchestrator loop started")
 
     # Check if sandbox execution is enabled
     from omoi_os.config import get_app_settings
@@ -115,13 +121,13 @@ async def orchestrator_loop():
             from omoi_os.services.daytona_spawner import get_daytona_spawner
 
             daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
-            print("Sandbox execution mode ENABLED - will spawn Daytona sandboxes")
+            logger.info("Sandbox execution mode ENABLED - will spawn Daytona sandboxes")
         except Exception as e:
-            print(f"Failed to initialize Daytona spawner: {e}")
-            print("Falling back to legacy mode")
+            logger.error("Failed to initialize Daytona spawner", error=str(e))
+            logger.warning("Falling back to legacy mode")
             sandbox_execution = False
     else:
-        print("Legacy execution mode - workers poll for tasks")
+        logger.info("Legacy execution mode - workers poll for tasks")
 
     while True:
         try:
@@ -200,8 +206,11 @@ async def orchestrator_loop():
                         # Update task with sandbox info
                         queue.assign_task(task.id, agent_id)
 
-                        print(
-                            f"🚀 Spawned sandbox {sandbox_id} for task {task_id} (agent: {agent_id})"
+                        logger.info(
+                            "Spawned sandbox for task",
+                            sandbox_id=sandbox_id,
+                            task_id=task_id,
+                            agent_id=agent_id,
                         )
 
                         # Publish event
@@ -224,10 +233,12 @@ async def orchestrator_loop():
                         import traceback
 
                         error_details = traceback.format_exc()
-                        print(
-                            f"❌ Failed to spawn sandbox for task {task_id}: {spawn_error}"
+                        logger.error(
+                            "Failed to spawn sandbox for task",
+                            task_id=task_id,
+                            error=str(spawn_error),
+                            traceback=error_details,
                         )
-                        print(f"   Traceback: {error_details}")
                         # Mark task as failed
                         queue.update_task_status(
                             task.id,
@@ -250,13 +261,13 @@ async def orchestrator_loop():
                         )
                     )
 
-                    print(f"Assigned task {task_id} to agent {agent_id}")
+                    logger.info("Assigned task to agent", task_id=task_id, agent_id=agent_id)
 
             # Poll every 10 seconds
             await asyncio.sleep(10)
 
         except Exception as e:
-            print(f"Error in orchestrator loop: {e}")
+            logger.error("Error in orchestrator loop", error=str(e), exc_info=True)
             await asyncio.sleep(10)
 
 
@@ -272,7 +283,7 @@ async def heartbeat_monitoring_loop():
     if not db or not heartbeat_protocol_service:
         return
 
-    print("Heartbeat monitoring loop started")
+    logger.info("Heartbeat monitoring loop started")
 
     # Import restart orchestrator
     from omoi_os.services.restart_orchestrator import RestartOrchestrator
@@ -295,10 +306,11 @@ async def heartbeat_monitoring_loop():
                 agent_id = agent_data["id"]
                 if missed_count >= 3:
                     # 3 consecutive missed → UNRESPONSIVE → restart
-                    print(
-                        f"🚨 Agent {agent_id} UNRESPONSIVE ({missed_count} missed heartbeats)"
+                    logger.warning(
+                        "Agent UNRESPONSIVE - initiating restart",
+                        agent_id=agent_id,
+                        missed_count=missed_count,
                     )
-                    print(f"🔄 Initiating restart protocol for agent {agent_id}")
 
                     try:
                         restart_result = restart_orchestrator.initiate_restart(
@@ -308,25 +320,26 @@ async def heartbeat_monitoring_loop():
                         )
 
                         if restart_result:
-                            print(
-                                f"✅ Agent {agent_id} restarted. Replacement: {restart_result['replacement_agent_id']}"
-                            )
-                            print(
-                                f"   Reassigned {len(restart_result['reassigned_tasks'])} tasks"
+                            logger.info(
+                                "Agent restarted successfully",
+                                agent_id=agent_id,
+                                replacement_agent_id=restart_result['replacement_agent_id'],
+                                reassigned_tasks=len(restart_result['reassigned_tasks']),
                             )
                         else:
-                            print(
-                                f"⚠️ Restart for agent {agent_id} blocked (cooldown or max attempts)"
+                            logger.warning(
+                                "Restart blocked (cooldown or max attempts)",
+                                agent_id=agent_id,
                             )
 
                     except Exception as e:
-                        print(f"❌ Error initiating restart for agent {agent_id}: {e}")
+                        logger.error("Error initiating restart", agent_id=agent_id, error=str(e), exc_info=True)
 
             # Check every 10 seconds (more frequent than diagnostic loop)
             await asyncio.sleep(10)
 
         except Exception as e:
-            print(f"Error in heartbeat monitoring loop: {e}")
+            logger.error("Error in heartbeat monitoring loop", error=str(e), exc_info=True)
             await asyncio.sleep(10)
 
 
@@ -344,10 +357,10 @@ async def diagnostic_monitoring_loop():
     diagnostic_settings = app_settings.diagnostic
 
     if not diagnostic_settings.enabled:
-        print("Diagnostic agent system disabled")
+        logger.info("Diagnostic agent system disabled")
         return
 
-    print("Diagnostic monitoring loop started")
+    logger.info("Diagnostic monitoring loop started")
 
     while True:
         try:
@@ -361,8 +374,11 @@ async def diagnostic_monitoring_loop():
                 workflow_id = workflow_info["workflow_id"]
                 time_stuck = workflow_info["time_stuck_seconds"]
 
-                print(f"🚨 WORKFLOW STUCK DETECTED - {time_stuck}s no progress")
-                print(f"🔍 Creating diagnostic agent for workflow {workflow_id}")
+                logger.warning(
+                    "Workflow stuck detected - creating diagnostic agent",
+                    workflow_id=workflow_id,
+                    time_stuck_seconds=time_stuck,
+                )
 
                 # Build diagnostic context using configured values
                 context = diagnostic_service.build_diagnostic_context(
@@ -381,16 +397,18 @@ async def diagnostic_monitoring_loop():
                     max_tasks=diagnostic_settings.max_tasks_per_run,
                 )
 
-                print(
-                    f"✅ Diagnostic run {diagnostic_run.id} created for workflow {workflow_id} "
-                    f"(spawned {diagnostic_run.tasks_created_count} recovery task(s))"
+                logger.info(
+                    "Diagnostic run created",
+                    diagnostic_run_id=str(diagnostic_run.id),
+                    workflow_id=workflow_id,
+                    tasks_created=diagnostic_run.tasks_created_count,
                 )
 
             # Check every 60 seconds
             await asyncio.sleep(60)
 
         except Exception as e:
-            print(f"Error in diagnostic monitoring loop: {e}")
+            logger.error("Error in diagnostic monitoring loop", error=str(e), exc_info=True)
             await asyncio.sleep(60)
 
 
@@ -406,7 +424,7 @@ async def approval_timeout_loop():
     if not db or not approval_service:
         return
 
-    print("Approval timeout monitoring loop started")
+    logger.info("Approval timeout monitoring loop started")
 
     while True:
         try:
@@ -415,15 +433,16 @@ async def approval_timeout_loop():
 
             if timed_out_ids:
                 for ticket_id in timed_out_ids:
-                    print(
-                        f"⏰ TICKET TIMEOUT - Ticket {ticket_id} approval deadline exceeded"
+                    logger.warning(
+                        "Ticket approval deadline exceeded",
+                        ticket_id=ticket_id,
                     )
 
             # Check every 10 seconds (frequent enough to catch timeouts quickly per REQ-THA-009)
             await asyncio.sleep(10)
 
         except Exception as e:
-            print(f"Error in approval timeout loop: {e}")
+            logger.error("Error in approval timeout loop", error=str(e), exc_info=True)
             await asyncio.sleep(10)
 
 
@@ -439,7 +458,7 @@ async def blocking_detection_loop():
     if not db or not queue or not phase_gate_service:
         return
 
-    print("Blocking detection loop started")
+    logger.info("Blocking detection loop started")
 
     while True:
         try:
@@ -449,10 +468,11 @@ async def blocking_detection_loop():
             # Mark tickets as blocked
             for result in results:
                 if result["should_block"]:
-                    print(
-                        f"🚫 BLOCKING DETECTED - Ticket {result['ticket_id']} "
-                        f"blocked ({result['blocker_type']}, "
-                        f"{result['time_in_state_minutes']:.1f} min in state)"
+                    logger.warning(
+                        "Blocking detected - marking ticket as blocked",
+                        ticket_id=result["ticket_id"],
+                        blocker_type=result["blocker_type"],
+                        time_in_state_minutes=round(result["time_in_state_minutes"], 1),
                     )
 
                     ticket_workflow_orchestrator.mark_blocked(
@@ -465,7 +485,7 @@ async def blocking_detection_loop():
             await asyncio.sleep(300)  # 5 minutes
 
         except Exception as e:
-            print(f"Error in blocking detection loop: {e}")
+            logger.error("Error in blocking detection loop", error=str(e), exc_info=True)
             await asyncio.sleep(300)
 
 
@@ -481,7 +501,7 @@ async def anomaly_monitoring_loop():
     if not db or not monitor_service or not diagnostic_service:
         return
 
-    print("Anomaly monitoring loop started")
+    logger.info("Anomaly monitoring loop started")
 
     # Track agents that have already triggered diagnostic runs (to avoid duplicate spawns)
     triggered_agents = set()
@@ -507,12 +527,11 @@ async def anomaly_monitoring_loop():
                     and consecutive_readings >= 3
                     and agent_id not in triggered_agents
                 ):
-                    print(
-                        f"🚨 AGENT ANOMALY DETECTED - Agent {agent_id} has anomaly_score={anomaly_score:.3f} "
-                        f"({consecutive_readings} consecutive readings)"
-                    )
-                    print(
-                        f"🔍 Creating diagnostic agent for anomalous agent {agent_id}"
+                    logger.warning(
+                        "Agent anomaly detected - creating diagnostic agent",
+                        agent_id=agent_id,
+                        anomaly_score=round(anomaly_score, 3),
+                        consecutive_readings=consecutive_readings,
                     )
 
                     # Get workflow ID from agent's current task or recent tasks
@@ -562,9 +581,11 @@ async def anomaly_monitoring_loop():
                                 )
                             )
 
-                            print(
-                                f"✅ Diagnostic run {diagnostic_run.id} created for agent {agent_id} anomaly "
-                                f"(workflow {workflow_id})"
+                            logger.info(
+                                "Diagnostic run created for agent anomaly",
+                                diagnostic_run_id=str(diagnostic_run.id),
+                                agent_id=agent_id,
+                                workflow_id=str(workflow_id),
                             )
 
                             # Mark agent as triggered to avoid duplicate spawns
@@ -583,7 +604,7 @@ async def anomaly_monitoring_loop():
             await asyncio.sleep(60)
 
         except Exception as e:
-            print(f"Error in anomaly monitoring loop: {e}")
+            logger.error("Error in anomaly monitoring loop", error=str(e), exc_info=True)
             await asyncio.sleep(60)
 
 
@@ -725,12 +746,12 @@ async def lifespan(app: FastAPI):
             event_bus=event_bus,
             config=monitoring_config,
         )
-        print("✅ Intelligent Monitoring Loop initialized")
+        logger.info("Intelligent Monitoring Loop initialized")
     except ImportError as e:
-        print(f"⚠️  MonitoringLoop not available: {e}")
+        logger.warning("MonitoringLoop not available", error=str(e))
         monitoring_loop = None
     except Exception as e:
-        print(f"⚠️  Failed to initialize MonitoringLoop: {e}")
+        logger.warning("Failed to initialize MonitoringLoop", error=str(e))
         monitoring_loop = None
 
     # NOTE: Database tables should be created via alembic migrations, not create_all()
@@ -755,16 +776,16 @@ async def lifespan(app: FastAPI):
     # Orchestrator can be disabled via ORCHESTRATOR_ENABLED=false
     if not is_testing and orchestrator_enabled:
         orchestrator_task = asyncio.create_task(orchestrator_loop())
-        print("🚀 Orchestrator loop started")
+        logger.info("Orchestrator loop started")
     elif not orchestrator_enabled:
-        print("⚠️  Orchestrator DISABLED via ORCHESTRATOR_ENABLED=false")
+        logger.warning("Orchestrator DISABLED via ORCHESTRATOR_ENABLED=false")
     else:
-        print("🧪 TESTING mode: Skipping orchestrator loop")
+        logger.info("TESTING mode: Skipping orchestrator loop")
 
     # Monitoring loops can be disabled separately via MONITORING_ENABLED=false
     skip_monitoring = is_testing or not monitoring_enabled
     if not monitoring_enabled and not is_testing:
-        print("⚠️  Monitoring DISABLED via MONITORING_ENABLED=false")
+        logger.warning("Monitoring DISABLED via MONITORING_ENABLED=false")
 
     if not skip_monitoring:
         heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
@@ -777,9 +798,9 @@ async def lifespan(app: FastAPI):
         if monitoring_loop:
             try:
                 asyncio.create_task(monitoring_loop.start())
-                print("✅ Intelligent Monitoring Loop started (background)")
+                logger.info("Intelligent Monitoring Loop started (background)")
             except Exception as e:
-                print(f"⚠️  Failed to start MonitoringLoop: {e}")
+                logger.warning("Failed to start MonitoringLoop", error=str(e))
 
     yield
 
@@ -801,9 +822,9 @@ async def lifespan(app: FastAPI):
     if monitoring_loop and not skip_monitoring:
         try:
             await monitoring_loop.stop()
-            print("✅ Intelligent Monitoring Loop stopped")
+            logger.info("Intelligent Monitoring Loop stopped")
         except Exception as e:
-            print(f"⚠️  Error stopping MonitoringLoop: {e}")
+            logger.warning("Error stopping MonitoringLoop", error=str(e))
 
     # Await task cancellation (only if tasks were started)
     if orchestrator_task:
@@ -859,7 +880,7 @@ async def combined_lifespan(app: FastAPI):
         if is_testing or not mcp_enabled:
             # Skip MCP server in test mode or when disabled
             if not mcp_enabled and not is_testing:
-                print("⚠️  MCP server DISABLED via MCP_ENABLED=false")
+                logger.warning("MCP server DISABLED via MCP_ENABLED=false")
             yield
         else:
             # Import here to avoid circular dependencies
@@ -877,8 +898,8 @@ app = FastAPI(
     lifespan=combined_lifespan,
 )
 
-# Set up logging
-logger = logging.getLogger(__name__)
+# Get structured logger
+logger = get_logger(__name__)
 
 
 # Exception handler for RequestValidationError (returns 422, but sometimes shows as 400)
@@ -935,6 +956,30 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Logging context middleware - adds request_id to all logs within a request
+@app.middleware("http")
+async def logging_context_middleware(request: Request, call_next):
+    """Add request context to all logs within a request lifecycle."""
+    # Generate or use existing request ID
+    request_id = request.headers.get("X-Request-ID", str(uuid4())[:8])
+
+    # Bind context for all logs in this request
+    bind_context(
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+    )
+
+    try:
+        response = await call_next(request)
+        # Add request ID to response headers for correlation
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        # Clear context at end of request
+        clear_context()
 
 # Include routers
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["tickets"])

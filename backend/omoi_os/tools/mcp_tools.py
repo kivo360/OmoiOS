@@ -6,17 +6,18 @@ HTTP access to the MCP server.
 """
 
 import asyncio
-import logging
 from typing import Any, Dict, List, Optional, Sequence, TYPE_CHECKING
 from pydantic import Field
 
 from openhands.sdk.tool import ToolDefinition, ToolExecutor
 from openhands.sdk.tool.schema import Action, Observation
 
+from omoi_os.logging import get_logger
+
 if TYPE_CHECKING:
     from openhands.sdk.core import ConversationState
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ============================================================================

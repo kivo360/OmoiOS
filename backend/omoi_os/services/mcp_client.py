@@ -5,11 +5,12 @@ on a central server, enabling distributed agent architectures.
 """
 
 import asyncio
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass
-import logging
+from typing import Any, Dict, List, Optional
 
-logger = logging.getLogger(__name__)
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass

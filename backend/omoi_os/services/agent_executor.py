@@ -20,8 +20,11 @@ from openhands.tools.preset.planning import (
 )
 
 from omoi_os.config import load_llm_settings
+from omoi_os.logging import get_logger
 from omoi_os.models.phase import PhaseModel
 from omoi_os.services.database import DatabaseService
+
+logger = get_logger(__name__)
 
 # Import OmoiOS native tools
 from omoi_os.tools import register_omoi_tools
@@ -374,9 +377,6 @@ class AgentExecutor:
                 embedding_service = EmbeddingService()
                 memory_service = MemoryService(embedding_service, event_bus)
             except Exception as e:
-                import logging
-
-                logger = logging.getLogger(__name__)
                 logger.warning(
                     f"Memory service not available (search_similar_tasks, get_learned_patterns will be disabled). "
                     f"To enable: set EMBEDDING_OPENAI_API_KEY or install fastembed. Error: {e}"
@@ -608,9 +608,6 @@ class AgentExecutor:
                 if phase:
                     return phase.to_dict()
         except Exception as e:
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.warning(f"Failed to load phase context for {self.phase_id}: {e}")
 
         return None

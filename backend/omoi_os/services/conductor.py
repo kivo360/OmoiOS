@@ -5,7 +5,6 @@ coherence scores, detect duplicate work, and identify coordination opportunities
 Replaces the original tmux-based agent communication with database-driven analysis.
 """
 
-import logging
 import uuid
 from datetime import timedelta
 from typing import Dict, List, Optional, Any
@@ -14,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.models.guardian_analysis import (
@@ -28,7 +28,7 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.llm_service import LLMService
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ConductorAnalysis:

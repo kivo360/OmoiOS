@@ -8,6 +8,7 @@ This module provides:
 """
 
 import os
+import warnings
 from contextlib import contextmanager
 from typing import Optional
 
@@ -46,7 +47,7 @@ class LogfireTracer:
                 )
                 self._configured = True
             except Exception as e:
-                print(f"Warning: Logfire configuration failed: {e}")
+                warnings.warn(f"Logfire configuration failed: {e}", RuntimeWarning, stacklevel=2)
                 self.enabled = False
 
     @contextmanager

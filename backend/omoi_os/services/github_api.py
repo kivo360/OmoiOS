@@ -1,14 +1,17 @@
 """GitHub API service for repository operations."""
 
+import base64
 from typing import Any, Optional
 from uuid import UUID
-import base64
 
 import httpx
 from pydantic import BaseModel
 
+from omoi_os.logging import get_logger
 from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
+
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -205,10 +208,6 @@ class GitHubAPIService:
 
     def _get_user_token_by_id(self, user_id: UUID) -> Optional[str]:
         """Get GitHub access token by user ID."""
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         with self.db.get_session() as session:
             user = session.get(User, user_id)
             if user:
@@ -254,10 +253,6 @@ class GitHubAPIService:
             page: Page number (only used if fetch_all_pages=False)
             fetch_all_pages: If True, automatically fetch all pages and return all repos
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         # Use provided token if available, otherwise fetch from database
         if not token:
             token = self._get_user_token_by_id(user_id)

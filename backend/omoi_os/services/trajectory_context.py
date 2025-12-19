@@ -7,12 +7,12 @@ This class implements the core concept from trajectory thinking:
 - Understand the complete journey, not just current state
 """
 
-import logging
 import re
 from collections import defaultdict
 from datetime import timedelta
 from typing import Dict, Any, List, Optional, Tuple
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.utils.datetime import utc_now
 from omoi_os.models.agent_log import AgentLog
@@ -26,7 +26,7 @@ from omoi_os.models.trajectory_analysis import (
 )
 from omoi_os.services.database import DatabaseService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class TrajectoryContext:

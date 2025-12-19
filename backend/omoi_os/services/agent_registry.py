@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import logging
 import os
 import socket
 import uuid
@@ -18,6 +17,7 @@ except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
 from sqlalchemy import and_
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_status import AgentStatus
 from omoi_os.services.agent_status_manager import AgentStatusManager
@@ -25,7 +25,7 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)

@@ -1,6 +1,5 @@
 """OAuth service for managing authentication flows."""
 
-import logging
 from functools import lru_cache
 from typing import Optional
 from uuid import UUID
@@ -9,12 +8,12 @@ import redis
 from sqlalchemy import select
 
 from omoi_os.config import get_app_settings
+from omoi_os.logging import get_logger
 from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.oauth import get_provider, list_providers, OAuthUserInfo
 
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Redis key prefix for OAuth state storage
 OAUTH_STATE_PREFIX = "oauth_state:"

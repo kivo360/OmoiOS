@@ -2,16 +2,16 @@
 
 from dataclasses import dataclass
 from typing import List, Optional
-import logging
 
 from sqlalchemy import text, select
 from sqlalchemy.orm import Session
 
+from omoi_os.logging import get_logger
 from omoi_os.models.ticket import Ticket  # Use main model (has embedding_vector now)
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.embedding import EmbeddingService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Default similarity threshold - tickets above this are considered duplicates
 DEFAULT_SIMILARITY_THRESHOLD = 0.85

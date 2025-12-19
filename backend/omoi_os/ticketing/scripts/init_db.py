@@ -2,8 +2,11 @@ from __future__ import annotations
 
 from sqlalchemy import text
 
+from omoi_os.logging import get_logger
 from omoi_os.ticketing.db import get_engine
 from omoi_os.ticketing.models import Base
+
+logger = get_logger(__name__)
 
 
 def main() -> None:
@@ -30,7 +33,7 @@ def main() -> None:
         # Example of creating a GIN index on tags if needed later:
         # conn.execute(text('CREATE INDEX IF NOT EXISTS idx_tickets_tags ON tickets USING GIN ((tags));'))
         pass
-    print("Database initialized.")
+    logger.info("Database initialized")
 
 
 if __name__ == "__main__":

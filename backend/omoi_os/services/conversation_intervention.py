@@ -1,6 +1,5 @@
 """Service for sending Guardian interventions to active OpenHands conversations."""
 
-import logging
 from typing import Optional
 
 from openhands.sdk import Conversation, Agent
@@ -8,8 +7,9 @@ from openhands.tools.preset.default import get_default_agent
 from openhands.sdk import LLM
 
 from omoi_os.config import load_llm_settings
+from omoi_os.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ConversationInterventionService:

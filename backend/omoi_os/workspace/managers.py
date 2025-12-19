@@ -4,7 +4,6 @@ Provides command executors, repository managers, and workspace managers
 for both local and Docker environments.
 """
 
-import logging
 import platform
 import re
 import socket
@@ -14,7 +13,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-logger = logging.getLogger(__name__)
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass

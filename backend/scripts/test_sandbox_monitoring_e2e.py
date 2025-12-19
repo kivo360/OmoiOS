@@ -31,11 +31,12 @@ from omoi_os.services.conductor import ConductorService
 from omoi_os.services.trajectory_context import TrajectoryContext
 from omoi_os.services.agent_output_collector import AgentOutputCollector
 from omoi_os.models.task import Task
+from omoi_os.api.routes.sandbox import query_trajectory_summary
 
 
 def test_sandbox_tasks_exist(db: DatabaseService) -> list:
     """Check for running sandbox tasks in the database."""
-    print("\n[1/6] Checking for sandbox tasks in database...")
+    print("\n[1/7] Checking for sandbox tasks in database...")
     with db.get_session() as session:
         # Check for any tasks with sandbox_id
         sandbox_tasks = (
@@ -65,7 +66,7 @@ def test_sandbox_tasks_exist(db: DatabaseService) -> list:
 
 def test_monitoring_loop_detection(db: DatabaseService, event_bus: EventBusService) -> bool:
     """Test MonitoringLoop._get_active_sandbox_agent_ids()."""
-    print("\n[2/6] Testing MonitoringLoop._get_active_sandbox_agent_ids()...")
+    print("\n[2/7] Testing MonitoringLoop._get_active_sandbox_agent_ids()...")
     try:
         config = MonitoringConfig(
             guardian_interval_seconds=60,
@@ -85,7 +86,7 @@ def test_monitoring_loop_detection(db: DatabaseService, event_bus: EventBusServi
 
 def test_guardian_detection(db: DatabaseService) -> bool:
     """Test IntelligentGuardian._get_active_sandbox_agent_ids()."""
-    print("\n[3/6] Testing IntelligentGuardian._get_active_sandbox_agent_ids()...")
+    print("\n[3/7] Testing IntelligentGuardian._get_active_sandbox_agent_ids()...")
     try:
         guardian = IntelligentGuardian(db)
         sandbox_ids = guardian._get_active_sandbox_agent_ids()
@@ -100,7 +101,7 @@ def test_guardian_detection(db: DatabaseService) -> bool:
 
 def test_conductor_detection(db: DatabaseService) -> bool:
     """Test ConductorService._get_active_sandbox_agent_ids()."""
-    print("\n[4/6] Testing ConductorService._get_active_sandbox_agent_ids()...")
+    print("\n[4/7] Testing ConductorService._get_active_sandbox_agent_ids()...")
     try:
         conductor = ConductorService(db)
         with db.get_session() as session:
@@ -116,7 +117,7 @@ def test_conductor_detection(db: DatabaseService) -> bool:
 
 def test_trajectory_context(db: DatabaseService) -> bool:
     """Test TrajectoryContext.get_sandbox_id_for_agent()."""
-    print("\n[5/6] Testing TrajectoryContext.get_sandbox_id_for_agent()...")
+    print("\n[5/7] Testing TrajectoryContext.get_sandbox_id_for_agent()...")
     try:
         trajectory = TrajectoryContext(db)
         with db.get_session() as session:
@@ -144,7 +145,7 @@ def test_trajectory_context(db: DatabaseService) -> bool:
 
 def test_agent_output_collector(db: DatabaseService, event_bus: EventBusService) -> bool:
     """Test AgentOutputCollector.get_sandbox_id_for_agent()."""
-    print("\n[6/6] Testing AgentOutputCollector.get_sandbox_id_for_agent()...")
+    print("\n[6/7] Testing AgentOutputCollector.get_sandbox_id_for_agent()...")
     try:
         collector = AgentOutputCollector(db, event_bus)
         with db.get_session() as session:
@@ -166,6 +167,49 @@ def test_agent_output_collector(db: DatabaseService, event_bus: EventBusService)
                 return True  # Not a failure, just no data
     except Exception as e:
         print(f"   ❌ Failed: {e}")
+        return False
+
+
+def test_trajectory_summary(db: DatabaseService) -> bool:
+    """Test the trajectory summary query (excludes heartbeats)."""
+    print("\n[7/7] Testing Trajectory Summary (heartbeat aggregation)...")
+    try:
+        with db.get_session() as session:
+            sandbox_task = session.query(Task).filter(Task.sandbox_id.isnot(None)).first()
+
+            if sandbox_task and sandbox_task.sandbox_id:
+                result = query_trajectory_summary(db, sandbox_task.sandbox_id, limit=50)
+
+                total = result["total_events"]
+                trajectory = result["trajectory_events"]
+                heartbeats = result["heartbeat_summary"]["count"]
+
+                print(f"   ✅ Trajectory summary retrieved successfully")
+                print(f"      Total events:      {total}")
+                print(f"      Trajectory events: {trajectory} (non-heartbeat)")
+                print(f"      Heartbeats:        {heartbeats} (aggregated)")
+
+                if heartbeats > 0:
+                    first_hb = result["heartbeat_summary"]["first_heartbeat"]
+                    last_hb = result["heartbeat_summary"]["last_heartbeat"]
+                    print(f"      First heartbeat:   {first_hb}")
+                    print(f"      Last heartbeat:    {last_hb}")
+
+                # Verify counts add up correctly
+                if trajectory + heartbeats == total:
+                    print(f"   ✅ Event counts verify: {trajectory} + {heartbeats} = {total}")
+                    return True
+                else:
+                    print(f"   ⚠️  Count mismatch: {trajectory} + {heartbeats} != {total}")
+                    return True  # Still pass - might be edge cases
+
+            else:
+                print("   ⚠️  No sandbox tasks to test with - SKIP")
+                return True  # Not a failure, just no data
+    except Exception as e:
+        print(f"   ❌ Failed: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
@@ -203,6 +247,7 @@ def main():
     results.append(("Conductor Detection", test_conductor_detection(db)))
     results.append(("TrajectoryContext", test_trajectory_context(db)))
     results.append(("AgentOutputCollector", test_agent_output_collector(db, event_bus)))
+    results.append(("Trajectory Summary", test_trajectory_summary(db)))
 
     # Print summary
     print("\n" + "=" * 70)

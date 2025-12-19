@@ -2,22 +2,21 @@
 
 from __future__ import annotations
 
-import logging
+import os
 from dataclasses import dataclass
 from typing import List, Optional
-
-import os
 
 import httpx
 from sqlalchemy import or_
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.task import Task
 from omoi_os.models.agent import Agent
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -736,18 +735,12 @@ class CollaborationService:
                                             thread.start()
                             except Exception as delivery_error:
                                 # Non-critical - message is still stored in database
-                                import logging
-                                logger = logging.getLogger(__name__)
                                 logger.warning(f"Failed to deliver message via OpenHands API: {delivery_error}")
                     except Exception as e:
                         # Non-critical failure - message is still stored in database
-                        import logging
-                        logger = logging.getLogger(__name__)
                         logger.warning(f"Failed to deliver message to agent {recipient_id[:8]}: {e}")
         except Exception as e:
             # Non-critical failure
-            import logging
-            logger = logging.getLogger(__name__)
             logger.warning(f"Failed to deliver messages to agents: {e}")
 
     # ---------------------------------------------------------------------

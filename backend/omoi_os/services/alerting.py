@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-import logging
 import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import yaml
 
+from omoi_os.logging import get_logger
 from omoi_os.models.monitor_anomaly import Alert
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class AlertRule:

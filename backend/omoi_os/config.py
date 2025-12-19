@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 from functools import lru_cache
 from pathlib import Path
@@ -20,8 +19,9 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
+from omoi_os.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 CONFIG_ROOT = Path("config")
 ENVIRONMENT_VARIABLE = "OMOIOS_ENV"
 DEFAULT_ENVIRONMENT = "local"
