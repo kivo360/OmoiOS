@@ -58,8 +58,8 @@ class PydanticAIService:
         ):
             return self.settings.model
 
-        # Default to kimi-k2-thinking
-        return "accounts/fireworks/models/kimi-k2-thinking"
+        # Default to GPT-OSS-120B (cost-effective alternative to kimi-k2)
+        return "accounts/fireworks/models/gpt-oss-120b"
 
     def create_agent(
         self,
