@@ -408,6 +408,90 @@ async def orchestrator_loop():
             await asyncio.sleep(10)
 
 
+async def idle_sandbox_check_loop():
+    """Background task that checks for idle sandboxes and terminates them.
+
+    An idle sandbox is one that:
+    - Has recent heartbeats (is alive)
+    - Has no work events for an extended period (is idle)
+
+    These sandboxes waste Daytona resources and should be terminated.
+    """
+    global db, event_bus
+
+    # Check if idle detection is enabled
+    idle_detection_enabled = os.getenv("IDLE_DETECTION_ENABLED", "true").lower() in ("true", "1", "yes")
+    if not idle_detection_enabled:
+        logger.info("idle_detection_disabled_via_env")
+        return
+
+    # Wait for services to initialize
+    await asyncio.sleep(5)
+
+    if not db:
+        logger.error("database_not_initialized_for_idle_check")
+        return
+
+    # Check if sandbox execution is enabled (only check if we're using sandboxes)
+    from omoi_os.config import get_app_settings
+
+    settings = get_app_settings()
+    if not settings.daytona.sandbox_execution:
+        logger.info("idle_sandbox_check_skipped_legacy_mode")
+        return
+
+    logger.info("idle_sandbox_check_loop_started")
+
+    # Get idle threshold from environment (default 30 minutes)
+    from datetime import timedelta
+
+    idle_threshold_minutes = int(os.getenv("IDLE_THRESHOLD_MINUTES", "10"))
+    idle_threshold = timedelta(minutes=idle_threshold_minutes)
+    check_interval = int(os.getenv("IDLE_CHECK_INTERVAL_SECONDS", "30"))
+
+    # Initialize idle sandbox monitor
+    from omoi_os.services.daytona_spawner import get_daytona_spawner
+    from omoi_os.services.idle_sandbox_monitor import IdleSandboxMonitor
+
+    try:
+        daytona_spawner = get_daytona_spawner(db=db, event_bus=event_bus)
+        idle_monitor = IdleSandboxMonitor(
+            db=db,
+            daytona_spawner=daytona_spawner,
+            event_bus=event_bus,
+            idle_threshold=idle_threshold,
+        )
+        logger.info(
+            "idle_monitor_initialized",
+            idle_threshold_minutes=idle_threshold_minutes,
+            check_interval_seconds=check_interval,
+        )
+    except Exception as e:
+        logger.error("idle_monitor_init_failed", error=str(e))
+        return
+
+    while not shutdown_event.is_set():
+        try:
+            # Check and terminate idle sandboxes
+            terminated = await idle_monitor.check_and_terminate_idle_sandboxes()
+
+            if terminated:
+                logger.info(
+                    "idle_sandboxes_terminated",
+                    count=len(terminated),
+                    sandbox_ids=[t["sandbox_id"] for t in terminated],
+                )
+
+            await asyncio.sleep(check_interval)
+
+        except asyncio.CancelledError:
+            logger.info("idle_sandbox_check_loop_cancelled")
+            break
+        except Exception as e:
+            logger.error("idle_sandbox_check_error", error=str(e))
+            await asyncio.sleep(check_interval)
+
+
 async def init_services():
     """Initialize required services."""
     global db, queue, event_bus, registry_service
@@ -488,10 +572,11 @@ async def main():
 
     try:
         await init_services()
-        # Run heartbeat and orchestrator loop concurrently
+        # Run heartbeat, orchestrator loop, and idle sandbox check concurrently
         await asyncio.gather(
             heartbeat_task(),
             orchestrator_loop(),
+            idle_sandbox_check_loop(),
         )
     except KeyboardInterrupt:
         await shutdown()

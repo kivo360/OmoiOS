@@ -2158,6 +2158,115 @@ if __name__ == "__main__":
             logger.error(f"Failed to get full logs for sandbox {sandbox_id}: {e}")
             return None
 
+    async def extract_session_transcript(
+        self, sandbox_id: str, session_id: Optional[str] = None
+    ) -> Optional[str]:
+        """Extract the session transcript from a sandbox before termination.
+
+        Searches for JSONL transcript files in the Claude sessions directory
+        and returns the most recent one as base64-encoded content.
+
+        Args:
+            sandbox_id: Sandbox ID to extract transcript from
+            session_id: Optional specific session ID to extract. If not provided,
+                       extracts the most recent session transcript.
+
+        Returns:
+            Base64-encoded transcript content, or None if not found/error
+        """
+        info = self._sandboxes.get(sandbox_id)
+        if not info:
+            logger.warning(f"Sandbox {sandbox_id} not found for transcript extraction")
+            return None
+
+        try:
+            daytona_sandbox = info.extra_data.get("daytona_sandbox")
+            if not daytona_sandbox:
+                logger.warning(f"No Daytona sandbox reference for {sandbox_id}")
+                return None
+
+            import base64
+
+            # Claude Code stores sessions in ~/.claude/projects/<project_key>/<session_id>.jsonl
+            # We need to find the .jsonl file in the sessions directory
+            claude_dir = "/root/.claude/projects"
+
+            try:
+                # List project directories
+                projects = daytona_sandbox.fs.list_files(claude_dir)
+                if not projects:
+                    logger.debug(f"No Claude projects found in sandbox {sandbox_id}")
+                    return None
+
+                # For each project directory, find .jsonl files
+                transcript_files = []
+                for project in projects:
+                    if hasattr(project, "is_dir") and project.is_dir:
+                        project_path = f"{claude_dir}/{project.name}"
+                        try:
+                            files = daytona_sandbox.fs.list_files(project_path)
+                            for f in files:
+                                if hasattr(f, "name") and f.name.endswith(".jsonl"):
+                                    transcript_files.append(
+                                        f"{project_path}/{f.name}"
+                                    )
+                        except Exception:
+                            continue
+
+                if not transcript_files:
+                    logger.debug(f"No transcript files found in sandbox {sandbox_id}")
+                    return None
+
+                # If a specific session_id is requested, find that file
+                if session_id:
+                    target_file = None
+                    for f in transcript_files:
+                        if session_id in f:
+                            target_file = f
+                            break
+                    if not target_file:
+                        logger.debug(
+                            f"Session {session_id} not found in sandbox {sandbox_id}"
+                        )
+                        return None
+                    transcript_path = target_file
+                else:
+                    # Get the most recent transcript (last in list typically, or we could check mtime)
+                    transcript_path = transcript_files[-1]
+
+                # Download the transcript file
+                logger.info(
+                    f"Extracting transcript from {transcript_path} in sandbox {sandbox_id}"
+                )
+                content = daytona_sandbox.fs.download_file(transcript_path)
+
+                if content:
+                    # Encode to base64
+                    if isinstance(content, bytes):
+                        transcript_b64 = base64.b64encode(content).decode("utf-8")
+                    else:
+                        transcript_b64 = base64.b64encode(
+                            content.encode("utf-8")
+                        ).decode("utf-8")
+
+                    logger.info(
+                        f"Extracted transcript ({len(transcript_b64)} bytes base64) "
+                        f"from sandbox {sandbox_id}"
+                    )
+                    return transcript_b64
+
+            except Exception as e:
+                logger.warning(
+                    f"Failed to list/download transcripts from sandbox {sandbox_id}: {e}"
+                )
+                return None
+
+        except Exception as e:
+            logger.error(f"Failed to extract transcript from sandbox {sandbox_id}: {e}")
+            return None
+
+        return None
+
     def list_active_sandboxes(self) -> List[SandboxInfo]:
         """List all active (creating or running) sandboxes."""
         return [

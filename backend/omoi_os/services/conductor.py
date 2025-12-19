@@ -15,6 +15,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from omoi_os.models.agent import Agent
+from omoi_os.models.task import Task
 from omoi_os.models.guardian_analysis import (
     ConductorAnalysisModel,
     DetectedDuplicateModel,
@@ -129,7 +130,11 @@ class ConductorService:
         cycle_id: Optional[uuid.UUID] = None,
     ) -> ConductorAnalysis:
         """
-        Analyze system coherence across all active agents.
+        Analyze system coherence across all active agents (legacy + sandbox).
+
+        This method now handles both:
+        - Legacy agents: Registered in agents table with heartbeats
+        - Sandbox agents: Tasks with sandbox_id that are in 'running' status
 
         Args:
             cycle_id: Optional cycle ID for tracking analysis cycles
@@ -143,9 +148,12 @@ class ConductorService:
                 if not cycle_id:
                     cycle_id = uuid.uuid4()
 
-                # Get active agents
+                # Get all active agent IDs (legacy + sandbox)
+                all_agent_ids = self._get_all_active_agent_ids(session)
+                num_agents = len(all_agent_ids)
+
+                # Also get legacy agents for backward compatibility with some methods
                 active_agents = self._get_active_agents(session)
-                num_agents = len(active_agents)
 
                 if num_agents == 0:
                     return ConductorAnalysis(
@@ -159,8 +167,16 @@ class ConductorService:
                         recommendations=["No active agents to analyze"],
                     )
 
-                # Get recent Guardian analyses
-                guardian_analyses = self._get_guardian_analyses(session, active_agents)
+                # Get recent Guardian analyses for ALL agents (legacy + sandbox)
+                guardian_analyses = self._get_guardian_analyses_by_ids(
+                    session, all_agent_ids
+                )
+
+                logger.info(
+                    f"Conductor coherence analysis: {len(active_agents)} legacy agents, "
+                    f"{num_agents - len(active_agents)} sandbox agents, "
+                    f"{len(guardian_analyses)} Guardian analyses found"
+                )
 
                 # Compute coherence score
                 coherence_score = self._compute_coherence_score(
@@ -250,7 +266,7 @@ class ConductorService:
             )
 
     def _get_active_agents(self, session: Session) -> List[Agent]:
-        """Get list of active agents."""
+        """Get list of active legacy agents (with recent heartbeats)."""
         # Use proper AgentStatus enum values
         from omoi_os.models.agent_status import AgentStatus
 
@@ -262,14 +278,88 @@ class ConductorService:
             .all()
         )
 
+    def _get_active_sandbox_agent_ids(self, session: Session) -> List[str]:
+        """Get agent IDs for all running sandbox tasks.
+
+        Sandbox tasks have an assigned_agent_id and are executing in
+        a Daytona sandbox (sandbox_id is set). This returns the agent IDs
+        so they can be included in coherence analysis.
+
+        Returns:
+            List of agent IDs that are running in sandboxes
+        """
+        try:
+            # Find running tasks that have a sandbox_id
+            running_sandbox_tasks = (
+                session.query(Task)
+                .filter(
+                    Task.status == "running",
+                    Task.sandbox_id.isnot(None),
+                    Task.assigned_agent_id.isnot(None),
+                )
+                .all()
+            )
+
+            return [
+                str(task.assigned_agent_id)
+                for task in running_sandbox_tasks
+                if task.assigned_agent_id
+            ]
+
+        except Exception as e:
+            logger.error(f"Failed to get active sandbox agent IDs: {e}")
+            return []
+
+    def _get_all_active_agent_ids(self, session: Session) -> List[str]:
+        """Get all active agent IDs (both legacy and sandbox).
+
+        This combines:
+        - Legacy agents: Registered in agents table with recent heartbeats
+        - Sandbox agents: Tasks with sandbox_id that are in 'running' status
+
+        Returns:
+            List of all active agent IDs
+        """
+        agent_ids: set[str] = set()
+
+        # Get legacy agent IDs
+        legacy_agents = self._get_active_agents(session)
+        for agent in legacy_agents:
+            agent_ids.add(str(agent.id))
+
+        # Get sandbox agent IDs
+        sandbox_agent_ids = self._get_active_sandbox_agent_ids(session)
+        agent_ids.update(sandbox_agent_ids)
+
+        return list(agent_ids)
+
     def _get_guardian_analyses(
         self, session: Session, active_agents: List[Agent]
     ) -> List[Dict[str, Any]]:
-        """Get recent Guardian analyses for active agents."""
+        """Get recent Guardian analyses for active agents (legacy only - for backward compat)."""
         if not active_agents:
             return []
 
-        agent_ids = [agent.id for agent in active_agents]
+        agent_ids = [str(agent.id) for agent in active_agents]
+        return self._get_guardian_analyses_by_ids(session, agent_ids)
+
+    def _get_guardian_analyses_by_ids(
+        self, session: Session, agent_ids: List[str]
+    ) -> List[Dict[str, Any]]:
+        """Get recent Guardian analyses for specified agent IDs.
+
+        This method works with both legacy and sandbox agents since
+        the Guardian now stores analyses for both types.
+
+        Args:
+            session: Database session
+            agent_ids: List of agent ID strings
+
+        Returns:
+            List of Guardian analysis dictionaries
+        """
+        if not agent_ids:
+            return []
 
         # Get the most recent analysis for each active agent
         query = text("""
@@ -679,8 +769,8 @@ class ConductorService:
                 row = result.fetchone()
                 recent_analysis = dict(row._mapping) if row else None
 
-                # Get active agent count
-                active_count = len(self._get_active_agents(session))
+                # Get active agent count (legacy + sandbox)
+                active_count = len(self._get_all_active_agent_ids(session))
 
                 # Get recent duplicate count
                 query = text("""
@@ -762,13 +852,27 @@ class ConductorService:
 
         # Get additional data for full response
         with self.db.get_session() as session:
-            # Get phase distribution
-            active_agents = self._get_active_agents(session)
-            phase_distribution = {}
-            steering_types = {}
+            # Get phase distribution (legacy agents + sandbox tasks)
+            phase_distribution: Dict[str, int] = {}
+            steering_types: Dict[str, int] = {}
 
+            # Count legacy agents by phase
+            active_agents = self._get_active_agents(session)
             for agent in active_agents:
                 phase = agent.phase_id or "unknown"
+                phase_distribution[phase] = phase_distribution.get(phase, 0) + 1
+
+            # Count sandbox tasks by phase
+            running_sandbox_tasks = (
+                session.query(Task)
+                .filter(
+                    Task.status == "running",
+                    Task.sandbox_id.isnot(None),
+                )
+                .all()
+            )
+            for task in running_sandbox_tasks:
+                phase = task.phase_id or "unknown"
                 phase_distribution[phase] = phase_distribution.get(phase, 0) + 1
 
             # Get recent steering types from guardian analyses
