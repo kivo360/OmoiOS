@@ -103,10 +103,11 @@ def test_conductor_detection(db: DatabaseService) -> bool:
     print("\n[4/6] Testing ConductorService._get_active_sandbox_agent_ids()...")
     try:
         conductor = ConductorService(db)
-        sandbox_ids = conductor._get_active_sandbox_agent_ids()
-        print(f"   ✅ Found {len(sandbox_ids)} active sandbox IDs via Conductor")
-        for sid in sandbox_ids[:3]:
-            print(f"      - {sid[:40]}...")
+        with db.get_session() as session:
+            sandbox_ids = conductor._get_active_sandbox_agent_ids(session)
+            print(f"   ✅ Found {len(sandbox_ids)} active sandbox IDs via Conductor")
+            for sid in sandbox_ids[:3]:
+                print(f"      - {sid[:40]}...")
         return True
     except Exception as e:
         print(f"   ❌ Failed: {e}")
