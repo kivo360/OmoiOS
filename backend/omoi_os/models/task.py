@@ -35,6 +35,9 @@ class Task(Base):
     task_type: Mapped[str] = mapped_column(
         String(100), nullable=False
     )  # analyze_requirements, implement_feature, etc.
+    title: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True, comment="Human-readable task title"
+    )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     priority: Mapped[str] = mapped_column(
         String(20), nullable=False, index=True
@@ -123,6 +126,13 @@ class Task(Base):
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        comment="Timestamp of last update to this task",
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
