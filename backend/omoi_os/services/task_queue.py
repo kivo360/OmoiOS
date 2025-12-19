@@ -878,3 +878,104 @@ class TaskQueueService:
                 "is_timed_out": is_timed_out,
                 "can_cancel": task.status in ["assigned", "running"],
             }
+
+    def get_stale_assigned_tasks(
+        self, stale_threshold_minutes: int = 3
+    ) -> list[Task]:
+        """
+        Get tasks stuck in 'assigned' status for too long.
+
+        Tasks that have been assigned but never transitioned to 'running' are
+        likely orphaned (sandbox crashed before sending agent.started event).
+
+        Args:
+            stale_threshold_minutes: Minutes after which an assigned task is considered stale
+
+        Returns:
+            List of stale Task objects
+        """
+        from datetime import timedelta
+        from omoi_os.utils.datetime import utc_now
+
+        stale_cutoff = utc_now() - timedelta(minutes=stale_threshold_minutes)
+
+        with self.db.get_session() as session:
+            # Find tasks that:
+            # 1. Are in 'assigned' status
+            # 2. Have a sandbox_id (were assigned to a sandbox)
+            # 3. Were created more than threshold ago
+            tasks = (
+                session.query(Task)
+                .filter(
+                    Task.status == "assigned",
+                    Task.sandbox_id.isnot(None),
+                    Task.created_at < stale_cutoff,
+                )
+                .all()
+            )
+
+            # Expunge tasks so they can be used outside the session
+            for task in tasks:
+                session.expunge(task)
+
+            return tasks
+
+    def cleanup_stale_assigned_tasks(
+        self, stale_threshold_minutes: int = 3, dry_run: bool = False
+    ) -> list[dict]:
+        """
+        Clean up tasks stuck in 'assigned' status by marking them as failed.
+
+        This handles cases where sandboxes crashed before sending any events
+        (agent.started, agent.completed, etc.), leaving tasks orphaned.
+
+        Args:
+            stale_threshold_minutes: Minutes after which an assigned task is considered stale
+            dry_run: If True, only report what would be cleaned up without making changes
+
+        Returns:
+            List of dicts with task info for each cleaned up task
+        """
+        from datetime import timedelta
+        from omoi_os.utils.datetime import utc_now
+
+        stale_cutoff = utc_now() - timedelta(minutes=stale_threshold_minutes)
+        cleaned_tasks = []
+
+        with self.db.get_session() as session:
+            # Find stale assigned tasks
+            tasks = (
+                session.query(Task)
+                .filter(
+                    Task.status == "assigned",
+                    Task.sandbox_id.isnot(None),
+                    Task.created_at < stale_cutoff,
+                )
+                .all()
+            )
+
+            for task in tasks:
+                task_info = {
+                    "task_id": str(task.id),
+                    "sandbox_id": task.sandbox_id,
+                    "task_type": task.task_type,
+                    "description": task.description[:50] if task.description else None,
+                    "created_at": str(task.created_at),
+                    "age_minutes": (utc_now() - task.created_at).total_seconds() / 60,
+                }
+
+                if not dry_run:
+                    task.status = "failed"
+                    task.error_message = (
+                        f"Task stuck in assigned status for "
+                        f"{task_info['age_minutes']:.1f} minutes. "
+                        f"Sandbox may have crashed before starting."
+                    )
+                    task.completed_at = utc_now()
+
+                cleaned_tasks.append(task_info)
+
+            if not dry_run:
+                session.commit()
+
+        return cleaned_tasks
