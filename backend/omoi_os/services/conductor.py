@@ -115,15 +115,19 @@ class ConductorService:
         self,
         db: DatabaseService,
         llm_service: Optional[LLMService] = None,
+        llm_analysis_enabled: bool = True,
     ):
         """Initialize conductor service.
 
         Args:
             db: Database service for persistence
             llm_service: Optional LLM service for analysis
+            llm_analysis_enabled: Whether to perform LLM-based duplicate analysis
+                Set to False to save tokens (will skip duplicate detection)
         """
         self.db = db
         self.llm_service = llm_service or LLMService()
+        self.llm_analysis_enabled = llm_analysis_enabled
 
     async def analyze_system_coherence(
         self,
@@ -478,6 +482,14 @@ class ConductorService:
     ) -> List[DuplicateDetection]:
         """Detect duplicate work across agents using LLM analysis."""
         duplicates = []
+
+        # Skip LLM-based duplicate detection if disabled (to save tokens)
+        if not self.llm_analysis_enabled:
+            logger.debug(
+                "llm_duplicate_detection_disabled",
+                reason="LLM analysis disabled via config",
+            )
+            return duplicates
 
         if len(guardian_analyses) < 2:
             return duplicates

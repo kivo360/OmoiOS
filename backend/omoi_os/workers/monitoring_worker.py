@@ -439,6 +439,7 @@ async def init_services():
             auto_steering_enabled=app_settings.monitoring.auto_steering_enabled,
             max_concurrent_analyses=app_settings.monitoring.max_concurrent_analyses,
             workspace_root=app_settings.workspace.root,
+            llm_analysis_enabled=app_settings.monitoring.llm_analysis_enabled,
         )
 
         monitoring_loop = MonitoringLoop(

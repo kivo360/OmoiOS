@@ -469,6 +469,10 @@ class MonitoringSettings(OmoiBaseSettings):
     auto_steering_enabled: bool = False
     max_concurrent_analyses: int = 5
 
+    # Toggle for LLM-based analysis in Guardian and Conductor
+    # Set MONITORING_LLM_ANALYSIS_ENABLED=false to disable LLM calls and save tokens
+    llm_analysis_enabled: bool = True
+
 
 class DiagnosticSettings(OmoiBaseSettings):
     """

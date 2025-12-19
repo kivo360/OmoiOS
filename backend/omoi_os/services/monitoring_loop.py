@@ -40,6 +40,7 @@ class MonitoringConfig:
     auto_steering_enabled: bool = False  # Auto-execute steering interventions
     max_concurrent_analyses: int = 5  # Limit concurrent analyses
     workspace_root: Optional[str] = None  # Root directory for agent workspaces
+    llm_analysis_enabled: bool = True  # Enable LLM-based trajectory analysis (disable to save tokens)
 
 
 @dataclass
@@ -84,11 +85,17 @@ class MonitoringLoop:
         self.event_bus = event_bus
         self.config = config or MonitoringConfig()
 
-        # Initialize monitoring components
+        # Initialize monitoring components with LLM analysis flag
         self.guardian = IntelligentGuardian(
-            db, workspace_root=self.config.workspace_root, event_bus=event_bus
+            db,
+            workspace_root=self.config.workspace_root,
+            event_bus=event_bus,
+            llm_analysis_enabled=self.config.llm_analysis_enabled,
         )
-        self.conductor = ConductorService(db)
+        self.conductor = ConductorService(
+            db,
+            llm_analysis_enabled=self.config.llm_analysis_enabled,
+        )
         self.output_collector = AgentOutputCollector(db, event_bus)
 
         # State tracking
