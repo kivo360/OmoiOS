@@ -330,9 +330,12 @@ async def poll_for_task(
 async def get_sandbox_events(
     client: httpx.AsyncClient, sandbox_id: str, seen_event_ids: set[str]
 ) -> list[dict]:
-    """Get new sandbox events (ones we haven't seen before)."""
+    """Get new sandbox events (ones we haven't seen before).
+
+    Uses the /trajectory endpoint which excludes heartbeats for faster queries.
+    """
     response = await client.get(
-        f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/events?limit=50"
+        f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/trajectory?limit=100"
     )
     if response.status_code == 200:
         data = response.json()
@@ -382,15 +385,18 @@ async def check_task_activity(
     }
 
     # Check sandbox events if we have a sandbox_id
+    # Uses /trajectory endpoint for efficiency (excludes heartbeats)
     if sandbox_id:
         try:
             response = await client.get(
-                f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/events?limit=20"
+                f"{API_BASE_URL}/api/v1/sandboxes/{sandbox_id}/trajectory?limit=50"
             )
             if response.status_code == 200:
                 data = response.json()
                 events = data.get("events", [])
-                activity["event_count"] = len(events)
+                # Include heartbeat count in total for activity check
+                heartbeat_count = data.get("heartbeat_summary", {}).get("count", 0)
+                activity["event_count"] = len(events) + heartbeat_count
 
                 # Activity indicators - events that show the worker is active
                 activity_indicators = [

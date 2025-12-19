@@ -8,7 +8,10 @@ from typing import Dict, List, Optional
 import yaml
 from pathlib import Path
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
+
+logger = get_logger(__name__)
 from omoi_os.models.agent_status import AgentStatus
 from omoi_os.models.guardian_action import AuthorityLevel
 from omoi_os.models.watchdog_action import WatchdogAction
@@ -101,7 +104,7 @@ class WatchdogService:
                         self.policies[policy_name] = policy_data["policy"]
             except Exception as e:
                 # Log error but continue loading other policies
-                print(f"Error loading policy {policy_file}: {e}")
+                logger.error("Error loading policy", policy_file=str(policy_file), error=str(e))
     
     def _create_default_policies(self) -> None:
         """Create default remediation policies."""
@@ -381,7 +384,7 @@ class WatchdogService:
                 return True
         except Exception as e:
             # Log error but don't fail
-            print(f"Error executing restart for agent {agent_id}: {e}")
+            logger.error("Error executing restart for agent", agent_id=agent_id, error=str(e), exc_info=True)
             return False
     
     def _execute_failover(
@@ -533,7 +536,7 @@ class WatchdogService:
             
             return True
         except Exception as e:
-            print(f"Error escalating to Guardian for agent {agent_id}: {e}")
+            logger.error("Error escalating to Guardian for agent", agent_id=agent_id, error=str(e), exc_info=True)
             return False
     
     def get_remediation_history(

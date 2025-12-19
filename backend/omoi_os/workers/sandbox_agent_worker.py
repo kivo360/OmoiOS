@@ -41,6 +41,17 @@ from uuid import uuid4
 
 import httpx
 
+# Configure logging for standalone sandbox script
+import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("sandbox_agent_worker")
+
+
 # Try to import Claude Agent SDK
 try:
     from claude_agent_sdk import (
@@ -177,7 +188,7 @@ class EventReporter:
             )
             return response.status_code == 200
         except Exception as e:
-            print(f"[EventReporter] Failed to report {event_type}: {e}")
+            logger.error("Failed to report event", extra={"event_type": event_type, "error": str(e)})
             return False
 
     async def heartbeat(self) -> bool:
@@ -229,7 +240,7 @@ class MessagePoller:
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
-            print(f"[MessagePoller] Poll failed: {e}")
+            logger.error("Message poll failed", extra={"error": str(e)})
 
         return []
 
@@ -270,7 +281,7 @@ async def process_sdk_response(
                                 "block_type": "text",
                             },
                         )
-                        print(f"💬 {block.text[:100]}...")
+                        logger.info("Assistant message", extra={"text_preview": block.text[:100]})
 
                     elif isinstance(block, ThinkingBlock):
                         # Report thinking (if present)
@@ -281,7 +292,7 @@ async def process_sdk_response(
                                 "block_type": "thinking",
                             },
                         )
-                        print(f"🤔 Thinking: {block.thinking[:50]}...")
+                        logger.debug("Agent thinking", extra={"thinking_preview": block.thinking[:50]})
 
                     elif isinstance(block, ToolUseBlock):
                         # Report tool use
@@ -294,7 +305,7 @@ async def process_sdk_response(
                                 "block_type": "tool_use",
                             },
                         )
-                        print(f"🔧 Tool: {block.name}")
+                        logger.info("Tool use", extra={"tool_name": block.name, "tool_id": block.id})
 
                     elif isinstance(block, ToolResultBlock):
                         # Report tool result
@@ -307,8 +318,12 @@ async def process_sdk_response(
                                 "block_type": "tool_result",
                             },
                         )
-                        status = "❌" if block.is_error else "✅"
-                        print(f"   {status} Result: {str(block.content)[:50]}...")
+                        log_level = logging.ERROR if block.is_error else logging.INFO
+                        logger.log(log_level, "Tool result", extra={
+                            "tool_id": block.tool_use_id,
+                            "is_error": block.is_error,
+                            "result_preview": str(block.content)[:50],
+                        })
 
             elif isinstance(msg, ResultMessage):
                 # Conversation turn completed
@@ -324,16 +339,18 @@ async def process_sdk_response(
                         "duration_api_ms": msg.duration_api_ms,
                     },
                 )
-                print(
-                    f"📊 Turn {msg.num_turns} complete. Cost: ${msg.total_cost_usd:.4f}"
-                )
+                logger.info("Turn complete", extra={
+                    "num_turns": msg.num_turns,
+                    "total_cost_usd": msg.total_cost_usd,
+                    "is_error": msg.is_error,
+                })
 
     except Exception as e:
         await reporter.report(
             "agent.error",
             {"error": str(e), "error_type": type(e).__name__},
         )
-        print(f"❌ Response error: {e}")
+        logger.error("Response processing error", extra={"error": str(e), "error_type": type(e).__name__}, exc_info=True)
 
     return result
 
@@ -355,7 +372,7 @@ class SandboxWorker:
         """Setup graceful shutdown on SIGTERM/SIGINT."""
 
         def handle_signal(signum, frame):
-            print(f"\n[Worker] Received signal {signum}, shutting down...")
+            logger.info("Received shutdown signal", extra={"signal": signum})
             self._shutdown_event.set()
 
         signal.signal(signal.SIGTERM, handle_signal)
@@ -366,25 +383,19 @@ class SandboxWorker:
         self._setup_signal_handlers()
         self.running = True
 
-        print("=" * 60)
-        print("🤖 SANDBOX AGENT WORKER (Claude Agent SDK)")
-        print("=" * 60)
-        print("\nConfiguration:")
-        for key, value in self.config.to_dict().items():
-            print(f"  {key}: {value}")
-        print()
+        logger.info("=" * 60)
+        logger.info("SANDBOX AGENT WORKER (Claude Agent SDK)")
+        logger.info("=" * 60)
+        logger.info("Configuration", extra=self.config.to_dict())
 
         # Validate config
         errors = self.config.validate()
         if errors:
-            print("❌ Configuration errors:")
-            for error in errors:
-                print(f"  - {error}")
+            logger.error("Configuration errors", extra={"errors": errors})
             return 1
 
         if not SDK_AVAILABLE:
-            print("❌ claude_agent_sdk package not installed")
-            print("   Run: pip install claude-agent-sdk")
+            logger.error("claude_agent_sdk package not installed - Run: pip install claude-agent-sdk")
             return 1
 
         # Create SDK options
@@ -407,9 +418,9 @@ class SandboxWorker:
                     async with ClaudeSDKClient(options=sdk_options) as client:
                         # Process initial prompt if provided
                         if self.config.initial_prompt:
-                            print(
-                                f"\n📤 Initial prompt: "
-                                f"{self.config.initial_prompt[:50]}..."
+                            logger.info(
+                                "Processing initial prompt",
+                                extra={"prompt_preview": self.config.initial_prompt[:50]}
                             )
                             await client.query(self.config.initial_prompt)
                             await process_sdk_response(client, reporter)
@@ -419,7 +430,7 @@ class SandboxWorker:
                             "agent.waiting",
                             {"message": "Ready for messages"},
                         )
-                        print("\n⏳ Waiting for messages...")
+                        logger.info("Waiting for messages")
 
                         # Main loop
                         last_heartbeat = asyncio.get_event_loop().time()
@@ -437,7 +448,7 @@ class SandboxWorker:
                                     if not content:
                                         continue
 
-                                    print(f"\n📥 [{msg_type}] {content[:50]}...")
+                                    logger.info("Received message", extra={"msg_type": msg_type, "content_preview": content[:50]})
 
                                     # Handle interrupt specially
                                     if msg_type == "interrupt":
@@ -445,7 +456,7 @@ class SandboxWorker:
                                             "agent.interrupted",
                                             {"reason": content},
                                         )
-                                        print("⚠️  Interrupt received")
+                                        logger.warning("Interrupt received", extra={"reason": content})
                                         await client.interrupt()
                                         continue
 
@@ -488,7 +499,7 @@ class SandboxWorker:
                             except asyncio.CancelledError:
                                 break
                             except Exception as e:
-                                print(f"❌ Loop error: {e}")
+                                logger.error("Main loop error", extra={"error": str(e)}, exc_info=True)
                                 await reporter.report(
                                     "agent.error",
                                     {"error": str(e)},
@@ -496,7 +507,7 @@ class SandboxWorker:
                                 await asyncio.sleep(1)  # Back off on error
 
                 except Exception as e:
-                    print(f"❌ SDK initialization error: {e}")
+                    logger.error("SDK initialization error", extra={"error": str(e)}, exc_info=True)
                     await reporter.report(
                         "agent.error",
                         {"error": str(e), "phase": "initialization"},
@@ -514,7 +525,7 @@ class SandboxWorker:
                     source="worker",
                 )
 
-                print("\n✅ Worker shutdown complete")
+                logger.info("Worker shutdown complete", extra={"total_turns": total_turns})
 
         return 0
 

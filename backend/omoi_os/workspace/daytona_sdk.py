@@ -24,7 +24,6 @@ Usage:
         conversation.run()
 """
 
-import logging
 from pathlib import Path
 from typing import Any, Optional
 
@@ -33,7 +32,9 @@ from openhands.sdk.workspace import LocalWorkspace
 from openhands.sdk.workspace.models import CommandResult, FileOperationResult
 from pydantic import Field, PrivateAttr
 
-logger = logging.getLogger(__name__)
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class DaytonaLocalWorkspace(LocalWorkspace):

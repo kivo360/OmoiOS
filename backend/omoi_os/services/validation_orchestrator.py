@@ -6,12 +6,15 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Dict, List, Optional
 from uuid import uuid4
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.models.validation_review import ValidationReview
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from omoi_os.services.agent_registry import AgentRegistryService
@@ -607,7 +610,7 @@ class ValidationOrchestrator:
                 session.commit()
         except Exception as e:
             # Log but don't fail validation if memory write fails
-            print(f"Warning: Failed to record validation memory: {e}")
+            logger.warning("Failed to record validation memory", error=str(e))
     
     def _check_repeated_failures(self, task_id: str, session) -> None:
         """Check for repeated validation failures and spawn Diagnosis if needed (REQ-VAL-DIAG-001).
@@ -662,9 +665,11 @@ class ValidationOrchestrator:
                     )
                     # Don't await in sync context - fire and forget
                     diagnostic_run = None  # Will be None, but task is running
-                    print(
-                        f"🚨 DIAGNOSIS SPAWNED: {consecutive_failures} consecutive validation failures "
-                        f"for task {task_id} (diagnostic task created)"
+                    logger.warning(
+                        "Diagnosis spawned for repeated validation failures",
+                        consecutive_failures=consecutive_failures,
+                        task_id=task_id,
+                        mode="async_task",
                     )
                 except RuntimeError:
                     # No event loop, use asyncio.run()
@@ -680,12 +685,14 @@ class ValidationOrchestrator:
                             max_tasks=5,
                         )
                     )
-                    print(
-                        f"🚨 DIAGNOSIS SPAWNED: {consecutive_failures} consecutive validation failures "
-                        f"for task {task_id} (diagnostic run: {diagnostic_run.id})"
+                    logger.warning(
+                        "Diagnosis spawned for repeated validation failures",
+                        consecutive_failures=consecutive_failures,
+                        task_id=task_id,
+                        diagnostic_run_id=str(diagnostic_run.id),
                     )
             except Exception as e:
-                print(f"Warning: Failed to spawn diagnostic agent: {e}")
+                logger.warning("Failed to spawn diagnostic agent", error=str(e))
     
     def check_validator_timeouts(self, timeout_minutes: int = 10) -> None:
         """Check for validator timeouts and handle (REQ-VAL-DIAG-002).
@@ -713,9 +720,11 @@ class ValidationOrchestrator:
                         elapsed = utc_now() - validator.last_heartbeat
                         if elapsed.total_seconds() > (timeout_minutes * 60):
                             # Validator timed out
-                            print(
-                                f"⏱️ VALIDATOR TIMEOUT: Task {task_id}, "
-                                f"validator {validator_id} exceeded {timeout_minutes} minutes"
+                            logger.warning(
+                                "Validator timeout detected",
+                                task_id=task_id,
+                                validator_id=validator_id,
+                                timeout_minutes=timeout_minutes,
                             )
                             
                             # Spawn Diagnosis Agent focused on timeout (REQ-VAL-DIAG-002)
@@ -738,9 +747,10 @@ class ValidationOrchestrator:
                                     )
                                     # Don't await in sync context - fire and forget
                                     diagnostic_run = None
-                                    print(
-                                        "🔍 DIAGNOSIS SPAWNED for validation timeout "
-                                        "(diagnostic task created)"
+                                    logger.warning(
+                                        "Diagnosis spawned for validation timeout",
+                                        task_id=task_id,
+                                        mode="async_task",
                                     )
                                 except RuntimeError:
                                     # No event loop, use asyncio.run()
@@ -756,12 +766,13 @@ class ValidationOrchestrator:
                                             max_tasks=5,
                                         )
                                     )
-                                    print(
-                                        f"🔍 DIAGNOSIS SPAWNED for validation timeout "
-                                        f"(diagnostic run: {diagnostic_run.id})"
+                                    logger.warning(
+                                        "Diagnosis spawned for validation timeout",
+                                        task_id=task_id,
+                                        diagnostic_run_id=str(diagnostic_run.id),
                                     )
                             except Exception as e:
-                                print(f"Warning: Failed to spawn diagnostic agent: {e}")
+                                logger.warning("Failed to spawn diagnostic agent", error=str(e))
                             
                             # Clear active validator
                             self._active_validators.pop(task_id, None)

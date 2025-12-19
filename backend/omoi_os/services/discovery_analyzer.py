@@ -11,20 +11,20 @@ The analyzer:
 4. Recommends agent assignments based on discovery context
 """
 
-import logging
-from typing import Any, Dict, List, Optional
 from datetime import timedelta
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
+from omoi_os.logging import get_logger
 from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task import Task
 from omoi_os.services.llm_service import LLMService, get_llm_service
 from omoi_os.utils.datetime import utc_now
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # =============================================================================

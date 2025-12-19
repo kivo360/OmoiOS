@@ -13,12 +13,15 @@ Usage:
 
 import asyncio
 import os
-import logging
-from typing import Any
 from pathlib import Path
+from typing import Any
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from omoi_os.logging import configure_logging, get_logger
+
+# Configure logging for worker
+_env = os.environ.get("OMOIOS_ENV", "development")
+configure_logging(env=_env)  # type: ignore[arg-type]
+logger = get_logger(__name__)
 
 # Environment configuration
 TASK_ID = os.environ.get("TASK_ID")
@@ -227,7 +230,7 @@ async def run_claude_agent(task_description: str, workspace_dir: str = "/workspa
         return False, "Failed to create tools"
     
     # Define a hook to track tool usage
-    async def track_tool_use(input_data, tool_use_id, context):
+    async def track_tool_use(input_data, tool_use_id, _context):
         """Track tool usage for Guardian observation."""
         tool_name = input_data.get("tool_name", "unknown")
         await report_event("tool_use", {"tool": tool_name, "tool_use_id": tool_use_id})

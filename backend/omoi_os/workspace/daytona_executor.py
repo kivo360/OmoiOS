@@ -8,7 +8,6 @@ This allows OpenHands SDK tools (terminal, file_editor, etc.) to execute
 in Daytona cloud sandboxes.
 """
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from openhands.sdk.tool import ToolExecutor
@@ -19,10 +18,12 @@ from openhands.tools.terminal.definition import (
 )
 from openhands.tools.terminal.metadata import CmdOutputMetadata
 
+from omoi_os.logging import get_logger
+
 if TYPE_CHECKING:
     from omoi_os.workspace.daytona_sdk import DaytonaLocalWorkspace
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DaytonaTerminalExecutor(ToolExecutor):

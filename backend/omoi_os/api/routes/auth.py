@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 
 from omoi_os.api.dependencies import get_db_session, get_current_user, get_auth_service
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
 from omoi_os.models.user import User
 from omoi_os.schemas.auth import (
     UserCreate,
@@ -231,9 +234,7 @@ async def forgot_password(
         # TODO: Send email with reset link
         # In production, this token should be sent via email, not returned
         # For development/testing, log the token (check server logs)
-        import logging
-
-        logging.getLogger(__name__).info(
+        logger.info(
             f"Password reset requested for {request.email}. "
             f"Token (DEV ONLY - remove in production): {reset_token}"
         )

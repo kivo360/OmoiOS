@@ -63,6 +63,7 @@ Example with GLM:
 import asyncio
 import base64
 import difflib
+import logging
 import os
 import signal
 import subprocess
@@ -73,6 +74,14 @@ from typing import Any, Optional
 from uuid import uuid4
 
 import httpx
+
+# Configure logging for standalone sandbox operation
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("claude_sandbox_worker")
 
 # Try to import pydantic v2 for agent model serialization
 # Define dataclass for agent definitions at module level (required for SDK's asdict())
@@ -483,12 +492,11 @@ Systematically investigate issues:
 
             # Write the transcript
             transcript_path.write_text(transcript_content)
-            print(f"[SessionImport] Imported session {self.resume_session_id}")
-            print(f"[SessionImport] Transcript path: {transcript_path}")
+            logger.info("Imported session transcript", extra={"session_id": self.resume_session_id, "path": str(transcript_path)})
             return True
 
         except Exception as e:
-            print(f"[SessionImport] Failed to import session: {e}")
+            logger.error("Failed to import session transcript", extra={"error": str(e)})
             return False
 
     def export_session_transcript(self, session_id: str) -> Optional[str]:
@@ -507,7 +515,7 @@ Systematically investigate issues:
             transcript_content = transcript_path.read_text()
             return base64.b64encode(transcript_content.encode("utf-8")).decode("utf-8")
         except Exception as e:
-            print(f"[SessionExport] Failed to export session: {e}")
+            logger.error("Failed to export session transcript", extra={"error": str(e)})
             return None
 
 
@@ -571,9 +579,7 @@ class EventReporter:
                     # Silently fail - heartbeats are non-critical and 502s are transient
                     return False
                 # Log other non-200 status codes
-                print(
-                    f"[EventReporter] Event {event_type} failed: {response.status_code}"
-                )
+                logger.warning("Event report failed", extra={"event_type": event_type, "status_code": response.status_code})
             return success
         except httpx.HTTPStatusError as e:
             # Handle HTTP errors (like 502 Bad Gateway)
@@ -583,7 +589,7 @@ class EventReporter:
                 # Heartbeats are non-critical, so we silently fail
                 return False
             else:
-                print(f"[EventReporter] HTTP error for {event_type}: {status_code}")
+                logger.warning("HTTP error reporting event", extra={"event_type": event_type, "status_code": status_code})
             return False
         except httpx.RequestError as e:
             # Network-level errors (connection refused, timeout, etc.)
@@ -594,7 +600,7 @@ class EventReporter:
                 return False
             # Log other network errors (but not for heartbeats to reduce spam)
             if event_type != "agent.heartbeat":
-                print(f"[EventReporter] Network error for {event_type}: {e}")
+                logger.warning("Network error reporting event", extra={"event_type": event_type, "error": str(e)})
             return False
         except Exception as e:
             # Only log unexpected errors, not network timeouts or 502s
@@ -604,7 +610,7 @@ class EventReporter:
                 return False
             # Log other unexpected errors (but not for heartbeats)
             if event_type != "agent.heartbeat":
-                print(f"[EventReporter] Failed to report {event_type}: {e}")
+                logger.error("Failed to report event", extra={"event_type": event_type, "error": str(e)})
             return False
 
     async def heartbeat(self) -> bool:
@@ -652,7 +658,7 @@ class MessagePoller:
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
-            print(f"[MessagePoller] Poll failed: {e}")
+            logger.warning("Message poll failed", extra={"error": str(e)})
 
         return []
 
@@ -665,12 +671,12 @@ class MessagePoller:
 def setup_github_workspace(config: WorkerConfig) -> bool:
     """Clone GitHub repo and setup workspace if configured."""
     if not config.github_token or not config.github_repo:
-        print("[GitHub] No credentials, skipping repo clone")
+        logger.info("No GitHub credentials, skipping repo clone")
         return False
 
     # Check if already cloned
     if os.path.exists(os.path.join(config.cwd, ".git")):
-        print(f"[GitHub] Workspace {config.cwd} already has git repo")
+        logger.info("Workspace already has git repo", extra={"cwd": config.cwd})
         return True
 
     # Configure git user
@@ -683,24 +689,24 @@ def setup_github_workspace(config: WorkerConfig) -> bool:
 
     # Clone with token
     clone_url = f"https://x-access-token:{config.github_token}@github.com/{config.github_repo}.git"
-    print(f"[GitHub] Cloning {config.github_repo}...")
+    logger.info("Cloning GitHub repository", extra={"repo": config.github_repo})
 
     result = subprocess.run(
         ["git", "clone", clone_url, config.cwd], capture_output=True, text=True
     )
 
     if result.returncode != 0:
-        print(f"[GitHub] Clone failed: {result.stderr}")
+        logger.error("GitHub clone failed", extra={"stderr": result.stderr})
         return False
 
     os.chdir(config.cwd)
 
     # Checkout branch if specified
     if config.branch_name:
-        print(f"[GitHub] Checking out branch: {config.branch_name}")
+        logger.info("Checking out branch", extra={"branch": config.branch_name})
         subprocess.run(["git", "checkout", config.branch_name], check=False)
 
-    print(f"[GitHub] Repository ready at {config.cwd}")
+    logger.info("Repository ready", extra={"cwd": config.cwd})
     return True
 
 
@@ -725,7 +731,7 @@ class SandboxWorker:
         """Setup graceful shutdown on SIGTERM/SIGINT."""
 
         def handle_signal(signum, frame):
-            print(f"\n[Worker] Received signal {signum}, shutting down...")
+            logger.info("Received shutdown signal", extra={"signum": signum})
             self._shutdown_event.set()
             self._should_stop = True
 
@@ -766,9 +772,7 @@ class SandboxWorker:
                             },
                         )
                     except Exception as e:
-                        print(
-                            f"[FileTracker] Failed to generate diff for {file_path}: {e}"
-                        )
+                        logger.warning("Failed to generate diff", extra={"file_path": file_path, "error": str(e)})
 
             elif tool_name == "Edit":
                 file_path = tool_input.get("file_path")
@@ -789,9 +793,7 @@ class SandboxWorker:
                                 },
                             )
                     except Exception as e:
-                        print(
-                            f"[FileTracker] Failed to read {file_path} after edit: {e}"
-                        )
+                        logger.warning("Failed to read file after edit", extra={"file_path": str(file_path), "error": str(e)})
 
             # Full tool tracking
             event_data = {
@@ -843,7 +845,7 @@ class SandboxWorker:
                                 str(file_path), old_content
                             )
                         except Exception as e:
-                            print(f"[FileTracker] Failed to cache {file_path}: {e}")
+                            logger.warning("Failed to cache file", extra={"file_path": str(file_path), "error": str(e)})
 
             return {}
 
@@ -858,7 +860,7 @@ class SandboxWorker:
 
         # Ensure reporter is available
         if not self.reporter:
-            print("[Warning] Reporter not available, skipping event reporting")
+            logger.warning("Reporter not available, skipping event reporting")
             # Still process messages but without reporting
 
         try:
@@ -867,7 +869,7 @@ class SandboxWorker:
                 message_stream = client.receive_messages()
             except Exception as stream_init_error:
                 error_msg = str(stream_init_error)
-                print(f"❌ Failed to initialize message stream: {error_msg}")
+                logger.error("Failed to initialize message stream", extra={"error": error_msg})
                 if self.reporter:
                     await self.reporter.report(
                         "agent.stream_error",
@@ -906,7 +908,7 @@ class SandboxWorker:
                                         "thinking_type": "extended_thinking",
                                     },
                                 )
-                            print(f"🤔 Thinking: {block.text[:100]}...")
+                            logger.debug("Agent thinking", extra={"content_preview": block.text[:100]})
 
                         elif isinstance(block, ToolUseBlock):
                             tool_event = {
@@ -932,9 +934,7 @@ class SandboxWorker:
                                     await self.reporter.report(
                                         "agent.subagent_invoked", tool_event
                                     )
-                                print(
-                                    f"🤖 Subagent: {block.input.get('subagent_type')}"
-                                )
+                                logger.info("Subagent invoked", extra={"subagent_type": block.input.get('subagent_type')})
 
                             # Special handling for skill invocation
                             elif block.name == "Skill":
@@ -946,7 +946,7 @@ class SandboxWorker:
                                     await self.reporter.report(
                                         "agent.skill_invoked", tool_event
                                     )
-                                print(f"⚡ Skill: {tool_event['skill_name']}")
+                                logger.info("Skill invoked", extra={"skill_name": tool_event['skill_name']})
 
                             # Standard tool use
                             else:
@@ -955,7 +955,7 @@ class SandboxWorker:
                                     await self.reporter.report(
                                         "agent.tool_use", tool_event
                                     )
-                                print(f"🔧 Tool: {block.name}")
+                                logger.info("Tool use", extra={"tool": block.name})
 
                         elif isinstance(block, ToolResultBlock):
                             result_content = str(block.content)
@@ -973,8 +973,8 @@ class SandboxWorker:
                                         "is_error": getattr(block, "is_error", False),
                                     },
                                 )
-                            status = "❌" if getattr(block, "is_error", False) else "✅"
-                            print(f"   {status} Result: {result_content[:80]}...")
+                            is_error = getattr(block, "is_error", False)
+                            logger.debug("Tool result", extra={"is_error": is_error, "result_preview": result_content[:80]})
 
                         elif isinstance(block, TextBlock):
                             if self.reporter:
@@ -987,7 +987,7 @@ class SandboxWorker:
                                     },
                                 )
                             final_output.append(block.text)
-                            print(f"💬 {block.text[:100]}...")
+                            logger.debug("Agent message", extra={"content_preview": block.text[:100]})
 
                 elif isinstance(msg, UserMessage):
                     for block in msg.content:
@@ -1037,11 +1037,9 @@ class SandboxWorker:
                                 msg.session_id
                             )
                             if transcript_b64:
-                                print(
-                                    f"📦 Exported session transcript ({len(transcript_b64)} bytes base64)"
-                                )
+                                logger.info("Exported session transcript", extra={"size_bytes": len(transcript_b64)})
                         except Exception as e:
-                            print(f"⚠️  Failed to export session transcript: {e}")
+                            logger.warning("Failed to export session transcript", extra={"error": str(e)})
 
                     # Safely extract message attributes (handle both object and dict)
                     num_turns = getattr(msg, "num_turns", None)
@@ -1104,20 +1102,13 @@ class SandboxWorker:
                             if reported:
                                 break
                             if attempt < max_retries - 1:
-                                print(
-                                    f"   [Retry {attempt + 1}/{max_retries}] Retrying completion event..."
-                                )
+                                logger.warning("Retrying completion event", extra={"attempt": attempt + 1, "max_retries": max_retries})
                                 await asyncio.sleep(retry_delay)
                                 retry_delay *= 2  # Exponential backoff
 
                         if not reported:
-                            print(
-                                "   ⚠️  WARNING: Failed to report completion after retries - task status may not update"
-                            )
-                            print(
-                                "   This is non-critical - task completed successfully, but status update may be delayed"
-                            )
-                    print(f"📊 Completed: {num_turns} turns, ${total_cost_usd:.4f}")
+                            logger.warning("Failed to report completion after retries - task status may not update")
+                    logger.info("Agent completed", extra={"turns": num_turns, "cost_usd": total_cost_usd})
                     return msg, final_output
 
         except Exception as e:
@@ -1127,18 +1118,14 @@ class SandboxWorker:
             # Detect specific error types
             if "exit code -9" in error_str or "SIGKILL" in error_str:
                 error_type = "sigkill"
-                print("❌ Stream error: Process killed (SIGKILL/exit -9)")
-                print("   This usually indicates:")
-                print("   - Out of memory (OOM killer)")
-                print("   - Resource limits exceeded")
-                print("   - Process timeout")
-                print("   - System resource constraints")
+                logger.error("Stream error: Process killed (SIGKILL/exit -9)", extra={
+                    "possible_causes": ["OOM killer", "Resource limits exceeded", "Process timeout", "System resource constraints"]
+                })
             elif "Command failed" in error_str:
                 error_type = "command_failed"
-                print("❌ Stream error: Command failed in message reader")
-                print(f"   Error: {error_str}")
+                logger.error("Stream error: Command failed in message reader", extra={"error": error_str})
             else:
-                print(f"❌ Stream error: {e}")
+                logger.error("Stream error", extra={"error": str(e)})
 
             if self.reporter:
                 await self.reporter.report(
@@ -1155,7 +1142,7 @@ class SandboxWorker:
 
             # If we have partial output, return it instead of None
             if final_output:
-                print(f"⚠️  Returning partial output ({len(final_output)} blocks)")
+                logger.warning("Returning partial output", extra={"block_count": len(final_output)})
 
         return None, final_output
 
@@ -1164,25 +1151,19 @@ class SandboxWorker:
         self._setup_signal_handlers()
         self.running = True
 
-        print("=" * 60)
-        print("🤖 CLAUDE SANDBOX WORKER (Production)")
-        print("=" * 60)
-        print("\nConfiguration:")
-        for key, value in self.config.to_dict().items():
-            print(f"  {key}: {value}")
-        print()
+        logger.info("=" * 60)
+        logger.info("CLAUDE SANDBOX WORKER (Production)")
+        logger.info("=" * 60)
+        logger.info("Configuration: %s", self.config.to_dict())
 
         # Validate config
         errors = self.config.validate()
         if errors:
-            print("❌ Configuration errors:")
-            for error in errors:
-                print(f"  - {error}")
+            logger.error("Configuration errors", extra={"errors": errors})
             return 1
 
         if not SDK_AVAILABLE:
-            print("❌ claude_agent_sdk package not installed")
-            print("   Run: pip install claude-agent-sdk")
+            logger.error("claude_agent_sdk package not installed - Run: pip install claude-agent-sdk")
             return 1
 
         # Setup workspace
@@ -1191,11 +1172,11 @@ class SandboxWorker:
 
         # Import session transcript if provided (for cross-sandbox resumption)
         if self.config.session_transcript_b64 and self.config.resume_session_id:
-            print("\n📥 Importing session transcript for cross-sandbox resumption...")
+            logger.info("Importing session transcript for cross-sandbox resumption")
             if self.config.import_session_transcript():
-                print("✅ Session transcript imported successfully")
+                logger.info("Session transcript imported successfully")
             else:
-                print("⚠️  Session transcript import failed, starting fresh")
+                logger.warning("Session transcript import failed, starting fresh")
                 self.config.resume_session_id = None  # Reset to avoid resume failure
 
         async with EventReporter(self.config) as reporter:
@@ -1228,12 +1209,13 @@ class SandboxWorker:
                 )
 
                 try:
-                    # Debug: Print options structure before creating client
-                    print("[DEBUG] Creating SDK client with options...")
-                    print(f"[DEBUG] Options type: {type(sdk_options)}")
+                    # Debug: Log options structure before creating client
+                    logger.debug("Creating SDK client with options")
+                    logger.debug("SDK options type", extra={"options_type": str(type(sdk_options))})
                     if hasattr(sdk_options, "hooks") and sdk_options.hooks:
-                        print(
-                            f"[DEBUG] Hooks present: {list(sdk_options.hooks.keys())}"
+                        logger.debug(
+                            "Hooks present in SDK options",
+                            extra={"hooks": list(sdk_options.hooks.keys())}
                         )
 
                     async with ClaudeSDKClient(options=sdk_options) as client:
@@ -1245,12 +1227,12 @@ class SandboxWorker:
                         )
 
                         if initial_task and initial_task.strip():
-                            print(f"\n📤 Initial task: {initial_task[:100]}...")
+                            logger.info("Processing initial task", extra={"task_preview": initial_task[:100]})
                             try:
                                 await client.query(initial_task)
                                 await self._process_messages(client)
                             except Exception as e:
-                                print(f"❌ Failed to process initial task: {e}")
+                                logger.error("Failed to process initial task", extra={"error": str(e)}, exc_info=True)
                                 if self.reporter:
                                     await self.reporter.report(
                                         "agent.error",
@@ -1260,8 +1242,8 @@ class SandboxWorker:
                                         },
                                     )
                         else:
-                            print(
-                                "⚠️  No initial task provided - worker will wait for messages"
+                            logger.warning(
+                                "No initial task provided - worker will wait for messages"
                             )
 
                         # Report ready
@@ -1269,7 +1251,7 @@ class SandboxWorker:
                             "agent.waiting",
                             {"message": "Ready for messages"},
                         )
-                        print("\n⏳ Waiting for messages...")
+                        logger.info("Waiting for messages")
 
                         # Main loop
                         last_heartbeat = asyncio.get_event_loop().time()
@@ -1302,7 +1284,7 @@ class SandboxWorker:
                                     if not content:
                                         continue
 
-                                    print(f"\n📥 [{msg_type}] {content[:80]}...")
+                                    logger.info("Received message", extra={"msg_type": msg_type, "content_preview": content[:80]})
 
                                     # Handle interrupt
                                     if msg_type == "interrupt":
@@ -1337,7 +1319,7 @@ class SandboxWorker:
                                         await client.query(content)
                                         await self._process_messages(client)
                                     except Exception as e:
-                                        print(f"❌ Failed to process message: {e}")
+                                        logger.error("Failed to process message", extra={"error": str(e)}, exc_info=True)
                                         if self.reporter:
                                             await self.reporter.report(
                                                 "agent.error",
@@ -1368,42 +1350,41 @@ class SandboxWorker:
                             except asyncio.CancelledError:
                                 break
                             except Exception as e:
-                                print(f"❌ Loop error: {e}")
+                                logger.error("Main loop error", extra={"error": str(e)}, exc_info=True)
                                 await reporter.report("agent.error", {"error": str(e)})
                                 await asyncio.sleep(1)
 
                 except Exception as e:
                     import traceback
 
-                    print(f"❌ SDK initialization error: {e}")
-                    print(f"❌ Error type: {type(e).__name__}")
-                    print("❌ Full traceback:")
-                    traceback.print_exc()
+                    logger.error(
+                        "SDK initialization error",
+                        extra={
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                            "traceback": traceback.format_exc(),
+                        },
+                        exc_info=True,
+                    )
 
                     # Try to identify what's causing the asdict() error
                     if "asdict()" in str(e):
-                        print(
-                            "\n[DEBUG] asdict() error detected - checking options structure:"
-                        )
-                        print(f"  - Options type: {type(sdk_options)}")
+                        debug_info = {"options_type": str(type(sdk_options))}
                         if hasattr(sdk_options, "__dict__"):
-                            print(
-                                f"  - Options dict keys: {list(sdk_options.__dict__.keys())}"
-                            )
+                            debug_info["options_keys"] = list(sdk_options.__dict__.keys())
                             if hasattr(sdk_options, "hooks"):
-                                print(f"  - Hooks type: {type(sdk_options.hooks)}")
+                                debug_info["hooks_type"] = str(type(sdk_options.hooks))
                                 if sdk_options.hooks:
-                                    for (
-                                        hook_type,
-                                        hook_list,
-                                    ) in sdk_options.hooks.items():
-                                        print(
-                                            f"    - {hook_type}: {type(hook_list)}, length={len(hook_list) if isinstance(hook_list, list) else 'N/A'}"
-                                        )
+                                    hooks_debug = {}
+                                    for hook_type, hook_list in sdk_options.hooks.items():
+                                        hooks_debug[hook_type] = {
+                                            "type": str(type(hook_list)),
+                                            "length": len(hook_list) if isinstance(hook_list, list) else "N/A",
+                                        }
                                         if isinstance(hook_list, list) and hook_list:
-                                            print(
-                                                f"      - First item type: {type(hook_list[0])}"
-                                            )
+                                            hooks_debug[hook_type]["first_item_type"] = str(type(hook_list[0]))
+                                    debug_info["hooks"] = hooks_debug
+                        logger.debug("asdict() error - options structure debug", extra=debug_info)
 
                     await reporter.report(
                         "agent.error",
@@ -1425,7 +1406,7 @@ class SandboxWorker:
                     },
                     source="worker",
                 )
-                print("\n✅ Worker shutdown complete")
+                logger.info("Worker shutdown complete", extra={"total_turns": self.turn_count})
 
         return 0
 

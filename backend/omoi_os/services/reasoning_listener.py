@@ -5,14 +5,14 @@ Listens to system events and automatically creates reasoning chain events.
 This bridges the event bus to the reasoning chain storage for automatic tracking.
 """
 
-import logging
 from typing import Any, Optional
 
+from omoi_os.logging import get_logger
 from omoi_os.models.reasoning import ReasoningEvent
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _ensure_serializable(value: Any) -> Any:

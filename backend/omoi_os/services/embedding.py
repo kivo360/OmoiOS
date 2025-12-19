@@ -1,20 +1,20 @@
 """Embedding service for generating text embeddings."""
 
-from typing import List, Optional, TYPE_CHECKING
-from enum import Enum
-import logging
 import threading
 import time
+from enum import Enum
+from typing import List, Optional, TYPE_CHECKING
 
 import numpy as np
 
 from omoi_os.config import get_app_settings
+from omoi_os.logging import get_logger
 
 if TYPE_CHECKING:
     from fastembed import TextEmbedding
     from openai import OpenAI
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Default embedding dimensions - must match pgvector column definitions
 # pgvector supports up to 16,000 dimensions for storage, but standard indexing

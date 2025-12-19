@@ -5,6 +5,10 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
+
 # Security scheme
 # Use auto_error=False to handle missing tokens gracefully
 # We'll check for credentials manually and raise appropriate errors
@@ -393,10 +397,6 @@ async def get_current_user(
     Raises:
         HTTPException: If token is invalid or user not found
     """
-    import logging
-
-    logger = logging.getLogger(__name__)
-
     from omoi_os.services.auth_service import AuthService
     from omoi_os.config import settings
     from omoi_os.models.user import User

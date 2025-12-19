@@ -4,7 +4,6 @@ Provides command execution and file operations in Daytona Cloud sandboxes
 for secure, isolated agent task execution.
 """
 
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -18,12 +17,13 @@ from daytona import (
 )
 from daytona.common.daytona import CodeLanguage
 
+from omoi_os.logging import get_logger
 from omoi_os.workspace.managers import CommandExecutor, CommandResult, WorkspaceManager
 
 if TYPE_CHECKING:
     from omoi_os.config import DaytonaSettings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

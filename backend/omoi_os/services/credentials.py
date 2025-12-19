@@ -10,7 +10,6 @@ Fallback Logic:
 
 from __future__ import annotations
 
-import logging
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
@@ -20,10 +19,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from omoi_os.config import load_anthropic_settings
+from omoi_os.logging import get_logger
 from omoi_os.models.user_credentials import UserCredential
 from omoi_os.services.database import DatabaseService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

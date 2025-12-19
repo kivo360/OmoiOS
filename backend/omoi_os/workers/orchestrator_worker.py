@@ -12,14 +12,17 @@ Run with: python -m omoi_os.workers.orchestrator_worker
 from __future__ import annotations
 
 import asyncio
-import logging
 import os
 import signal
 import sys
 import time
 from typing import TYPE_CHECKING, Literal
 
-import structlog
+# Configure logging before any other imports that might log
+from omoi_os.logging import configure_logging, get_logger
+
+_env = os.environ.get("OMOIOS_ENV", "development")
+configure_logging(env=_env)  # type: ignore[arg-type]
 
 if TYPE_CHECKING:
     from omoi_os.services.database import DatabaseService
@@ -27,16 +30,7 @@ if TYPE_CHECKING:
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
 
-# Configure structlog for JSON output
-structlog.configure(
-    processors=[
-        structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.JSONRenderer(),
-    ],
-    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-)
-logger = structlog.get_logger("orchestrator")
+logger = get_logger("orchestrator")
 
 # Services (initialized in init_services)
 db: DatabaseService | None = None

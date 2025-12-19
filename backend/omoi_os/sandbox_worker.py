@@ -8,7 +8,7 @@ Environment Variables Required:
     AGENT_ID: Assigned agent identifier
     TASK_ID: Task to execute
     MCP_SERVER_URL: URL of the OmoiOS MCP server (e.g., http://host:18000/mcp)
-    
+
 Optional Environment Variables:
     LLM_API_KEY: API key for LLM provider
     LLM_MODEL: Model to use (default: from config)
@@ -23,20 +23,24 @@ Usage:
 """
 
 import asyncio
-import logging
 import os
 import sys
 from typing import Any, Dict, Optional
 
 from pydantic import SecretStr
 
-# Configure logging early
-log_level = os.environ.get("LOG_LEVEL", "INFO")
-logging.basicConfig(
-    level=getattr(logging, log_level),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+# Configure structured logging before any other imports that might log
+from omoi_os.logging import configure_logging, get_logger
+
+import logging as stdlib_logging  # Only for log level constants
+
+_env = os.environ.get("OMOIOS_ENV", "development")
+_log_level = os.environ.get("LOG_LEVEL", "INFO")
+configure_logging(
+    env=_env,  # type: ignore[arg-type]
+    log_level=getattr(stdlib_logging, _log_level),
 )
-logger = logging.getLogger("sandbox_worker")
+logger = get_logger("sandbox_worker")
 
 
 async def run_sandbox_worker():
