@@ -615,6 +615,35 @@ class ObservabilitySettings(OmoiBaseSettings):
     logfire_token: Optional[str] = None
 
 
+class TitleGenerationSettings(OmoiBaseSettings):
+    """
+    Title generation LLM configuration.
+
+    Uses a separate, lightweight LLM for generating task titles to keep costs low.
+
+    Precedence: YAML defaults (config/base.yaml + config/<env>.yaml) < environment variables < init kwargs.
+    """
+
+    yaml_section = "title_generation"
+    model_config = SettingsConfigDict(
+        env_prefix="TITLE_GEN_",
+        extra="ignore",
+    )
+
+    # Model name - defaults to a cheap, fast model from Fireworks
+    model: str = "accounts/fireworks/models/gpt-oss-20b"
+
+    # API key - uses Fireworks by default, can override with TITLE_GEN_API_KEY
+    api_key: Optional[str] = None
+
+    # Base URL for the LLM provider (defaults to Fireworks)
+    base_url: str = "https://api.fireworks.ai/inference/v1"
+
+
+def load_title_generation_settings() -> TitleGenerationSettings:
+    return get_app_settings().title_generation
+
+
 class DemoSettings(OmoiBaseSettings):
     """
     Developer demo / CLI example configuration.
@@ -662,6 +691,7 @@ class AppSettings:
         self.integrations = IntegrationSettings()
         self.embedding = EmbeddingSettings()
         self.observability = ObservabilitySettings()
+        self.title_generation = TitleGenerationSettings()
         self.demo = DemoSettings()
 
     @property

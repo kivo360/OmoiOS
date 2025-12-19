@@ -4,16 +4,18 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from omoi_os.config import LLMSettings, load_llm_settings
+from omoi_os.config import (
+    LLMSettings,
+    TitleGenerationSettings,
+    load_llm_settings,
+    load_title_generation_settings,
+)
 from omoi_os.logging import get_logger
 
 logger = get_logger(__name__)
-
-# Default model for title generation - lightweight and cheap
-DEFAULT_TITLE_MODEL = "accounts/fireworks/models/gpt-oss-20b"
 
 
 class TaskTitleDescription(BaseModel):
@@ -37,38 +39,51 @@ class TitleGenerationService:
     Uses Fireworks.ai gpt-oss-20b model (or configured alternative) for
     cost-effective title generation. This is separate from the main analytics
     LLM to keep costs low.
+
+    Configuration can be done via:
+    - YAML: config/base.yaml -> title_generation section
+    - Environment variables: TITLE_GEN_MODEL, TITLE_GEN_API_KEY, TITLE_GEN_BASE_URL
     """
 
     def __init__(
         self,
-        settings: Optional[LLMSettings] = None,
-        model_name: Optional[str] = None,
+        settings: Optional[TitleGenerationSettings] = None,
+        llm_settings: Optional[LLMSettings] = None,
     ):
         """
         Initialize title generation service.
 
         Args:
-            settings: Optional LLM settings (defaults to loading from environment)
-            model_name: Optional model name override (defaults to gpt-oss-20b)
+            settings: Optional title generation settings (defaults to loading from config)
+            llm_settings: Optional LLM settings for API key fallback
         """
-        self.settings = settings or load_llm_settings()
-        self.model_name = model_name or DEFAULT_TITLE_MODEL
+        self.settings = settings or load_title_generation_settings()
+        self.llm_settings = llm_settings or load_llm_settings()
+        self.model_name = self.settings.model
 
-        # Get API key - prefer dedicated Fireworks key, fallback to general LLM key
-        api_key = self.settings.fireworks_api_key or self.settings.api_key
+        # Get API key - priority order:
+        # 1. Title generation specific key (TITLE_GEN_API_KEY)
+        # 2. Fireworks API key from LLM settings (LLM_FIREWORKS_API_KEY)
+        # 3. General LLM API key (LLM_API_KEY)
+        api_key = (
+            self.settings.api_key
+            or self.llm_settings.fireworks_api_key
+            or self.llm_settings.api_key
+        )
         if not api_key:
             raise ValueError(
-                "fireworks_api_key or LLM api_key must be set to use TitleGenerationService"
+                "TITLE_GEN_API_KEY, LLM_FIREWORKS_API_KEY, or LLM_API_KEY must be set "
+                "to use TitleGenerationService"
             )
 
-        # Create Fireworks provider
+        # Create provider with configured base URL
         self.provider = OpenAIProvider(
             api_key=api_key,
-            base_url="https://api.fireworks.ai/inference/v1",
+            base_url=self.settings.base_url,
         )
 
         # Create the model
-        self.model = OpenAIModel(
+        self.model = OpenAIChatModel(
             self.model_name,
             provider=self.provider,
         )
@@ -76,6 +91,7 @@ class TitleGenerationService:
         logger.info(
             "TitleGenerationService initialized",
             model=self.model_name,
+            base_url=self.settings.base_url,
         )
 
     async def generate_title_and_description(
