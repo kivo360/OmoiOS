@@ -16,6 +16,65 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+async def generate_task_title(
+    task_id: str,
+    db: "DatabaseService",
+    task_type: str,
+    description: Optional[str] = None,
+    context: Optional[str] = None,
+) -> Optional[str]:
+    """
+    Generate and update a task's title using the TitleGenerationService.
+
+    This is an async helper that can be called after task creation to
+    generate a human-readable title without blocking the main flow.
+
+    Args:
+        task_id: UUID of the task to update
+        db: DatabaseService instance
+        task_type: The task type (e.g., "analyze_requirements")
+        description: Optional existing task description
+        context: Optional additional context for title generation
+
+    Returns:
+        Generated title string, or None if generation failed
+    """
+    try:
+        from omoi_os.services.title_generation_service import get_title_generation_service
+
+        title_service = get_title_generation_service()
+        result = await title_service.generate_title_and_description(
+            task_type=task_type,
+            existing_description=description,
+            context=context,
+        )
+
+        # Update the task with the generated title and description
+        with db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if task:
+                task.title = result.title
+                # Only update description if we generated one and task doesn't have one
+                if result.description and not task.description:
+                    task.description = result.description
+                session.commit()
+                logger.info(
+                    "Generated title for task",
+                    task_id=task_id,
+                    title=result.title,
+                )
+                return result.title
+
+    except Exception as e:
+        logger.warning(
+            "Failed to generate title for task",
+            task_id=task_id,
+            error=str(e),
+        )
+
+    return None
+
+
 class TaskQueueService:
     """Manages task queue operations: enqueue, retrieve, assign, update."""
 
@@ -79,6 +138,7 @@ class TaskQueueService:
         priority: str,
         dependencies: dict | None = None,
         session: Optional["Session"] = None,
+        title: Optional[str] = None,
     ) -> Task:
         """
         Add a task to the queue.
@@ -91,6 +151,8 @@ class TaskQueueService:
             priority: Task priority (CRITICAL, HIGH, MEDIUM, LOW)
             dependencies: Optional dependencies dict: {"depends_on": ["task_id_1", "task_id_2"]}
             session: Optional database session to use. If not provided, creates a new session.
+            title: Optional human-readable title. If not provided, can be generated later
+                   using generate_task_title().
 
         Returns:
             Created Task object
@@ -101,6 +163,7 @@ class TaskQueueService:
                 ticket_id=ticket_id,
                 phase_id=phase_id,
                 task_type=task_type,
+                title=title,
                 description=description,
                 priority=priority,
                 status="pending",
@@ -126,6 +189,7 @@ class TaskQueueService:
                     ticket_id=ticket_id,
                     phase_id=phase_id,
                     task_type=task_type,
+                    title=title,
                     description=description,
                     priority=priority,
                     status="pending",

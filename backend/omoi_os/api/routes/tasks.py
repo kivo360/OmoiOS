@@ -123,6 +123,7 @@ async def get_task(
             "ticket_id": task.ticket_id,
             "phase_id": task.phase_id,
             "task_type": task.task_type,
+            "title": task.title,
             "description": task.description,
             "priority": task.priority,
             "status": task.status,
@@ -135,6 +136,7 @@ async def get_task(
             "retry_count": task.retry_count,
             "max_retries": task.max_retries,
             "created_at": task.created_at.isoformat(),
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
             "started_at": task.started_at.isoformat() if task.started_at else None,
             "completed_at": task.completed_at.isoformat()
             if task.completed_at
@@ -173,11 +175,13 @@ async def list_tasks(
                 "ticket_id": task.ticket_id,
                 "phase_id": task.phase_id,
                 "task_type": task.task_type,
+                "title": task.title,
                 "description": task.description,
                 "priority": task.priority,
                 "status": task.status,
                 "assigned_agent_id": task.assigned_agent_id,
                 "created_at": task.created_at.isoformat(),
+                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
             }
             for task in tasks
         ]
@@ -689,3 +693,118 @@ async def set_task_timeout(
             "timeout_seconds": task.timeout_seconds,
             "status": task.status,
         }
+
+
+@router.post("/{task_id}/generate-title", response_model=dict)
+async def generate_task_title(
+    task_id: str,
+    context: str | None = Body(None, embed=True),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Generate a human-readable title for a task using LLM.
+
+    Uses the TitleGenerationService with gpt-oss-20b model to create
+    a concise, action-oriented title. If the task already has a description,
+    the title will be generated from that. Otherwise, both title and
+    description will be generated.
+
+    Args:
+        task_id: Task UUID
+        context: Optional additional context for title generation
+        db: Database service
+
+    Returns:
+        Task with generated title
+    """
+    from omoi_os.services.task_queue import generate_task_title as gen_title
+
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        task_type = task.task_type
+        description = task.description
+
+    # Generate title asynchronously
+    title = await gen_title(
+        task_id=task_id,
+        db=db,
+        task_type=task_type,
+        description=description,
+        context=context,
+    )
+
+    if not title:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate title for task",
+        )
+
+    # Reload the task to get updated title and description
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.id == task_id).first()
+        return {
+            "task_id": task_id,
+            "title": task.title,
+            "description": task.description,
+            "task_type": task.task_type,
+        }
+
+
+@router.post("/generate-titles", response_model=dict)
+async def generate_titles_batch(
+    limit: int = Body(10, embed=True),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Generate titles for tasks that don't have one yet (batch operation).
+
+    This is useful for backfilling titles on existing tasks.
+
+    Args:
+        limit: Maximum number of tasks to process (default 10)
+        db: Database service
+
+    Returns:
+        Results of batch title generation
+    """
+    from omoi_os.services.task_queue import generate_task_title as gen_title
+
+    with db.get_session() as session:
+        # Find tasks without titles
+        tasks = (
+            session.query(Task)
+            .filter(Task.title.is_(None))
+            .limit(limit)
+            .all()
+        )
+
+        task_info = [
+            {
+                "id": task.id,
+                "task_type": task.task_type,
+                "description": task.description,
+            }
+            for task in tasks
+        ]
+
+    results = {"processed": 0, "succeeded": 0, "failed": 0, "tasks": []}
+
+    for info in task_info:
+        results["processed"] += 1
+        title = await gen_title(
+            task_id=info["id"],
+            db=db,
+            task_type=info["task_type"],
+            description=info["description"],
+        )
+        if title:
+            results["succeeded"] += 1
+            results["tasks"].append({"task_id": info["id"], "title": title})
+        else:
+            results["failed"] += 1
+            results["tasks"].append({"task_id": info["id"], "title": None, "error": "Generation failed"})
+
+    return results
