@@ -126,6 +126,17 @@ observability:
   enable_tracing: false
   logfire_token: null
 
+title_generation:
+  # Model for generating task titles (lightweight, cheap model)
+  # Can be overridden with TITLE_GEN_MODEL environment variable
+  model: accounts/fireworks/models/gpt-oss-20b
+  # API key - defaults to LLM_FIREWORKS_API_KEY if not set
+  # Can be overridden with TITLE_GEN_API_KEY environment variable
+  api_key: null
+  # Base URL for the LLM provider
+  # Can be overridden with TITLE_GEN_BASE_URL environment variable
+  base_url: https://api.fireworks.ai/inference/v1
+
 demo:
   sdk_example: activate_skill
   persistence_dir: ./.conversations
