@@ -116,6 +116,7 @@ class IntelligentGuardian:
         llm_service: Optional[LLMService] = None,
         event_bus: Optional[EventBusService] = None,
         workspace_root: Optional[str] = None,
+        llm_analysis_enabled: bool = True,
     ):
         """Initialize intelligent guardian.
 
@@ -124,11 +125,13 @@ class IntelligentGuardian:
             llm_service: Optional LLM service for analysis
             event_bus: Optional event bus for real-time updates
             workspace_root: Root directory for agent workspaces
+            llm_analysis_enabled: Whether to perform LLM-based trajectory analysis
         """
         self.db = db
         self.llm_service = llm_service or LLMService()
         self.event_bus = event_bus
         self.workspace_root = workspace_root
+        self.llm_analysis_enabled = llm_analysis_enabled
 
         # Initialize helper services
         self.trajectory_context = TrajectoryContext(db)
@@ -148,8 +151,17 @@ class IntelligentGuardian:
             force_analysis: Skip cache and force fresh analysis
 
         Returns:
-            Trajectory analysis results or None if agent not found
+            Trajectory analysis results or None if agent not found or LLM analysis disabled
         """
+        # Skip LLM analysis if disabled (to save tokens)
+        if not self.llm_analysis_enabled:
+            logger.debug(
+                "llm_analysis_disabled",
+                agent_id=agent_id,
+                reason="LLM analysis disabled via config",
+            )
+            return None
+
         try:
             # Check if we already have a recent analysis
             if not force_analysis:
