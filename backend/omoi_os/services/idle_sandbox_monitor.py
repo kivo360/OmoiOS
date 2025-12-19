@@ -60,8 +60,8 @@ class IdleSandboxMonitor:
         "agent.tool_result",
     }
 
-    # Default idle threshold (10 minutes)
-    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=10)
+    # Default idle threshold (3 minutes - if only heartbeats for this long, sandbox is idle)
+    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=3)
 
     # Heartbeat timeout (90 seconds - sandbox is dead if no heartbeat for this long)
     HEARTBEAT_TIMEOUT = timedelta(seconds=90)
