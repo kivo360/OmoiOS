@@ -402,6 +402,69 @@ async def orchestrator_loop():
             await asyncio.sleep(10)
 
 
+async def stale_task_cleanup_loop():
+    """Background task that cleans up tasks stuck in 'assigned' status.
+
+    Tasks that have been assigned but never transitioned to 'running' are
+    likely orphaned (sandbox crashed before sending agent.started event).
+
+    This loop periodically marks these stale tasks as failed so they can
+    be retried or investigated.
+    """
+    global db, queue
+
+    # Check if stale cleanup is enabled
+    stale_cleanup_enabled = os.getenv("STALE_TASK_CLEANUP_ENABLED", "true").lower() in ("true", "1", "yes")
+    if not stale_cleanup_enabled:
+        logger.info("stale_task_cleanup_disabled_via_env")
+        return
+
+    # Wait for services to initialize
+    await asyncio.sleep(10)
+
+    if not db or not queue:
+        logger.error("services_not_initialized_for_stale_cleanup")
+        return
+
+    logger.info("stale_task_cleanup_loop_started")
+
+    # Get thresholds from environment
+    # Default: 3 minutes threshold - sandbox should be running by then
+    # Default: 15 second check interval - quick detection of stale tasks
+    stale_threshold_minutes = int(os.getenv("STALE_TASK_THRESHOLD_MINUTES", "3"))
+    check_interval = int(os.getenv("STALE_TASK_CHECK_INTERVAL_SECONDS", "15"))
+
+    logger.info(
+        "stale_task_cleanup_config",
+        stale_threshold_minutes=stale_threshold_minutes,
+        check_interval_seconds=check_interval,
+    )
+
+    while not shutdown_event.is_set():
+        try:
+            # Clean up stale assigned tasks
+            cleaned_tasks = queue.cleanup_stale_assigned_tasks(
+                stale_threshold_minutes=stale_threshold_minutes,
+                dry_run=False,
+            )
+
+            if cleaned_tasks:
+                logger.info(
+                    "stale_tasks_cleaned",
+                    count=len(cleaned_tasks),
+                    task_ids=[t["task_id"][:8] for t in cleaned_tasks],
+                )
+
+            await asyncio.sleep(check_interval)
+
+        except asyncio.CancelledError:
+            logger.info("stale_task_cleanup_loop_cancelled")
+            break
+        except Exception as e:
+            logger.error("stale_task_cleanup_error", error=str(e))
+            await asyncio.sleep(check_interval)
+
+
 async def idle_sandbox_check_loop():
     """Background task that checks for idle sandboxes and terminates them.
 
@@ -566,11 +629,12 @@ async def main():
 
     try:
         await init_services()
-        # Run heartbeat, orchestrator loop, and idle sandbox check concurrently
+        # Run heartbeat, orchestrator loop, idle sandbox check, and stale task cleanup concurrently
         await asyncio.gather(
             heartbeat_task(),
             orchestrator_loop(),
             idle_sandbox_check_loop(),
+            stale_task_cleanup_loop(),
         )
     except KeyboardInterrupt:
         await shutdown()

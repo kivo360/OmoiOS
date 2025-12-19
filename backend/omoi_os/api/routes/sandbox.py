@@ -419,8 +419,9 @@ async def post_sandbox_event(
             f"[SandboxEvent] Failed to persist event {event.event_type} for sandbox {sandbox_id}: {e}"
         )
 
-    # Handle task finalization for completion/failure events
-    if event.event_type in ("agent.completed", "agent.failed", "agent.error"):
+    # Handle task status transitions based on event type
+    # This includes: agent.started -> running, agent.completed -> completed, agent.failed/error -> failed
+    if event.event_type in ("agent.started", "agent.completed", "agent.failed", "agent.error"):
         try:
             db = get_db_service()
             from omoi_os.models.task import Task
@@ -428,7 +429,7 @@ async def post_sandbox_event(
 
             task_id = event.event_data.get("task_id")
             logger.debug(
-                f"Task finalization: event_type={event.event_type}, task_id={task_id}, sandbox_id={sandbox_id}"
+                f"Task status update: event_type={event.event_type}, task_id={task_id}, sandbox_id={sandbox_id}"
             )
 
             if not task_id:
@@ -444,7 +445,7 @@ async def post_sandbox_event(
                         .first()
                     )
                     if task:
-                        task_id = task.id
+                        task_id = str(task.id)
                         logger.info(f"Found task {task_id} by sandbox_id fallback")
                     else:
                         logger.warning(
@@ -453,7 +454,18 @@ async def post_sandbox_event(
 
             if task_id:
                 task_queue = TaskQueueService(db)
-                if event.event_type == "agent.completed":
+
+                # Handle agent.started -> transition to running
+                if event.event_type == "agent.started":
+                    logger.info(f"Updating task {task_id} status to running (agent.started)")
+                    task_queue.update_task_status(
+                        task_id=task_id,
+                        status="running",
+                    )
+                    logger.info(f"Successfully updated task {task_id} to running")
+
+                # Handle agent.completed -> transition to completed
+                elif event.event_type == "agent.completed":
                     # Extract result from event_data
                     result = {
                         "success": event.event_data.get("success", True),
@@ -478,6 +490,8 @@ async def post_sandbox_event(
                         result=result,
                     )
                     logger.info(f"Successfully updated task {task_id} to completed")
+
+                # Handle agent.failed/error -> transition to failed
                 elif event.event_type in ("agent.failed", "agent.error"):
                     error_message = event.event_data.get(
                         "error", "Task execution failed"
@@ -490,15 +504,16 @@ async def post_sandbox_event(
                         status="failed",
                         error_message=error_message,
                     )
+                    logger.info(f"Successfully updated task {task_id} to failed")
             else:
                 logger.warning(
-                    f"Could not determine task_id for finalization. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
+                    f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
                 )
         except Exception as e:
-            # Task finalization is important but shouldn't break event processing
-            # Log error but continue
+            # Task status update is important but shouldn't break event processing
+            # Log error with full stack trace for debugging
             logger.error(
-                f"Failed to finalize task for sandbox {sandbox_id}, event_type={event.event_type}: {e}",
+                f"Failed to update task status for sandbox {sandbox_id}, event_type={event.event_type}: {e}",
                 exc_info=True,
             )
 
