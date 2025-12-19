@@ -1455,10 +1455,13 @@ def get_agent_trajectory(
             return {"success": False, "error": f"Agent {agent_id} not found"}
 
         # Build trajectory context
+        # Uses auto-routing to handle both sandbox and legacy agents
+        # For sandbox agents, this queries sandbox_events table
+        # For legacy agents, this queries agent_logs table
         trajectory_ctx = TrajectoryContext(db=_db)
 
         try:
-            context = trajectory_ctx.build_accumulated_context(
+            context = trajectory_ctx.build_accumulated_context_auto(
                 agent_id=agent_id,
                 include_full_history=include_full_history,
             )

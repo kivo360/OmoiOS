@@ -19,6 +19,7 @@ from omoi_os.models.trajectory_analysis import (
     SystemHealthResponse,
     TrajectoryAnalysisResponse,
 )
+from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.intelligent_guardian import IntelligentGuardian
@@ -347,20 +348,43 @@ class MonitoringLoop:
     # -------------------------------------------------------------------------
 
     async def _run_guardian_analysis(self) -> List[Dict[str, Any]]:
-        """Run Guardian trajectory analysis on all active agents."""
+        """Run Guardian trajectory analysis on all active agents (legacy + sandbox).
+
+        This method now handles both:
+        - Legacy agents: Registered in agents table with heartbeats
+        - Sandbox agents: Tasks with sandbox_id that are in 'running' status
+
+        The Guardian's analyze_agent_trajectory method uses auto-routing to
+        pull data from the appropriate source (agent_logs vs sandbox_events).
+        """
         try:
-            # Get active agents
+            agent_ids_to_analyze: set[str] = set()
+
+            # 1. Get active legacy agents (registered agents with recent heartbeats)
             active_agents = self.output_collector.get_active_agents()
-            if not active_agents:
+            for agent in active_agents:
+                agent_ids_to_analyze.add(agent.id)
+
+            # 2. Get active sandbox agents (tasks with sandbox_id in running status)
+            sandbox_agent_ids = self._get_active_sandbox_agent_ids()
+            agent_ids_to_analyze.update(sandbox_agent_ids)
+
+            if not agent_ids_to_analyze:
+                logger.debug("No active agents or sandbox tasks to analyze")
                 return []
+
+            logger.info(
+                f"Guardian analysis: {len(active_agents)} legacy agents, "
+                f"{len(sandbox_agent_ids)} sandbox agents"
+            )
 
             # Run analyses with concurrency limit
             semaphore = asyncio.Semaphore(self.config.max_concurrent_analyses)
             tasks = []
 
-            for agent in active_agents:
+            for agent_id in agent_ids_to_analyze:
                 task = asyncio.create_task(
-                    self._analyze_agent_with_semaphore(semaphore, agent.id)
+                    self._analyze_agent_with_semaphore(semaphore, agent_id)
                 )
                 tasks.append(task)
 
@@ -380,6 +404,41 @@ class MonitoringLoop:
 
         except Exception as e:
             logger.error(f"Guardian analysis failed: {e}")
+            return []
+
+    def _get_active_sandbox_agent_ids(self) -> List[str]:
+        """Get agent IDs for all running sandbox tasks.
+
+        Sandbox tasks have an assigned_agent_id and are executing in
+        a Daytona sandbox (sandbox_id is set). This returns the agent IDs
+        so they can be monitored by the Guardian.
+
+        Returns:
+            List of agent IDs that are running in sandboxes
+        """
+        try:
+            with self.db.get_session() as session:
+                # Find running tasks that have a sandbox_id
+                running_sandbox_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.status == "running",
+                        Task.sandbox_id.isnot(None),
+                        Task.assigned_agent_id.isnot(None),
+                    )
+                    .all()
+                )
+
+                agent_ids = [
+                    str(task.assigned_agent_id)
+                    for task in running_sandbox_tasks
+                    if task.assigned_agent_id
+                ]
+
+                return agent_ids
+
+        except Exception as e:
+            logger.error(f"Failed to get active sandbox agent IDs: {e}")
             return []
 
     async def _analyze_agent_with_semaphore(

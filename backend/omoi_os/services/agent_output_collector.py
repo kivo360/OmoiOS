@@ -15,6 +15,8 @@ from pathlib import Path
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_log import AgentLog
+from omoi_os.models.sandbox_event import SandboxEvent
+from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -379,3 +381,303 @@ class AgentOutputCollector:
             logger.error(f"Failed to extract error context for {agent_id}: {e}")
 
         return "No specific errors detected"
+
+    # -------------------------------------------------------------------------
+    # Sandbox-Aware Methods (Phase 6)
+    # -------------------------------------------------------------------------
+
+    def get_sandbox_id_for_agent(self, agent_id: str) -> Optional[str]:
+        """Get sandbox_id for an agent if running in sandbox.
+
+        Args:
+            agent_id: Agent ID to look up
+
+        Returns:
+            sandbox_id if agent is in sandbox, None otherwise
+        """
+        try:
+            with self.db.get_session() as session:
+                task = (
+                    session.query(Task)
+                    .filter(
+                        Task.assigned_agent_id == agent_id,
+                        Task.sandbox_id.isnot(None),
+                        Task.status.in_(["running", "assigned"]),
+                    )
+                    .first()
+                )
+                return task.sandbox_id if task else None
+        except Exception as e:
+            logger.error(f"Failed to get sandbox_id for agent {agent_id}: {e}")
+            return None
+
+    def is_sandbox_agent(self, agent_id: str) -> bool:
+        """Check if agent is running in a sandbox."""
+        return self.get_sandbox_id_for_agent(agent_id) is not None
+
+    def get_sandbox_output(
+        self, sandbox_id: str, lines: int = 50
+    ) -> str:
+        """Get recent output from sandbox events.
+
+        Args:
+            sandbox_id: Sandbox ID to query
+            lines: Number of recent events to include
+
+        Returns:
+            Formatted output string from sandbox events
+        """
+        try:
+            with self.db.get_session() as session:
+                events = (
+                    session.query(SandboxEvent)
+                    .filter(SandboxEvent.sandbox_id == sandbox_id)
+                    .filter(
+                        SandboxEvent.event_type.in_([
+                            "agent.assistant_message",
+                            "agent.tool_use",
+                            "agent.tool_result",
+                            "agent.file_edited",
+                            "agent.error",
+                            "agent.completed",
+                            "agent.message_injected",
+                        ])
+                    )
+                    .order_by(SandboxEvent.created_at.desc())
+                    .limit(lines)
+                    .all()
+                )
+
+                if not events:
+                    return "No sandbox output available"
+
+                # Format events for display (reverse to chronological order)
+                formatted_events = []
+                for event in reversed(events):
+                    timestamp = event.created_at.strftime("%H:%M:%S")
+                    event_type = event.event_type.replace("agent.", "").upper()
+                    event_data = event.event_data or {}
+
+                    # Extract content based on event type
+                    content = self._format_sandbox_event(event.event_type, event_data)
+                    formatted_events.append(f"[{timestamp}] {event_type}: {content}")
+
+                return "\n".join(formatted_events)
+
+        except Exception as e:
+            logger.error(f"Failed to get sandbox output for {sandbox_id}: {e}")
+            return f"Error retrieving sandbox output: {str(e)}"
+
+    def _format_sandbox_event(self, event_type: str, event_data: dict) -> str:
+        """Format a sandbox event for display.
+
+        Args:
+            event_type: Type of event
+            event_data: Event payload
+
+        Returns:
+            Formatted content string
+        """
+        content = event_data.get("content", "")
+        tool_name = event_data.get("tool_name", "")
+        file_path = event_data.get("file_path", "")
+        error = event_data.get("error", "")
+        message = event_data.get("message", "")
+
+        if event_type == "agent.assistant_message":
+            return content[:200] + ("..." if len(content) > 200 else "")
+        elif event_type == "agent.tool_use":
+            return f"Tool: {tool_name}"
+        elif event_type == "agent.tool_result":
+            return content[:150] + ("..." if len(content) > 150 else "")
+        elif event_type == "agent.file_edited":
+            return f"File: {file_path}"
+        elif event_type == "agent.error":
+            return error[:200] if error else "Error occurred"
+        elif event_type == "agent.completed":
+            return message or "Task completed"
+        elif event_type == "agent.message_injected":
+            msg_type = event_data.get("message_type", "user")
+            return f"[{msg_type}] {content[:100]}"
+        else:
+            return message or content or event_type
+
+    def get_agent_output_auto(
+        self,
+        agent_id: str,
+        lines: int = 200,
+        workspace_dir: Optional[str] = None,
+    ) -> str:
+        """Automatically detect agent type and get appropriate output.
+
+        Routes to sandbox or legacy output collection based on agent type.
+
+        Args:
+            agent_id: Agent ID
+            lines: Number of lines/events to return
+            workspace_dir: Optional workspace directory for legacy agents
+
+        Returns:
+            Formatted output string
+        """
+        # Check if sandbox agent
+        sandbox_id = self.get_sandbox_id_for_agent(agent_id)
+
+        if sandbox_id:
+            logger.debug(f"Agent {agent_id} is sandbox agent, using sandbox events")
+            return self._get_sandbox_agent_output(agent_id, sandbox_id, lines)
+        else:
+            logger.debug(f"Agent {agent_id} is legacy agent, using agent logs")
+            return self.get_agent_output(agent_id, lines, workspace_dir)
+
+    def _get_sandbox_agent_output(
+        self, agent_id: str, sandbox_id: str, lines: int = 50
+    ) -> str:
+        """Get output for a sandbox agent.
+
+        Args:
+            agent_id: Agent ID
+            sandbox_id: Sandbox ID
+            lines: Number of events to include
+
+        Returns:
+            Formatted output combining sandbox events and agent status
+        """
+        output_sections = []
+
+        # Get sandbox events
+        sandbox_output = self.get_sandbox_output(sandbox_id, lines)
+        if sandbox_output:
+            output_sections.append("=== Sandbox Events ===")
+            output_sections.append(sandbox_output)
+
+        # Get agent/task status
+        status_output = self._get_sandbox_status(agent_id, sandbox_id)
+        if status_output:
+            output_sections.append("=== Sandbox Status ===")
+            output_sections.append(status_output)
+
+        if output_sections:
+            return "\n\n".join(output_sections)
+        else:
+            return "No sandbox agent output available"
+
+    def _get_sandbox_status(self, agent_id: str, sandbox_id: str) -> str:
+        """Get status summary for a sandbox agent.
+
+        Args:
+            agent_id: Agent ID
+            sandbox_id: Sandbox ID
+
+        Returns:
+            Status summary string
+        """
+        try:
+            with self.db.get_session() as session:
+                agent = session.query(Agent).filter_by(id=agent_id).first()
+                task = session.query(Task).filter_by(sandbox_id=sandbox_id).first()
+
+                summary_parts = []
+
+                if agent:
+                    summary_parts.extend([
+                        f"Agent Type: {agent.agent_type}",
+                        f"Status: {agent.status}",
+                    ])
+                    if agent.last_heartbeat:
+                        time_since = (utc_now() - agent.last_heartbeat).total_seconds()
+                        summary_parts.append(f"Last Heartbeat: {time_since:.0f}s ago")
+
+                if task:
+                    summary_parts.extend([
+                        f"Task: {task.id}",
+                        f"Task Status: {task.status}",
+                        f"Phase: {task.phase_id or 'None'}",
+                    ])
+
+                summary_parts.append(f"Sandbox: {sandbox_id}")
+
+                return " | ".join(summary_parts)
+
+        except Exception as e:
+            logger.error(f"Failed to get sandbox status: {e}")
+            return f"Error getting status: {str(e)}"
+
+    def extract_sandbox_error_context(self, sandbox_id: str) -> str:
+        """Extract error context from sandbox events.
+
+        Args:
+            sandbox_id: Sandbox ID to check
+
+        Returns:
+            Error context string
+        """
+        try:
+            with self.db.get_session() as session:
+                # Look for error events
+                error_events = (
+                    session.query(SandboxEvent)
+                    .filter(
+                        SandboxEvent.sandbox_id == sandbox_id,
+                        SandboxEvent.event_type == "agent.error",
+                    )
+                    .order_by(SandboxEvent.created_at.desc())
+                    .limit(5)
+                    .all()
+                )
+
+                if error_events:
+                    error_contexts = []
+                    for event in error_events:
+                        timestamp = event.created_at.strftime("%H:%M:%S")
+                        event_data = event.event_data or {}
+                        error_msg = event_data.get("error", "Unknown error")
+                        error_contexts.append(f"[{timestamp}] {error_msg}")
+                    return "\n".join(error_contexts)
+
+                # Check for error indicators in recent events
+                recent_events = (
+                    session.query(SandboxEvent)
+                    .filter(
+                        SandboxEvent.sandbox_id == sandbox_id,
+                        SandboxEvent.created_at > utc_now() - timedelta(minutes=10),
+                    )
+                    .order_by(SandboxEvent.created_at.desc())
+                    .limit(20)
+                    .all()
+                )
+
+                for event in recent_events:
+                    event_data = event.event_data or {}
+                    content = str(event_data.get("content", "")).lower()
+                    error = str(event_data.get("error", "")).lower()
+
+                    error_indicators = [
+                        "error", "exception", "traceback", "failed",
+                        "cannot", "unable", "permission denied"
+                    ]
+
+                    combined = content + error
+                    if any(indicator in combined for indicator in error_indicators):
+                        return f"Potential error in {event.event_type}: {event_data}"
+
+        except Exception as e:
+            logger.error(f"Failed to extract error context for sandbox {sandbox_id}: {e}")
+
+        return "No specific errors detected"
+
+    def extract_error_context_auto(self, agent_id: str) -> str:
+        """Automatically extract error context from appropriate source.
+
+        Args:
+            agent_id: Agent ID
+
+        Returns:
+            Error context string
+        """
+        sandbox_id = self.get_sandbox_id_for_agent(agent_id)
+
+        if sandbox_id:
+            return self.extract_sandbox_error_context(sandbox_id)
+        else:
+            return self.extract_error_context(agent_id)

@@ -1,10 +1,166 @@
 # Sandbox System Gap Analysis
 
-**Created**: 2025-12-12  
-**Updated**: 2025-12-12 (major revision after discovering existing WebSocket system)  
-**Validated**: 2025-12-12 ✅ (cross-referenced against actual codebase)  
-**Status**: Planning Document - VALIDATED  
+**Created**: 2025-12-12
+**Updated**: 2025-12-18 (major revision - most gaps have been implemented!)
+**Validated**: 2025-12-18 ✅ (systematically verified against actual codebase)
+**Status**: ~~Planning Document~~ → **MOSTLY IMPLEMENTED**
 **Purpose**: Comprehensive analysis of existing infrastructure vs. requirements for real-time sandbox agent communication
+
+---
+
+## 🎉 Implementation Status Update (2025-12-18)
+
+**Most gaps identified in this document have been implemented!** This section summarizes the current state:
+
+### ✅ Fully Implemented (No Work Needed)
+| Gap | Original Status | Implementation Location |
+|-----|----------------|------------------------|
+| `sandbox_id` in Task model | 🔴 Missing | `backend/omoi_os/models/task.py:63` |
+| GitHub Token handling | 🔴 Missing | `daytona_spawner.py:546,599-606` (uses Daytona SDK's `git.clone()`) |
+| Sandbox event callback endpoint | ❌ Missing | `sandbox.py:365` - `POST /{sandbox_id}/events` |
+| Message injection endpoints | ❌ Missing | `sandbox.py:758,803` - `POST/GET /{sandbox_id}/messages` |
+| Database event persistence | ❌ Optional | `sandbox.py:212-269` - persists to `sandbox_events` table |
+| Guardian sandbox intervention | 🔴 Missing | `intelligent_guardian.py:693-887` - `_is_sandbox_task()` + `_sandbox_intervention()` |
+| GitHub API methods | 🟡 Missing | `github_api.py:804,852,923,956` - `get_pull_request`, `merge_pull_request`, `delete_branch`, `compare_branches` |
+| Branch workflow service | ❌ Missing | `branch_workflow.py` + `api/routes/branch_workflow.py` |
+| Worker script updates | ❌ Missing | Embedded in `daytona_spawner.py` - workers POST to sandbox endpoints |
+| Session transcript saving | ❌ Not planned | `sandbox.py:272-332` - cross-sandbox resumption support |
+
+### ❌ Still Outstanding
+| Gap | Status | Notes |
+|-----|--------|-------|
+| RestartOrchestrator sandbox handling | 🔴 Not started | `restart_orchestrator.py` has no sandbox/daytona awareness |
+| Heartbeat-based sandbox health | 🟡 Partial | Workers can POST heartbeat events, but RestartOrchestrator doesn't consume them |
+| Idle sandbox detection | ✅ Implemented | `idle_sandbox_monitor.py` + `orchestrator_worker.py:411-492` |
+
+### Effort Remaining
+- **RestartOrchestrator integration**: ~4-6 hours
+- **Full fault tolerance for sandboxes**: ~8-12 hours
+- ~~**Idle sandbox detection**: ~2-4 hours~~ ✅ **DONE**
+
+---
+
+## Idle Sandbox Detection Design (2025-12-18) ✅ IMPLEMENTED
+
+### Problem Statement
+
+Current monitoring can detect **dead sandboxes** (missed heartbeats via RestartOrchestrator), but cannot detect **idle sandboxes** that:
+- ✅ Send heartbeats (appear alive)
+- ❌ Show no actual work progress
+- ❌ Have no user input for extended periods
+
+These idle sandboxes waste Daytona resources and should be terminated.
+
+### Work Events vs Non-Work Events
+
+The worker script (`claude_sandbox_worker.py`) reports various event types. Only some indicate actual progress:
+
+**Work Events** (indicate progress - last activity timestamp should update):
+- `agent.file_edited` - Modified files
+- `agent.tool_completed` - Completed a tool call
+- `agent.subagent_completed` - Subagent finished work
+- `agent.skill_completed` - Skill execution done
+- `agent.completed` - Task completed
+- `agent.assistant_message` - Generated output
+- `agent.tool_use` - Tool invocation
+- `agent.tool_result` - Tool execution result
+
+**Non-Work Events** (don't indicate progress):
+- `agent.heartbeat` - Just alive signal
+- `agent.started` - Initial startup
+- `agent.thinking` - Processing without output
+- `agent.error` - Failure state (but track these separately)
+
+### Architecture Decision: New Service, Not RestartOrchestrator
+
+**RestartOrchestrator** handles **dead agent detection** (no heartbeats). Idle detection is fundamentally different:
+- Different detection logic (event analysis vs heartbeat timeout)
+- Different termination approach (Daytona SDK vs local process kill)
+- Different recovery patterns (no replacement needed for idle sandboxes)
+
+**Solution**: Create `IdleSandboxMonitor` service integrated into `orchestrator_worker.py`.
+
+### Implementation Design
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                     IDLE SANDBOX MONITORING FLOW                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│  orchestrator_worker.py                                                     │
+│  ├─ orchestrator_loop() - existing task spawn loop                         │
+│  ├─ heartbeat_task() - existing heartbeat logging                          │
+│  └─ idle_sandbox_check_loop() - NEW                                        │
+│         │                                                                   │
+│         ├─ Every 60 seconds:                                               │
+│         │   └─ Query sandbox_events for all active sandboxes               │
+│         │                                                                   │
+│         ├─ For each sandbox:                                               │
+│         │   ├─ Last heartbeat < 90s ago? → Alive                           │
+│         │   ├─ Last work event < IDLE_THRESHOLD ago? → Active              │
+│         │   ├─ Last user message < IDLE_THRESHOLD ago? → Has input         │
+│         │   └─ Otherwise → IDLE                                            │
+│         │                                                                   │
+│         └─ For IDLE sandboxes:                                             │
+│             ├─ Terminate via DaytonaSpawnerService.stop_sandbox()          │
+│             ├─ Update task.status = "failed" with reason                   │
+│             └─ Emit SANDBOX_TERMINATED_IDLE event                          │
+│                                                                             │
+│  Configuration (via YAML or env):                                          │
+│  ├─ IDLE_THRESHOLD_MINUTES: 30 (default)                                   │
+│  ├─ IDLE_CHECK_INTERVAL_SECONDS: 60 (default)                              │
+│  └─ IDLE_DETECTION_ENABLED: true (default)                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Database Queries
+
+```python
+# Get last work event for a sandbox
+last_work = session.query(SandboxEvent).filter(
+    SandboxEvent.sandbox_id == sandbox_id,
+    SandboxEvent.event_type.in_(WORK_EVENT_TYPES)
+).order_by(SandboxEvent.created_at.desc()).first()
+
+# Get last heartbeat
+last_heartbeat = session.query(SandboxEvent).filter(
+    SandboxEvent.sandbox_id == sandbox_id,
+    SandboxEvent.event_type == "agent.heartbeat"
+).order_by(SandboxEvent.created_at.desc()).first()
+
+# Get active sandboxes (have recent heartbeats)
+cutoff = utc_now() - timedelta(seconds=90)
+active_sandboxes = session.query(SandboxEvent.sandbox_id).filter(
+    SandboxEvent.event_type == "agent.heartbeat",
+    SandboxEvent.created_at >= cutoff
+).distinct().all()
+```
+
+### Termination Flow
+
+1. **Stop sandbox** via Daytona SDK
+2. **Update task** status to "failed" with error_message explaining idle termination
+3. **Emit event** `SANDBOX_TERMINATED_IDLE` for monitoring/alerting
+4. **Log** for debugging (sandbox_id, last_work_at, idle_duration)
+
+### Files Created/Modified ✅
+
+| File | Action | Description |
+|------|--------|-------------|
+| `backend/omoi_os/services/idle_sandbox_monitor.py` | ✅ CREATED | Core idle detection service |
+| `backend/omoi_os/workers/orchestrator_worker.py` | ✅ MODIFIED | Added `idle_sandbox_check_loop()` (lines 411-492) |
+
+### Integration with Existing Systems
+
+- **Uses existing**: `SandboxEvent` model, `DaytonaSpawnerService`, `EventBusService`
+- **Runs in**: `orchestrator_worker.py` alongside existing loops
+- **Configurable**: Via environment variables:
+  - `IDLE_DETECTION_ENABLED`: Enable/disable (default: true)
+  - `IDLE_THRESHOLD_MINUTES`: Time without work before considered idle (default: 30)
+  - `IDLE_CHECK_INTERVAL_SECONDS`: How often to check (default: 60)
+
+---
 
 ---
 
@@ -71,39 +227,29 @@
    - Planned: `/sandboxes/{id}/events` endpoint
    - Recommendation: Consolidate to sandbox-centric model per this design
 
-4. **🔴 Missing `sandbox_id` Field in Task Model** (HIGH Risk - BUG!)
-   - Location: `backend/omoi_os/api/routes/tasks.py` line ~45
-   - Issue: `register_conversation` endpoint sets `task.sandbox_id = request.sandbox_id`
-   - Problem: The `Task` model has NO `sandbox_id` field defined!
-   - Impact: Sandbox-task association is broken; Guardian can't identify sandbox tasks
-   - **Required Fix**: Add `sandbox_id` field to Task model (see Phase 6)
+4. **~~🔴 Missing `sandbox_id` Field in Task Model~~** ✅ **RESOLVED**
+   - Location: `backend/omoi_os/models/task.py` line 63
+   - **Status**: Field exists! `sandbox_id: Mapped[Optional[str]] = mapped_column(...)`
+   - Also present in: `sandbox_event.py:41`, `claude_session_transcript.py:61`
+   - ~~Impact: Sandbox-task association is broken; Guardian can't identify sandbox tasks~~
+   - **No action needed** - this was implemented
 
-5. **🔴 Guardian Cannot Intervene with Sandbox Agents** (HIGH Risk - Architecture Gap!)
-   - Location: `backend/omoi_os/services/intelligent_guardian.py` and `conversation_intervention.py`
-   - Issue: Guardian uses `ConversationInterventionService` which loads conversation state from **LOCAL filesystem**
-   - Problem: Sandbox agents have conversation state **INSIDE the Daytona sandbox**, not locally accessible
-   - Impact: Guardian monitoring works but CANNOT send interventions to sandbox agents
-   - **Required Fix**: Add sandbox-aware intervention routing (see Phase 6)
+5. **~~🔴 Guardian Cannot Intervene with Sandbox Agents~~** ✅ **RESOLVED**
+   - Location: `backend/omoi_os/services/intelligent_guardian.py` lines 693-887
+   - **Status**: IMPLEMENTED with sandbox-aware routing!
+   - Implementation:
+     - `_is_sandbox_task(task)` - detects sandbox mode via `task.sandbox_id`
+     - `_sandbox_intervention(intervention, task)` - POSTs to `/api/v1/sandboxes/{id}/messages`
+   - The "REQUIRED FLOW" diagram below is now the ACTUAL implementation:
 
    ```
-   CURRENT FLOW (Broken for Sandbox):
+   IMPLEMENTED FLOW (Sandbox-aware) ✅:
    ┌─────────────────────────────────────────────────────────────────┐
    │  Guardian.execute_steering_intervention()                       │
    │       │                                                         │
-   │       └─► ConversationInterventionService.send_intervention()   │
-   │                │                                                │
-   │                └─► Conversation(                                │
-   │                        persistence_dir=task.persistence_dir     │
-   │                    )  ◄── FAILS! Path doesn't exist locally!   │
-   └─────────────────────────────────────────────────────────────────┘
-   
-   REQUIRED FLOW (Sandbox-aware):
-   ┌─────────────────────────────────────────────────────────────────┐
-   │  Guardian.execute_steering_intervention()                       │
-   │       │                                                         │
-   │       ├─► IF task.sandbox_id:                                   │
-   │       │       POST /api/v1/sandboxes/{id}/messages              │
-   │       │       (Uses message injection API)                      │
+   │       ├─► IF self._is_sandbox_task(task):  # Line 825          │
+   │       │       await self._sandbox_intervention(...)  # Line 827 │
+   │       │       → POST /api/v1/sandboxes/{id}/messages            │
    │       │                                                         │
    │       └─► ELSE:                                                 │
    │               ConversationInterventionService (legacy path)     │
@@ -117,13 +263,23 @@
    - Impact: Guardian and monitoring code must detect mode and route correctly
    - Recommendation: Clear mode detection via `task.sandbox_id` presence
 
-7. **🔴 GitHub Token Not Passed to Sandbox** (HIGH Risk - Blocking MVP!)
-   - Location: `backend/omoi_os/services/daytona_spawner.py` lines 147-169
-   - Issue: `spawn_for_task()` does NOT pass GitHub credentials to sandbox
-   - Missing env vars: `GITHUB_TOKEN`, `GITHUB_REPO`, `BRANCH_NAME`
-   - Impact: Agents cannot clone repos, work on files directly, or create commits
-   - **Required Fix**: Pass user's OAuth token to sandbox via `extra_env` (see Phase 3.5)
-   - Status: **Addressed in Phase 3.5** of implementation checklist
+7. **~~🔴 GitHub Token Not Passed to Sandbox~~** ✅ **RESOLVED**
+   - Location: `backend/omoi_os/services/daytona_spawner.py` lines 543-634
+   - **Status**: IMPLEMENTED using Daytona SDK's native git.clone()!
+   - Implementation:
+     - Line 546: `github_token = env_vars.pop("GITHUB_TOKEN", None)`
+     - Lines 599-606: Uses Daytona SDK's `sandbox.git.clone()` with token:
+       ```python
+       sandbox.git.clone(
+           url=repo_url,
+           path=workspace_path,
+           username="x-access-token",
+           password=github_token,
+       )
+       ```
+   - Also in worker scripts (lines 822, 1307): Workers can clone using token from env
+   - ~~Impact: Agents cannot clone repos, work on files directly, or create commits~~
+   - **No action needed** - this was implemented
 
 9. **🟡 Fault Tolerance System Not Designed for Sandbox** (Medium Risk - Future Integration)
    - Location: `docs/design/monitoring/fault_tolerance.md`
@@ -138,20 +294,20 @@
    - **Full Integration**: Connect RestartOrchestrator to DaytonaSpawnerService
    - See "MVP vs Full Integration" section below
 
-10. **🟡 GitHub API Missing Methods for Branch Workflow** (Medium Risk - Phase 5 Blocker)
+10. **~~🟡 GitHub API Missing Methods for Branch Workflow~~** ✅ **RESOLVED**
     - Location: `backend/omoi_os/services/github_api.py`
-    - Issue: GitHub API service missing methods required for BranchWorkflowService
+    - **Status**: ALL methods now exist!
     - **Existing** (ready to use):
       - `create_branch()` ✅
       - `create_pull_request()` ✅
       - `list_branches()`, `list_commits()`, `list_pull_requests()` ✅
-    - **Missing** (must add in Phase 5):
-      - `merge_pull_request(user_id, owner, repo, pr_number)` ❌
-      - `delete_branch(user_id, owner, repo, branch_name)` ❌
-      - `get_pull_request(user_id, owner, repo, pr_number)` ❌ - for mergeable check
-      - `compare_branches(user_id, owner, repo, base, head)` ❌ - for conflict detection
-    - Impact: BranchWorkflowService cannot complete PR lifecycle
-    - **Required Fix**: Add missing methods before Phase 5 implementation
+    - **~~Missing~~ Now Implemented**:
+      - `get_pull_request()` ✅ Line 804
+      - `merge_pull_request()` ✅ Line 852
+      - `delete_branch()` ✅ Line 923
+      - `compare_branches()` ✅ Line 956
+    - ~~Impact: BranchWorkflowService cannot complete PR lifecycle~~
+    - **No action needed** - all methods implemented
 
 11. **🔴 RestartOrchestrator Spawns Local Agents, Not Sandboxes** (HIGH Risk - Phase 7 Blocker)
     - Location: `backend/omoi_os/services/restart_orchestrator.py` line 246-265
@@ -501,19 +657,22 @@ For implementers, here are the exact file locations:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Gap 1 (Actual): Sandbox Event Callback Endpoint ❌
+### ~~Gap 1 (Actual): Sandbox Event Callback Endpoint~~ ✅ IMPLEMENTED
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                   NEEDED: Sandbox Event Callback Endpoint                    │
+│                   ✅ IMPLEMENTED: Sandbox Event Callback Endpoint            │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
+│  Location: backend/omoi_os/api/routes/sandbox.py:365                       │
 │  Endpoint: POST /api/v1/sandboxes/{sandbox_id}/events                      │
 │                                                                             │
-│  Purpose:                                                                   │
-│  ├─ Workers POST events to this endpoint                                   │
-│  ├─ Server validates and persists event                                    │
-│  └─ Server publishes to EventBusService                                    │
+│  Features Implemented:                                                      │
+│  ├─ Workers POST events to this endpoint ✅                                │
+│  ├─ Server validates and persists event to sandbox_events table ✅         │
+│  ├─ Server publishes to EventBusService ✅                                 │
+│  ├─ Task finalization on agent.completed/failed events ✅                  │
+│  └─ Session transcript saving for cross-sandbox resumption ✅              │
 │                                                                             │
 │  Request Body:                                                              │
 │  {                                                                          │
@@ -522,155 +681,139 @@ For implementers, here are the exact file locations:
 │    "source": "agent"                                                       │
 │  }                                                                          │
 │                                                                             │
-│  What Happens:                                                              │
-│  1. Validate event schema                                                  │
-│  2. (Optional) Persist to sandbox_events table                             │
-│  3. Publish via event_bus.publish(SystemEvent(                             │
-│       event_type="SANDBOX_EVENT",                                          │
-│       entity_type="sandbox",                                               │
-│       entity_id=sandbox_id,                                                │
-│       payload=event_data                                                   │
-│     ))                                                                     │
-│  4. WebSocketEventManager automatically broadcasts to subscribers          │
+│  Also includes GET endpoint for querying events:                           │
+│  GET /api/v1/sandboxes/{sandbox_id}/events?limit=100&event_type=...       │
 │                                                                             │
-│  Effort: ~2-3 hours                                                        │
+│  Effort: ~~2-3 hours~~ DONE                                                │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Gap 2: Sandbox Session Persistence ❌
+### ~~Gap 2: Sandbox Session Persistence~~ ✅ IMPLEMENTED
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     NEEDED: Database Persistence                             │
+│                  ✅ IMPLEMENTED: Database Persistence                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  New Tables (optional but recommended):                                     │
-│  ├─ sandbox_sessions - tracks sandbox instances                            │
-│  └─ sandbox_events - event audit log for replay                            │
+│  Tables Created:                                                            │
+│  ├─ sandbox_events - event audit log (sandbox.py:212-269)                  │
+│  └─ claude_session_transcripts - session transcript storage                │
 │                                                                             │
-│  Current State:                                                             │
-│  ├─ SandboxInfo stored in memory only (DaytonaSpawnerService)              │
-│  └─ Lost on server restart                                                 │
+│  Models:                                                                    │
+│  ├─ backend/omoi_os/models/sandbox_event.py ✅                             │
+│  └─ backend/omoi_os/models/claude_session_transcript.py ✅                 │
 │                                                                             │
-│  Note: This is optional for MVP. Events flow through Redis pub/sub         │
-│  regardless. DB persistence is for:                                         │
-│  ├─ Audit trail                                                            │
-│  ├─ Event replay on reconnection                                           │
-│  └─ Query sandbox history                                                  │
+│  Features:                                                                  │
+│  ├─ Event persistence on POST /sandboxes/{id}/events ✅                    │
+│  ├─ Event querying via GET /sandboxes/{id}/events ✅                       │
+│  ├─ Session transcript saving for cross-sandbox resumption ✅              │
+│  └─ Audit trail with timestamps ✅                                         │
 │                                                                             │
-│  Effort: ~4-6 hours (migration + models + service updates)                 │
+│  Note: Sandbox tracking is still in-memory in DaytonaSpawnerService        │
+│  (Medium Risk item #1). Full session persistence would require more work.  │
+│                                                                             │
+│  Effort: ~~4-6 hours~~ DONE                                                │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Gap 3: Message Injection ❌
+### ~~Gap 3: Message Injection~~ ✅ IMPLEMENTED
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        NEEDED: Message Injection                             │
+│                     ✅ IMPLEMENTED: Message Injection                        │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  Purpose: User/Guardian sends message to running agent                      │
+│  Location: backend/omoi_os/api/routes/sandbox.py:758-831                   │
 │                                                                             │
-│  Recommended: HTTP Polling (Simple & Reliable)                              │
-│  ────────────────────────────────────────────────────────────────           │
-│                                                                             │
-│  Endpoint: GET /api/v1/sandboxes/{sandbox_id}/messages                     │
-│  ├─ Worker polls every 2-5 seconds                                         │
-│  ├─ Returns pending messages for the sandbox                               │
-│  └─ Server marks messages as delivered                                     │
-│                                                                             │
-│  Endpoint: POST /api/v1/sandboxes/{sandbox_id}/messages                    │
+│  POST /api/v1/sandboxes/{sandbox_id}/messages ✅ (line 758)                │
 │  ├─ User/Guardian posts message                                            │
-│  └─ Stored in memory or DB until worker polls                              │
+│  ├─ Stored in Redis (RedisMessageQueue) or in-memory for tests            │
+│  ├─ Broadcasts SANDBOX_MESSAGE_QUEUED event                                │
+│  └─ Returns message_id for tracking                                        │
 │                                                                             │
-│  Worker Integration:                                                        │
-│  1. After each agent turn, poll for messages                               │
-│  2. If message exists, inject into agent conversation                      │
-│  3. Handle "interrupt" command to stop current operation                   │
+│  GET /api/v1/sandboxes/{sandbox_id}/messages ✅ (line 803)                 │
+│  ├─ Worker polls for pending messages                                      │
+│  ├─ Returns and clears pending messages (FIFO order)                       │
+│  └─ Returns empty list if no messages                                      │
 │                                                                             │
-│  Effort: ~4-6 hours (endpoint + worker modification)                       │
+│  Message Types Supported:                                                   │
+│  ├─ user_message - Guidance from user                                      │
+│  ├─ interrupt - High-priority stop signal                                  │
+│  ├─ guardian_nudge - Guardian intervention                                 │
+│  └─ system - System-level notification                                     │
 │                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
-
-### Gap 4: Worker Script Updates ❌
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                      NEEDED: Worker Script Updates                           │
-├─────────────────────────────────────────────────────────────────────────────┤
+│  Backend: message_queue.py (Redis + InMemory implementations)              │
 │                                                                             │
-│  Update Claude Agent SDK Worker (_get_worker_script):                       │
-│  ├─ POST events to /api/v1/sandboxes/{id}/events (not tasks endpoint)      │
-│  ├─ Report more granular events (tool_use, thinking, etc.)                 │
-│  ├─ Poll for messages after each agent turn                                │
-│  └─ Handle interrupt commands                                              │
-│  └─ Use PreToolUse/PostToolUse hooks for real-time reporting               │
-│                                                                             │
-│  Effort: ~4 hours                                                          │
+│  Effort: ~~4-6 hours~~ DONE                                                │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Gap 5: Guardian & Monitoring Integration ❌ (NEW - Critical!)
+### ~~Gap 4: Worker Script Updates~~ ✅ IMPLEMENTED
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│              NEEDED: Guardian & Existing Systems Integration                 │
+│                   ✅ IMPLEMENTED: Worker Script Updates                      │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  PROBLEM: Guardian CANNOT intervene with sandbox agents!                    │
+│  Location: daytona_spawner.py worker scripts                               │
 │                                                                             │
-│  Existing Systems Affected:                                                 │
-│  ├─ IntelligentGuardian (intelligent_guardian.py)                          │
-│  │   └─ Monitors agent trajectories, detects drift, sends interventions    │
-│  ├─ ConversationInterventionService (conversation_intervention.py)         │
-│  │   └─ Sends messages by loading from LOCAL persistence_dir               │
-│  ├─ Task Model (models/task.py)                                            │
-│  │   └─ MISSING sandbox_id field!                                          │
-│  └─ Agent Registry Service (agent_registry.py)                             │
-│      └─ Tracks agent capabilities - needs sandbox mode awareness           │
+│  Claude Worker Features:                                                    │
+│  ├─ POST events to /api/v1/sandboxes/{id}/events ✅                        │
+│  ├─ Report granular events (tool_use, thinking, progress) ✅               │
+│  ├─ Poll for messages after each agent turn ✅                             │
+│  ├─ Handle interrupt/user_message/guardian_nudge types ✅                  │
+│  ├─ Git repo cloning with GITHUB_TOKEN ✅                                  │
+│  ├─ Session transcript extraction for resumption ✅                        │
+│  └─ Heartbeat reporting ✅                                                 │
 │                                                                             │
-│  Required Changes:                                                          │
+│  Worker script also:                                                        │
+│  ├─ Loads from backend/omoi_os/workers/claude_sandbox_worker.py           │
+│  └─ Supports resume_session_id for continuing previous sessions            │
 │                                                                             │
-│  1. Add sandbox_id to Task Model                                           │
-│     ┌──────────────────────────────────────────────────────────────┐       │
-│     │  # backend/omoi_os/models/task.py                            │       │
-│     │  sandbox_id: Mapped[Optional[str]] = mapped_column(          │       │
-│     │      String(255), nullable=True, index=True                  │       │
-│     │  )                                                           │       │
-│     └──────────────────────────────────────────────────────────────┘       │
+│  Effort: ~~4 hours~~ DONE                                                  │
 │                                                                             │
-│  2. Update Guardian to Detect Sandbox Mode                                  │
-│     ┌──────────────────────────────────────────────────────────────┐       │
-│     │  def _is_sandbox_task(self, task: Task) -> bool:             │       │
-│     │      return bool(task.sandbox_id)                            │       │
-│     └──────────────────────────────────────────────────────────────┘       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### ~~Gap 5: Guardian & Monitoring Integration~~ ✅ IMPLEMENTED
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│           ✅ IMPLEMENTED: Guardian & Existing Systems Integration            │
+├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  3. Add Sandbox Intervention Path                                          │
-│     ┌──────────────────────────────────────────────────────────────┐       │
-│     │  async def _sandbox_intervention(self, sandbox_id, msg):     │       │
-│     │      async with httpx.AsyncClient() as client:               │       │
-│     │          await client.post(                                  │       │
-│     │              f"{URL}/sandboxes/{sandbox_id}/messages",       │       │
-│     │              json={                                          │       │
-│     │                  "content": msg,                             │       │
-│     │                  "message_type": "guardian_intervention"     │       │
-│     │              }                                               │       │
-│     │          )                                                   │       │
-│     └──────────────────────────────────────────────────────────────┘       │
+│  ~~PROBLEM: Guardian CANNOT intervene with sandbox agents!~~                │
+│  SOLVED: Guardian now fully supports sandbox interventions!                 │
 │                                                                             │
-│  4. Update Worker to Handle Guardian Messages                              │
-│     ┌──────────────────────────────────────────────────────────────┐       │
-│     │  if msg["message_type"] == "guardian_intervention":          │       │
-│     │      agent.inject_system_message(                            │       │
-│     │          f"[GUARDIAN] {msg['content']}"                      │       │
-│     │      )                                                       │       │
-│     └──────────────────────────────────────────────────────────────┘       │
+│  All Changes Implemented:                                                   │
 │                                                                             │
-│  Effort: ~6-8 hours                                                        │
+│  1. sandbox_id in Task Model ✅                                            │
+│     Location: backend/omoi_os/models/task.py:63                            │
+│     sandbox_id: Mapped[Optional[str]] = mapped_column(...)                 │
+│                                                                             │
+│  2. Guardian Sandbox Mode Detection ✅                                      │
+│     Location: intelligent_guardian.py:693-702                              │
+│     def _is_sandbox_task(self, task: Task) -> bool:                        │
+│         return bool(task.sandbox_id) if task else False                    │
+│                                                                             │
+│  3. Sandbox Intervention Path ✅                                           │
+│     Location: intelligent_guardian.py:704-749                              │
+│     async def _sandbox_intervention(self, intervention, task):             │
+│         → POST /api/v1/sandboxes/{task.sandbox_id}/messages                │
+│         → message_type: "guardian_nudge"                                   │
+│                                                                             │
+│  4. Intervention Routing ✅                                                 │
+│     Location: intelligent_guardian.py:825-887                              │
+│     if self._is_sandbox_task(task):                                        │
+│         return await self._sandbox_intervention(intervention, task)        │
+│                                                                             │
+│  5. Worker Handles Guardian Messages ✅                                     │
+│     Worker polls and processes guardian_nudge message type                 │
+│                                                                             │
+│  Effort: ~~6-8 hours~~ DONE                                                │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -881,31 +1024,33 @@ For implementers, here are the exact file locations:
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Files to Create/Modify (Reduced!)
+### Files Created/Modified (2025-12-18 Status)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                     REVISED FILES TO CREATE/MODIFY                           │
+│                       FILES CREATED/MODIFIED                                 │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  NEW FILES (minimal):                                                       │
-│  ├─ backend/omoi_os/api/routes/sandboxes.py    (event + message endpoints) │
-│  └─ backend/omoi_os/api/schemas/sandbox.py     (request/response DTOs)     │
+│  ✅ CREATED FILES:                                                          │
+│  ├─ backend/omoi_os/api/routes/sandbox.py    (event + message endpoints)   │
+│  ├─ backend/omoi_os/api/routes/branch_workflow.py (branch workflow API)    │
+│  ├─ backend/omoi_os/services/branch_workflow.py (branch workflow service)  │
+│  ├─ backend/omoi_os/services/message_queue.py (Redis + InMemory queues)    │
+│  ├─ backend/omoi_os/models/sandbox_event.py (event persistence model)      │
+│  ├─ backend/omoi_os/models/claude_session_transcript.py (session storage)  │
+│  └─ backend/omoi_os/workers/claude_sandbox_worker.py (worker script)       │
 │                                                                             │
-│  MODIFIED FILES:                                                            │
-│  ├─ backend/omoi_os/services/daytona_spawner.py (worker script updates)    │
-│  └─ backend/omoi_os/api/main.py                 (route registration)       │
+│  ✅ MODIFIED FILES:                                                         │
+│  ├─ backend/omoi_os/models/task.py (added sandbox_id field)                │
+│  ├─ backend/omoi_os/services/daytona_spawner.py (worker scripts, git)      │
+│  ├─ backend/omoi_os/services/intelligent_guardian.py (sandbox routing)     │
+│  ├─ backend/omoi_os/services/github_api.py (added 4 methods)               │
+│  └─ backend/omoi_os/api/main.py (route registration)                       │
 │                                                                             │
-│  OPTIONAL (for persistence):                                                │
-│  ├─ backend/alembic/versions/XXX_sandbox_sessions.py                       │
-│  └─ backend/omoi_os/models/sandbox.py                                      │
+│  ❌ STILL NEEDS MODIFICATION:                                               │
+│  └─ backend/omoi_os/services/restart_orchestrator.py (sandbox awareness)   │
 │                                                                             │
-│  NO LONGER NEEDED:                                                          │
-│  ├─ ❌ backend/omoi_os/api/websockets/sandbox_ws.py (use existing!)        │
-│  ├─ ❌ backend/omoi_os/services/ws_manager.py (use existing!)              │
-│  └─ ❌ EventBusService modifications (already works!)                      │
-│                                                                             │
-│  Total: 2 new files, 2 modified files (MVP)                                │
+│  Total: 7 new files, 5 modified files (DONE!)                              │
 │                                                                             │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -1120,20 +1265,26 @@ while agent_running:
 - ✅ Task queue with full DAG support
 - ✅ Monitoring infrastructure
 
-### What We Need (Updated!)
-- ❌ Sandbox event callback endpoint (~2-3 hours)
-- ❌ Message injection endpoints (~4-6 hours)
-- ❌ Worker script updates (~4 hours)
-- ❌ **Guardian & Systems Integration (~6-8 hours)** ← Critical for monitoring!
-- ❌ (Optional) Database persistence for audit trail
-- ❌ (Full Integration) Fault tolerance integration (~8-12 hours)
+### What's Been Built Since Original Analysis (2025-12-18 Update!)
+- ✅ **Sandbox event callback endpoint** - `sandbox.py:365` with DB persistence
+- ✅ **Message injection endpoints** - `sandbox.py:758,803` with Redis queue
+- ✅ **Worker script updates** - POST to sandbox endpoints, message polling, heartbeats
+- ✅ **Guardian sandbox integration** - `intelligent_guardian.py:693-887`
+- ✅ **Database persistence** - `sandbox_events` and `claude_session_transcripts` tables
+- ✅ **GitHub API methods** - `merge_pull_request`, `delete_branch`, `get_pull_request`, `compare_branches`
+- ✅ **Branch workflow service** - `branch_workflow.py` + routes
+- ✅ **Session transcript saving** - Cross-sandbox resumption support
+
+### ❌ What Still Needs Work
+- ❌ **RestartOrchestrator sandbox handling** (~4-6 hours) - No daytona/sandbox awareness
+- ❌ **Full fault tolerance for sandboxes** (~8-12 hours) - Heartbeat consumption, escalation ladder
 
 ### Revised Effort
-**Original estimate**: 36-52 hours  
-**MVP estimate**: 14-19 hours (without Guardian integration)
-**Full estimate with Guardian**: 20-27 hours  
-**Full Integration (incl. fault tolerance)**: 30-40 hours  
-**Savings**: Still 50-60% reduction from original!
+**Original estimate**: 36-52 hours
+**~~MVP estimate~~**: ~~14-19 hours~~ → **DONE!** 🎉
+**~~Full estimate with Guardian~~**: ~~20-27 hours~~ → **DONE!** 🎉
+**Remaining (fault tolerance)**: 12-18 hours
+**Total completed**: ~90% of original scope!
 
 ---
 

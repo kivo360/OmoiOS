@@ -166,8 +166,10 @@ class IntelligentGuardian:
                     return None
 
                 # Build trajectory context
-                # Note: build_accumulated_context creates its own session internally
-                trajectory_data = self.trajectory_context.build_accumulated_context(
+                # Note: Uses auto-routing to handle both sandbox and legacy agents
+                # For sandbox agents, this queries sandbox_events table
+                # For legacy agents, this queries agent_logs table
+                trajectory_data = self.trajectory_context.build_accumulated_context_auto(
                     agent_id
                 )
 
@@ -176,7 +178,8 @@ class IntelligentGuardian:
                     return None
 
                 # Get agent output for additional context
-                agent_output = self.output_collector.get_agent_output(
+                # Uses auto-routing to handle both sandbox and legacy agents
+                agent_output = self.output_collector.get_agent_output_auto(
                     agent_id, workspace_dir=self._get_workspace_dir(agent)
                 )
 
@@ -229,18 +232,62 @@ class IntelligentGuardian:
         self,
         force_analysis: bool = False,
     ) -> List[TrajectoryAnalysis]:
-        """Analyze trajectories of all active agents."""
-        active_agents = self.output_collector.get_active_agents()
-        analyses = []
+        """Analyze trajectories of all active agents (legacy + sandbox).
 
+        This method now handles both:
+        - Legacy agents: Registered in agents table with heartbeats
+        - Sandbox agents: Tasks with sandbox_id that are in 'running' status
+        """
+        agent_ids_to_analyze: set[str] = set()
+
+        # Get legacy agent IDs
+        active_agents = self.output_collector.get_active_agents()
         for agent in active_agents:
+            agent_ids_to_analyze.add(str(agent.id))
+
+        # Get sandbox agent IDs
+        sandbox_agent_ids = self._get_active_sandbox_agent_ids()
+        agent_ids_to_analyze.update(sandbox_agent_ids)
+
+        analyses = []
+        for agent_id in agent_ids_to_analyze:
             analysis: TrajectoryAnalysis | None = await self.analyze_agent_trajectory(
-                agent.id, force_analysis
+                agent_id, force_analysis
             )
             if analysis:
                 analyses.append(analysis)
 
         return analyses
+
+    def _get_active_sandbox_agent_ids(self) -> List[str]:
+        """Get agent IDs for all running sandbox tasks.
+
+        Returns:
+            List of agent IDs that are running in sandboxes
+        """
+        from omoi_os.models.task import Task
+
+        try:
+            with self.db.get_session() as session:
+                running_sandbox_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.status == "running",
+                        Task.sandbox_id.isnot(None),
+                        Task.assigned_agent_id.isnot(None),
+                    )
+                    .all()
+                )
+
+                return [
+                    str(task.assigned_agent_id)
+                    for task in running_sandbox_tasks
+                    if task.assigned_agent_id
+                ]
+
+        except Exception as e:
+            logger.error(f"Failed to get active sandbox agent IDs: {e}")
+            return []
 
     async def detect_steering_interventions(
         self,

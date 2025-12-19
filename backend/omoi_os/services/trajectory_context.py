@@ -16,6 +16,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from omoi_os.models.agent import Agent
 from omoi_os.utils.datetime import utc_now
 from omoi_os.models.agent_log import AgentLog
+from omoi_os.models.sandbox_event import SandboxEvent
 from omoi_os.models.task import Task
 from omoi_os.models.trajectory_analysis import (
     ConversationEvent,
@@ -691,3 +692,312 @@ class TrajectoryContext:
                 return markers[-1]
 
         return None
+
+    # -------------------------------------------------------------------------
+    # Sandbox-Aware Methods (Phase 6)
+    # -------------------------------------------------------------------------
+
+    def get_sandbox_id_for_agent(self, agent_id: str) -> Optional[str]:
+        """Get the sandbox_id for an agent if it's running in a sandbox.
+
+        Args:
+            agent_id: Agent ID to look up
+
+        Returns:
+            sandbox_id if agent is running in a sandbox, None otherwise
+        """
+        with self.db.get_session() as session:
+            # Find task assigned to this agent that has a sandbox_id
+            task = (
+                session.query(Task)
+                .filter(
+                    Task.assigned_agent_id == agent_id,
+                    Task.sandbox_id.isnot(None),
+                    Task.status.in_(["running", "assigned"]),
+                )
+                .first()
+            )
+            if task and task.sandbox_id:
+                return task.sandbox_id
+            return None
+
+    def is_sandbox_agent(self, agent_id: str) -> bool:
+        """Check if an agent is running in a sandbox.
+
+        Args:
+            agent_id: Agent ID to check
+
+        Returns:
+            True if agent has an associated sandbox_id
+        """
+        return self.get_sandbox_id_for_agent(agent_id) is not None
+
+    def get_sandbox_events(
+        self, sandbox_id: str, limit: int = 100
+    ) -> List[SandboxEvent]:
+        """Get sandbox events for trajectory analysis.
+
+        Args:
+            sandbox_id: Sandbox ID to query
+            limit: Maximum number of events to return
+
+        Returns:
+            List of SandboxEvent objects ordered by created_at
+        """
+        with self.db.get_session() as session:
+            events = (
+                session.query(SandboxEvent)
+                .filter(SandboxEvent.sandbox_id == sandbox_id)
+                .order_by(SandboxEvent.created_at)
+                .limit(limit)
+                .all()
+            )
+            # Expunge to use outside session
+            for event in events:
+                session.expunge(event)
+            return events
+
+    def _convert_sandbox_events_to_logs(
+        self, events: List[SandboxEvent], agent_id: str
+    ) -> List[AgentLog]:
+        """Convert SandboxEvents to AgentLog format for trajectory analysis.
+
+        This bridges the gap between sandbox events and the existing
+        trajectory analysis infrastructure.
+
+        Args:
+            events: List of SandboxEvent objects
+            agent_id: Agent ID to associate with logs
+
+        Returns:
+            List of AgentLog-like objects (duck-typed for compatibility)
+        """
+        from dataclasses import dataclass
+
+        @dataclass
+        class PseudoAgentLog:
+            """Duck-typed AgentLog for sandbox events."""
+            id: str
+            agent_id: str
+            log_type: str
+            message: str
+            details: Optional[dict]
+            created_at: Any
+
+        logs = []
+        for event in events:
+            # Map sandbox event types to log types
+            event_type = event.event_type or ""
+            log_type = self._map_event_type_to_log_type(event_type)
+
+            # Build message from event data
+            event_data = event.event_data or {}
+            message = self._build_message_from_event(event_type, event_data)
+
+            logs.append(
+                PseudoAgentLog(
+                    id=event.id,
+                    agent_id=agent_id,
+                    log_type=log_type,
+                    message=message,
+                    details=event_data,
+                    created_at=event.created_at,
+                )
+            )
+
+        return logs
+
+    def _map_event_type_to_log_type(self, event_type: str) -> str:
+        """Map sandbox event types to AgentLog log types.
+
+        Args:
+            event_type: Sandbox event type (e.g., 'agent.tool_use')
+
+        Returns:
+            AgentLog log_type (e.g., 'output', 'input', 'intervention')
+        """
+        mapping = {
+            # Agent output events
+            "agent.assistant_message": "output",
+            "agent.tool_result": "output",
+            "agent.completed": "output",
+            "agent.file_edited": "output",
+            # Agent action events
+            "agent.tool_use": "action",
+            "agent.subagent_completed": "action",
+            "agent.skill_completed": "action",
+            # Status events
+            "agent.started": "status",
+            "agent.thinking": "status",
+            "agent.waiting": "status",
+            "agent.heartbeat": "heartbeat",
+            # Error events
+            "agent.error": "error",
+            # Intervention events
+            "agent.message_injected": "intervention",
+            "agent.interrupted": "intervention",
+        }
+        return mapping.get(event_type, "event")
+
+    def _build_message_from_event(
+        self, event_type: str, event_data: dict
+    ) -> str:
+        """Build a human-readable message from sandbox event data.
+
+        Args:
+            event_type: Type of event
+            event_data: Event payload
+
+        Returns:
+            Formatted message string
+        """
+        # Extract common fields
+        content = event_data.get("content", "")
+        tool_name = event_data.get("tool_name", "")
+        file_path = event_data.get("file_path", "")
+        error = event_data.get("error", "")
+        message = event_data.get("message", "")
+
+        if event_type == "agent.assistant_message":
+            return content[:500] if content else "Assistant response"
+        elif event_type == "agent.tool_use":
+            return f"Tool: {tool_name}" if tool_name else "Tool execution"
+        elif event_type == "agent.tool_result":
+            return f"Tool result: {content[:200]}" if content else "Tool completed"
+        elif event_type == "agent.file_edited":
+            return f"Edited: {file_path}" if file_path else "File edited"
+        elif event_type == "agent.error":
+            return f"Error: {error}" if error else "Error occurred"
+        elif event_type == "agent.completed":
+            return message if message else "Task completed"
+        elif event_type == "agent.message_injected":
+            msg_type = event_data.get("message_type", "user")
+            return f"[{msg_type}] {content[:200]}" if content else "Message received"
+        elif event_type == "agent.thinking":
+            return "Processing..."
+        elif event_type == "agent.heartbeat":
+            return "Heartbeat"
+        else:
+            # Generic fallback
+            return message or content or event_type
+
+    def build_sandbox_context(
+        self, agent_id: str, sandbox_id: str
+    ) -> Dict[str, Any]:
+        """Build accumulated context from sandbox events.
+
+        This is the sandbox-aware version of build_accumulated_context.
+
+        Args:
+            agent_id: Agent ID
+            sandbox_id: Sandbox ID to query events from
+
+        Returns:
+            Complete accumulated context from sandbox events
+        """
+        logger.debug(
+            f"Building sandbox context for agent {agent_id}, sandbox {sandbox_id}"
+        )
+
+        # Check cache first
+        cache_key = f"sandbox:{sandbox_id}"
+        if cache_key in self.context_cache:
+            cached = self.context_cache[cache_key]
+            if cached["timestamp"] > utc_now() - self.cache_ttl:
+                return cached["context"]
+
+        # Get sandbox events
+        events = self.get_sandbox_events(sandbox_id, limit=200)
+
+        if not events:
+            logger.warning(f"No sandbox events found for {sandbox_id}")
+            return self._get_empty_context()
+
+        # Convert to AgentLog-compatible format
+        pseudo_logs = self._convert_sandbox_events_to_logs(events, agent_id)
+
+        with self.db.get_session() as session:
+            # Get agent and task for context
+            agent = session.query(Agent).filter_by(id=agent_id).first()
+            task = (
+                session.query(Task)
+                .filter_by(sandbox_id=sandbox_id)
+                .first()
+            )
+
+            # Build conversation history from pseudo-logs
+            conversation = self._build_conversation_history(
+                pseudo_logs, include_full_history=True
+            )
+
+            # Extract accumulated understanding
+            context = {
+                # Core trajectory elements
+                "overall_goal": self._extract_overall_goal(conversation, task),
+                "evolved_goals": self._track_goal_evolution(conversation),
+                "constraints": self._extract_persistent_constraints(conversation),
+                "lifted_constraints": self._identify_lifted_constraints(conversation),
+                "standing_instructions": self._extract_standing_instructions(
+                    conversation
+                ),
+                # Reference resolution
+                "references": self._resolve_references(conversation),
+                "context_markers": self._extract_context_markers(conversation),
+                # Journey tracking
+                "phases_completed": self._identify_completed_phases(conversation),
+                "current_focus": self._determine_current_focus(conversation),
+                "attempted_approaches": self._extract_attempted_approaches(
+                    conversation
+                ),
+                "discovered_blockers": self._find_discovered_blockers(conversation),
+                # Meta information
+                "conversation_length": len(conversation),
+                "session_duration": self._calculate_session_duration(pseudo_logs),
+                "last_activity": events[-1].created_at if events else utc_now(),
+                "agent_id": agent_id,
+                "sandbox_id": sandbox_id,
+                "agent_type": agent.agent_type if agent else "unknown",
+                "agent_status": agent.status if agent else "unknown",
+                "is_sandbox": True,
+            }
+
+            # Add task-specific context
+            if task:
+                context["task_id"] = str(task.id)
+                context["task_description"] = task.description or ""
+                context["task_status"] = task.status
+                context["phase_id"] = task.phase_id
+
+            # Cache the result
+            self.context_cache[cache_key] = {
+                "timestamp": utc_now(),
+                "context": context,
+            }
+
+            return context
+
+    def build_accumulated_context_auto(
+        self, agent_id: str, include_full_history: bool = True
+    ) -> Dict[str, Any]:
+        """Automatically detect if agent is in sandbox and build appropriate context.
+
+        This is the main entry point that routes to either:
+        - build_sandbox_context() for sandbox agents
+        - build_accumulated_context() for legacy agents
+
+        Args:
+            agent_id: Agent ID to build context for
+            include_full_history: Whether to include full history
+
+        Returns:
+            Accumulated context from the appropriate source
+        """
+        # Check if agent is running in a sandbox
+        sandbox_id = self.get_sandbox_id_for_agent(agent_id)
+
+        if sandbox_id:
+            logger.debug(f"Agent {agent_id} is sandbox agent, using sandbox events")
+            return self.build_sandbox_context(agent_id, sandbox_id)
+        else:
+            logger.debug(f"Agent {agent_id} is legacy agent, using agent logs")
+            return self.build_accumulated_context(agent_id, include_full_history)
