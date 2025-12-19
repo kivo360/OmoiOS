@@ -161,10 +161,35 @@ async def orchestrator_loop():
                 log = log.bind(
                     task_id=task_id, phase=phase_id, ticket_id=str(task.ticket_id)
                 )
-                log.info("task_found")
+                log.info(
+                    "task_found",
+                    task_status=task.status,
+                    task_type=task.task_type,
+                    sandbox_id=task.sandbox_id,
+                    assigned_agent_id=task.assigned_agent_id,
+                    created_at=str(task.created_at) if task.created_at else None,
+                )
+
+                # Check if task already has a sandbox (shouldn't spawn another)
+                if task.sandbox_id:
+                    log.warning(
+                        "task_already_has_sandbox",
+                        existing_sandbox_id=task.sandbox_id,
+                        task_status=task.status,
+                        reason="Task found in pending queue but already has sandbox_id - skipping spawn",
+                    )
+                    # Skip this task - it already has a sandbox
+                    await asyncio.sleep(1)
+                    continue
 
                 if sandbox_execution and daytona_spawner:
                     # Sandbox mode: spawn a Daytona sandbox for this task
+                    log.info(
+                        "sandbox_spawn_decision",
+                        reason="Task has no sandbox_id and status is pending - will spawn new sandbox",
+                        sandbox_execution=sandbox_execution,
+                        daytona_spawner_available=daytona_spawner is not None,
+                    )
                     try:
                         # Extract user_id, repo info, ticket info, GitHub token, and FULL TASK DATA from DB
                         # This enables per-user credentials, GitHub branch workflow, and task injection
@@ -300,10 +325,14 @@ async def orchestrator_loop():
                         sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "claude")
 
                         log.info(
-                            "spawning_sandbox",
+                            "spawning_sandbox_starting",
                             agent_id=agent_id,
                             agent_type=agent_type,
                             runtime=sandbox_runtime,
+                            github_repo=extra_env.get("GITHUB_REPO"),
+                            has_github_token="GITHUB_TOKEN" in extra_env,
+                            ticket_id=extra_env.get("TICKET_ID"),
+                            ticket_type=extra_env.get("TICKET_TYPE"),
                         )
 
                         # Spawn sandbox with user/repo context
@@ -316,6 +345,12 @@ async def orchestrator_loop():
                             runtime=sandbox_runtime,
                         )
 
+                        log.info(
+                            "sandbox_spawn_returned",
+                            sandbox_id=sandbox_id,
+                            agent_id=agent_id,
+                        )
+
                         # Update task with sandbox info
                         queue.assign_task(task.id, agent_id)
 
@@ -325,15 +360,29 @@ async def orchestrator_loop():
                                 session.query(Task).filter(Task.id == task.id).first()
                             )
                             if task_obj:
+                                # Double-check task doesn't already have a different sandbox
+                                if task_obj.sandbox_id and task_obj.sandbox_id != sandbox_id:
+                                    log.error(
+                                        "task_sandbox_id_conflict",
+                                        existing_sandbox_id=task_obj.sandbox_id,
+                                        new_sandbox_id=sandbox_id,
+                                        task_status=task_obj.status,
+                                        reason="Task already has a different sandbox_id - this is a bug!",
+                                    )
                                 task_obj.sandbox_id = sandbox_id
                                 session.commit()
-                                log.debug(
-                                    "task_sandbox_id_updated", sandbox_id=sandbox_id
+                                log.info(
+                                    "task_sandbox_id_updated",
+                                    sandbox_id=sandbox_id,
+                                    task_status=task_obj.status,
                                 )
 
                         stats["tasks_processed"] += 1
                         log.info(
-                            "sandbox_spawned", sandbox_id=sandbox_id, agent_id=agent_id
+                            "sandbox_spawned_successfully",
+                            sandbox_id=sandbox_id,
+                            agent_id=agent_id,
+                            task_id=task_id,
                         )
 
                         # Publish event
