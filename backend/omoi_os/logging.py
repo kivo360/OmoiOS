@@ -142,12 +142,14 @@ def configure_logging(
         try:
             import orjson
 
-            json_serializer = orjson.dumps
+            def json_serializer(obj: Any, **_kwargs: Any) -> str:
+                # orjson.dumps returns bytes, decode to str for proper log output
+                return orjson.dumps(obj).decode("utf-8")
         except ImportError:
             import json
 
-            def json_serializer(obj: Any, **_kwargs: Any) -> bytes:
-                return json.dumps(obj).encode("utf-8")
+            def json_serializer(obj: Any, **_kwargs: Any) -> str:
+                return json.dumps(obj)
 
         shared_processors.append(
             structlog.processors.ExceptionRenderer(
