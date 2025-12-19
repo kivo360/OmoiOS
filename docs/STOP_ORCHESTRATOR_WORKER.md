@@ -118,7 +118,7 @@ If tasks were already created, you may want to clean them up:
 SELECT description, COUNT(*) as count
 FROM tasks
 WHERE status IN ('pending', 'assigned')
-  AND created_at > NOW() - INTERVAL '1 hour'
+    AND created_at > NOW() - INTERVAL '1 hour'
 GROUP BY description
 HAVING COUNT(*) > 1;
 
@@ -132,7 +132,7 @@ WHERE id IN (
         ) as rn
         FROM tasks
         WHERE status = 'pending'
-          AND created_at > NOW() - INTERVAL '1 hour'
+            AND created_at > NOW() - INTERVAL '1 hour'
     ) t WHERE rn > 1
 );
 ```

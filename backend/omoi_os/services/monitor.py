@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.monitor_anomaly import MonitorAnomaly
@@ -442,7 +442,23 @@ class MonitorService:
 
                 # Update baseline with current metrics
                 if agent.status in ["idle", "running"]:
-                    metrics = self._collect_agent_metrics_for_baseline(agent.id, session)
+                    # Check if agent has an active sandbox task
+                    sandbox_id = None
+                    if agent.tags and "sandbox" in agent.tags:
+                        sandbox_task = (
+                            session.query(Task)
+                            .filter(
+                                Task.sandbox_id.isnot(None),
+                                Task.status == "running",
+                            )
+                            .first()
+                        )
+                        if sandbox_task:
+                            sandbox_id = sandbox_task.sandbox_id
+
+                    metrics = self._collect_agent_metrics_for_baseline(
+                        agent.id, session, sandbox_id=sandbox_id
+                    )
                     if metrics:
                         self.baseline_learner.learn_baseline(
                             agent.agent_type,
@@ -500,13 +516,21 @@ class MonitorService:
         return {}
 
     def _collect_agent_metrics_for_baseline(
-        self, agent_id: str, session
+        self, agent_id: str, session, sandbox_id: Optional[str] = None
     ) -> Optional[Dict[str, float]]:
-        """Collect current metrics for baseline learning."""
-        from sqlalchemy import func
-        from datetime import timedelta
+        """Collect current metrics for baseline learning.
 
+        Supports both legacy (assigned_agent_id) and sandbox (sandbox_id) task queries.
+        """
         one_hour_ago = utc_now() - timedelta(hours=1)
+
+        # Build task ownership filter that supports both modes
+        if sandbox_id:
+            # Sandbox mode - query by sandbox_id
+            ownership_filter = Task.sandbox_id == sandbox_id
+        else:
+            # Legacy mode - query by assigned_agent_id
+            ownership_filter = Task.assigned_agent_id == agent_id
 
         # Compute latency
         latency_result = (
@@ -519,7 +543,7 @@ class MonitorService:
                 ).label("latency_std"),
             )
             .filter(
-                Task.assigned_agent_id == agent_id,
+                ownership_filter,
                 Task.status == "completed",
                 Task.completed_at >= one_hour_ago,
                 Task.started_at.isnot(None),
@@ -531,7 +555,7 @@ class MonitorService:
         total_tasks = (
             session.query(func.count(Task.id))
             .filter(
-                Task.assigned_agent_id == agent_id,
+                ownership_filter,
                 Task.status.in_(["completed", "failed"]),
                 Task.completed_at >= one_hour_ago,
             )
@@ -543,7 +567,7 @@ class MonitorService:
             failed_tasks = (
                 session.query(func.count(Task.id))
                 .filter(
-                    Task.assigned_agent_id == agent_id,
+                    ownership_filter,
                     Task.status == "failed",
                     Task.completed_at >= one_hour_ago,
                 )

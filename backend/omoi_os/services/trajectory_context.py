@@ -698,16 +698,32 @@ class TrajectoryContext:
     # -------------------------------------------------------------------------
 
     def get_sandbox_id_for_agent(self, agent_id: str) -> Optional[str]:
-        """Get the sandbox_id for an agent if it's running in a sandbox.
+        """Get the sandbox_id for an agent/sandbox identifier.
+
+        This method handles both cases:
+        1. agent_id is actually a sandbox_id (from sandbox-aware monitoring)
+        2. agent_id is a legacy agent_id with an associated sandbox task
 
         Args:
-            agent_id: Agent ID to look up
+            agent_id: Agent ID or sandbox ID to look up
 
         Returns:
-            sandbox_id if agent is running in a sandbox, None otherwise
+            sandbox_id if found, None otherwise
         """
         with self.db.get_session() as session:
-            # Find task assigned to this agent that has a sandbox_id
+            # First check if agent_id is itself a sandbox_id
+            task = (
+                session.query(Task)
+                .filter(
+                    Task.sandbox_id == agent_id,
+                    Task.status.in_(["running", "assigned"]),
+                )
+                .first()
+            )
+            if task and task.sandbox_id:
+                return task.sandbox_id
+
+            # Fallback: check if it's a legacy agent with sandbox task
             task = (
                 session.query(Task)
                 .filter(
@@ -719,6 +735,7 @@ class TrajectoryContext:
             )
             if task and task.sandbox_id:
                 return task.sandbox_id
+
             return None
 
     def is_sandbox_agent(self, agent_id: str) -> bool:
