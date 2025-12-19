@@ -407,38 +407,39 @@ class MonitoringLoop:
             return []
 
     def _get_active_sandbox_agent_ids(self) -> List[str]:
-        """Get agent IDs for all running sandbox tasks.
+        """Get sandbox IDs for all running sandbox tasks.
 
-        Sandbox tasks have an assigned_agent_id and are executing in
-        a Daytona sandbox (sandbox_id is set). This returns the agent IDs
-        so they can be monitored by the Guardian.
+        Sandbox tasks have sandbox_id set and are executing in a Daytona sandbox.
+        Note: Sandbox tasks do NOT have assigned_agent_id - they use sandbox_id
+        as the execution context identifier.
 
         Returns:
-            List of agent IDs that are running in sandboxes
+            List of sandbox_ids for running sandbox tasks (used as agent identifiers)
         """
         try:
             with self.db.get_session() as session:
                 # Find running tasks that have a sandbox_id
+                # NOTE: Sandbox tasks don't have assigned_agent_id
                 running_sandbox_tasks = (
                     session.query(Task)
                     .filter(
                         Task.status == "running",
                         Task.sandbox_id.isnot(None),
-                        Task.assigned_agent_id.isnot(None),
                     )
                     .all()
                 )
 
-                agent_ids = [
-                    str(task.assigned_agent_id)
+                # Return sandbox_ids as the identifiers for monitoring
+                sandbox_ids = [
+                    str(task.sandbox_id)
                     for task in running_sandbox_tasks
-                    if task.assigned_agent_id
+                    if task.sandbox_id
                 ]
 
-                return agent_ids
+                return sandbox_ids
 
         except Exception as e:
-            logger.error(f"Failed to get active sandbox agent IDs: {e}")
+            logger.error(f"Failed to get active sandbox IDs: {e}")
             return []
 
     async def _analyze_agent_with_semaphore(

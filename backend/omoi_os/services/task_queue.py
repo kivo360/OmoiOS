@@ -3,6 +3,8 @@
 from typing import List, Optional, TYPE_CHECKING
 import logging
 
+from sqlalchemy import or_
+
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_scorer import TaskScorer
@@ -349,21 +351,32 @@ class TaskQueueService:
                     },
                 )
 
-    def get_assigned_tasks(self, agent_id: str) -> list[Task]:
+    def get_assigned_tasks(
+        self, agent_id: str, sandbox_id: Optional[str] = None
+    ) -> list[Task]:
         """
-        Get all tasks assigned to a specific agent.
+        Get all tasks assigned to a specific agent or sandbox.
+
+        Supports both legacy (assigned_agent_id) and sandbox (sandbox_id) modes.
 
         Args:
             agent_id: UUID of the agent
+            sandbox_id: Optional sandbox ID for sandbox mode queries
 
         Returns:
-            List of Task objects assigned to the agent
+            List of Task objects assigned to the agent or sandbox
         """
         with self.db.get_session() as session:
+            # Build ownership filter supporting both modes
+            if sandbox_id:
+                ownership_filter = Task.sandbox_id == sandbox_id
+            else:
+                ownership_filter = Task.assigned_agent_id == agent_id
+
             tasks = (
                 session.query(Task)
                 .filter(
-                    Task.assigned_agent_id == agent_id,
+                    ownership_filter,
                     Task.status.in_(["assigned", "running"]),
                 )
                 .all()
@@ -558,9 +571,11 @@ class TaskQueueService:
             task.retry_count += 1
             task.status = "pending"
             task.error_message = None  # Clear previous error message
-            task.assigned_agent_id = (
-                None  # Clear assignment so it can be picked up again
-            )
+            # Clear appropriate assignment based on execution mode
+            if task.sandbox_id:
+                task.sandbox_id = None  # Clear sandbox for retry
+            else:
+                task.assigned_agent_id = None  # Clear legacy assignment
 
             session.commit()
             return True
@@ -779,12 +794,17 @@ class TaskQueueService:
             session.commit()
             return True
 
-    def get_cancellable_tasks(self, agent_id: str | None = None) -> list[Task]:
+    def get_cancellable_tasks(
+        self, agent_id: str | None = None, sandbox_id: str | None = None
+    ) -> list[Task]:
         """
         Get all tasks that can be cancelled.
 
+        Supports both legacy (agent_id) and sandbox (sandbox_id) filtering.
+
         Args:
-            agent_id: Optional agent ID to filter by
+            agent_id: Optional agent ID to filter by (legacy mode)
+            sandbox_id: Optional sandbox ID to filter by (sandbox mode)
 
         Returns:
             List of cancellable Task objects
@@ -792,7 +812,9 @@ class TaskQueueService:
         with self.db.get_session() as session:
             query = session.query(Task).filter(Task.status.in_(["assigned", "running"]))
 
-            if agent_id:
+            if sandbox_id:
+                query = query.filter(Task.sandbox_id == sandbox_id)
+            elif agent_id:
                 query = query.filter(Task.assigned_agent_id == agent_id)
 
             tasks = query.all()

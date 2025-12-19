@@ -5,7 +5,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from sqlalchemy import desc
+import os
+
+import httpx
+from sqlalchemy import desc, or_
 
 from omoi_os.models.diagnostic_run import DiagnosticRun
 from omoi_os.models.task import Task
@@ -561,25 +564,39 @@ class DiagnosticService:
             from omoi_os.models.agent import Agent
             from omoi_os.services.conversation_intervention import ConversationInterventionService
             
-            # Find all active tasks for this workflow with assigned agents
+            # Find all active tasks for this workflow - supports both legacy and sandbox modes
+            # Legacy: has assigned_agent_id + conversation_id + persistence_dir
+            # Sandbox: has sandbox_id
             active_tasks = (
                 session.query(Task)
                 .filter(
                     Task.ticket_id == workflow_id,
-                    Task.assigned_agent_id.isnot(None),
+                    or_(
+                        # Legacy mode
+                        Task.assigned_agent_id.isnot(None),
+                        # Sandbox mode
+                        Task.sandbox_id.isnot(None),
+                    ),
                     Task.status.in_(["assigned", "running", "under_review", "validation_in_progress"]),
-                    Task.conversation_id.isnot(None),
-                    Task.persistence_dir.isnot(None),
                 )
                 .all()
             )
-            
+
             if not active_tasks:
                 return  # No active agents to notify
-            
-            # Group tasks by agent
-            agent_tasks = {}
+
+            # Separate tasks into legacy and sandbox groups
+            legacy_tasks = []
+            sandbox_tasks = []
             for task in active_tasks:
+                if task.sandbox_id:
+                    sandbox_tasks.append(task)
+                elif task.assigned_agent_id and task.conversation_id and task.persistence_dir:
+                    legacy_tasks.append(task)
+
+            # Group legacy tasks by agent
+            agent_tasks = {}
+            for task in legacy_tasks:
                 agent_id = task.assigned_agent_id
                 if agent_id not in agent_tasks:
                     agent_tasks[agent_id] = []
@@ -637,18 +654,69 @@ class DiagnosticService:
                         f"for workflow {workflow_id}"
                     )
             
-            if notified_count > 0:
-                logger.info(
-                    f"Sent recovery task notifications to {notified_count} active agent(s) "
-                    f"for workflow {workflow_id}"
+            # Notify sandbox agents via message injection API
+            sandbox_notified = 0
+            for task in sandbox_tasks:
+                success = self._send_sandbox_diagnostic_notification(
+                    task.sandbox_id, intervention_message
                 )
-                
+                if success:
+                    sandbox_notified += 1
+                    logger.info(
+                        f"Notified sandbox {task.sandbox_id[:8]} about {len(spawned_tasks)} recovery tasks "
+                        f"for workflow {workflow_id}"
+                    )
+
+            total_notified = notified_count + sandbox_notified
+            if total_notified > 0:
+                logger.info(
+                    f"Sent recovery task notifications to {total_notified} active agent(s) "
+                    f"({notified_count} legacy, {sandbox_notified} sandbox) for workflow {workflow_id}"
+                )
+
         except Exception as e:
             # Don't fail diagnostic if intervention notification fails
             logger.warning(
                 f"Failed to notify agents about recovery tasks for workflow {workflow_id}: {e}",
                 exc_info=True,
             )
+
+    def _send_sandbox_diagnostic_notification(
+        self, sandbox_id: str, message: str
+    ) -> bool:
+        """Send diagnostic notification to sandbox agent via message injection API."""
+        base_url = (
+            os.environ.get("MCP_SERVER_URL", "http://localhost:18000")
+            .replace("/mcp", "")
+            .rstrip("/")
+        )
+
+        try:
+            with httpx.Client(timeout=30) as client:
+                response = client.post(
+                    f"{base_url}/api/v1/sandboxes/{sandbox_id}/messages",
+                    json={
+                        "content": message,
+                        "message_type": "diagnostic_recovery",
+                    },
+                )
+
+                if response.status_code == 200:
+                    logger.info(
+                        f"Successfully sent diagnostic notification to sandbox {sandbox_id}"
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"Failed to send diagnostic notification: {response.status_code} - {response.text}"
+                    )
+                    return False
+
+        except Exception as e:
+            logger.error(
+                f"Failed to send diagnostic notification to sandbox {sandbox_id}: {e}"
+            )
+            return False
 
     def _get_conductor_analyses(self, session, max_analyses: int) -> List[dict]:
         """Get recent Conductor analyses for system context."""

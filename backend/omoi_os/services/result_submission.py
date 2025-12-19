@@ -67,13 +67,20 @@ class ResultSubmissionService:
             FileNotFoundError: If markdown file doesn't exist
             ValueError: If file validation fails or agent doesn't own task
         """
-        # Verify agent owns task
+        # Verify agent owns task (supports both legacy and sandbox modes)
         with self.db.get_session() as session:
             task = session.get(Task, task_id)
             if not task:
                 raise ValueError(f"Task {task_id} not found")
-            
-            if task.assigned_agent_id != agent_id:
+
+            # Sandbox tasks don't have assigned_agent_id - they use sandbox_id
+            # For sandbox tasks, we trust the agent_id passed from the sandbox worker
+            if task.sandbox_id:
+                # Sandbox mode - validation is handled by the sandbox worker
+                # The worker knows its own agent_id and sandbox_id
+                pass
+            elif task.assigned_agent_id != agent_id:
+                # Legacy mode - verify agent owns the task
                 raise ValueError(
                     f"Task {task_id} is not assigned to agent {agent_id}"
                 )

@@ -2,6 +2,8 @@
 
 from typing import Dict, Optional
 
+from sqlalchemy import or_
+
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_baseline import AgentBaseline
 from omoi_os.models.task import Task
@@ -263,10 +265,14 @@ class CompositeAnomalyScorer:
             Queue impact score (0-1), higher = more tasks blocked
         """
         # Count tasks assigned to this agent that are blocking others
+        # Support both legacy (assigned_agent_id) and sandbox (sandbox_id) modes
         agent_tasks = (
             session.query(Task)
             .filter(
-                Task.assigned_agent_id == agent_id,
+                or_(
+                    Task.assigned_agent_id == agent_id,
+                    Task.sandbox_id.isnot(None),  # Include sandbox tasks
+                ),
                 Task.status.in_(["assigned", "running"]),
             )
             .all()
@@ -307,13 +313,25 @@ class CompositeAnomalyScorer:
         queue_impact = min(1.0, blocking_count / 10.0)
         return queue_impact
 
-    def _compute_agent_latency(self, agent_id: str) -> float:
-        """Compute average task latency for agent (in milliseconds)."""
+    def _compute_agent_latency(
+        self, agent_id: str, sandbox_id: Optional[str] = None
+    ) -> float:
+        """Compute average task latency for agent (in milliseconds).
+
+        Supports both legacy (assigned_agent_id) and sandbox (sandbox_id) modes.
+        """
         from datetime import timedelta
         from sqlalchemy import func
 
         with self.db.get_session() as session:
             one_hour_ago = utc_now() - timedelta(hours=1)
+
+            # Build ownership filter based on mode
+            if sandbox_id:
+                ownership_filter = Task.sandbox_id == sandbox_id
+            else:
+                ownership_filter = Task.assigned_agent_id == agent_id
+
             result = (
                 session.query(
                     func.avg(
@@ -324,7 +342,7 @@ class CompositeAnomalyScorer:
                     ).label("avg_latency_ms")
                 )
                 .filter(
-                    Task.assigned_agent_id == agent_id,
+                    ownership_filter,
                     Task.status == "completed",
                     Task.completed_at >= one_hour_ago,
                     Task.started_at.isnot(None),
@@ -334,18 +352,29 @@ class CompositeAnomalyScorer:
 
             return float(result) if result else 0.0
 
-    def _compute_agent_error_rate(self, agent_id: str) -> float:
-        """Compute error rate for agent (0-1)."""
+    def _compute_agent_error_rate(
+        self, agent_id: str, sandbox_id: Optional[str] = None
+    ) -> float:
+        """Compute error rate for agent (0-1).
+
+        Supports both legacy (assigned_agent_id) and sandbox (sandbox_id) modes.
+        """
         from datetime import timedelta
         from sqlalchemy import func
 
         with self.db.get_session() as session:
             one_hour_ago = utc_now() - timedelta(hours=1)
 
+            # Build ownership filter based on mode
+            if sandbox_id:
+                ownership_filter = Task.sandbox_id == sandbox_id
+            else:
+                ownership_filter = Task.assigned_agent_id == agent_id
+
             total_tasks = (
                 session.query(func.count(Task.id))
                 .filter(
-                    Task.assigned_agent_id == agent_id,
+                    ownership_filter,
                     Task.status.in_(["completed", "failed"]),
                     Task.completed_at >= one_hour_ago,
                 )
@@ -358,7 +387,7 @@ class CompositeAnomalyScorer:
             failed_tasks = (
                 session.query(func.count(Task.id))
                 .filter(
-                    Task.assigned_agent_id == agent_id,
+                    ownership_filter,
                     Task.status == "failed",
                     Task.completed_at >= one_hour_ago,
                 )

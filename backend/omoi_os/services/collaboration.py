@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
+import os
+
+import httpx
+from sqlalchemy import or_
+
 from omoi_os.models.agent_message import AgentMessage, CollaborationThread
+from omoi_os.models.task import Task
+from omoi_os.models.agent import Agent
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -57,6 +67,52 @@ class CollaborationService:
         """
         self.db = db
         self.event_bus = event_bus
+
+    # ---------------------------------------------------------------------
+    # Sandbox Message Delivery
+    # ---------------------------------------------------------------------
+
+    def _deliver_sandbox_message(self, sandbox_id: str, message: str) -> bool:
+        """Deliver a message to a sandbox agent via message injection API.
+
+        Args:
+            sandbox_id: Target sandbox ID
+            message: Message content to deliver
+
+        Returns:
+            True if message was delivered successfully
+        """
+        # Get base URL from environment or default
+        base_url = (
+            os.environ.get("MCP_SERVER_URL", "http://localhost:18000")
+            .replace("/mcp", "")
+            .rstrip("/")
+        )
+
+        try:
+            with httpx.Client(timeout=30) as client:
+                response = client.post(
+                    f"{base_url}/api/v1/sandboxes/{sandbox_id}/messages",
+                    json={
+                        "content": message,
+                        "message_type": "agent_collaboration",
+                    },
+                )
+
+                if response.status_code == 200:
+                    logger.info(
+                        f"Successfully delivered collaboration message to sandbox {sandbox_id}"
+                    )
+                    return True
+                else:
+                    logger.warning(
+                        f"Failed to deliver sandbox message: {response.status_code} - {response.text}"
+                    )
+                    return False
+
+        except Exception as e:
+            logger.error(f"Failed to deliver sandbox message to {sandbox_id}: {e}")
+            return False
 
     # ---------------------------------------------------------------------
     # Thread Management
@@ -612,19 +668,30 @@ class CollaborationService:
                 # Deliver to each recipient
                 for recipient_id in recipient_ids:
                     try:
-                        # Find agent's active task with conversation info
+                        # Find agent's active task - supports both sandbox and legacy modes
                         active_task = (
                             session.query(Task)
                             .filter(
-                                Task.assigned_agent_id == recipient_id,
+                                or_(
+                                    Task.assigned_agent_id == recipient_id,
+                                    Task.sandbox_id.isnot(None),  # Include sandbox tasks
+                                ),
                                 Task.status == "running",
-                                Task.conversation_id.isnot(None),
-                                Task.persistence_dir.isnot(None),
                             )
                             .first()
                         )
-                        
-                        if active_task and active_task.conversation_id and active_task.persistence_dir:
+
+                        if not active_task:
+                            logger.debug(f"No active task found for recipient {recipient_id[:8]}")
+                            continue
+
+                        # Route message delivery based on execution mode
+                        if active_task.sandbox_id:
+                            # Sandbox mode - use message injection API (sync)
+                            self._deliver_sandbox_message(
+                                active_task.sandbox_id, formatted_message
+                            )
+                        elif active_task.conversation_id and active_task.persistence_dir:
                             # Deliver via OpenHands Conversation API directly (similar to Guardian but for agent messages)
                             try:
                                 from openhands.sdk import Conversation, Agent as OpenHandsAgent
