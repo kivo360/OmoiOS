@@ -29,6 +29,16 @@ import type {
   MembershipCreate,
 } from "@/lib/api/types"
 
+// UUID validation regex - prevents API calls with invalid IDs like "new"
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Check if a string is a valid UUID
+ */
+function isValidUUID(id: string | undefined): id is string {
+  return !!id && UUID_REGEX.test(id)
+}
+
 // Query keys
 export const organizationKeys = {
   all: ["organizations"] as const,
@@ -60,7 +70,7 @@ export function useOrganization(orgId: string | undefined) {
   return useQuery<Organization>({
     queryKey: organizationKeys.detail(orgId!),
     queryFn: () => getOrganization(orgId!),
-    enabled: !!orgId,
+    enabled: isValidUUID(orgId),
   })
 }
 
@@ -119,7 +129,7 @@ export function useMembers(orgId: string | undefined) {
   return useQuery<Membership[]>({
     queryKey: organizationKeys.members(orgId!),
     queryFn: () => listMembers(orgId!),
-    enabled: !!orgId,
+    enabled: isValidUUID(orgId),
   })
 }
 
@@ -186,7 +196,7 @@ export function useRoles(orgId: string | undefined, includeSystem = true) {
   return useQuery<Role[]>({
     queryKey: organizationKeys.roles(orgId!),
     queryFn: () => listRoles(orgId!, includeSystem),
-    enabled: !!orgId,
+    enabled: isValidUUID(orgId),
   })
 }
 
