@@ -1,15 +1,30 @@
 # OmoiOS User Journey Documentation
 
-**Created**: 2025-01-30  
-**Status**: User Journey Documentation  
+**Created**: 2025-01-30
+**Status**: User Journey Documentation
 **Purpose**: Complete user flow from onboarding to feature completion
 
 This documentation has been split into focused sections for easier navigation and maintenance.
 
+---
+
+## The Core Promise
+
+> **Start a feature before bed. Wake up to a PR.**
+
+Let AI run overnight and finish your software for you. Describe what you want, approve a plan, go to sleep. Wake up to a completed PR ready for review.
+
+**See [00a_demo_flow.md](./00a_demo_flow.md) for the video demo script.**
+
+---
+
 ## Document Structure
 
+### Demo & Overview
+- **[00_overview.md](./00_overview.md)** - The 60-Second Story, Core Promise, Dashboard Layout, Key User Interactions
+- **[00a_demo_flow.md](./00a_demo_flow.md)** - Video Demo Script (90 seconds), Scene Breakdowns, Talking Points
+
 ### Core Journey
-- **[00_overview.md](./00_overview.md)** - Overview, Dashboard Layout, and Key User Interactions
 - **[01_onboarding.md](./01_onboarding.md)** - Phase 1: Onboarding & First Project Setup
 - **[02_feature_planning.md](./02_feature_planning.md)** - Phase 2: Feature Request & Planning
 - **[03_execution_monitoring.md](./03_execution_monitoring.md)** - Phase 3: Autonomous Execution & Monitoring
