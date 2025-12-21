@@ -3,6 +3,36 @@
 **Part of**: [Page Flow Documentation](./README.md)
 
 ---
+
+## The Core Promise
+
+> **Start a feature before bed. Wake up to a PR.**
+
+Let AI run overnight and finish your software for you.
+
+**See [../user_journey/00a_demo_flow.md](../user_journey/00a_demo_flow.md) for the video demo script.**
+
+---
+
+## The Overnight Story
+
+```
+9:00 PM - Type "Add Stripe payments", approve plan (5 min)
+9:05 PM - Go to sleep 😴
+
+   [Agents work through the night]
+   [Guardian keeps them on track]
+   [Bugs found → Fixed automatically]
+
+7:00 AM - Wake up ☀️ PR waiting
+7:05 AM - Review with coffee, approve ☕
+7:10 AM - Feature merged before standup
+
+Your time: 10 minutes | AI time: 10 hours | Shipped: Same morning
+```
+
+---
+
 ## Navigation Summary
 
 ### Main Routes

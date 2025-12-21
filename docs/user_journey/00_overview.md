@@ -3,6 +3,67 @@
 **Part of**: [User Journey Documentation](./README.md)
 
 ---
+
+## The Core Promise
+
+**Start a feature before bed. Wake up to a PR.**
+
+OmoiOS lets AI run overnight and finish your software for you. You describe what you want built, approve a plan, and go to sleep. While you're away, agents autonomously write code, run tests, fix bugs, and create PRs. You wake up to completed work ready for review.
+
+---
+
+## The Overnight Story
+
+```
+9:00 PM - You type: "Add payment processing with Stripe"
+        ↓
+9:02 PM - OmoiOS generates plan (Requirements → Design → Tasks)
+        ↓
+9:05 PM - You review & approve plan
+        ↓
+9:06 PM - You go to bed 😴
+        ↓
+   [Agents work through the night]
+        ├── Agent 1: Building payment API
+        ├── Agent 2: Writing tests
+        ├── Agent 3: Discovers bug → fixes it
+        └── Guardian: Keeps agents on track, sends corrections
+        ↓
+7:00 AM - You wake up ☀️
+        ↓
+   ☕ Coffee + PR Review (5 min)
+        ↓
+   🎉 Feature merged before standup
+```
+
+**Your time: 10 minutes | AI work time: 10 hours | Feature: Complete**
+
+---
+
+## How It Works: Interconnected Problem-Solving
+
+OmoiOS workflows are **interconnected problem-solving graphs**, not linear pipelines. The workflow structure emerges from what agents discover as they work.
+
+### Key Workflow Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| **Ticket Threading** | Tickets move through phases (Requirements → Design → Implementation → Testing) preserving all context—comments, commits, decisions |
+| **Discovery Branching** | Agents find bugs, optimizations, or missing requirements → spawn new tasks → workflow branches dynamically |
+| **Feedback Loops** | Validation fails → spawns fix task → revalidates → loops until success |
+| **Phase Jumping** | Implementation discovers missing requirements → spawns clarification task → adapts to reality |
+| **Parallel Execution** | Multiple agents work on different components simultaneously |
+
+### Self-Healing System
+
+**Guardian agents monitor every 60 seconds:**
+- Detects when agents drift, get stuck, or violate constraints
+- Sends targeted interventions: "Focus on core authentication flow first"
+- Alignment scores (0-100%) show agent health at a glance
+- Users see interventions happen but rarely need to act
+
+---
+
 ## Overview
 
 OmoiOS follows a **spec-driven autonomous engineering workflow** where users describe what they want built, and the system automatically plans, executes, and monitors the work. Users provide strategic oversight at approval gates rather than micromanaging every step.

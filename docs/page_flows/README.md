@@ -1,10 +1,22 @@
 # OmoiOS Page Flow & Navigation Documentation
 
-**Created**: 2025-01-30  
-**Status**: Page Flow Documentation  
+**Created**: 2025-01-30
+**Status**: Page Flow Documentation
 **Purpose**: Detailed page-by-page flow for registration, project selection, agent management, and spec-driven workflow
 
 This documentation has been split into focused sections for easier navigation and maintenance.
+
+---
+
+## The Core Promise
+
+> **Start a feature before bed. Wake up to a PR.**
+
+Let AI run overnight and finish your software for you. Describe what you want, approve a plan, go to sleep. Wake up to a completed PR ready for review.
+
+**See [../user_journey/00a_demo_flow.md](../user_journey/00a_demo_flow.md) for the video demo script.**
+
+---
 
 ## Document Structure
 
