@@ -148,6 +148,7 @@ async def create_ticket(
     queue: TaskQueueService = Depends(get_task_queue),
     approval_service: ApprovalService = Depends(get_approval_service),
     dedup_service: TicketDeduplicationService = Depends(get_ticket_dedup_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
 ):
     """
     Create a new ticket and enqueue initial tasks (with approval gate if enabled).
@@ -259,6 +260,22 @@ async def create_ticket(
                 "phase": ticket.phase_id,
                 "priority": ticket.priority,
             },
+        )
+
+        # Publish TICKET_CREATED event for orchestrator instant wakeup
+        from omoi_os.services.event_bus import SystemEvent
+
+        event_bus.publish(
+            SystemEvent(
+                event_type="TICKET_CREATED",
+                entity_type="ticket",
+                entity_id=str(ticket.id),
+                payload={
+                    "title": ticket.title,
+                    "priority": ticket.priority,
+                    "phase_id": ticket.phase_id,
+                },
+            )
         )
 
         return TicketResponse.model_validate(ticket)

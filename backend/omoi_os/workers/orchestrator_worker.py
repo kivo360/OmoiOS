@@ -41,11 +41,15 @@ registry_service: AgentRegistryService | None = None
 # Shutdown flag
 shutdown_event = asyncio.Event()
 
+# Task ready event - set when a new task is created (for instant wakeup)
+task_ready_event = asyncio.Event()
+
 # Stats tracking (global for heartbeat access)
 stats = {
     "poll_count": 0,
     "tasks_processed": 0,
     "tasks_failed": 0,
+    "events_received": 0,
     "start_time": 0.0,
 }
 
@@ -63,8 +67,28 @@ async def heartbeat_task():
             poll_count=stats["poll_count"],
             tasks_processed=stats["tasks_processed"],
             tasks_failed=stats["tasks_failed"],
+            events_received=stats["events_received"],
         )
         await asyncio.sleep(30)
+
+
+def handle_task_event(event_data: dict) -> None:
+    """Handle TASK_CREATED events to wake up orchestrator immediately.
+
+    This is called by the Redis event bus subscriber when a new task is created.
+    Sets the task_ready_event to interrupt the polling sleep.
+    """
+    stats["events_received"] += 1
+    event_type = event_data.get("event_type", "unknown")
+    entity_id = event_data.get("entity_id", "unknown")
+    logger.info(
+        "task_event_received",
+        event_type=event_type,
+        entity_id=entity_id,
+        events_total=stats["events_received"],
+    )
+    # Wake up the orchestrator loop immediately
+    task_ready_event.set()
 
 
 async def orchestrator_loop():
@@ -73,6 +97,10 @@ async def orchestrator_loop():
     Supports two execution modes:
     1. Legacy mode (SANDBOX_EXECUTION=false): Assigns to DB agents, workers poll
     2. Sandbox mode (SANDBOX_EXECUTION=true): Spawns Daytona sandboxes per task
+
+    Uses hybrid event-driven + polling approach:
+    - Subscribes to TASK_CREATED events for instant wakeup
+    - Falls back to polling every 5 seconds if events are missed
     """
     global db, queue, event_bus, registry_service
 
@@ -89,6 +117,15 @@ async def orchestrator_loop():
         return
 
     logger.info("orchestrator_loop_started")
+
+    # Subscribe to task events for instant wakeup (hybrid approach)
+    # This allows the orchestrator to respond immediately when tasks are created
+    try:
+        event_bus.subscribe("TASK_CREATED", handle_task_event)
+        event_bus.subscribe("TICKET_CREATED", handle_task_event)  # Tickets also trigger tasks
+        logger.info("event_subscriptions_registered", events=["TASK_CREATED", "TICKET_CREATED"])
+    except Exception as e:
+        logger.warning("event_subscription_failed", error=str(e), fallback="polling_only")
 
     # Check if sandbox execution is enabled
     from omoi_os.config import get_app_settings
@@ -439,8 +476,16 @@ async def orchestrator_loop():
             else:
                 log.debug("no_pending_tasks")
 
-            # Poll every 10 seconds
-            await asyncio.sleep(10)
+            # Hybrid wait: event-driven with polling fallback
+            # - If TASK_CREATED event fires, wake up immediately
+            # - Otherwise, poll every 5 seconds as fallback
+            try:
+                await asyncio.wait_for(task_ready_event.wait(), timeout=5.0)
+                task_ready_event.clear()  # Reset for next event
+                log.debug("woke_up_from_event")
+            except asyncio.TimeoutError:
+                # Normal polling cycle - no event received
+                pass
 
         except asyncio.CancelledError:
             logger.info("orchestrator_loop_cancelled")
