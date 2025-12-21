@@ -16,9 +16,12 @@ export function OrganizationsPanel() {
   const { data: organizations, isLoading, error } = useOrganizations()
 
   // Extract org ID from path if viewing a specific org
+  // Exclude "new" since that's the create organization page, not a valid org ID
   const orgIdMatch = pathname.match(/\/organizations\/([^/]+)/)
+  const extractedId = orgIdMatch?.[1]
+  const isValidOrgId = extractedId && extractedId !== "new"
   const firstOrg = organizations?.[0]
-  const currentOrgId = orgIdMatch ? orgIdMatch[1] : firstOrg?.id
+  const currentOrgId = isValidOrgId ? extractedId : firstOrg?.id
 
   const quickLinks = currentOrgId
     ? [
