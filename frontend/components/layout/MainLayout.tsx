@@ -19,7 +19,8 @@ export function MainLayout({ children }: MainLayoutProps) {
   useEffect(() => {
     if (pathname.startsWith("/command")) setActiveSection("command")
     else if (pathname.startsWith("/projects") || pathname.startsWith("/board")) setActiveSection("projects")
-    else if (pathname.startsWith("/agents")) setActiveSection("agents")
+    else if (pathname.startsWith("/sandboxes") || pathname.startsWith("/sandbox/")) setActiveSection("sandboxes")
+    else if (pathname.startsWith("/phases")) setActiveSection("phases")
     else if (pathname.startsWith("/analytics")) setActiveSection("analytics")
     else if (pathname.startsWith("/organizations")) setActiveSection("organizations")
     else if (pathname.startsWith("/settings")) setActiveSection("settings")
@@ -41,7 +42,7 @@ export function MainLayout({ children }: MainLayoutProps) {
             break
           case "3":
             e.preventDefault()
-            setActiveSection("agents")
+            setActiveSection("sandboxes")
             break
           case "4":
             e.preventDefault()

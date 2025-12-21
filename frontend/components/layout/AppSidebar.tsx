@@ -25,15 +25,15 @@ import {
   HelpCircle,
   LayoutDashboard,
   FolderKanban,
-  Bot,
+  Box,
   BarChart3,
 } from "lucide-react"
 
 const mainNavItems = [
-  { title: "Command", href: "/", icon: Plus },
+  { title: "Command", href: "/command", icon: Plus },
   { title: "Analytics", href: "/analytics", icon: BarChart3 },
   { title: "Projects", href: "/projects", icon: FolderKanban },
-  { title: "Agents", href: "/agents", icon: Bot },
+  { title: "Sandboxes", href: "/sandboxes", icon: Box },
 ]
 
 export function AppSidebar() {
@@ -80,9 +80,11 @@ export function AppSidebar() {
           {/* Quick Actions */}
           <SidebarGroup>
             <SidebarGroupContent className="px-2">
-              <Button className="w-full justify-start gap-2" size="sm">
-                <Plus className="h-4 w-4" />
-                New Agent
+              <Button className="w-full justify-start gap-2" size="sm" asChild>
+                <a href="/command">
+                  <Plus className="h-4 w-4" />
+                  New Sandbox
+                </a>
               </Button>
             </SidebarGroupContent>
           </SidebarGroup>

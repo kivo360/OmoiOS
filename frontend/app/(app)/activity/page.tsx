@@ -1,7 +1,8 @@
 "use client"
 
-import { useState, useMemo, useCallback } from "react"
+import { useState, useMemo, useCallback, Suspense } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Search,
   Filter,
@@ -39,6 +41,11 @@ import {
   Wifi,
   WifiOff,
   FileCode,
+  Terminal,
+  Wrench,
+  Eye,
+  Code,
+  X,
 } from "lucide-react"
 import { useEvents, type SystemEvent } from "@/hooks/useEvents"
 import { FileChangeCard } from "@/components/custom/FileChangeCard"
@@ -89,9 +96,21 @@ const activityTypeConfig: Record<string, { icon: typeof Plus; color: string; bg:
   blocking_added: { icon: AlertTriangle, color: "text-orange-600", bg: "bg-orange-100", label: "Blocking" },
   tasks_generated: { icon: Zap, color: "text-violet-600", bg: "bg-violet-100", label: "Generated" },
   spec_approved: { icon: FileText, color: "text-teal-600", bg: "bg-teal-100", label: "Approved" },
-  // File edit events
+  // File edit events (sandbox)
   "SANDBOX_agent.file_edited": { icon: FileCode, color: "text-blue-600", bg: "bg-blue-100", label: "File Edit" },
   "agent.file_edited": { icon: FileCode, color: "text-blue-600", bg: "bg-blue-100", label: "File Edit" },
+  // Sandbox agent events
+  "SANDBOX_agent.started": { icon: Zap, color: "text-green-600", bg: "bg-green-100", label: "Started" },
+  "SANDBOX_agent.completed": { icon: CheckCircle, color: "text-emerald-600", bg: "bg-emerald-100", label: "Completed" },
+  "SANDBOX_agent.error": { icon: AlertCircle, color: "text-red-600", bg: "bg-red-100", label: "Error" },
+  "SANDBOX_agent.tool_use": { icon: Wrench, color: "text-purple-600", bg: "bg-purple-100", label: "Tool Use" },
+  "SANDBOX_agent.tool_result": { icon: Terminal, color: "text-gray-600", bg: "bg-gray-100", label: "Tool Result" },
+  "SANDBOX_agent.thinking": { icon: Brain, color: "text-amber-600", bg: "bg-amber-100", label: "Thinking" },
+  "SANDBOX_agent.assistant_message": { icon: MessageSquare, color: "text-blue-600", bg: "bg-blue-100", label: "Message" },
+  "SANDBOX_agent.heartbeat": { icon: Wifi, color: "text-gray-400", bg: "bg-gray-50", label: "Heartbeat" },
+  "SANDBOX_agent.message_injected": { icon: MessageSquare, color: "text-indigo-600", bg: "bg-indigo-100", label: "Injected" },
+  "SANDBOX_agent.subagent_invoked": { icon: Bot, color: "text-violet-600", bg: "bg-violet-100", label: "Subagent" },
+  "SANDBOX_agent.subagent_completed": { icon: CheckCircle, color: "text-violet-600", bg: "bg-violet-100", label: "Subagent Done" },
   // Default for unknown types
   default: { icon: Zap, color: "text-gray-600", bg: "bg-gray-100", label: "Event" },
 }
@@ -160,7 +179,10 @@ function eventToActivity(event: SystemEvent, index: number): Activity {
   }
 }
 
-export default function ActivityPage() {
+function ActivityPageContent() {
+  const searchParams = useSearchParams()
+  const sandboxId = searchParams.get("sandbox_id")
+  
   const [searchQuery, setSearchQuery] = useState("")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [actorFilter, setActorFilter] = useState<string>("all")
@@ -170,15 +192,32 @@ export default function ActivityPage() {
   
   // Handle new events from WebSocket
   const handleNewEvent = useCallback((event: SystemEvent) => {
+    // If filtering by sandbox, only accept events for that sandbox
+    if (sandboxId && event.entity_id !== sandboxId) {
+      return
+    }
+    
     setActivities((prev) => {
       const activity = eventToActivity(event, prev.length)
       return [activity, ...prev].slice(0, 100) // Keep max 100 activities
     })
-  }, [])
+  }, [sandboxId])
+  
+  // Build WebSocket filters based on sandbox_id
+  const wsFilters = useMemo(() => {
+    if (sandboxId) {
+      return {
+        entity_types: ["sandbox"],
+        entity_ids: [sandboxId],
+      }
+    }
+    return undefined
+  }, [sandboxId])
   
   // Subscribe to real-time events
   const { isConnected, isConnecting, error, clearEvents } = useEvents({
     enabled: isLive,
+    filters: wsFilters,
     onEvent: handleNewEvent,
     maxEvents: 100,
   })
@@ -262,9 +301,25 @@ export default function ActivityPage() {
       <div className="flex-shrink-0 border-b bg-background px-6 py-4">
         <div className="flex items-start justify-between">
           <div className="space-y-1">
-            <h1 className="text-xl font-semibold">Activity Timeline</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold">
+                {sandboxId ? "Sandbox Activity" : "Activity Timeline"}
+              </h1>
+              {sandboxId && (
+                <Badge variant="secondary" className="font-mono text-xs">
+                  <Terminal className="mr-1 h-3 w-3" />
+                  {sandboxId.slice(0, 8)}...
+                  <Link href="/activity" className="ml-1 hover:text-destructive">
+                    <X className="h-3 w-3" />
+                  </Link>
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
-              Real-time feed of all system activity
+              {sandboxId 
+                ? "Real-time events from sandbox execution"
+                : "Real-time feed of all system activity"
+              }
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -582,5 +637,46 @@ export default function ActivityPage() {
         </div>
       </ScrollArea>
     </div>
+  )
+}
+
+function ActivityPageLoading() {
+  return (
+    <div className="flex h-[calc(100vh-3.5rem)] flex-col">
+      <div className="flex-shrink-0 border-b bg-background px-6 py-4">
+        <div className="flex items-start justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-8 w-24" />
+            <Skeleton className="h-8 w-16" />
+          </div>
+        </div>
+      </div>
+      <div className="flex-shrink-0 border-b bg-muted/30 px-6 py-3">
+        <div className="flex items-center gap-3">
+          <Skeleton className="h-9 w-64" />
+          <Skeleton className="h-9 w-32" />
+          <Skeleton className="h-9 w-48" />
+        </div>
+      </div>
+      <div className="flex-1 px-6 py-4">
+        <div className="max-w-3xl mx-auto space-y-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-24 w-full" />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export default function ActivityPage() {
+  return (
+    <Suspense fallback={<ActivityPageLoading />}>
+      <ActivityPageContent />
+    </Suspense>
   )
 }
