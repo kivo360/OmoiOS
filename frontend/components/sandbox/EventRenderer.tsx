@@ -655,21 +655,10 @@ interface BashCardProps {
 // Parse Bash output which may be JSON with stdout/stderr fields
 function parseBashOutput(output: string): { stdout: string; stderr: string; exitCode?: number } {
   if (!output) return { stdout: "", stderr: "" }
-  
-  // Try to parse as JSON (Claude's tool response format)
+
+  // Try to parse as JSON first (standard tool response format)
   try {
-    // Handle Python dict format: {'stdout': '...', 'stderr': '...'}
-    // Convert single quotes to double quotes for JSON parsing
-    let jsonStr = output
-    if (output.startsWith("{") && output.includes("'stdout'")) {
-      jsonStr = output
-        .replace(/'/g, '"')
-        .replace(/True/g, "true")
-        .replace(/False/g, "false")
-        .replace(/None/g, "null")
-    }
-    
-    const parsed = JSON.parse(jsonStr)
+    const parsed = JSON.parse(output)
     if (typeof parsed === "object" && parsed !== null) {
       return {
         stdout: parsed.stdout || parsed.output || "",
@@ -678,9 +667,50 @@ function parseBashOutput(output: string): { stdout: string; stderr: string; exit
       }
     }
   } catch {
-    // Not JSON, treat as raw output
+    // Not valid JSON, try Python dict format
   }
-  
+
+  // Handle Python dict format: {'stdout': '...', 'stderr': '...', 'interrupted': False, 'isImage': False}
+  // Use regex to extract the field values directly instead of trying to convert to JSON
+  if (output.startsWith("{") && (output.includes("'stdout'") || output.includes('"stdout"'))) {
+    try {
+      // Extract stdout value - handle both single and double quoted strings
+      // Match 'stdout': "..." or 'stdout': '...' or "stdout": "..."
+      const stdoutMatch = output.match(/['"]stdout['"]\s*:\s*(['"])([\s\S]*?)(?<!\\)\1\s*[,}]/)
+      const stderrMatch = output.match(/['"]stderr['"]\s*:\s*(['"])([\s\S]*?)(?<!\\)\1\s*[,}]/)
+      const exitCodeMatch = output.match(/['"](?:exit_code|exitCode)['"]\s*:\s*(\d+)/)
+
+      // If we found stdout, extract it
+      if (stdoutMatch) {
+        const stdout = stdoutMatch[2]
+          // Unescape common escape sequences
+          .replace(/\\n/g, "\n")
+          .replace(/\\t/g, "\t")
+          .replace(/\\r/g, "\r")
+          .replace(/\\\\/g, "\\")
+          .replace(/\\'/g, "'")
+          .replace(/\\"/g, '"')
+
+        const stderr = stderrMatch ? stderrMatch[2]
+          .replace(/\\n/g, "\n")
+          .replace(/\\t/g, "\t")
+          .replace(/\\r/g, "\r")
+          .replace(/\\\\/g, "\\")
+          .replace(/\\'/g, "'")
+          .replace(/\\"/g, '"')
+        : ""
+
+        return {
+          stdout,
+          stderr,
+          exitCode: exitCodeMatch ? parseInt(exitCodeMatch[1], 10) : undefined,
+        }
+      }
+    } catch {
+      // Regex failed, fall through to raw output
+    }
+  }
+
   return { stdout: output, stderr: "" }
 }
 

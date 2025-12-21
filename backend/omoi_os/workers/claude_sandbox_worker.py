@@ -795,12 +795,31 @@ class SandboxWorker:
                     except Exception as e:
                         logger.warning("Failed to read file after edit", extra={"file_path": str(file_path), "error": str(e)})
 
+            # Serialize tool_response properly
+            # Claude SDK tool results (like CLIResult) are objects with stdout/stderr fields
+            serialized_response = None
+            if tool_response:
+                if hasattr(tool_response, "stdout"):
+                    # CLIResult-like object from Bash tool
+                    serialized_response = tool_response.stdout or ""
+                    if hasattr(tool_response, "stderr") and tool_response.stderr:
+                        serialized_response += f"\n[stderr]: {tool_response.stderr}"
+                elif hasattr(tool_response, "__dict__"):
+                    # Generic object - try to serialize nicely
+                    import json
+                    try:
+                        serialized_response = json.dumps(tool_response.__dict__, default=str)
+                    except (TypeError, ValueError):
+                        serialized_response = str(tool_response)
+                else:
+                    serialized_response = str(tool_response)
+
             # Full tool tracking
             event_data = {
                 "turn": turn_count,
                 "tool": tool_name,
                 "tool_input": tool_input,
-                "tool_response": str(tool_response)[:2000] if tool_response else None,
+                "tool_response": serialized_response,
             }
 
             # Special tracking for subagents
