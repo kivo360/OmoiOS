@@ -9,21 +9,34 @@ import type {
   TaskDependencies,
 } from "./types"
 
+export interface ListTasksParams {
+  status?: string
+  phase_id?: string
+  has_sandbox?: boolean
+  limit?: number
+}
+
 /**
  * List tasks with optional filtering
  */
-export async function listTasks(params?: {
-  status?: string
-  phase_id?: string
-}): Promise<TaskListItem[]> {
+export async function listTasks(params?: ListTasksParams): Promise<TaskListItem[]> {
   const searchParams = new URLSearchParams()
   if (params?.status) searchParams.set("status", params.status)
   if (params?.phase_id) searchParams.set("phase_id", params.phase_id)
+  if (params?.has_sandbox !== undefined) searchParams.set("has_sandbox", String(params.has_sandbox))
+  if (params?.limit) searchParams.set("limit", String(params.limit))
 
   const query = searchParams.toString()
   const url = query ? `/api/v1/tasks?${query}` : "/api/v1/tasks"
 
   return apiRequest<TaskListItem[]>(url)
+}
+
+/**
+ * List tasks that have sandboxes (convenience function)
+ */
+export async function listSandboxTasks(params?: Omit<ListTasksParams, "has_sandbox">): Promise<TaskListItem[]> {
+  return listTasks({ ...params, has_sandbox: true })
 }
 
 /**

@@ -49,15 +49,36 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const filtersRef = useRef(filters)
+  const onEventRef = useRef(onEvent)
+  const enabledRef = useRef(enabled)
 
-  // Update filters ref when they change
+  // Update refs when they change
   useEffect(() => {
     filtersRef.current = filters
   }, [filters])
 
+  useEffect(() => {
+    onEventRef.current = onEvent
+  }, [onEvent])
+
+  useEffect(() => {
+    enabledRef.current = enabled
+  }, [enabled])
+
   const buildWsUrl = useCallback(() => {
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-    const host = process.env.NEXT_PUBLIC_API_URL?.replace(/^https?:\/\//, "") || "localhost:18000"
+    // Get API base URL, default to localhost:18000
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
+    
+    // Parse the URL to get host and determine protocol
+    let wsUrl: string
+    try {
+      const url = new URL(apiUrl)
+      const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:"
+      wsUrl = `${wsProtocol}//${url.host}/api/v1/ws/events`
+    } catch {
+      // Fallback for invalid URLs
+      wsUrl = "ws://localhost:18000/api/v1/ws/events"
+    }
 
     const params = new URLSearchParams()
     if (filtersRef.current?.event_types?.length) {
@@ -71,21 +92,28 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
     }
 
     const query = params.toString()
-    return `${protocol}//${host}/api/v1/events/ws/events${query ? `?${query}` : ""}`
+    return query ? `${wsUrl}?${query}` : wsUrl
   }, [])
+
+  // Use ref to track connecting state to avoid dependency issues
+  const isConnectingRef = useRef(false)
 
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return
-    if (isConnecting) return
+    if (isConnectingRef.current) return
 
+    isConnectingRef.current = true
     setIsConnecting(true)
     setError(null)
 
     try {
-      const ws = new WebSocket(buildWsUrl())
+      const url = buildWsUrl()
+      console.log("[WebSocket] Connecting to:", url)
+      const ws = new WebSocket(url)
       wsRef.current = ws
 
       ws.onopen = () => {
+        isConnectingRef.current = false
         setIsConnected(true)
         setIsConnecting(false)
         setError(null)
@@ -123,36 +151,43 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
           })
 
           // Call callback if provided
-          onEvent?.(systemEvent)
+          onEventRef.current?.(systemEvent)
         } catch (err) {
           console.error("[WebSocket] Failed to parse message:", err)
         }
       }
 
       ws.onclose = (event) => {
+        console.log("[WebSocket] Connection closed - code:", event.code, "reason:", event.reason)
+        isConnectingRef.current = false
         setIsConnected(false)
         setIsConnecting(false)
         wsRef.current = null
 
+        // Only auto-reconnect on abnormal closures
         if (event.code !== 1000 && event.code !== 1001) {
-          console.log("[WebSocket] Connection closed, reconnecting in 5s...")
-          // Auto-reconnect after 5 seconds
+          console.log("[WebSocket] Will reconnect in 5s...")
           reconnectTimeoutRef.current = setTimeout(() => {
-            if (enabled) connect()
+            connect()
           }, 5000)
         }
       }
 
-      ws.onerror = (event) => {
-        console.error("[WebSocket] Error:", event)
+      ws.onerror = () => {
+        // WebSocket error events don't contain useful info in browsers
+        // The error is usually followed by onclose with more details
+        console.error("[WebSocket] Error occurred - url:", url)
+        isConnectingRef.current = false
         setError("WebSocket connection error")
         setIsConnecting(false)
       }
     } catch (err) {
+      isConnectingRef.current = false
       setError(err instanceof Error ? err.message : "Failed to connect")
       setIsConnecting(false)
     }
-  }, [buildWsUrl, enabled, maxEvents, onEvent, isConnecting])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildWsUrl, maxEvents])
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -186,7 +221,7 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
     }
   }, [])
 
-  // Auto-connect when enabled
+  // Auto-connect when enabled changes
   useEffect(() => {
     if (enabled) {
       connect()
@@ -197,7 +232,8 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
     return () => {
       disconnect()
     }
-  }, [enabled, connect, disconnect])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled])
 
   return {
     events,

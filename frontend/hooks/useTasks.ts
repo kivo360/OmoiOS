@@ -5,6 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   listTasks,
+  listSandboxTasks,
   getTask,
   getTaskDependencies,
   addTaskDependencies,
@@ -16,6 +17,7 @@ import {
   getCancellableTasks,
   cleanupTimedOutTasks,
   setTaskTimeout,
+  type ListTasksParams,
 } from "@/lib/api/tasks"
 import type { Task, TaskListItem, TaskDependencies } from "@/lib/api/types"
 
@@ -23,8 +25,9 @@ import type { Task, TaskListItem, TaskDependencies } from "@/lib/api/types"
 export const taskKeys = {
   all: ["tasks"] as const,
   lists: () => [...taskKeys.all, "list"] as const,
-  list: (params: { status?: string; phase_id?: string }) =>
-    [...taskKeys.lists(), params] as const,
+  list: (params?: ListTasksParams) => [...taskKeys.lists(), params] as const,
+  sandboxList: (params?: Omit<ListTasksParams, "has_sandbox">) => 
+    [...taskKeys.lists(), "sandbox", params] as const,
   details: () => [...taskKeys.all, "detail"] as const,
   detail: (id: string) => [...taskKeys.details(), id] as const,
   dependencies: (id: string) => [...taskKeys.detail(id), "dependencies"] as const,
@@ -36,10 +39,20 @@ export const taskKeys = {
 /**
  * Hook to fetch list of tasks
  */
-export function useTasks(params?: { status?: string; phase_id?: string }) {
+export function useTasks(params?: ListTasksParams) {
   return useQuery<TaskListItem[]>({
-    queryKey: taskKeys.list(params ?? {}),
+    queryKey: taskKeys.list(params),
     queryFn: () => listTasks(params),
+  })
+}
+
+/**
+ * Hook to fetch tasks that have sandboxes
+ */
+export function useSandboxTasks(params?: Omit<ListTasksParams, "has_sandbox">) {
+  return useQuery<TaskListItem[]>({
+    queryKey: taskKeys.sandboxList(params),
+    queryFn: () => listSandboxTasks(params),
   })
 }
 

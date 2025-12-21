@@ -127,6 +127,7 @@ async def get_task(
             "description": task.description,
             "priority": task.priority,
             "status": task.status,
+            "sandbox_id": task.sandbox_id,
             "assigned_agent_id": task.assigned_agent_id,
             "conversation_id": task.conversation_id,
             "result": task.result,
@@ -148,6 +149,8 @@ async def get_task(
 async def list_tasks(
     status: str | None = None,
     phase_id: str | None = None,
+    has_sandbox: bool | None = None,
+    limit: int = 100,
     db: DatabaseService = Depends(get_db_service),
 ):
     """
@@ -156,6 +159,8 @@ async def list_tasks(
     Args:
         status: Filter by status (pending, assigned, running, completed, failed)
         phase_id: Filter by phase ID
+        has_sandbox: Filter to only tasks with a sandbox_id (True) or without (False)
+        limit: Maximum number of tasks to return (default 100)
         db: Database service
 
     Returns:
@@ -167,6 +172,13 @@ async def list_tasks(
             query = query.filter(Task.status == status)
         if phase_id:
             query = query.filter(Task.phase_id == phase_id)
+        if has_sandbox is True:
+            query = query.filter(Task.sandbox_id.isnot(None))
+        elif has_sandbox is False:
+            query = query.filter(Task.sandbox_id.is_(None))
+
+        # Order by most recent first and limit
+        query = query.order_by(Task.created_at.desc()).limit(limit)
 
         tasks = query.all()
         return [
@@ -179,9 +191,11 @@ async def list_tasks(
                 "description": task.description,
                 "priority": task.priority,
                 "status": task.status,
+                "sandbox_id": task.sandbox_id,
                 "assigned_agent_id": task.assigned_agent_id,
                 "created_at": task.created_at.isoformat(),
                 "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+                "started_at": task.started_at.isoformat() if task.started_at else None,
             }
             for task in tasks
         ]
@@ -774,12 +788,7 @@ async def generate_titles_batch(
 
     with db.get_session() as session:
         # Find tasks without titles
-        tasks = (
-            session.query(Task)
-            .filter(Task.title.is_(None))
-            .limit(limit)
-            .all()
-        )
+        tasks = session.query(Task).filter(Task.title.is_(None)).limit(limit).all()
 
         task_info = [
             {
@@ -805,6 +814,8 @@ async def generate_titles_batch(
             results["tasks"].append({"task_id": info["id"], "title": title})
         else:
             results["failed"] += 1
-            results["tasks"].append({"task_id": info["id"], "title": None, "error": "Generation failed"})
+            results["tasks"].append(
+                {"task_id": info["id"], "title": None, "error": "Generation failed"}
+            )
 
     return results
