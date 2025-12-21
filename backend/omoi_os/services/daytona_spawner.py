@@ -20,6 +20,7 @@ from uuid import uuid4
 
 from omoi_os.config import load_daytona_settings, get_app_settings
 from omoi_os.logging import get_logger
+from omoi_os.sandbox_skills import get_skills_for_upload
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -587,6 +588,58 @@ class DaytonaSpawnerService:
             install_cmd = "uv pip install openhands-sdk openhands-tools httpx 2>/dev/null || pip install openhands-sdk openhands-tools httpx"
         sandbox.process.exec(install_cmd, timeout=180)
 
+        # Install GitHub CLI (gh) for PR creation, merging, and GitHub API access
+        # This enables agents to create PRs, merge branches, and interact with GitHub
+        logger.info("Installing GitHub CLI...")
+        try:
+            # Try to install gh CLI - different methods for different base images
+            gh_install_cmd = """
+            if command -v gh &> /dev/null; then
+                echo "gh already installed"
+            elif command -v apt-get &> /dev/null; then
+                # Debian/Ubuntu
+                curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg 2>/dev/null
+                chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+                echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+                apt-get update -qq && apt-get install gh -y -qq
+            elif command -v apk &> /dev/null; then
+                # Alpine
+                apk add --no-cache github-cli
+            elif command -v dnf &> /dev/null; then
+                # Fedora/RHEL
+                dnf install -y gh
+            else
+                echo "Could not install gh - unknown package manager"
+            fi
+            """
+            sandbox.process.exec(gh_install_cmd, timeout=120)
+            logger.info("GitHub CLI installed successfully")
+        except Exception as e:
+            logger.warning(f"Failed to install GitHub CLI: {e}")
+            # Continue without gh - agent can still use git commands directly
+
+        # Upload Claude skills to sandbox (Claude runtime only)
+        if runtime == "claude":
+            logger.info("Uploading Claude skills to sandbox...")
+            try:
+                # Create skills directory
+                sandbox.process.exec("mkdir -p /root/.claude/skills")
+
+                # Get skills and upload each one
+                skills = get_skills_for_upload()
+                for skill_path, content in skills.items():
+                    # Create parent directory for skill
+                    parent_dir = "/".join(skill_path.rsplit("/", 1)[:-1])
+                    sandbox.process.exec(f"mkdir -p {parent_dir}")
+                    # Upload skill file
+                    sandbox.fs.upload_file(content.encode("utf-8"), skill_path)
+                    logger.debug(f"Uploaded skill: {skill_path}")
+
+                logger.info(f"Uploaded {len(skills)} Claude skills to sandbox")
+            except Exception as e:
+                logger.warning(f"Failed to upload Claude skills: {e}")
+                # Continue without skills - agent can still function
+
         # Clone GitHub repository using Daytona SDK (if configured)
         # This uses sandbox.git.clone() directly instead of shell commands
         # Token is passed via SDK, never exposed in environment variables
@@ -616,6 +669,32 @@ class DaytonaSpawnerService:
                     env_vars["GITHUB_REPO_OWNER"] = github_owner
                 if github_repo_name:
                     env_vars["GITHUB_REPO_NAME"] = github_repo_name
+
+                # Configure git for pushing
+                # 1. Set up git credential helper to use the token
+                # Store credentials in memory for the session (more secure than file)
+                sandbox.process.exec("git config --global credential.helper 'cache --timeout=86400'")
+
+                # 2. Configure the remote URL with token for push access
+                # This embeds the token in the remote URL (standard GitHub approach)
+                authenticated_url = f"https://x-access-token:{github_token}@github.com/{github_repo}.git"
+                sandbox.process.exec(
+                    f"cd {workspace_path} && git remote set-url origin {shlex.quote(authenticated_url)}"
+                )
+
+                # 3. Configure git user for commits (use GitHub Actions bot identity)
+                sandbox.process.exec('git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"')
+                sandbox.process.exec('git config --global user.name "github-actions[bot]"')
+
+                # 4. Set default branch behavior for push
+                sandbox.process.exec("git config --global push.default current")
+
+                # 5. Pass GITHUB_TOKEN to environment for gh CLI and API access
+                # This allows the agent to use `gh` commands for PRs, merges, etc.
+                env_vars["GITHUB_TOKEN"] = github_token
+                env_vars["GH_TOKEN"] = github_token  # gh CLI uses this
+
+                logger.info("Git configured for push access with GitHub token")
 
                 # Update env file with workspace path
                 sandbox.process.exec(
@@ -1589,12 +1668,32 @@ async def run_agent(task_description: str):
         tool_name = input_data.get("tool_name", "unknown")
         tool_input = input_data.get("tool_input", {})
         tool_response = input_data.get("tool_response", "")
-        
+
+        # Serialize tool_response properly
+        # Claude SDK tool results (like CLIResult) are objects with stdout/stderr fields
+        # We need to extract just the stdout content for display
+        serialized_response = None
+        if tool_response:
+            if hasattr(tool_response, "stdout"):
+                # CLIResult-like object from Bash tool
+                serialized_response = tool_response.stdout or ""
+                if hasattr(tool_response, "stderr") and tool_response.stderr:
+                    serialized_response += f"\n[stderr]: {tool_response.stderr}"
+            elif hasattr(tool_response, "__dict__"):
+                # Generic object - try to serialize nicely
+                import json
+                try:
+                    serialized_response = json.dumps(tool_response.__dict__, default=str)
+                except (TypeError, ValueError):
+                    serialized_response = str(tool_response)
+            else:
+                serialized_response = str(tool_response)
+
         # Comprehensive tool tracking with full details
         event_data = {
             "tool": tool_name,
             "tool_input": tool_input,  # Full input, no truncation
-            "tool_response": str(tool_response)[:2000] if tool_response else None,  # Reasonable limit for responses
+            "tool_response": serialized_response,  # Properly serialized response
         }
         
         # Special tracking for subagents

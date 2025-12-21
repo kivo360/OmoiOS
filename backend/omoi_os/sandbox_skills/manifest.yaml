@@ -1,0 +1,61 @@
+# Sandbox Agent Skills Manifest
+# These skills are uploaded to Daytona sandboxes for agent use
+
+version: "1.0"
+description: "Core skills for OmoiOS sandbox agents"
+
+# Skills are loaded in order - higher priority skills first
+skills:
+  # Workflow Skills - Core development workflow
+  - name: spec-driven-dev
+    description: "Create requirements, designs, tickets, and tasks following spec-driven development"
+    category: workflow
+    priority: high
+
+  - name: git-workflow
+    description: "Git branching, commits, and PR workflow following GitFlow conventions"
+    category: workflow
+    priority: high
+
+  # Development Skills
+  - name: code-review
+    description: "Review code for security, quality, and maintainability"
+    category: development
+    priority: high
+
+  - name: refactor-planner
+    description: "Plan safe refactoring with dependency analysis and rollback strategies"
+    category: development
+    priority: medium
+
+  # Testing Skills
+  - name: test-writer
+    description: "Generate comprehensive tests including unit, integration, and property-based tests"
+    category: testing
+    priority: high
+
+  # Integration Skills
+  - name: pr-creator
+    description: "Create well-structured pull requests with proper descriptions and labels"
+    category: integration
+    priority: high
+
+  # Debugging Skills
+  - name: error-diagnosis
+    description: "Debug errors, analyze logs, and identify root causes"
+    category: debugging
+    priority: high
+
+# Default settings for sandbox skill loading
+settings:
+  # Where to install skills in the sandbox
+  install_path: "/root/.claude/skills"
+
+  # Whether to also copy to project .claude/skills
+  copy_to_project: false
+
+  # Skills to always include (even if not explicitly requested)
+  always_include:
+    - spec-driven-dev
+    - git-workflow
+    - error-diagnosis
