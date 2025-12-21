@@ -410,9 +410,11 @@ export interface Task {
   ticket_id: string
   phase_id: string
   task_type: string
-  description: string
+  title: string | null
+  description: string | null
   priority: string
   status: string
+  sandbox_id: string | null
   assigned_agent_id: string | null
   conversation_id: string | null
   result: Record<string, unknown> | null
@@ -422,6 +424,7 @@ export interface Task {
   retry_count: number
   max_retries: number
   created_at: string
+  updated_at: string | null
   started_at: string | null
   completed_at: string | null
 }
@@ -431,11 +434,15 @@ export interface TaskListItem {
   ticket_id: string
   phase_id: string
   task_type: string
-  description: string
+  title: string | null
+  description: string | null
   priority: string
   status: string
+  sandbox_id: string | null
   assigned_agent_id: string | null
   created_at: string
+  updated_at: string | null
+  started_at: string | null
 }
 
 export interface TaskDependencies {
@@ -443,6 +450,24 @@ export interface TaskDependencies {
   depends_on: string[]
   dependencies_complete: boolean
   blocked_tasks: { id: string; description: string; status: string }[]
+}
+
+// Task associated with a sandbox (from GET /sandboxes/{id}/task)
+export interface SandboxTask {
+  id: string
+  ticket_id: string
+  phase_id: string
+  task_type: string
+  title: string | null
+  description: string | null
+  priority: string
+  status: string
+  sandbox_id: string
+  assigned_agent_id: string | null
+  created_at: string
+  updated_at: string | null
+  started_at: string | null
+  completed_at: string | null
 }
 
 // ============================================================================
@@ -803,6 +828,123 @@ export interface CreatePullRequestRequest {
   base: string
   body?: string
   draft?: boolean
+}
+
+// ============================================================================
+// Sandbox Types
+// ============================================================================
+
+export interface SandboxEvent {
+  id: string
+  sandbox_id: string
+  event_type: string
+  event_data: Record<string, unknown>
+  source: "agent" | "worker" | "system"
+  created_at: string
+}
+
+export interface SandboxEventCreate {
+  event_type: string
+  event_data?: Record<string, unknown>
+  source?: "agent" | "worker" | "system"
+}
+
+export interface SandboxEventResponse {
+  status: string
+  sandbox_id: string
+  event_type: string
+  event_id: string | null
+  timestamp: string
+}
+
+export interface SandboxMessage {
+  content: string
+  message_type?: "user_message" | "interrupt" | "guardian_nudge" | "system"
+}
+
+export interface MessageItem {
+  id: string
+  content: string
+  message_type: string
+  created_at: string
+}
+
+export interface MessageQueueResponse {
+  sandbox_id: string
+  messages: MessageItem[]
+  count: number
+}
+
+export interface HeartbeatSummary {
+  count: number
+  first_heartbeat: string | null
+  last_heartbeat: string | null
+}
+
+export interface TrajectorySummaryResponse {
+  sandbox_id: string
+  events: SandboxEvent[]
+  heartbeat_summary: HeartbeatSummary
+  total_events: number
+  trajectory_events: number
+}
+
+export interface SandboxEventsListResponse {
+  sandbox_id: string
+  events: SandboxEvent[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface SandboxInfo {
+  sandbox_id: string
+  task_id: string | null
+  status: string
+  created_at: string
+  model: string | null
+}
+
+// File edit event data structure
+export interface FileEditEventData {
+  file_path: string
+  change_type: "created" | "modified" | "deleted"
+  lines_added: number
+  lines_removed: number
+  diff_preview?: string
+  full_diff?: string
+  full_diff_available?: boolean
+  full_diff_size?: number
+  turn?: number
+  tool_use_id?: string
+}
+
+// Tool use event data structure
+export interface ToolUseEventData {
+  tool: string
+  input: Record<string, unknown>
+  tool_use_id: string
+  turn?: number
+}
+
+// Tool result event data structure
+export interface ToolResultEventData {
+  tool_use_id: string
+  content: string
+  is_error?: boolean
+  turn?: number
+}
+
+// Assistant message event data structure
+export interface AssistantMessageEventData {
+  content: string
+  turn?: number
+}
+
+// Thinking event data structure
+export interface ThinkingEventData {
+  content: string
+  turn?: number
 }
 
 // ============================================================================

@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.logging import get_logger
+from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -112,6 +113,25 @@ class MessageItem(BaseModel):
     content: str
     message_type: str
     timestamp: str
+
+
+class SandboxTaskResponse(BaseModel):
+    """Response for GET /sandboxes/{sandbox_id}/task - returns task info for a sandbox."""
+
+    id: str
+    ticket_id: str
+    phase_id: str
+    task_type: str
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: str
+    status: str
+    sandbox_id: str
+    assigned_agent_id: Optional[str] = None
+    created_at: str
+    updated_at: Optional[str] = None
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
 
 
 # ============================================================================
@@ -421,7 +441,12 @@ async def post_sandbox_event(
 
     # Handle task status transitions based on event type
     # This includes: agent.started -> running, agent.completed -> completed, agent.failed/error -> failed
-    if event.event_type in ("agent.started", "agent.completed", "agent.failed", "agent.error"):
+    if event.event_type in (
+        "agent.started",
+        "agent.completed",
+        "agent.failed",
+        "agent.error",
+    ):
         try:
             db = get_db_service()
             from omoi_os.models.task import Task
@@ -457,7 +482,9 @@ async def post_sandbox_event(
 
                 # Handle agent.started -> transition to running
                 if event.event_type == "agent.started":
-                    logger.info(f"Updating task {task_id} status to running (agent.started)")
+                    logger.info(
+                        f"Updating task {task_id} status to running (agent.started)"
+                    )
                     task_queue.update_task_status(
                         task_id=task_id,
                         status="running",
@@ -848,6 +875,73 @@ async def get_sandbox_trajectory(
             heartbeat_summary=HeartbeatSummary(count=0),
             total_events=0,
             trajectory_events=0,
+        )
+
+
+# ============================================================================
+# SANDBOX-TASK LOOKUP ENDPOINT
+# ============================================================================
+
+
+@router.get("/{sandbox_id}/task", response_model=SandboxTaskResponse)
+async def get_task_by_sandbox(
+    sandbox_id: str,
+) -> SandboxTaskResponse:
+    """
+    Get the task associated with a sandbox.
+
+    This endpoint allows the frontend to fetch task details (title, status, etc.)
+    when viewing a sandbox by its ID.
+
+    Args:
+        sandbox_id: Sandbox identifier (from URL path)
+
+    Returns:
+        SandboxTaskResponse with task information
+
+    Raises:
+        HTTPException 404: If no task is found for this sandbox
+
+    Example:
+        GET /api/v1/sandboxes/sandbox-abc123/task
+
+        Response:
+        {
+            "id": "task-xyz",
+            "title": "Add authentication to API",
+            "status": "running",
+            "sandbox_id": "sandbox-abc123",
+            ...
+        }
+    """
+    from fastapi import HTTPException
+
+    db = get_db_service()
+
+    with db.get_session() as session:
+        task = session.query(Task).filter(Task.sandbox_id == sandbox_id).first()
+
+        if not task:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No task found for sandbox {sandbox_id}",
+            )
+
+        return SandboxTaskResponse(
+            id=task.id,
+            ticket_id=task.ticket_id,
+            phase_id=task.phase_id,
+            task_type=task.task_type,
+            title=task.title,
+            description=task.description,
+            priority=task.priority,
+            status=task.status,
+            sandbox_id=task.sandbox_id or sandbox_id,
+            assigned_agent_id=task.assigned_agent_id,
+            created_at=task.created_at.isoformat(),
+            updated_at=task.updated_at.isoformat() if task.updated_at else None,
+            started_at=task.started_at.isoformat() if task.started_at else None,
+            completed_at=task.completed_at.isoformat() if task.completed_at else None,
         )
 
 
