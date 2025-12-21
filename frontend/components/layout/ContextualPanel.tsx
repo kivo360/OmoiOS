@@ -16,6 +16,7 @@ import {
   ProjectSettingsPanel,
   PhasesPanel,
   HealthPanel,
+  TasksPanel,
 } from "@/components/panels"
 
 interface ContextualPanelProps {
@@ -71,11 +72,17 @@ export function ContextualPanel({
       return <PhasesPanel />
     }
 
+    // Sandbox pages get Tasks panel
+    if (pathname.startsWith("/sandbox")) {
+      return <TasksPanel />
+    }
+
     // Default: use activeSection-based panels
     switch (activeSection) {
       case "command":
-      case "agents":
-        return <AgentsPanel />
+      case "sandboxes":
+        // Use TasksPanel for sandbox-first workflow
+        return <TasksPanel />
       case "projects":
         return <ProjectsPanel />
       case "phases":
@@ -87,7 +94,7 @@ export function ContextualPanel({
       case "organizations":
         return <OrganizationsPanel />
       default:
-        return <AgentsPanel />
+        return <TasksPanel />
     }
   }
 
