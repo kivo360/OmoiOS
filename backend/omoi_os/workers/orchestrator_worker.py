@@ -497,10 +497,13 @@ async def orchestrator_loop():
 
 
 async def stale_task_cleanup_loop():
-    """Background task that cleans up tasks stuck in 'assigned' status.
+    """Background task that cleans up tasks stuck in 'assigned' or 'claiming' status.
 
     Tasks that have been assigned but never transitioned to 'running' are
     likely orphaned (sandbox crashed before sending agent.started event).
+
+    Tasks stuck in 'claiming' status are reset to 'pending' so they can be
+    picked up again (orchestrator crashed after claiming but before assigning).
 
     This loop periodically marks these stale tasks as failed so they can
     be retried or investigated.
@@ -525,18 +528,33 @@ async def stale_task_cleanup_loop():
     # Get thresholds from environment
     # Default: 3 minutes threshold - sandbox should be running by then
     # Default: 15 second check interval - quick detection of stale tasks
+    # Default: 60 second threshold for claiming tasks (should be quick)
     stale_threshold_minutes = int(os.getenv("STALE_TASK_THRESHOLD_MINUTES", "3"))
+    stale_claiming_threshold_seconds = int(os.getenv("STALE_CLAIMING_THRESHOLD_SECONDS", "60"))
     check_interval = int(os.getenv("STALE_TASK_CHECK_INTERVAL_SECONDS", "15"))
 
     logger.info(
         "stale_task_cleanup_config",
         stale_threshold_minutes=stale_threshold_minutes,
+        stale_claiming_threshold_seconds=stale_claiming_threshold_seconds,
         check_interval_seconds=check_interval,
     )
 
     while not shutdown_event.is_set():
         try:
-            # Clean up stale assigned tasks
+            # Clean up stale claiming tasks (reset to pending for retry)
+            claiming_cleaned = queue.cleanup_stale_claiming_tasks(
+                stale_threshold_seconds=stale_claiming_threshold_seconds,
+            )
+
+            if claiming_cleaned:
+                logger.info(
+                    "stale_claiming_tasks_reset",
+                    count=len(claiming_cleaned),
+                    task_ids=[t["task_id"][:8] for t in claiming_cleaned],
+                )
+
+            # Clean up stale assigned tasks (mark as failed)
             cleaned_tasks = queue.cleanup_stale_assigned_tasks(
                 stale_threshold_minutes=stale_threshold_minutes,
                 dry_run=False,

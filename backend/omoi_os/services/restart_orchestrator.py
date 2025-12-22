@@ -283,7 +283,7 @@ class RestartOrchestrator:
                 session.query(Task)
                 .filter(
                     Task.assigned_agent_id == old_agent_id,
-                    Task.status.in_(["assigned", "running"]),
+                    Task.status.in_(["assigned", "running", "claiming"]),
                 )
                 .all()
             )
@@ -293,6 +293,9 @@ class RestartOrchestrator:
                 # Reassign task to new agent
                 task.assigned_agent_id = new_agent_id
                 task.status = "pending"  # Reset to pending so it can be picked up again
+                # IMPORTANT: Clear sandbox_id so task can be picked up by get_next_task()
+                # The atomic claim in get_next_task() filters out tasks with existing sandbox_id
+                task.sandbox_id = None
                 reassigned_task_ids.append(task.id)
 
             session.commit()
