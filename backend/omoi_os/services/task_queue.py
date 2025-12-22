@@ -219,6 +219,9 @@ class TaskQueueService:
         Uses dynamic scoring per REQ-TQM-PRI-002.
         Verifies capability matching per REQ-TQM-ASSIGN-001.
 
+        IMPORTANT: This method atomically claims the task by setting status to 'claiming'
+        to prevent duplicate sandbox spawns from race conditions.
+
         Args:
             phase_id: Phase identifier to filter by (None = any phase)
             agent_capabilities: Optional list of agent capabilities for matching (REQ-TQM-ASSIGN-001)
@@ -227,7 +230,12 @@ class TaskQueueService:
             Task object or None if no pending tasks with completed dependencies and matching capabilities
         """
         with self.db.get_session() as session:
-            query = session.query(Task).filter(Task.status == "pending")
+            # Only get tasks that are truly pending (not already being claimed)
+            # Also exclude tasks that already have a sandbox_id (prevents duplicate spawns)
+            query = session.query(Task).filter(
+                Task.status == "pending",
+                Task.sandbox_id.is_(None),  # Exclude tasks with existing sandbox
+            )
             if phase_id is not None:
                 query = query.filter(Task.phase_id == phase_id)
             tasks = query.all()
@@ -256,10 +264,35 @@ class TaskQueueService:
             # Sort by score descending (REQ-TQM-PRI-002)
             task = max(available_tasks, key=lambda t: t.score)
 
-            # Update score in database
-            session.query(Task).filter(Task.id == task.id).update({"score": task.score})
+            # ATOMIC CLAIM: Use SELECT ... FOR UPDATE SKIP LOCKED to prevent race conditions
+            # This ensures only one orchestrator can claim this task
+            from sqlalchemy import text
+
+            # Try to atomically claim the task by updating status to 'claiming'
+            # Using row-level lock to prevent duplicate claims
+            result = session.execute(
+                text("""
+                    UPDATE tasks
+                    SET status = 'claiming', score = :score
+                    WHERE id = :task_id
+                    AND status = 'pending'
+                    AND sandbox_id IS NULL
+                    RETURNING id
+                """),
+                {"task_id": str(task.id), "score": task.score}
+            )
+            claimed_row = result.fetchone()
             session.commit()
-            session.refresh(task)  # Refresh to ensure all attributes are loaded
+
+            if not claimed_row:
+                # Another process claimed this task, try again with next available
+                logger.debug(
+                    f"Task {task.id} was claimed by another process, skipping"
+                )
+                return None
+
+            # Refresh to get latest state after our update
+            session.refresh(task)
 
             # Expunge so it can be used outside the session
             session.expunge(task)
@@ -335,6 +368,8 @@ class TaskQueueService:
         """
         Assign a task to an agent.
 
+        Transitions task from 'claiming' to 'assigned' status.
+
         Args:
             task_id: UUID of the task
             agent_id: UUID of the agent
@@ -342,6 +377,12 @@ class TaskQueueService:
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
             if task:
+                # Validate task is in expected state (pending or claiming)
+                if task.status not in ("pending", "claiming"):
+                    logger.warning(
+                        f"Task {task_id} has unexpected status {task.status} during assignment, "
+                        f"expected 'pending' or 'claiming'"
+                    )
                 task.assigned_agent_id = agent_id
                 task.status = "assigned"
                 session.commit()
@@ -943,11 +984,67 @@ class TaskQueueService:
                 "can_cancel": task.status in ["assigned", "running"],
             }
 
+    def cleanup_stale_claiming_tasks(
+        self, stale_threshold_seconds: int = 60
+    ) -> list[dict]:
+        """
+        Clean up tasks stuck in 'claiming' status.
+
+        Tasks in 'claiming' status should transition to 'assigned' within seconds.
+        If they've been claiming for too long, the orchestrator likely crashed
+        after claiming but before assigning. Reset them to 'pending' for retry.
+
+        Args:
+            stale_threshold_seconds: Seconds after which a claiming task is considered stale
+
+        Returns:
+            List of dicts with task info for each cleaned up task
+        """
+        from datetime import timedelta
+        from omoi_os.utils.datetime import utc_now
+
+        stale_cutoff = utc_now() - timedelta(seconds=stale_threshold_seconds)
+        cleaned_tasks = []
+
+        with self.db.get_session() as session:
+            # Find tasks stuck in 'claiming' status
+            tasks = (
+                session.query(Task)
+                .filter(
+                    Task.status == "claiming",
+                    or_(
+                        Task.created_at < stale_cutoff,
+                        # Also check updated_at if available
+                    ),
+                )
+                .all()
+            )
+
+            for task in tasks:
+                task_info = {
+                    "task_id": str(task.id),
+                    "task_type": task.task_type,
+                    "description": task.description[:50] if task.description else None,
+                    "created_at": str(task.created_at),
+                }
+
+                # Reset to pending so it can be claimed again
+                task.status = "pending"
+                cleaned_tasks.append(task_info)
+
+            if cleaned_tasks:
+                session.commit()
+                logger.info(
+                    f"Reset {len(cleaned_tasks)} stale claiming tasks to pending"
+                )
+
+        return cleaned_tasks
+
     def get_stale_assigned_tasks(
         self, stale_threshold_minutes: int = 3
     ) -> list[Task]:
         """
-        Get tasks stuck in 'assigned' status for too long.
+        Get tasks stuck in 'assigned' or 'claiming' status for too long.
 
         Tasks that have been assigned but never transitioned to 'running' are
         likely orphaned (sandbox crashed before sending agent.started event).
@@ -965,13 +1062,13 @@ class TaskQueueService:
 
         with self.db.get_session() as session:
             # Find tasks that:
-            # 1. Are in 'assigned' status
+            # 1. Are in 'assigned' status (or 'claiming' for longer than threshold)
             # 2. Have a sandbox_id (were assigned to a sandbox)
             # 3. Were created more than threshold ago
             tasks = (
                 session.query(Task)
                 .filter(
-                    Task.status == "assigned",
+                    Task.status.in_(["assigned", "claiming"]),
                     Task.sandbox_id.isnot(None),
                     Task.created_at < stale_cutoff,
                 )
@@ -988,7 +1085,7 @@ class TaskQueueService:
         self, stale_threshold_minutes: int = 3, dry_run: bool = False
     ) -> list[dict]:
         """
-        Clean up tasks stuck in 'assigned' status by marking them as failed.
+        Clean up tasks stuck in 'assigned' or 'claiming' status by marking them as failed.
 
         This handles cases where sandboxes crashed before sending any events
         (agent.started, agent.completed, etc.), leaving tasks orphaned.
@@ -1007,11 +1104,12 @@ class TaskQueueService:
         cleaned_tasks = []
 
         with self.db.get_session() as session:
-            # Find stale assigned tasks
+            # Find stale assigned/claiming tasks
+            # Include 'claiming' status for tasks where orchestrator crashed mid-claim
             tasks = (
                 session.query(Task)
                 .filter(
-                    Task.status == "assigned",
+                    Task.status.in_(["assigned", "claiming"]),
                     Task.sandbox_id.isnot(None),
                     Task.created_at < stale_cutoff,
                 )
