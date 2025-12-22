@@ -9,10 +9,12 @@ Provides endpoints for managing project specifications including:
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Any, Dict
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.models.spec import (
@@ -26,6 +28,376 @@ from omoi_os.utils.datetime import utc_now
 
 
 router = APIRouter(prefix="/specs", tags=["specs"])
+
+
+# ============================================================================
+# Async Database Helpers (Non-blocking)
+# ============================================================================
+
+
+async def _list_project_specs_async(
+    db: DatabaseService,
+    project_id: str,
+    status: Optional[str] = None,
+) -> List[SpecModel]:
+    """List specs for a project (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        query = (
+            select(SpecModel)
+            .filter(SpecModel.project_id == project_id)
+            .options(
+                selectinload(SpecModel.requirements).selectinload(
+                    SpecRequirementModel.criteria
+                ),
+                selectinload(SpecModel.tasks),
+            )
+        )
+        if status:
+            query = query.filter(SpecModel.status == status)
+        query = query.order_by(SpecModel.created_at.desc())
+        result = await session.execute(query)
+        specs = result.scalars().all()
+        return specs
+
+
+async def _create_spec_async(
+    db: DatabaseService,
+    project_id: str,
+    title: str,
+    description: Optional[str],
+) -> SpecModel:
+    """Create a new spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        new_spec = SpecModel(
+            project_id=project_id,
+            title=title,
+            description=description,
+            status="draft",
+            phase="Requirements",
+        )
+        session.add(new_spec)
+        await session.commit()
+        await session.refresh(new_spec)
+        return new_spec
+
+
+async def _get_spec_async(
+    db: DatabaseService, spec_id: str
+) -> Optional[SpecModel]:
+    """Get a spec by ID (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel)
+            .filter(SpecModel.id == spec_id)
+            .options(
+                selectinload(SpecModel.requirements).selectinload(
+                    SpecRequirementModel.criteria
+                ),
+                selectinload(SpecModel.tasks),
+            )
+        )
+        spec = result.scalar_one_or_none()
+        return spec
+
+
+async def _update_spec_async(
+    db: DatabaseService,
+    spec_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    status: Optional[str] = None,
+    phase: Optional[str] = None,
+) -> Optional[SpecModel]:
+    """Update a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel)
+            .filter(SpecModel.id == spec_id)
+            .options(
+                selectinload(SpecModel.requirements).selectinload(
+                    SpecRequirementModel.criteria
+                ),
+                selectinload(SpecModel.tasks),
+            )
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        if title is not None:
+            spec.title = title
+        if description is not None:
+            spec.description = description
+        if status is not None:
+            spec.status = status
+        if phase is not None:
+            spec.phase = phase
+
+        await session.commit()
+        await session.refresh(spec)
+        return spec
+
+
+async def _delete_spec_async(db: DatabaseService, spec_id: str) -> bool:
+    """Delete a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return False
+
+        await session.delete(spec)
+        await session.commit()
+        return True
+
+
+async def _add_requirement_async(
+    db: DatabaseService,
+    spec_id: str,
+    title: str,
+    condition: str,
+    action: str,
+) -> Optional[SpecRequirementModel]:
+    """Add a requirement to a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        # Verify spec exists
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        new_req = SpecRequirementModel(
+            spec_id=spec_id,
+            title=title,
+            condition=condition,
+            action=action,
+            status="pending",
+        )
+        session.add(new_req)
+        await session.commit()
+        await session.refresh(new_req)
+        return new_req
+
+
+async def _update_requirement_async(
+    db: DatabaseService,
+    spec_id: str,
+    req_id: str,
+    title: Optional[str] = None,
+    condition: Optional[str] = None,
+    action: Optional[str] = None,
+    status: Optional[str] = None,
+) -> Optional[SpecRequirementModel]:
+    """Update a requirement (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecRequirementModel)
+            .filter(
+                SpecRequirementModel.id == req_id,
+                SpecRequirementModel.spec_id == spec_id,
+            )
+            .options(selectinload(SpecRequirementModel.criteria))
+        )
+        req = result.scalar_one_or_none()
+        if not req:
+            return None
+
+        if title is not None:
+            req.title = title
+        if condition is not None:
+            req.condition = condition
+        if action is not None:
+            req.action = action
+        if status is not None:
+            req.status = status
+
+        await session.commit()
+        await session.refresh(req)
+        return req
+
+
+async def _delete_requirement_async(
+    db: DatabaseService, spec_id: str, req_id: str
+) -> bool:
+    """Delete a requirement (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecRequirementModel).filter(
+                SpecRequirementModel.id == req_id,
+                SpecRequirementModel.spec_id == spec_id,
+            )
+        )
+        req = result.scalar_one_or_none()
+        if not req:
+            return False
+
+        await session.delete(req)
+        await session.commit()
+        return True
+
+
+async def _add_criterion_async(
+    db: DatabaseService,
+    spec_id: str,
+    req_id: str,
+    text: str,
+) -> Optional[SpecCriterionModel]:
+    """Add a criterion to a requirement (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        # Verify requirement exists
+        result = await session.execute(
+            select(SpecRequirementModel).filter(
+                SpecRequirementModel.id == req_id,
+                SpecRequirementModel.spec_id == spec_id,
+            )
+        )
+        req = result.scalar_one_or_none()
+        if not req:
+            return None
+
+        new_criterion = SpecCriterionModel(
+            requirement_id=req_id,
+            text=text,
+            completed=False,
+        )
+        session.add(new_criterion)
+        await session.commit()
+        await session.refresh(new_criterion)
+        return new_criterion
+
+
+async def _update_criterion_async(
+    db: DatabaseService,
+    criterion_id: str,
+    req_id: str,
+    text: Optional[str] = None,
+    completed: Optional[bool] = None,
+) -> Optional[SpecCriterionModel]:
+    """Update a criterion (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecCriterionModel).filter(
+                SpecCriterionModel.id == criterion_id,
+                SpecCriterionModel.requirement_id == req_id,
+            )
+        )
+        criterion = result.scalar_one_or_none()
+        if not criterion:
+            return None
+
+        if text is not None:
+            criterion.text = text
+        if completed is not None:
+            criterion.completed = completed
+
+        await session.commit()
+        await session.refresh(criterion)
+        return criterion
+
+
+async def _update_design_async(
+    db: DatabaseService, spec_id: str, design: Dict[str, Any]
+) -> Optional[SpecModel]:
+    """Update spec design (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        spec.design = design
+        await session.commit()
+        return spec
+
+
+async def _add_task_async(
+    db: DatabaseService,
+    spec_id: str,
+    title: str,
+    description: Optional[str],
+    phase: str,
+    priority: str,
+) -> Optional[SpecTaskModel]:
+    """Add a task to a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        # Verify spec exists
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        new_task = SpecTaskModel(
+            spec_id=spec_id,
+            title=title,
+            description=description,
+            phase=phase,
+            priority=priority,
+            status="pending",
+        )
+        session.add(new_task)
+        await session.commit()
+        await session.refresh(new_task)
+        return new_task
+
+
+async def _list_spec_tasks_async(
+    db: DatabaseService, spec_id: str
+) -> Optional[List[SpecTaskModel]]:
+    """List tasks for a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel)
+            .filter(SpecModel.id == spec_id)
+            .options(selectinload(SpecModel.tasks))
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+        return spec.tasks
+
+
+async def _approve_requirements_async(db: DatabaseService, spec_id: str) -> bool:
+    """Approve requirements (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return False
+
+        spec.requirements_approved = True
+        spec.requirements_approved_at = utc_now()
+        spec.status = "design"
+        spec.phase = "Design"
+        await session.commit()
+        return True
+
+
+async def _approve_design_async(db: DatabaseService, spec_id: str) -> bool:
+    """Approve design (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return False
+
+        spec.design_approved = True
+        spec.design_approved_at = utc_now()
+        spec.status = "executing"
+        spec.phase = "Implementation"
+        await session.commit()
+        return True
 
 
 # ============================================================================
@@ -248,18 +620,12 @@ async def list_project_specs(
     db: DatabaseService = Depends(get_db_service),
 ):
     """List all specs for a project."""
-    with db.get_session() as session:
-        query = session.query(SpecModel).filter(SpecModel.project_id == project_id)
-
-        if status:
-            query = query.filter(SpecModel.status == status)
-
-        specs = query.order_by(SpecModel.created_at.desc()).all()
-
-        return SpecListResponse(
-            specs=[_spec_to_response(s) for s in specs],
-            total=len(specs),
-        )
+    # Use async database operations (non-blocking)
+    specs = await _list_project_specs_async(db, project_id, status)
+    return SpecListResponse(
+        specs=[_spec_to_response(s) for s in specs],
+        total=len(specs),
+    )
 
 
 @router.post("", response_model=SpecResponse)
@@ -268,20 +634,11 @@ async def create_spec(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Create a new specification."""
-    with db.get_session() as session:
-        new_spec = SpecModel(
-            project_id=spec.project_id,
-            title=spec.title,
-            description=spec.description,
-            status="draft",
-            phase="Requirements",
-        )
-
-        session.add(new_spec)
-        session.commit()
-        session.refresh(new_spec)
-
-        return _spec_to_response(new_spec)
+    # Use async database operations (non-blocking)
+    new_spec = await _create_spec_async(
+        db, spec.project_id, spec.title, spec.description
+    )
+    return _spec_to_response(new_spec)
 
 
 @router.get("/{spec_id}", response_model=SpecResponse)
@@ -290,13 +647,11 @@ async def get_spec(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Get a spec by ID."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
-
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        return _spec_to_response(spec)
+    # Use async database operations (non-blocking)
+    spec = await _get_spec_async(db, spec_id)
+    if not spec:
+        raise HTTPException(status_code=404, detail="Spec not found")
+    return _spec_to_response(spec)
 
 
 @router.patch("/{spec_id}", response_model=SpecResponse)
@@ -306,25 +661,13 @@ async def update_spec(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Update a spec."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
-
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        if updates.title is not None:
-            spec.title = updates.title
-        if updates.description is not None:
-            spec.description = updates.description
-        if updates.status is not None:
-            spec.status = updates.status
-        if updates.phase is not None:
-            spec.phase = updates.phase
-
-        session.commit()
-        session.refresh(spec)
-
-        return _spec_to_response(spec)
+    # Use async database operations (non-blocking)
+    spec = await _update_spec_async(
+        db, spec_id, updates.title, updates.description, updates.status, updates.phase
+    )
+    if not spec:
+        raise HTTPException(status_code=404, detail="Spec not found")
+    return _spec_to_response(spec)
 
 
 @router.delete("/{spec_id}")
@@ -333,16 +676,11 @@ async def delete_spec(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Delete a spec."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
-
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        session.delete(spec)
-        session.commit()
-
-        return {"message": "Spec deleted successfully"}
+    # Use async database operations (non-blocking)
+    deleted = await _delete_spec_async(db, spec_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Spec not found")
+    return {"message": "Spec deleted successfully"}
 
 
 # ============================================================================
@@ -357,33 +695,22 @@ async def add_requirement(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Add a requirement to a spec."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
+    # Use async database operations (non-blocking)
+    new_req = await _add_requirement_async(
+        db, spec_id, req.title, req.condition, req.action
+    )
+    if not new_req:
+        raise HTTPException(status_code=404, detail="Spec not found")
 
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        new_req = SpecRequirementModel(
-            spec_id=spec_id,
-            title=req.title,
-            condition=req.condition,
-            action=req.action,
-            status="pending",
-        )
-
-        session.add(new_req)
-        session.commit()
-        session.refresh(new_req)
-
-        return Requirement(
-            id=new_req.id,
-            title=new_req.title,
-            condition=new_req.condition,
-            action=new_req.action,
-            criteria=[],
-            linked_design=new_req.linked_design,
-            status=new_req.status,
-        )
+    return Requirement(
+        id=new_req.id,
+        title=new_req.title,
+        condition=new_req.condition,
+        action=new_req.action,
+        criteria=[],
+        linked_design=new_req.linked_design,
+        status=new_req.status,
+    )
 
 
 @router.patch("/{spec_id}/requirements/{req_id}", response_model=Requirement)
@@ -394,45 +721,27 @@ async def update_requirement(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Update a requirement."""
-    with db.get_session() as session:
-        req = (
-            session.query(SpecRequirementModel)
-            .filter(
-                SpecRequirementModel.id == req_id,
-                SpecRequirementModel.spec_id == spec_id,
-            )
-            .first()
-        )
+    # Use async database operations (non-blocking)
+    req = await _update_requirement_async(
+        db, spec_id, req_id, updates.title, updates.condition, updates.action, updates.status
+    )
+    if not req:
+        raise HTTPException(status_code=404, detail="Requirement not found")
 
-        if not req:
-            raise HTTPException(status_code=404, detail="Requirement not found")
+    criteria = [
+        AcceptanceCriterion(id=c.id, text=c.text, completed=c.completed)
+        for c in req.criteria
+    ]
 
-        if updates.title is not None:
-            req.title = updates.title
-        if updates.condition is not None:
-            req.condition = updates.condition
-        if updates.action is not None:
-            req.action = updates.action
-        if updates.status is not None:
-            req.status = updates.status
-
-        session.commit()
-        session.refresh(req)
-
-        criteria = [
-            AcceptanceCriterion(id=c.id, text=c.text, completed=c.completed)
-            for c in req.criteria
-        ]
-
-        return Requirement(
-            id=req.id,
-            title=req.title,
-            condition=req.condition,
-            action=req.action,
-            criteria=criteria,
-            linked_design=req.linked_design,
-            status=req.status,
-        )
+    return Requirement(
+        id=req.id,
+        title=req.title,
+        condition=req.condition,
+        action=req.action,
+        criteria=criteria,
+        linked_design=req.linked_design,
+        status=req.status,
+    )
 
 
 @router.delete("/{spec_id}/requirements/{req_id}")
@@ -442,23 +751,11 @@ async def delete_requirement(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Delete a requirement."""
-    with db.get_session() as session:
-        req = (
-            session.query(SpecRequirementModel)
-            .filter(
-                SpecRequirementModel.id == req_id,
-                SpecRequirementModel.spec_id == spec_id,
-            )
-            .first()
-        )
-
-        if not req:
-            raise HTTPException(status_code=404, detail="Requirement not found")
-
-        session.delete(req)
-        session.commit()
-
-        return {"message": "Requirement deleted successfully"}
+    # Use async database operations (non-blocking)
+    deleted = await _delete_requirement_async(db, spec_id, req_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Requirement not found")
+    return {"message": "Requirement deleted successfully"}
 
 
 # ============================================================================
@@ -476,34 +773,16 @@ async def add_criterion(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Add an acceptance criterion to a requirement."""
-    with db.get_session() as session:
-        req = (
-            session.query(SpecRequirementModel)
-            .filter(
-                SpecRequirementModel.id == req_id,
-                SpecRequirementModel.spec_id == spec_id,
-            )
-            .first()
-        )
+    # Use async database operations (non-blocking)
+    new_criterion = await _add_criterion_async(db, spec_id, req_id, criterion.text)
+    if not new_criterion:
+        raise HTTPException(status_code=404, detail="Requirement not found")
 
-        if not req:
-            raise HTTPException(status_code=404, detail="Requirement not found")
-
-        new_criterion = SpecCriterionModel(
-            requirement_id=req_id,
-            text=criterion.text,
-            completed=False,
-        )
-
-        session.add(new_criterion)
-        session.commit()
-        session.refresh(new_criterion)
-
-        return AcceptanceCriterion(
-            id=new_criterion.id,
-            text=new_criterion.text,
-            completed=new_criterion.completed,
-        )
+    return AcceptanceCriterion(
+        id=new_criterion.id,
+        text=new_criterion.text,
+        completed=new_criterion.completed,
+    )
 
 
 @router.patch("/{spec_id}/requirements/{req_id}/criteria/{criterion_id}")
@@ -515,32 +794,18 @@ async def update_criterion(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Update an acceptance criterion."""
-    with db.get_session() as session:
-        criterion = (
-            session.query(SpecCriterionModel)
-            .filter(
-                SpecCriterionModel.id == criterion_id,
-                SpecCriterionModel.requirement_id == req_id,
-            )
-            .first()
-        )
+    # Use async database operations (non-blocking)
+    criterion = await _update_criterion_async(
+        db, criterion_id, req_id, updates.text, updates.completed
+    )
+    if not criterion:
+        raise HTTPException(status_code=404, detail="Criterion not found")
 
-        if not criterion:
-            raise HTTPException(status_code=404, detail="Criterion not found")
-
-        if updates.text is not None:
-            criterion.text = updates.text
-        if updates.completed is not None:
-            criterion.completed = updates.completed
-
-        session.commit()
-        session.refresh(criterion)
-
-        return AcceptanceCriterion(
-            id=criterion.id,
-            text=criterion.text,
-            completed=criterion.completed,
-        )
+    return AcceptanceCriterion(
+        id=criterion.id,
+        text=criterion.text,
+        completed=criterion.completed,
+    )
 
 
 # ============================================================================
@@ -555,16 +820,11 @@ async def update_design(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Update the design for a spec."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
-
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        spec.design = design.model_dump()
-        session.commit()
-
-        return design
+    # Use async database operations (non-blocking)
+    spec = await _update_design_async(db, spec_id, design.model_dump())
+    if not spec:
+        raise HTTPException(status_code=404, detail="Spec not found")
+    return design
 
 
 # ============================================================================
@@ -579,37 +839,25 @@ async def add_task(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Add a task to a spec."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
+    # Use async database operations (non-blocking)
+    new_task = await _add_task_async(
+        db, spec_id, task.title, task.description, task.phase, task.priority
+    )
+    if not new_task:
+        raise HTTPException(status_code=404, detail="Spec not found")
 
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        new_task = SpecTaskModel(
-            spec_id=spec_id,
-            title=task.title,
-            description=task.description,
-            phase=task.phase,
-            priority=task.priority,
-            status="pending",
-        )
-
-        session.add(new_task)
-        session.commit()
-        session.refresh(new_task)
-
-        return SpecTask(
-            id=new_task.id,
-            title=new_task.title,
-            description=new_task.description,
-            phase=new_task.phase,
-            priority=new_task.priority,
-            status=new_task.status,
-            assigned_agent=new_task.assigned_agent,
-            dependencies=new_task.dependencies or [],
-            estimated_hours=new_task.estimated_hours,
-            actual_hours=new_task.actual_hours,
-        )
+    return SpecTask(
+        id=new_task.id,
+        title=new_task.title,
+        description=new_task.description,
+        phase=new_task.phase,
+        priority=new_task.priority,
+        status=new_task.status,
+        assigned_agent=new_task.assigned_agent,
+        dependencies=new_task.dependencies or [],
+        estimated_hours=new_task.estimated_hours,
+        actual_hours=new_task.actual_hours,
+    )
 
 
 @router.get("/{spec_id}/tasks", response_model=list[SpecTask])
@@ -618,27 +866,26 @@ async def list_spec_tasks(
     db: DatabaseService = Depends(get_db_service),
 ):
     """List tasks for a spec."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
+    # Use async database operations (non-blocking)
+    tasks = await _list_spec_tasks_async(db, spec_id)
+    if tasks is None:
+        raise HTTPException(status_code=404, detail="Spec not found")
 
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        return [
-            SpecTask(
-                id=t.id,
-                title=t.title,
-                description=t.description,
-                phase=t.phase,
-                priority=t.priority,
-                status=t.status,
-                assigned_agent=t.assigned_agent,
-                dependencies=t.dependencies or [],
-                estimated_hours=t.estimated_hours,
-                actual_hours=t.actual_hours,
-            )
-            for t in spec.tasks
-        ]
+    return [
+        SpecTask(
+            id=t.id,
+            title=t.title,
+            description=t.description,
+            phase=t.phase,
+            priority=t.priority,
+            status=t.status,
+            assigned_agent=t.assigned_agent,
+            dependencies=t.dependencies or [],
+            estimated_hours=t.estimated_hours,
+            actual_hours=t.actual_hours,
+        )
+        for t in tasks
+    ]
 
 
 # ============================================================================
@@ -652,20 +899,11 @@ async def approve_requirements(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Approve requirements and move to design phase."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
-
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        spec.requirements_approved = True
-        spec.requirements_approved_at = utc_now()
-        spec.status = "design"
-        spec.phase = "Design"
-
-        session.commit()
-
-        return {"message": "Requirements approved, moved to Design phase"}
+    # Use async database operations (non-blocking)
+    approved = await _approve_requirements_async(db, spec_id)
+    if not approved:
+        raise HTTPException(status_code=404, detail="Spec not found")
+    return {"message": "Requirements approved, moved to Design phase"}
 
 
 @router.post("/{spec_id}/approve-design")
@@ -674,17 +912,8 @@ async def approve_design(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Approve design and move to execution phase."""
-    with db.get_session() as session:
-        spec = session.query(SpecModel).filter(SpecModel.id == spec_id).first()
-
-        if not spec:
-            raise HTTPException(status_code=404, detail="Spec not found")
-
-        spec.design_approved = True
-        spec.design_approved_at = utc_now()
-        spec.status = "executing"
-        spec.phase = "Implementation"
-
-        session.commit()
-
-        return {"message": "Design approved, moved to Implementation phase"}
+    # Use async database operations (non-blocking)
+    approved = await _approve_design_async(db, spec_id)
+    if not approved:
+        raise HTTPException(status_code=404, detail="Spec not found")
+    return {"message": "Design approved, moved to Implementation phase"}

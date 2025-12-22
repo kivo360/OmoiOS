@@ -1,5 +1,6 @@
 """API routes for Kanban board operations."""
 
+import asyncio
 from typing import List, Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -56,8 +57,116 @@ def get_board_service() -> BoardService:
     return BoardService(event_bus=event_bus)
 
 
+# ============================================================================
+# Sync helpers that run in thread pool (non-blocking)
+# ============================================================================
+# BoardService uses sync SQLAlchemy operations, so we run them in a thread pool
+# to avoid blocking the event loop while still being non-blocking for async callers.
+
+
+def _get_board_view_sync(
+    db: DatabaseService,
+    board_service: BoardService,
+    project_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Get board view (runs in thread pool)."""
+    with db.get_session() as session:
+        # Check if board columns exist, if not, create defaults
+        from omoi_os.models.board_column import BoardColumn
+
+        existing_columns = session.query(BoardColumn).first()
+
+        if not existing_columns:
+            board_service.create_default_board(session=session)
+            session.commit()
+
+        board_data = board_service.get_board_view(session=session, project_id=project_id)
+        return board_data
+
+
+def _move_ticket_sync(
+    db: DatabaseService,
+    board_service: BoardService,
+    ticket_id: str,
+    target_column_id: str,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Move ticket to column (runs in thread pool)."""
+    with db.get_session() as session:
+        ticket = board_service.move_ticket_to_column(
+            session=session,
+            ticket_id=ticket_id,
+            target_column_id=target_column_id,
+            force=force,
+        )
+        session.commit()
+
+        return {
+            "ticket_id": ticket.id,
+            "new_phase": ticket.phase_id,
+            "new_column": target_column_id,
+            "status": "moved",
+        }
+
+
+def _get_column_stats_sync(
+    db: DatabaseService,
+    board_service: BoardService,
+    project_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Get column stats (runs in thread pool)."""
+    with db.get_session() as session:
+        stats = board_service.get_column_stats(session=session, project_id=project_id)
+        return stats
+
+
+def _check_wip_violations_sync(
+    db: DatabaseService,
+    board_service: BoardService,
+    project_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Check WIP violations (runs in thread pool)."""
+    with db.get_session() as session:
+        violations = board_service.check_wip_limits(session=session, project_id=project_id)
+        return violations
+
+
+def _auto_transition_ticket_sync(
+    db: DatabaseService,
+    board_service: BoardService,
+    ticket_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Auto transition ticket (runs in thread pool)."""
+    with db.get_session() as session:
+        result = board_service.auto_transition_ticket(session=session, ticket_id=ticket_id)
+
+        if result:
+            session.commit()
+            return {
+                "ticket_id": result.id,
+                "new_phase": result.phase_id,
+                "transitioned": True,
+            }
+        else:
+            return None
+
+
+def _get_column_for_phase_sync(
+    db: DatabaseService,
+    board_service: BoardService,
+    phase_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Get column for phase (runs in thread pool)."""
+    with db.get_session() as session:
+        column = board_service.get_column_for_phase(session=session, phase_id=phase_id)
+
+        if column:
+            return column.to_dict()
+        return None
+
+
 @router.get("/view", response_model=BoardViewResponse)
-def get_board_view(
+async def get_board_view(
     project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for cross-project board."),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -67,24 +176,16 @@ def get_board_view(
 
     Returns all columns with tickets organized by current phase.
     Automatically initializes default board columns if none exist.
-    
+
     Args:
         project_id: Optional project ID to filter tickets. If omitted, shows all tickets (cross-project board).
     """
     try:
-        with db.get_session() as session:
-            # Check if board columns exist, if not, create defaults
-            from omoi_os.models.board_column import BoardColumn
-            from sqlalchemy import select
-            
-            existing_columns = session.execute(select(BoardColumn)).scalars().first()
-            if not existing_columns:
-                # Initialize default board columns
-                board_service.create_default_board(session=session)
-                session.commit()
-            
-            board_data = board_service.get_board_view(session=session, project_id=project_id)
-            return BoardViewResponse(**board_data)
+        # Run sync service in thread pool (non-blocking)
+        board_data = await asyncio.to_thread(
+            _get_board_view_sync, db, board_service, project_id
+        )
+        return BoardViewResponse(**board_data)
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to get board view: {str(e)}"
@@ -92,7 +193,7 @@ def get_board_view(
 
 
 @router.post("/move")
-def move_ticket(
+async def move_ticket(
     request: MoveTicketRequest,
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -104,21 +205,16 @@ def move_ticket(
     phase mapping. Respects WIP limits unless force=True.
     """
     try:
-        with db.get_session() as session:
-            ticket = board_service.move_ticket_to_column(
-                session=session,
-                ticket_id=request.ticket_id,
-                target_column_id=request.target_column_id,
-                force=request.force,
-            )
-            session.commit()
-
-            return {
-                "ticket_id": ticket.id,
-                "new_phase": ticket.phase_id,
-                "new_column": request.target_column_id,
-                "status": "moved",
-            }
+        # Run sync service in thread pool (non-blocking)
+        result = await asyncio.to_thread(
+            _move_ticket_sync,
+            db,
+            board_service,
+            request.ticket_id,
+            request.target_column_id,
+            request.force,
+        )
+        return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -126,7 +222,7 @@ def move_ticket(
 
 
 @router.get("/stats", response_model=List[ColumnStatsResponse])
-def get_column_stats(
+async def get_column_stats(
     project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for all projects."),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -135,14 +231,16 @@ def get_column_stats(
     Get statistics for all board columns.
 
     Includes ticket counts, WIP utilization, and limit violations.
-    
+
     Args:
         project_id: Optional project ID to filter tickets. If omitted, shows all projects.
     """
     try:
-        with db.get_session() as session:
-            stats = board_service.get_column_stats(session=session, project_id=project_id)
-            return [ColumnStatsResponse(**stat) for stat in stats]
+        # Run sync service in thread pool (non-blocking)
+        stats = await asyncio.to_thread(
+            _get_column_stats_sync, db, board_service, project_id
+        )
+        return [ColumnStatsResponse(**stat) for stat in stats]
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to get column stats: {str(e)}"
@@ -150,7 +248,7 @@ def get_column_stats(
 
 
 @router.get("/wip-violations", response_model=List[WIPViolationResponse])
-def check_wip_violations(
+async def check_wip_violations(
     project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for all projects."),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -160,14 +258,16 @@ def check_wip_violations(
 
     Returns columns where current ticket count exceeds WIP limit.
     Useful for Guardian monitoring and resource reallocation.
-    
+
     Args:
         project_id: Optional project ID to filter tickets. If omitted, checks all projects.
     """
     try:
-        with db.get_session() as session:
-            violations = board_service.check_wip_limits(session=session, project_id=project_id)
-            return [WIPViolationResponse(**v) for v in violations]
+        # Run sync service in thread pool (non-blocking)
+        violations = await asyncio.to_thread(
+            _check_wip_violations_sync, db, board_service, project_id
+        )
+        return [WIPViolationResponse(**v) for v in violations]
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to check WIP limits: {str(e)}"
@@ -175,7 +275,7 @@ def check_wip_violations(
 
 
 @router.post("/auto-transition/{ticket_id}")
-def auto_transition_ticket(
+async def auto_transition_ticket(
     ticket_id: str,
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -187,22 +287,19 @@ def auto_transition_ticket(
     (e.g., building → testing).
     """
     try:
-        with db.get_session() as session:
-            result = board_service.auto_transition_ticket(session=session, ticket_id=ticket_id)
+        # Run sync service in thread pool (non-blocking)
+        result = await asyncio.to_thread(
+            _auto_transition_ticket_sync, db, board_service, ticket_id
+        )
 
-            if result:
-                session.commit()
-                return {
-                    "ticket_id": result.id,
-                    "new_phase": result.phase_id,
-                    "transitioned": True,
-                }
-            else:
-                return {
-                    "ticket_id": ticket_id,
-                    "transitioned": False,
-                    "reason": "No auto-transition configured or WIP limit exceeded",
-                }
+        if result:
+            return result
+        else:
+            return {
+                "ticket_id": ticket_id,
+                "transitioned": False,
+                "reason": "No auto-transition configured or WIP limit exceeded",
+            }
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to auto-transition: {str(e)}"
@@ -210,7 +307,7 @@ def auto_transition_ticket(
 
 
 @router.get("/column/{phase_id}")
-def get_column_for_phase(
+async def get_column_for_phase(
     phase_id: str,
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -221,15 +318,17 @@ def get_column_for_phase(
     Useful for determining visual position of a ticket.
     """
     try:
-        with db.get_session() as session:
-            column = board_service.get_column_for_phase(session=session, phase_id=phase_id)
+        # Run sync service in thread pool (non-blocking)
+        column_data = await asyncio.to_thread(
+            _get_column_for_phase_sync, db, board_service, phase_id
+        )
 
-            if column:
-                return column.to_dict()
-            else:
-                raise HTTPException(
-                    status_code=404, detail=f"No column found for phase {phase_id}"
-                )
+        if column_data:
+            return column_data
+        else:
+            raise HTTPException(
+                status_code=404, detail=f"No column found for phase {phase_id}"
+            )
     except HTTPException:
         raise
     except Exception as e:

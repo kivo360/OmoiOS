@@ -1,5 +1,6 @@
 """Worker service for executing tasks."""
 
+import asyncio
 import os
 import random
 import threading
@@ -205,6 +206,367 @@ class HeartbeatManager:
                 # Continue running even if there's an error
                 interval = self._get_interval()
                 time.sleep(interval)
+
+
+class AsyncHeartbeatManager:
+    """
+    Async heartbeat manager - pure async replacement for HeartbeatManager.
+
+    Per the async_python_patterns.md guide, this replaces threading with asyncio
+    for cleaner shutdown and better resource utilization.
+
+    Features:
+    - Adaptive frequency based on agent status (30s IDLE, 15s RUNNING)
+    - Sequence number tracking
+    - Health metrics collection
+    - Checksum validation
+    - Graceful shutdown with asyncio.Event
+    """
+
+    # Interval thresholds per REQ-FT-HB-002
+    IDLE_INTERVAL = 30  # IDLE agents: 30s
+    RUNNING_INTERVAL = 15  # RUNNING agents: 15s
+    HIGH_LOAD_INTERVAL = 10  # Under high load: 10s
+
+    def __init__(
+        self,
+        agent_id: str,
+        heartbeat_protocol_service,
+        current_task_id: Optional[str] = None,
+        get_agent_status: Optional[callable] = None,
+        collect_health_metrics: Optional[callable] = None,
+    ):
+        """
+        Initialize AsyncHeartbeatManager.
+
+        Args:
+            agent_id: ID of the agent to emit heartbeats for
+            heartbeat_protocol_service: HeartbeatProtocolService instance (async-aware)
+            current_task_id: Optional callable to get current task ID
+            get_agent_status: Optional async callable to get current agent status
+            collect_health_metrics: Optional async callable to collect health metrics
+        """
+        self.agent_id = agent_id
+        self.heartbeat_protocol_service = heartbeat_protocol_service
+        self.current_task_id = current_task_id
+        self.get_agent_status = get_agent_status or (lambda: "idle")
+        self.collect_health_metrics = collect_health_metrics or (lambda: {})
+        self._sequence_number = 0
+        self._task: Optional[asyncio.Task] = None
+        self._stop_event = asyncio.Event()
+
+    async def start(self) -> None:
+        """Start the async heartbeat loop."""
+        if self._task is not None:
+            return
+
+        self._stop_event.clear()
+        self._task = asyncio.create_task(self._heartbeat_loop())
+        logger.info("Async heartbeat manager started", agent_id=self.agent_id)
+
+    async def stop(self) -> None:
+        """Gracefully stop the async heartbeat loop."""
+        if self._task is None:
+            return
+
+        self._stop_event.set()
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        self._task = None
+        logger.info("Async heartbeat manager stopped", agent_id=self.agent_id)
+
+    async def _get_interval_async(self) -> int:
+        """
+        Get adaptive heartbeat interval per REQ-FT-HB-002.
+
+        Returns:
+            Interval in seconds
+        """
+        status = self.get_agent_status()
+        if asyncio.iscoroutine(status):
+            status = await status
+        if status == "running":
+            return self.RUNNING_INTERVAL
+        elif status == "idle":
+            return self.IDLE_INTERVAL
+        else:
+            return self.IDLE_INTERVAL
+
+    async def _collect_health_metrics_async(self) -> dict:
+        """
+        Collect health metrics for heartbeat per REQ-ALM-002.
+
+        Returns:
+            Dictionary of health metrics
+        """
+        base_metrics = self.collect_health_metrics()
+        if asyncio.iscoroutine(base_metrics):
+            base_metrics = await base_metrics
+
+        if not base_metrics:
+            base_metrics = {}
+
+        metrics = {
+            "cpu_usage_percent": base_metrics.get("cpu_usage_percent", 0.0),
+            "memory_usage_mb": base_metrics.get("memory_usage_mb", 0),
+            "active_connections": base_metrics.get("active_connections", 0),
+            "pending_operations": base_metrics.get("pending_operations", 0),
+            "last_error_timestamp": base_metrics.get("last_error_timestamp"),
+            "custom_metrics": base_metrics.get("custom_metrics", {}),
+        }
+        return metrics
+
+    async def _create_heartbeat_message_async(self) -> "HeartbeatMessage":
+        """
+        Create heartbeat message with sequence number and checksum per REQ-ALM-002.
+
+        Returns:
+            HeartbeatMessage with all required fields
+        """
+        from omoi_os.models.heartbeat_message import HeartbeatMessage
+
+        self._sequence_number += 1
+
+        status = self.get_agent_status()
+        if asyncio.iscoroutine(status):
+            status = await status
+        if not status:
+            status = "idle"
+
+        task_id = None
+        if callable(self.current_task_id):
+            task_id = self.current_task_id()
+        elif self.current_task_id:
+            task_id = self.current_task_id
+
+        health_metrics = await self._collect_health_metrics_async()
+        now = utc_now()
+
+        payload = {
+            "agent_id": self.agent_id,
+            "timestamp": now.isoformat(),
+            "sequence_number": self._sequence_number,
+            "status": status,
+            "current_task_id": task_id,
+            "health_metrics": health_metrics,
+        }
+
+        checksum = self.heartbeat_protocol_service._calculate_checksum(payload)
+
+        return HeartbeatMessage(
+            agent_id=self.agent_id,
+            timestamp=now,
+            sequence_number=self._sequence_number,
+            status=status,
+            current_task_id=task_id,
+            health_metrics=health_metrics,
+            checksum=checksum,
+        )
+
+    async def _heartbeat_loop(self) -> None:
+        """Async heartbeat loop with graceful shutdown support."""
+        while not self._stop_event.is_set():
+            try:
+                heartbeat_message = await self._create_heartbeat_message_async()
+
+                # Use async method if available, otherwise fall back to sync
+                if hasattr(self.heartbeat_protocol_service, 'receive_heartbeat_async'):
+                    ack = await self.heartbeat_protocol_service.receive_heartbeat_async(
+                        heartbeat_message
+                    )
+                else:
+                    ack = self.heartbeat_protocol_service.receive_heartbeat(
+                        heartbeat_message
+                    )
+
+                if not ack.received:
+                    logger.warning(
+                        "Heartbeat not acknowledged",
+                        agent_id=self.agent_id,
+                        message=ack.message,
+                    )
+                elif ack.message:
+                    logger.debug(
+                        "Heartbeat acknowledged",
+                        agent_id=self.agent_id,
+                        message=ack.message,
+                    )
+
+            except Exception as e:
+                logger.error(
+                    "Error in async heartbeat loop",
+                    agent_id=self.agent_id,
+                    error=str(e),
+                    exc_info=True,
+                )
+
+            # Non-blocking sleep with early exit support
+            interval = await self._get_interval_async()
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(),
+                    timeout=interval
+                )
+                break  # Stop event was set
+            except asyncio.TimeoutError:
+                pass  # Normal timeout, continue loop
+
+
+class AsyncTimeoutManager:
+    """
+    Async timeout manager - pure async replacement for TimeoutManager.
+
+    Per the async_python_patterns.md guide, this eliminates threading
+    for cleaner shutdown and better integration with async services.
+    """
+
+    def __init__(
+        self,
+        task_queue: TaskQueueService,
+        event_bus: EventBusService,
+        interval_seconds: int = 10,
+    ):
+        """
+        Initialize AsyncTimeoutManager.
+
+        Args:
+            task_queue: TaskQueueService instance
+            event_bus: EventBusService instance for publishing timeout events
+            interval_seconds: Check interval in seconds (default: 10)
+        """
+        self.task_queue = task_queue
+        self.event_bus = event_bus
+        self.interval_seconds = interval_seconds
+        self._task: Optional[asyncio.Task] = None
+        self._stop_event = asyncio.Event()
+
+    async def start(self) -> None:
+        """Start the async timeout monitoring loop."""
+        if self._task is not None:
+            return
+
+        self._stop_event.clear()
+        self._task = asyncio.create_task(self._timeout_monitoring_loop())
+        logger.info("Async timeout manager started")
+
+    async def stop(self) -> None:
+        """Gracefully stop the async timeout monitoring loop."""
+        if self._task is None:
+            return
+
+        self._stop_event.set()
+        self._task.cancel()
+        try:
+            await self._task
+        except asyncio.CancelledError:
+            pass
+        self._task = None
+        logger.info("Async timeout manager stopped")
+
+    async def _timeout_monitoring_loop(self) -> None:
+        """Async loop that checks for timed-out tasks at regular intervals."""
+        while not self._stop_event.is_set():
+            try:
+                # Use async method if available
+                if hasattr(self.task_queue, 'get_timed_out_tasks_async'):
+                    timed_out_tasks = await self.task_queue.get_timed_out_tasks_async()
+                else:
+                    timed_out_tasks = self.task_queue.get_timed_out_tasks()
+
+                for task in timed_out_tasks:
+                    try:
+                        # Use async method if available
+                        if hasattr(self.task_queue, 'mark_task_timeout_async'):
+                            success = await self.task_queue.mark_task_timeout_async(task.id)
+                        else:
+                            success = self.task_queue.mark_task_timeout(task.id)
+
+                        if success:
+                            logger.warning(
+                                "Task timed out",
+                                task_id=str(task.id),
+                                timeout_seconds=task.timeout_seconds,
+                            )
+
+                            # Publish timeout event
+                            self.event_bus.publish(
+                                SystemEvent(
+                                    event_type="TASK_TIMED_OUT",
+                                    entity_type="task",
+                                    entity_id=str(task.id),
+                                    payload={
+                                        "timeout_seconds": task.timeout_seconds,
+                                        "elapsed_time": self.task_queue.get_task_elapsed_time(
+                                            task.id
+                                        ),
+                                        "phase_id": task.phase_id,
+                                        "task_type": task.task_type,
+                                    },
+                                )
+                            )
+                        else:
+                            logger.error(
+                                "Failed to mark task as timed out",
+                                task_id=str(task.id),
+                            )
+
+                    except Exception as e:
+                        logger.error(
+                            "Error handling timeout for task",
+                            task_id=str(task.id),
+                            error=str(e),
+                            exc_info=True,
+                        )
+
+            except Exception as e:
+                logger.error(
+                    "Error in async timeout monitoring loop",
+                    error=str(e),
+                    exc_info=True,
+                )
+
+            # Non-blocking sleep with early exit support
+            try:
+                await asyncio.wait_for(
+                    self._stop_event.wait(),
+                    timeout=self.interval_seconds
+                )
+                break  # Stop event was set
+            except asyncio.TimeoutError:
+                pass  # Normal timeout, continue loop
+
+    async def check_task_cancellation_before_execution_async(self, task: Task) -> bool:
+        """
+        Async check if a task has been cancelled before starting execution.
+
+        Args:
+            task: Task to check
+
+        Returns:
+            True if task can proceed, False if task was cancelled
+        """
+        async with self.task_queue.db.get_async_session() as session:
+            from sqlalchemy import select
+            result = await session.execute(
+                select(Task).filter(Task.id == task.id)
+            )
+            current_task = result.scalar_one_or_none()
+
+            if not current_task:
+                return False
+
+            if current_task.status not in ["assigned", "running"]:
+                logger.info(
+                    "Task status changed, cancelling execution",
+                    task_id=str(task.id),
+                    new_status=current_task.status,
+                )
+                return False
+
+        return True
 
 
 class TimeoutManager:

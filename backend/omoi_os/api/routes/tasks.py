@@ -1,9 +1,10 @@
 """Task API routes."""
 
-from typing import List
+from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends, Body
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from omoi_os.api.dependencies import (
     get_db_service,
@@ -17,6 +18,226 @@ from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.reasoning_listener import log_reasoning_event
 
 router = APIRouter()
+
+
+# ============================================================================
+# Async Database Helpers (Non-blocking)
+# ============================================================================
+
+
+async def _register_conversation_async(
+    db: DatabaseService,
+    task_id: str,
+    conversation_id: str,
+    persistence_dir: str,
+    sandbox_id: str,
+) -> Task:
+    """Register conversation for a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        task.conversation_id = conversation_id
+        task.persistence_dir = persistence_dir
+        task.sandbox_id = sandbox_id
+        await session.commit()
+        return task
+
+
+async def _get_task_async(db: DatabaseService, task_id: str) -> Optional[Task]:
+    """Get a task by ID (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        return task
+
+
+async def _list_tasks_async(
+    db: DatabaseService,
+    status: Optional[str] = None,
+    phase_id: Optional[str] = None,
+    has_sandbox: Optional[bool] = None,
+    limit: int = 100,
+) -> List[Task]:
+    """List tasks with filters (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        query = select(Task)
+        if status:
+            query = query.filter(Task.status == status)
+        if phase_id:
+            query = query.filter(Task.phase_id == phase_id)
+        if has_sandbox is True:
+            query = query.filter(Task.sandbox_id.isnot(None))
+        elif has_sandbox is False:
+            query = query.filter(Task.sandbox_id.is_(None))
+
+        query = query.order_by(Task.created_at.desc()).limit(limit)
+        result = await session.execute(query)
+        tasks = result.scalars().all()
+        return tasks
+
+
+async def _get_task_dependencies_async(
+    db: DatabaseService, task_id: str
+) -> Optional[Dict[str, Any]]:
+    """Get task dependencies info (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        depends_on = []
+        if task.dependencies:
+            depends_on = task.dependencies.get("depends_on", [])
+
+        return {"task": task, "depends_on": depends_on}
+
+
+async def _add_task_dependencies_async(
+    db: DatabaseService,
+    task_id: str,
+    new_depends_on: set,
+    combined_depends_on: list,
+) -> Optional[Task]:
+    """Add dependencies to a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        # Verify all dependency tasks exist
+        dep_result = await session.execute(
+            select(Task).filter(Task.id.in_(new_depends_on))
+        )
+        dependency_tasks = dep_result.scalars().all()
+        if len(dependency_tasks) != len(new_depends_on):
+            found_ids = {t.id for t in dependency_tasks}
+            missing = new_depends_on - found_ids
+            raise ValueError(f"Dependency tasks not found: {', '.join(missing)}")
+
+        task.dependencies = {"depends_on": combined_depends_on}
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+
+async def _set_task_dependencies_async(
+    db: DatabaseService,
+    task_id: str,
+    depends_on: list,
+) -> Optional[Dict[str, Any]]:
+    """Set all dependencies for a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        # Verify all dependency tasks exist
+        if depends_on:
+            dep_result = await session.execute(
+                select(Task).filter(Task.id.in_(depends_on))
+            )
+            dependency_tasks = dep_result.scalars().all()
+            if len(dependency_tasks) != len(depends_on):
+                found_ids = {t.id for t in dependency_tasks}
+                missing = set(depends_on) - found_ids
+                raise ValueError(f"Dependency tasks not found: {', '.join(missing)}")
+
+        # Get old dependencies
+        old_depends_on = []
+        if task.dependencies:
+            old_depends_on = task.dependencies.get("depends_on", [])
+
+        # Update
+        if depends_on:
+            task.dependencies = {"depends_on": depends_on}
+        else:
+            task.dependencies = None
+
+        await session.commit()
+        await session.refresh(task)
+        return {"task": task, "old_depends_on": old_depends_on}
+
+
+async def _remove_task_dependency_async(
+    db: DatabaseService,
+    task_id: str,
+    depends_on_task_id: str,
+) -> Optional[Dict[str, Any]]:
+    """Remove a dependency from a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        if not task.dependencies:
+            raise ValueError("Task has no dependencies")
+
+        depends_on = task.dependencies.get("depends_on", [])
+        if depends_on_task_id not in depends_on:
+            raise ValueError(
+                f"Task {depends_on_task_id} is not a dependency of {task_id}"
+            )
+
+        # Remove the dependency
+        updated_depends_on = [
+            dep_id for dep_id in depends_on if dep_id != depends_on_task_id
+        ]
+
+        if updated_depends_on:
+            task.dependencies = {"depends_on": updated_depends_on}
+        else:
+            task.dependencies = None
+
+        await session.commit()
+        await session.refresh(task)
+        return {"task": task, "updated_depends_on": updated_depends_on}
+
+
+async def _set_task_timeout_async(
+    db: DatabaseService,
+    task_id: str,
+    timeout_seconds: int,
+) -> Optional[Task]:
+    """Set timeout for a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        if task.status not in ["pending", "assigned", "running"]:
+            raise ValueError("Cannot set timeout for completed or failed tasks")
+
+        task.timeout_seconds = timeout_seconds
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+
+async def _get_tasks_without_titles_async(
+    db: DatabaseService, limit: int
+) -> List[Dict[str, Any]]:
+    """Get tasks without titles (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Task).filter(Task.title.is_(None)).limit(limit)
+        )
+        tasks = result.scalars().all()
+        return [
+            {
+                "id": task.id,
+                "task_type": task.task_type,
+                "description": task.description,
+            }
+            for task in tasks
+        ]
 
 
 class CancelTaskRequest(BaseModel):
@@ -68,34 +289,35 @@ async def register_conversation(
     event_bus: EventBusService = Depends(get_event_bus_service),
 ):
     """Register conversation ID from sandbox worker for Guardian observation."""
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Use async database operations (non-blocking)
+    task = await _register_conversation_async(
+        db,
+        task_id,
+        request.conversation_id,
+        request.persistence_dir,
+        request.sandbox_id,
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        task.conversation_id = request.conversation_id
-        task.persistence_dir = request.persistence_dir
-        task.sandbox_id = request.sandbox_id
-        session.commit()
-
-        # Publish event for Guardian
-        event_bus.publish(
-            SystemEvent(
-                event_type="CONVERSATION_REGISTERED",
-                entity_type="task",
-                entity_id=task_id,
-                payload={
-                    "conversation_id": request.conversation_id,
-                    "sandbox_id": request.sandbox_id,
-                },
-            )
+    # Publish event for Guardian
+    event_bus.publish(
+        SystemEvent(
+            event_type="CONVERSATION_REGISTERED",
+            entity_type="task",
+            entity_id=task_id,
+            payload={
+                "conversation_id": request.conversation_id,
+                "sandbox_id": request.sandbox_id,
+            },
         )
+    )
 
-        return {
-            "success": True,
-            "task_id": task_id,
-            "conversation_id": request.conversation_id,
-        }
+    return {
+        "success": True,
+        "task_id": task_id,
+        "conversation_id": request.conversation_id,
+    }
 
 
 @router.get("/{task_id}", response_model=dict)
@@ -113,36 +335,36 @@ async def get_task(
     Returns:
         Task information
     """
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Use async database operations (non-blocking)
+    task = await _get_task_async(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        return {
-            "id": task.id,
-            "ticket_id": task.ticket_id,
-            "phase_id": task.phase_id,
-            "task_type": task.task_type,
-            "title": task.title,
-            "description": task.description,
-            "priority": task.priority,
-            "status": task.status,
-            "sandbox_id": task.sandbox_id,
-            "assigned_agent_id": task.assigned_agent_id,
-            "conversation_id": task.conversation_id,
-            "result": task.result,
-            "error_message": task.error_message,
-            "dependencies": task.dependencies,
-            "timeout_seconds": task.timeout_seconds,
-            "retry_count": task.retry_count,
-            "max_retries": task.max_retries,
-            "created_at": task.created_at.isoformat(),
-            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-            "started_at": task.started_at.isoformat() if task.started_at else None,
-            "completed_at": task.completed_at.isoformat()
-            if task.completed_at
-            else None,
-        }
+    return {
+        "id": task.id,
+        "ticket_id": task.ticket_id,
+        "phase_id": task.phase_id,
+        "task_type": task.task_type,
+        "title": task.title,
+        "description": task.description,
+        "priority": task.priority,
+        "status": task.status,
+        "sandbox_id": task.sandbox_id,
+        "assigned_agent_id": task.assigned_agent_id,
+        "conversation_id": task.conversation_id,
+        "result": task.result,
+        "error_message": task.error_message,
+        "dependencies": task.dependencies,
+        "timeout_seconds": task.timeout_seconds,
+        "retry_count": task.retry_count,
+        "max_retries": task.max_retries,
+        "created_at": task.created_at.isoformat(),
+        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+        "started_at": task.started_at.isoformat() if task.started_at else None,
+        "completed_at": task.completed_at.isoformat()
+        if task.completed_at
+        else None,
+    }
 
 
 @router.get("", response_model=List[dict])
@@ -166,39 +388,26 @@ async def list_tasks(
     Returns:
         List of tasks
     """
-    with db.get_session() as session:
-        query = session.query(Task)
-        if status:
-            query = query.filter(Task.status == status)
-        if phase_id:
-            query = query.filter(Task.phase_id == phase_id)
-        if has_sandbox is True:
-            query = query.filter(Task.sandbox_id.isnot(None))
-        elif has_sandbox is False:
-            query = query.filter(Task.sandbox_id.is_(None))
-
-        # Order by most recent first and limit
-        query = query.order_by(Task.created_at.desc()).limit(limit)
-
-        tasks = query.all()
-        return [
-            {
-                "id": task.id,
-                "ticket_id": task.ticket_id,
-                "phase_id": task.phase_id,
-                "task_type": task.task_type,
-                "title": task.title,
-                "description": task.description,
-                "priority": task.priority,
-                "status": task.status,
-                "sandbox_id": task.sandbox_id,
-                "assigned_agent_id": task.assigned_agent_id,
-                "created_at": task.created_at.isoformat(),
-                "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-                "started_at": task.started_at.isoformat() if task.started_at else None,
-            }
-            for task in tasks
-        ]
+    # Use async database operations (non-blocking)
+    tasks = await _list_tasks_async(db, status, phase_id, has_sandbox, limit)
+    return [
+        {
+            "id": task.id,
+            "ticket_id": task.ticket_id,
+            "phase_id": task.phase_id,
+            "task_type": task.task_type,
+            "title": task.title,
+            "description": task.description,
+            "priority": task.priority,
+            "status": task.status,
+            "sandbox_id": task.sandbox_id,
+            "assigned_agent_id": task.assigned_agent_id,
+            "created_at": task.created_at.isoformat(),
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+            "started_at": task.started_at.isoformat() if task.started_at else None,
+        }
+        for task in tasks
+    ]
 
 
 @router.get("/{task_id}/dependencies", response_model=dict)
@@ -218,30 +427,28 @@ async def get_task_dependencies(
     Returns:
         Dependencies information including depends_on and blocked tasks
     """
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Use async database operations (non-blocking)
+    result = await _get_task_dependencies_async(db, task_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        depends_on = []
-        if task.dependencies:
-            depends_on = task.dependencies.get("depends_on", [])
+    depends_on = result["depends_on"]
 
-        # Get blocked tasks (tasks that depend on this one)
-        blocked_tasks = queue.get_blocked_tasks(task_id)
+    # Get blocked tasks (tasks that depend on this one)
+    blocked_tasks = queue.get_blocked_tasks(task_id)
 
-        # Check if dependencies are complete
-        dependencies_complete = queue.check_dependencies_complete(task_id)
+    # Check if dependencies are complete
+    dependencies_complete = queue.check_dependencies_complete(task_id)
 
-        return {
-            "task_id": task_id,
-            "depends_on": depends_on,
-            "dependencies_complete": dependencies_complete,
-            "blocked_tasks": [
-                {"id": t.id, "description": t.description, "status": t.status}
-                for t in blocked_tasks
-            ],
-        }
+    return {
+        "task_id": task_id,
+        "depends_on": depends_on,
+        "dependencies_complete": dependencies_complete,
+        "blocked_tasks": [
+            {"id": t.id, "description": t.description, "status": t.status}
+            for t in blocked_tasks
+        ],
+    }
 
 
 @router.post("/{task_id}/check-circular", response_model=dict)
@@ -296,60 +503,52 @@ async def add_task_dependencies(
     Returns:
         Updated task dependencies
     """
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # First get the current dependencies using async
+    result = await _get_task_dependencies_async(db, task_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        # Get current dependencies
-        current_deps = task.dependencies or {}
-        current_depends_on = set(current_deps.get("depends_on", []))
+    current_depends_on = set(result["depends_on"])
+    new_depends_on = set(request.depends_on)
+    combined_depends_on = list(current_depends_on | new_depends_on)
 
-        # Add new dependencies
-        new_depends_on = set(request.depends_on)
-        combined_depends_on = list(current_depends_on | new_depends_on)
-
-        # Check for circular dependencies
-        cycle = queue.detect_circular_dependencies(task_id, combined_depends_on)
-        if cycle:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Circular dependency detected: {' -> '.join(cycle)}",
-            )
-
-        # Verify all dependency tasks exist
-        dependency_tasks = session.query(Task).filter(Task.id.in_(new_depends_on)).all()
-        if len(dependency_tasks) != len(new_depends_on):
-            found_ids = {t.id for t in dependency_tasks}
-            missing = new_depends_on - found_ids
-            raise HTTPException(
-                status_code=404,
-                detail=f"Dependency tasks not found: {', '.join(missing)}",
-            )
-
-        # Update dependencies
-        task.dependencies = {"depends_on": combined_depends_on}
-        session.commit()
-        session.refresh(task)
-
-        # Publish event
-        event_bus.publish(
-            SystemEvent(
-                event_type="TASK_DEPENDENCY_UPDATED",
-                entity_type="task",
-                entity_id=task_id,
-                payload={
-                    "depends_on": combined_depends_on,
-                    "added": list(new_depends_on),
-                },
-            )
+    # Check for circular dependencies
+    cycle = queue.detect_circular_dependencies(task_id, combined_depends_on)
+    if cycle:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Circular dependency detected: {' -> '.join(cycle)}",
         )
 
-        return {
-            "task_id": task_id,
-            "depends_on": combined_depends_on,
-            "dependencies_complete": queue.check_dependencies_complete(task_id),
-        }
+    # Use async database operations (non-blocking)
+    try:
+        task = await _add_task_dependencies_async(
+            db, task_id, new_depends_on, combined_depends_on
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    # Publish event
+    event_bus.publish(
+        SystemEvent(
+            event_type="TASK_DEPENDENCY_UPDATED",
+            entity_type="task",
+            entity_id=task_id,
+            payload={
+                "depends_on": combined_depends_on,
+                "added": list(new_depends_on),
+            },
+        )
+    )
+
+    return {
+        "task_id": task_id,
+        "depends_on": combined_depends_on,
+        "dependencies_complete": queue.check_dependencies_complete(task_id),
+    }
 
 
 @router.put("/{task_id}/dependencies", response_model=dict)
@@ -373,64 +572,43 @@ async def set_task_dependencies(
     Returns:
         Updated task dependencies
     """
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
-
-        # Check for circular dependencies
-        cycle = queue.detect_circular_dependencies(task_id, request.depends_on)
-        if cycle:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Circular dependency detected: {' -> '.join(cycle)}",
-            )
-
-        # Verify all dependency tasks exist
-        if request.depends_on:
-            dependency_tasks = (
-                session.query(Task).filter(Task.id.in_(request.depends_on)).all()
-            )
-            if len(dependency_tasks) != len(request.depends_on):
-                found_ids = {t.id for t in dependency_tasks}
-                missing = set(request.depends_on) - found_ids
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Dependency tasks not found: {', '.join(missing)}",
-                )
-
-        # Get old dependencies for event
-        old_depends_on = []
-        if task.dependencies:
-            old_depends_on = task.dependencies.get("depends_on", [])
-
-        # Update dependencies
-        if request.depends_on:
-            task.dependencies = {"depends_on": request.depends_on}
-        else:
-            task.dependencies = None
-
-        session.commit()
-        session.refresh(task)
-
-        # Publish event
-        event_bus.publish(
-            SystemEvent(
-                event_type="TASK_DEPENDENCY_UPDATED",
-                entity_type="task",
-                entity_id=task_id,
-                payload={
-                    "depends_on": request.depends_on,
-                    "old_depends_on": old_depends_on,
-                },
-            )
+    # Check for circular dependencies
+    cycle = queue.detect_circular_dependencies(task_id, request.depends_on)
+    if cycle:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Circular dependency detected: {' -> '.join(cycle)}",
         )
 
-        return {
-            "task_id": task_id,
-            "depends_on": request.depends_on,
-            "dependencies_complete": queue.check_dependencies_complete(task_id),
-        }
+    # Use async database operations (non-blocking)
+    try:
+        result = await _set_task_dependencies_async(db, task_id, request.depends_on)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    old_depends_on = result["old_depends_on"]
+
+    # Publish event
+    event_bus.publish(
+        SystemEvent(
+            event_type="TASK_DEPENDENCY_UPDATED",
+            entity_type="task",
+            entity_id=task_id,
+            payload={
+                "depends_on": request.depends_on,
+                "old_depends_on": old_depends_on,
+            },
+        )
+    )
+
+    return {
+        "task_id": task_id,
+        "depends_on": request.depends_on,
+        "dependencies_complete": queue.check_dependencies_complete(task_id),
+    }
 
 
 @router.delete("/{task_id}/dependencies/{depends_on_task_id}", response_model=dict)
@@ -454,52 +632,37 @@ async def remove_task_dependency(
     Returns:
         Updated task dependencies
     """
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Use async database operations (non-blocking)
+    try:
+        result = await _remove_task_dependency_async(db, task_id, depends_on_task_id)
+    except ValueError as e:
+        if "no dependencies" in str(e).lower():
+            raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e))
 
-        if not task.dependencies:
-            raise HTTPException(status_code=400, detail="Task has no dependencies")
+    if not result:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        depends_on = task.dependencies.get("depends_on", [])
-        if depends_on_task_id not in depends_on:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Task {depends_on_task_id} is not a dependency of {task_id}",
-            )
+    updated_depends_on = result["updated_depends_on"]
 
-        # Remove the dependency
-        updated_depends_on = [
-            dep_id for dep_id in depends_on if dep_id != depends_on_task_id
-        ]
-
-        if updated_depends_on:
-            task.dependencies = {"depends_on": updated_depends_on}
-        else:
-            task.dependencies = None
-
-        session.commit()
-        session.refresh(task)
-
-        # Publish event
-        event_bus.publish(
-            SystemEvent(
-                event_type="TASK_DEPENDENCY_UPDATED",
-                entity_type="task",
-                entity_id=task_id,
-                payload={
-                    "depends_on": updated_depends_on,
-                    "removed": [depends_on_task_id],
-                },
-            )
+    # Publish event
+    event_bus.publish(
+        SystemEvent(
+            event_type="TASK_DEPENDENCY_UPDATED",
+            entity_type="task",
+            entity_id=task_id,
+            payload={
+                "depends_on": updated_depends_on,
+                "removed": [depends_on_task_id],
+            },
         )
+    )
 
-        return {
-            "task_id": task_id,
-            "depends_on": updated_depends_on,
-            "dependencies_complete": queue.check_dependencies_complete(task_id),
-        }
+    return {
+        "task_id": task_id,
+        "depends_on": updated_depends_on,
+        "dependencies_complete": queue.check_dependencies_complete(task_id),
+    }
 
 
 # Task Timeout & Cancellation Endpoints (Agent D)
@@ -686,27 +849,20 @@ async def set_task_timeout(
     Returns:
         Updated task information
     """
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Use async database operations (non-blocking)
+    try:
+        task = await _set_task_timeout_async(db, task_id, request.timeout_seconds)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
-        # Only allow setting timeout for pending/assigned/running tasks
-        if task.status not in ["pending", "assigned", "running"]:
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot set timeout for completed or failed tasks",
-            )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        task.timeout_seconds = request.timeout_seconds
-        session.commit()
-        session.refresh(task)
-
-        return {
-            "task_id": task_id,
-            "timeout_seconds": task.timeout_seconds,
-            "status": task.status,
-        }
+    return {
+        "task_id": task_id,
+        "timeout_seconds": task.timeout_seconds,
+        "status": task.status,
+    }
 
 
 @router.post("/{task_id}/generate-title", response_model=dict)
@@ -733,13 +889,13 @@ async def generate_task_title(
     """
     from omoi_os.services.task_queue import generate_task_title as gen_title
 
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="Task not found")
+    # Use async database operations (non-blocking)
+    task = await _get_task_async(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
 
-        task_type = task.task_type
-        description = task.description
+    task_type = task.task_type
+    description = task.description
 
     # Generate title asynchronously
     title = await gen_title(
@@ -757,14 +913,13 @@ async def generate_task_title(
         )
 
     # Reload the task to get updated title and description
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.id == task_id).first()
-        return {
-            "task_id": task_id,
-            "title": task.title,
-            "description": task.description,
-            "task_type": task.task_type,
-        }
+    task = await _get_task_async(db, task_id)
+    return {
+        "task_id": task_id,
+        "title": task.title,
+        "description": task.description,
+        "task_type": task.task_type,
+    }
 
 
 @router.post("/generate-titles", response_model=dict)
@@ -786,18 +941,8 @@ async def generate_titles_batch(
     """
     from omoi_os.services.task_queue import generate_task_title as gen_title
 
-    with db.get_session() as session:
-        # Find tasks without titles
-        tasks = session.query(Task).filter(Task.title.is_(None)).limit(limit).all()
-
-        task_info = [
-            {
-                "id": task.id,
-                "task_type": task.task_type,
-                "description": task.description,
-            }
-            for task in tasks
-        ]
+    # Use async database operations (non-blocking)
+    task_info = await _get_tasks_without_titles_async(db, limit)
 
     results = {"processed": 0, "succeeded": 0, "failed": 0, "tasks": []}
 

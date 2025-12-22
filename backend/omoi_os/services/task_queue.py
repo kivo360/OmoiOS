@@ -2,7 +2,8 @@
 
 from typing import List, Optional, TYPE_CHECKING
 
-from sqlalchemy import or_
+from sqlalchemy import or_, select, update, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from omoi_os.logging import get_logger
 from omoi_os.models.task import Task
@@ -1141,3 +1142,373 @@ class TaskQueueService:
                 session.commit()
 
         return cleaned_tasks
+
+    # =========================================================================
+    # ASYNC METHODS
+    # =========================================================================
+    # These async versions use the async database session for non-blocking I/O.
+    # Per async_python_patterns.md, these should be used in async contexts
+    # to avoid blocking the event loop.
+
+    async def _check_dependencies_complete_async(
+        self, session: AsyncSession, task: Task
+    ) -> bool:
+        """
+        Async version: Check if all dependencies for a task are completed.
+
+        Args:
+            session: Async database session
+            task: Task to check dependencies for
+
+        Returns:
+            True if all dependencies are completed, False otherwise
+        """
+        if not task.dependencies:
+            return True
+
+        depends_on = task.dependencies.get("depends_on", [])
+        if not depends_on:
+            return True
+
+        # Check if all dependency tasks are completed
+        result = await session.execute(
+            select(Task).filter(Task.id.in_(depends_on))
+        )
+        dependency_tasks = result.scalars().all()
+
+        # If we can't find all dependencies, consider them incomplete
+        if len(dependency_tasks) != len(depends_on):
+            return False
+
+        # All dependencies must be completed
+        return all(dep_task.status == "completed" for dep_task in dependency_tasks)
+
+    async def get_ready_tasks_async(
+        self,
+        phase_id: Optional[str] = None,
+        limit: int = 10,
+        agent_capabilities: Optional[List[str]] = None,
+    ) -> list[Task]:
+        """
+        Async version: Get multiple ready tasks for parallel execution.
+
+        This is the async equivalent of get_ready_tasks(), using non-blocking
+        database operations per async_python_patterns.md Section 3.
+
+        Args:
+            phase_id: Optional phase identifier to filter by
+            limit: Maximum number of tasks to return
+            agent_capabilities: Optional list of agent capabilities for matching
+
+        Returns:
+            List of Task objects ready for execution, sorted by score descending
+        """
+        async with self.db.get_async_session() as session:
+            # Build query
+            stmt = select(Task).filter(Task.status == "pending")
+            if phase_id:
+                stmt = stmt.filter(Task.phase_id == phase_id)
+
+            result = await session.execute(stmt)
+            tasks = result.scalars().all()
+
+            if not tasks:
+                return []
+
+            # Filter out tasks with incomplete dependencies and capability mismatches
+            available_tasks = []
+            for task in tasks:
+                if not await self._check_dependencies_complete_async(session, task):
+                    continue
+
+                # Check capability matching (REQ-TQM-ASSIGN-001)
+                if agent_capabilities is not None and not self._check_capability_match(
+                    task, agent_capabilities
+                ):
+                    continue
+
+                # Compute and update score (REQ-TQM-PRI-002)
+                task.score = self.scorer.compute_score(task)
+                available_tasks.append(task)
+
+            # Sort by score descending
+            available_tasks.sort(key=lambda t: t.score, reverse=True)
+
+            # Take top N tasks
+            batch = available_tasks[:limit]
+
+            # Update scores in database
+            for task in batch:
+                await session.execute(
+                    update(Task).where(Task.id == task.id).values(score=task.score)
+                )
+            await session.commit()
+
+            # Refresh all tasks
+            for task in batch:
+                await session.refresh(task)
+
+            return batch
+
+    async def get_next_task_async(
+        self, phase_id: Optional[str] = None, agent_capabilities: Optional[List[str]] = None
+    ) -> Task | None:
+        """
+        Async version: Get highest-scored pending task with atomic claim.
+
+        This is the async equivalent of get_next_task(), using non-blocking
+        database operations and atomic claim pattern.
+
+        Args:
+            phase_id: Phase identifier to filter by (None = any phase)
+            agent_capabilities: Optional list of agent capabilities for matching
+
+        Returns:
+            Task object or None if no pending tasks available
+        """
+        async with self.db.get_async_session() as session:
+            # Build query for pending tasks without sandbox
+            stmt = select(Task).filter(
+                Task.status == "pending",
+                Task.sandbox_id.is_(None),
+            )
+            if phase_id is not None:
+                stmt = stmt.filter(Task.phase_id == phase_id)
+
+            result = await session.execute(stmt)
+            tasks = result.scalars().all()
+
+            if not tasks:
+                return None
+
+            # Filter out tasks with incomplete dependencies and capability mismatches
+            available_tasks = []
+            for task in tasks:
+                if not await self._check_dependencies_complete_async(session, task):
+                    continue
+
+                if agent_capabilities is not None and not self._check_capability_match(
+                    task, agent_capabilities
+                ):
+                    continue
+
+                task.score = self.scorer.compute_score(task)
+                available_tasks.append(task)
+
+            if not available_tasks:
+                return None
+
+            # Sort by score descending
+            task = max(available_tasks, key=lambda t: t.score)
+
+            # Atomic claim using raw SQL
+            claim_result = await session.execute(
+                text("""
+                    UPDATE tasks
+                    SET status = 'claiming', score = :score
+                    WHERE id = :task_id
+                    AND status = 'pending'
+                    AND sandbox_id IS NULL
+                    RETURNING id
+                """),
+                {"task_id": str(task.id), "score": task.score}
+            )
+            claimed_row = claim_result.fetchone()
+            await session.commit()
+
+            if not claimed_row:
+                logger.debug(f"Task {task.id} was claimed by another process, skipping")
+                return None
+
+            await session.refresh(task)
+            return task
+
+    async def assign_task_async(self, task_id: str, agent_id: str) -> None:
+        """
+        Async version: Assign a task to an agent.
+
+        Args:
+            task_id: UUID of the task
+            agent_id: UUID of the agent
+        """
+        async with self.db.get_async_session() as session:
+            result = await session.execute(
+                select(Task).filter(Task.id == task_id)
+            )
+            task = result.scalar_one_or_none()
+
+            if task:
+                if task.status not in ("pending", "claiming"):
+                    logger.warning(
+                        f"Task {task_id} has unexpected status {task.status} during assignment"
+                    )
+                task.assigned_agent_id = agent_id
+                task.status = "assigned"
+                await session.commit()
+                await session.refresh(task)
+
+                # Publish assignment event
+                self._publish_event("TASK_ASSIGNED", task, {"agent_id": agent_id})
+
+    async def update_task_status_async(
+        self,
+        task_id: str,
+        status: str,
+        result: dict | None = None,
+        error_message: str | None = None,
+        conversation_id: str | None = None,
+        persistence_dir: str | None = None,
+    ) -> None:
+        """
+        Async version: Update task status and result.
+
+        Args:
+            task_id: UUID of the task
+            status: New status (running, completed, failed)
+            result: Optional task result dictionary
+            error_message: Optional error message if failed
+            conversation_id: Optional OpenHands conversation ID
+            persistence_dir: Optional OpenHands conversation persistence directory
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        async with self.db.get_async_session() as session:
+            query_result = await session.execute(
+                select(Task).filter(Task.id == task_id)
+            )
+            task = query_result.scalar_one_or_none()
+
+            if task:
+                old_status = task.status
+                task.status = status
+                if result:
+                    task.result = result
+                if error_message:
+                    task.error_message = error_message
+                if conversation_id:
+                    task.conversation_id = conversation_id
+                if persistence_dir:
+                    task.persistence_dir = persistence_dir
+                if status == "running" and not task.started_at:
+                    task.started_at = utc_now()
+                elif status in ("completed", "failed") and not task.completed_at:
+                    task.completed_at = utc_now()
+
+                await session.commit()
+                await session.refresh(task)
+
+                # Publish status change event
+                event_type = {
+                    "running": "TASK_STARTED",
+                    "completed": "TASK_COMPLETED",
+                    "failed": "TASK_FAILED",
+                    "cancelled": "TASK_CANCELLED",
+                }.get(status, "TASK_STATUS_CHANGED")
+
+                self._publish_event(
+                    event_type,
+                    task,
+                    {
+                        "old_status": old_status,
+                        "error_message": error_message,
+                        "has_result": result is not None,
+                    },
+                )
+
+    async def get_timed_out_tasks_async(self) -> list[Task]:
+        """
+        Async version: Get all tasks that have exceeded their timeout.
+
+        Returns:
+            List of timed-out Task objects
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        async with self.db.get_async_session() as session:
+            result = await session.execute(
+                select(Task).filter(
+                    Task.status == "running",
+                    Task.timeout_seconds.isnot(None),
+                )
+            )
+            tasks = result.scalars().all()
+
+            timed_out_tasks = []
+            now = utc_now()
+            for task in tasks:
+                if task.started_at:
+                    elapsed_seconds = (now - task.started_at).total_seconds()
+                    if elapsed_seconds > task.timeout_seconds:
+                        timed_out_tasks.append(task)
+
+            return timed_out_tasks
+
+    async def mark_task_timeout_async(
+        self, task_id: str, reason: str = "timeout_exceeded"
+    ) -> bool:
+        """
+        Async version: Mark a task as failed due to timeout.
+
+        Args:
+            task_id: UUID of the task to mark as timed out
+            reason: Timeout reason
+
+        Returns:
+            True if task was marked as timed out, False if task not found
+        """
+        from omoi_os.utils.datetime import utc_now
+
+        async with self.db.get_async_session() as session:
+            result = await session.execute(
+                select(Task).filter(Task.id == task_id)
+            )
+            task = result.scalar_one_or_none()
+
+            if not task:
+                return False
+
+            if task.status != "running":
+                return False
+
+            # Calculate elapsed time for debugging
+            elapsed_seconds = 0
+            now = utc_now()
+            if task.started_at:
+                elapsed_seconds = (now - task.started_at).total_seconds()
+
+            task.status = "failed"
+            task.error_message = (
+                f"Task timed out after {elapsed_seconds:.1f}s: {reason}"
+            )
+            task.completed_at = now
+
+            await session.commit()
+            return True
+
+    async def get_assigned_tasks_async(
+        self, agent_id: str, sandbox_id: Optional[str] = None
+    ) -> list[Task]:
+        """
+        Async version: Get all tasks assigned to a specific agent or sandbox.
+
+        Args:
+            agent_id: UUID of the agent
+            sandbox_id: Optional sandbox ID for sandbox mode queries
+
+        Returns:
+            List of Task objects assigned to the agent or sandbox
+        """
+        async with self.db.get_async_session() as session:
+            if sandbox_id:
+                stmt = select(Task).filter(
+                    Task.sandbox_id == sandbox_id,
+                    Task.status.in_(["assigned", "running"]),
+                )
+            else:
+                stmt = select(Task).filter(
+                    Task.assigned_agent_id == agent_id,
+                    Task.status.in_(["assigned", "running"]),
+                )
+
+            result = await session.execute(stmt)
+            return list(result.scalars().all())

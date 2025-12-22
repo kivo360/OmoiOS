@@ -19,7 +19,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from omoi_os.api.dependencies import get_db_service
@@ -239,7 +239,7 @@ def persist_sandbox_event(
     source: str,
 ) -> str:
     """
-    Persist event to database.
+    Persist event to database (SYNC version - use persist_sandbox_event_async in async contexts).
 
     Phase 4: Database persistence for audit trails.
 
@@ -291,6 +291,69 @@ def persist_sandbox_event(
         return db_event.id
 
 
+async def persist_sandbox_event_async(
+    db: DatabaseService,
+    sandbox_id: str,
+    event_type: str,
+    event_data: dict,
+    source: str,
+) -> str:
+    """
+    Persist event to database (ASYNC version - non-blocking).
+
+    Phase 4: Database persistence for audit trails.
+
+    For agent.completed events with session_id, also saves the session transcript
+    to claude_session_transcripts table for cross-sandbox resumption.
+
+    Args:
+        db: Database service
+        sandbox_id: Unique identifier for the sandbox
+        event_type: Original event type (e.g., 'agent.tool_use')
+        event_data: Event payload dictionary
+        source: Event source ('agent', 'worker', 'system')
+
+    Returns:
+        Persisted event ID
+    """
+    from sqlalchemy import select
+
+    from omoi_os.models.sandbox_event import SandboxEvent
+
+    async with db.get_async_session() as session:
+        db_event = SandboxEvent(
+            sandbox_id=sandbox_id,
+            event_type=event_type,
+            event_data=event_data,
+            source=source,
+        )
+        session.add(db_event)
+        await session.commit()
+        await session.refresh(db_event)
+        event_id = db_event.id
+
+    # Save session transcript for cross-sandbox resumption (outside session)
+    if event_type == "agent.completed" and event_data.get("session_id"):
+        await save_session_transcript_async(
+            db=db,
+            session_id=event_data["session_id"],
+            sandbox_id=sandbox_id,
+            task_id=event_data.get("task_id"),
+            transcript_b64=event_data.get("transcript_b64"),
+            metadata={
+                "turns": event_data.get("turns"),
+                "cost_usd": event_data.get("cost_usd"),
+                "stop_reason": event_data.get("stop_reason"),
+                "input_tokens": event_data.get("input_tokens"),
+                "output_tokens": event_data.get("output_tokens"),
+                "cache_read_tokens": event_data.get("cache_read_tokens"),
+                "cache_write_tokens": event_data.get("cache_write_tokens"),
+            },
+        )
+
+    return event_id
+
+
 def save_session_transcript(
     db: DatabaseService,
     session_id: str,
@@ -300,7 +363,7 @@ def save_session_transcript(
     metadata: dict | None = None,
 ) -> None:
     """
-    Save Claude session transcript to database for cross-sandbox resumption.
+    Save Claude session transcript to database (SYNC version).
 
     Args:
         db: Database service
@@ -350,9 +413,69 @@ def save_session_transcript(
         logger.warning(f"Failed to save session transcript {session_id}: {e}")
 
 
+async def save_session_transcript_async(
+    db: DatabaseService,
+    session_id: str,
+    sandbox_id: str,
+    task_id: str | None = None,
+    transcript_b64: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """
+    Save Claude session transcript to database (ASYNC version - non-blocking).
+
+    Args:
+        db: Database service
+        session_id: Claude Code session ID
+        sandbox_id: Daytona sandbox ID
+        task_id: Optional task ID associated with this session
+        transcript_b64: Base64-encoded transcript content (optional)
+        metadata: Additional metadata dictionary (stored as session_metadata)
+    """
+    if not transcript_b64:
+        # No transcript provided - skip saving
+        return
+
+    try:
+        from sqlalchemy import select
+
+        from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+
+        async with db.get_async_session() as session:
+            # Check if transcript already exists
+            result = await session.execute(
+                select(ClaudeSessionTranscript).filter_by(session_id=session_id)
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                # Update existing transcript
+                existing.transcript_b64 = transcript_b64
+                existing.sandbox_id = sandbox_id
+                if task_id:
+                    existing.task_id = task_id
+                existing.session_metadata = metadata or {}
+                existing.updated_at = utc_now()
+            else:
+                # Create new transcript
+                transcript = ClaudeSessionTranscript(
+                    session_id=session_id,
+                    transcript_b64=transcript_b64,
+                    sandbox_id=sandbox_id,
+                    task_id=task_id,
+                    session_metadata=metadata or {},
+                )
+                session.add(transcript)
+
+            await session.commit()
+    except Exception as e:
+        # Log but don't fail - transcript saving is optional
+        logger.warning(f"Failed to save session transcript {session_id}: {e}")
+
+
 def get_session_transcript(db: DatabaseService, session_id: str) -> str | None:
     """
-    Retrieve Claude session transcript from database.
+    Retrieve Claude session transcript from database (SYNC version).
 
     Args:
         db: Database service
@@ -378,11 +501,39 @@ def get_session_transcript(db: DatabaseService, session_id: str) -> str | None:
     return None
 
 
+async def get_session_transcript_async(db: DatabaseService, session_id: str) -> str | None:
+    """
+    Retrieve Claude session transcript from database (ASYNC version - non-blocking).
+
+    Args:
+        db: Database service
+        session_id: Claude Code session ID
+
+    Returns:
+        Base64-encoded transcript content, or None if not found
+    """
+    try:
+        from sqlalchemy import select
+
+        from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+
+        async with db.get_async_session() as session:
+            result = await session.execute(
+                select(ClaudeSessionTranscript).filter_by(session_id=session_id)
+            )
+            transcript = result.scalar_one_or_none()
+            if transcript:
+                return transcript.transcript_b64
+    except Exception as e:
+        logger.warning(f"Failed to retrieve session transcript {session_id}: {e}")
+
+    return None
+
+
 @router.post("/{sandbox_id}/events", response_model=SandboxEventResponse)
 async def post_sandbox_event(
     sandbox_id: str,
     event: SandboxEventCreate,
-    request: Request = None,
 ) -> SandboxEventResponse:
     """
     Receive event from sandbox worker and broadcast to subscribers.
@@ -399,7 +550,6 @@ async def post_sandbox_event(
     Args:
         sandbox_id: Unique identifier for the sandbox (from URL path)
         event: Event data from request body
-        request: FastAPI Request object for logging
 
     Returns:
         SandboxEventResponse with status, timestamp, and event_id
@@ -412,18 +562,20 @@ async def post_sandbox_event(
             "source": "agent"
         }
     """
+    from sqlalchemy import select
+
     # Log incoming request for debugging 502 issues
     logger.info(
         f"[SandboxEvent] Received {event.event_type} from sandbox {sandbox_id[:20]}... "
         f"(source: {event.source})"
     )
 
-    # Persist to database (Phase 4) - optional, don't fail if DB unavailable
     # Persist to database (Phase 4) - optional, fails gracefully
+    # Using async version to avoid blocking the event loop
     event_id: str | None = None
     try:
         db = get_db_service()
-        event_id = persist_sandbox_event(
+        event_id = await persist_sandbox_event_async(
             db=db,
             sandbox_id=sandbox_id,
             event_type=event.event_type,
@@ -449,7 +601,6 @@ async def post_sandbox_event(
     ):
         try:
             db = get_db_service()
-            from omoi_os.models.task import Task
             from omoi_os.services.task_queue import TaskQueueService
 
             task_id = event.event_data.get("task_id")
@@ -458,17 +609,17 @@ async def post_sandbox_event(
             )
 
             if not task_id:
-                # Try to find task by sandbox_id as fallback
+                # Try to find task by sandbox_id as fallback (async)
                 logger.debug(
                     f"No task_id in event_data, searching by sandbox_id={sandbox_id}"
                 )
-                with db.get_session() as session:
-                    task = (
-                        session.query(Task)
+                async with db.get_async_session() as session:
+                    result = await session.execute(
+                        select(Task)
                         .filter(Task.sandbox_id == sandbox_id)
                         .filter(Task.status.in_(["assigned", "running"]))
-                        .first()
                     )
+                    task = result.scalar_one_or_none()
                     if task:
                         task_id = str(task.id)
                         logger.info(f"Found task {task_id} by sandbox_id fallback")
@@ -480,18 +631,18 @@ async def post_sandbox_event(
             if task_id:
                 task_queue = TaskQueueService(db)
 
-                # Handle agent.started -> transition to running
+                # Handle agent.started -> transition to running (async)
                 if event.event_type == "agent.started":
                     logger.info(
                         f"Updating task {task_id} status to running (agent.started)"
                     )
-                    task_queue.update_task_status(
+                    await task_queue.update_task_status_async(
                         task_id=task_id,
                         status="running",
                     )
                     logger.info(f"Successfully updated task {task_id} to running")
 
-                # Handle agent.completed -> transition to completed
+                # Handle agent.completed -> transition to completed (async)
                 elif event.event_type == "agent.completed":
                     # Extract result from event_data
                     result = {
@@ -511,14 +662,14 @@ async def post_sandbox_event(
                         logger.debug(f"Task {task_id} completion missing final_output")
 
                     logger.info(f"Updating task {task_id} status to completed")
-                    task_queue.update_task_status(
+                    await task_queue.update_task_status_async(
                         task_id=task_id,
                         status="completed",
                         result=result,
                     )
                     logger.info(f"Successfully updated task {task_id} to completed")
 
-                # Handle agent.failed/error -> transition to failed
+                # Handle agent.failed/error -> transition to failed (async)
                 elif event.event_type in ("agent.failed", "agent.error"):
                     error_message = event.event_data.get(
                         "error", "Task execution failed"
@@ -526,7 +677,7 @@ async def post_sandbox_event(
                     logger.info(
                         f"Updating task {task_id} status to failed: {error_message}"
                     )
-                    task_queue.update_task_status(
+                    await task_queue.update_task_status_async(
                         task_id=task_id,
                         status="failed",
                         error_message=error_message,
@@ -616,7 +767,7 @@ def query_sandbox_events(
     event_type: Optional[str] = None,
 ) -> tuple[list[dict], int]:
     """
-    Query persisted events for a sandbox.
+    Query persisted events for a sandbox (SYNC version).
 
     Args:
         db: Database service
@@ -648,6 +799,65 @@ def query_sandbox_events(
             .limit(limit)
             .all()
         )
+
+        return [
+            {
+                "id": str(e.id),
+                "sandbox_id": e.sandbox_id,
+                "event_type": e.event_type,
+                "event_data": e.event_data,
+                "source": e.source,
+                "created_at": e.created_at,
+            }
+            for e in events
+        ], total_count
+
+
+async def query_sandbox_events_async(
+    db: DatabaseService,
+    sandbox_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    event_type: Optional[str] = None,
+) -> tuple[list[dict], int]:
+    """
+    Query persisted events for a sandbox (ASYNC version - non-blocking).
+
+    Args:
+        db: Database service
+        sandbox_id: Sandbox identifier
+        limit: Maximum events to return
+        offset: Pagination offset
+        event_type: Optional filter by event type
+
+    Returns:
+        Tuple of (events list, total count)
+    """
+    from sqlalchemy import func, select
+
+    from omoi_os.models.sandbox_event import SandboxEvent
+
+    async with db.get_async_session() as session:
+        # Build base filter
+        base_filter = SandboxEvent.sandbox_id == sandbox_id
+        if event_type:
+            base_filter = base_filter & (SandboxEvent.event_type == event_type)
+
+        # Get total count
+        count_result = await session.execute(
+            select(func.count(SandboxEvent.id)).filter(base_filter)
+        )
+        total_count = count_result.scalar() or 0
+
+        # Get paginated results, ordered by created_at desc (newest first)
+        result = await session.execute(
+            select(SandboxEvent)
+            .filter(base_filter)
+            .order_by(SandboxEvent.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        events = result.scalars().all()
 
         return [
             {
@@ -706,7 +916,8 @@ async def get_sandbox_events(
     """
     try:
         db = get_db_service()
-        events, total_count = query_sandbox_events(
+        # Use async version to avoid blocking the event loop
+        events, total_count = await query_sandbox_events_async(
             db=db,
             sandbox_id=sandbox_id,
             limit=limit,
@@ -733,7 +944,7 @@ def query_trajectory_summary(
     limit: int = 100,
 ) -> dict:
     """
-    Query trajectory events with heartbeat aggregation.
+    Query trajectory events with heartbeat aggregation (SYNC version).
 
     This provides a cleaner view by:
     - Excluding heartbeat events from the main list
@@ -814,6 +1025,94 @@ def query_trajectory_summary(
         }
 
 
+async def query_trajectory_summary_async(
+    db: DatabaseService,
+    sandbox_id: str,
+    limit: int = 100,
+) -> dict:
+    """
+    Query trajectory events with heartbeat aggregation (ASYNC version - non-blocking).
+
+    This provides a cleaner view by:
+    - Excluding heartbeat events from the main list
+    - Aggregating heartbeat info (count, first, last)
+    - Returning only meaningful trajectory events
+
+    Args:
+        db: Database service
+        sandbox_id: Sandbox identifier
+        limit: Maximum non-heartbeat events to return
+
+    Returns:
+        Dict with events, heartbeat_summary, and counts
+    """
+    from sqlalchemy import func, select
+
+    from omoi_os.models.sandbox_event import SandboxEvent
+
+    async with db.get_async_session() as session:
+        # Define heartbeat event types to exclude from main list
+        heartbeat_types = ["agent.heartbeat", "heartbeat"]
+
+        # Get total count of all events
+        total_result = await session.execute(
+            select(func.count(SandboxEvent.id)).filter(
+                SandboxEvent.sandbox_id == sandbox_id
+            )
+        )
+        total_count = total_result.scalar() or 0
+
+        # Get heartbeat summary (count, first, last)
+        heartbeat_result = await session.execute(
+            select(
+                func.count(SandboxEvent.id).label("count"),
+                func.min(SandboxEvent.created_at).label("first"),
+                func.max(SandboxEvent.created_at).label("last"),
+            )
+            .filter(SandboxEvent.sandbox_id == sandbox_id)
+            .filter(SandboxEvent.event_type.in_(heartbeat_types))
+        )
+        heartbeat_stats = heartbeat_result.first()
+
+        heartbeat_count = heartbeat_stats.count if heartbeat_stats else 0
+        first_heartbeat = heartbeat_stats.first if heartbeat_stats else None
+        last_heartbeat = heartbeat_stats.last if heartbeat_stats else None
+
+        # Get non-heartbeat events (the actual trajectory)
+        trajectory_result = await session.execute(
+            select(SandboxEvent)
+            .filter(SandboxEvent.sandbox_id == sandbox_id)
+            .filter(~SandboxEvent.event_type.in_(heartbeat_types))
+            .order_by(SandboxEvent.created_at.asc())  # Chronological order
+            .limit(limit)
+        )
+        trajectory_events = trajectory_result.scalars().all()
+
+        trajectory_count = len(trajectory_events)
+
+        return {
+            "sandbox_id": sandbox_id,
+            "events": [
+                {
+                    "id": str(e.id),
+                    "sandbox_id": e.sandbox_id,
+                    "event_type": e.event_type,
+                    "event_data": e.event_data,
+                    "source": e.source,
+                    "created_at": e.created_at,
+                }
+                for e in trajectory_events
+            ],
+            "heartbeat_summary": {
+                "count": heartbeat_count,
+                "first_heartbeat": first_heartbeat,
+                "last_heartbeat": last_heartbeat,
+            },
+            "total_events": total_count,
+            "trajectory_events": trajectory_count,
+        }
+
+
 @router.get("/{sandbox_id}/trajectory", response_model=TrajectorySummaryResponse)
 async def get_sandbox_trajectory(
     sandbox_id: str,
@@ -854,7 +1153,8 @@ async def get_sandbox_trajectory(
     """
     try:
         db = get_db_service()
-        result = query_trajectory_summary(
+        # Use async version to avoid blocking the event loop
+        result = await query_trajectory_summary_async(
             db=db,
             sandbox_id=sandbox_id,
             limit=limit,
@@ -915,11 +1215,16 @@ async def get_task_by_sandbox(
         }
     """
     from fastapi import HTTPException
+    from sqlalchemy import select
 
     db = get_db_service()
 
-    with db.get_session() as session:
-        task = session.query(Task).filter(Task.sandbox_id == sandbox_id).first()
+    # Use async version to avoid blocking the event loop
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Task).filter(Task.sandbox_id == sandbox_id)
+        )
+        task = result.scalar_one_or_none()
 
         if not task:
             raise HTTPException(
