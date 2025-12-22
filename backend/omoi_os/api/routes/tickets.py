@@ -1,10 +1,12 @@
 """Ticket API routes."""
 
+import asyncio
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, BackgroundTasks
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select, or_, func
 
 from omoi_os.api.dependencies import (
     get_db_service,
@@ -26,7 +28,7 @@ from omoi_os.services.ticket_workflow import (
     InvalidTransitionError,
 )
 from omoi_os.services.phase_gate import PhaseGateService
-from omoi_os.services.event_bus import EventBusService
+from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.approval import ApprovalService, InvalidApprovalStateError
 from omoi_os.services.reasoning_listener import log_reasoning_event
 
@@ -51,32 +53,38 @@ async def list_tickets(
     search: Optional[str] = Query(None, description="Search in title and description"),
     db: DatabaseService = Depends(get_db_service),
 ):
-    """List tickets with pagination and optional filters."""
-    from sqlalchemy import or_
-
-    with db.get_session() as session:
-        query = session.query(Ticket)
+    """List tickets with pagination and optional filters (async)."""
+    async with db.get_async_session() as session:
+        # Build base query
+        stmt = select(Ticket)
 
         # Apply filters
         if status:
-            query = query.filter(Ticket.status == status)
+            stmt = stmt.filter(Ticket.status == status)
         if priority:
-            query = query.filter(Ticket.priority == priority)
+            stmt = stmt.filter(Ticket.priority == priority)
         if phase_id:
-            query = query.filter(Ticket.phase_id == phase_id)
+            stmt = stmt.filter(Ticket.phase_id == phase_id)
         if search:
             search_term = f"%{search}%"
-            query = query.filter(
+            stmt = stmt.filter(
                 or_(
                     Ticket.title.ilike(search_term),
                     Ticket.description.ilike(search_term),
                 )
             )
 
-        total = query.count()
-        tickets = (
-            query.order_by(Ticket.created_at.desc()).offset(offset).limit(limit).all()
-        )
+        # Get total count and paginated results in parallel
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        paginated_stmt = stmt.order_by(Ticket.created_at.desc()).offset(offset).limit(limit)
+
+        # Execute both queries (could be parallelized with gather if on separate sessions)
+        count_result = await session.execute(count_stmt)
+        total = count_result.scalar() or 0
+
+        result = await session.execute(paginated_stmt)
+        tickets = result.scalars().all()
+
         return TicketListResponse(
             tickets=[
                 {
@@ -140,9 +148,46 @@ class TicketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+async def _generate_embedding_background(
+    ticket_id: str,
+    title: str,
+    description: str | None,
+    dedup_service: TicketDeduplicationService,
+    db: DatabaseService,
+) -> None:
+    """Background task to generate and store embedding for a ticket.
+
+    Per async_python_patterns.md Section 4.3, this defers non-critical embedding
+    generation to a background task to reduce user-facing latency.
+    """
+    from omoi_os.logging import get_logger
+    logger = get_logger(__name__)
+
+    try:
+        # Generate embedding
+        content = f"{title}\n{description or ''}"
+        embedding = dedup_service.embedding_service.generate_embedding(content)
+
+        if embedding:
+            # Store using async session
+            async with db.get_async_session() as session:
+                from sqlalchemy import update
+                stmt = (
+                    update(Ticket)
+                    .where(Ticket.id == ticket_id)
+                    .values(embedding_vector=embedding)
+                )
+                await session.execute(stmt)
+                await session.commit()
+                logger.debug(f"Background embedding stored for ticket {ticket_id}")
+    except Exception as e:
+        logger.warning(f"Failed to generate embedding in background for ticket {ticket_id}: {e}")
+
+
 @router.post("", response_model=TicketResponse | DuplicateCheckResponse)
 async def create_ticket(
     ticket_data: TicketCreate,
+    background_tasks: BackgroundTasks,
     requested_by_agent_id: str | None = None,
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
@@ -153,12 +198,14 @@ async def create_ticket(
     """
     Create a new ticket and enqueue initial tasks (with approval gate if enabled).
 
-    Performs duplicate detection using pgvector embedding similarity before creation.
-    If duplicates are found and force_create is False, returns duplicate candidates
-    instead of creating a new ticket.
+    Uses async patterns per async_python_patterns.md:
+    - Async database operations for non-blocking I/O
+    - Background tasks for embedding generation
+    - Fire-and-forget event publishing
 
     Args:
         ticket_data: Ticket creation data
+        background_tasks: FastAPI background tasks
         requested_by_agent_id: Optional agent ID that requested this ticket
         db: Database service
         queue: Task queue service
@@ -171,6 +218,9 @@ async def create_ticket(
     # Check for duplicates if enabled
     embedding = None
     if ticket_data.check_duplicates and not ticket_data.force_create:
+        # Dedup check (includes embedding generation)
+        # Note: This is still sync because it calls external embedding service
+        # TODO: Make embedding service async for full async flow
         dedup_result = dedup_service.check_duplicate(
             title=ticket_data.title,
             description=ticket_data.description,
@@ -198,7 +248,8 @@ async def create_ticket(
         # Store the embedding for later use
         embedding = dedup_result.embedding
 
-    with db.get_session() as session:
+    # Use async session for ticket creation
+    async with db.get_async_session() as session:
         ticket = Ticket(
             title=ticket_data.title,
             description=ticket_data.description,
@@ -212,73 +263,94 @@ async def create_ticket(
             ticket.embedding_vector = embedding
 
         session.add(ticket)
-        session.flush()
+        await session.flush()
 
         # Apply approval gate if enabled (REQ-THA-002, REQ-THA-003)
+        # Note: approval_service still uses sync session internally
         ticket = approval_service.create_ticket_with_approval(
             ticket, requested_by_agent_id=requested_by_agent_id
         )
 
         # Flush to get ticket.id before emitting event
-        session.flush()
+        await session.flush()
+        ticket_id = str(ticket.id)
 
-        # If we didn't have an embedding yet (force_create or check_duplicates=false),
-        # generate and store one now for future dedup checks
+        # Defer embedding generation to background if not already done
+        # Per async_python_patterns.md Section 4.3: Non-critical work in background
         if not embedding and ticket_data.check_duplicates:
-            dedup_service.generate_and_store_embedding(ticket, session=session)
+            background_tasks.add_task(
+                _generate_embedding_background,
+                ticket_id=ticket_id,
+                title=ticket_data.title,
+                description=ticket_data.description,
+                dedup_service=dedup_service,
+                db=db,
+            )
 
         # Emit pending event if approval is enabled (REQ-THA-010)
         if ApprovalStatus.is_pending(ticket.approval_status):
             approval_service._emit_pending_event(ticket)
 
-        # Only create initial task if ticket is approved (REQ-THA-007)
-        if ApprovalStatus.can_proceed(ticket.approval_status):
-            queue.enqueue_task(
-                ticket_id=ticket.id,
-                phase_id=ticket_data.phase_id,
-                task_type="analyze_requirements",
-                description=f"Analyze requirements for: {ticket_data.title}",
-                priority=ticket_data.priority,
-                session=session,  # Use the same session so ticket is visible
-            )
+        # Commit ticket FIRST so it's visible to subsequent operations
+        # This is critical - enqueue_task needs to see the committed ticket
+        await session.commit()
+        await session.refresh(ticket)
 
-        session.commit()
-        session.refresh(ticket)
+        # Capture values needed after session context ends
+        should_create_task = ApprovalStatus.can_proceed(ticket.approval_status)
+        ticket_id_for_task = ticket.id
+        phase_for_task = ticket_data.phase_id
+        title_for_task = ticket_data.title
+        priority_for_task = ticket_data.priority
 
-        # Log reasoning event for ticket creation
-        log_reasoning_event(
-            db=db,
+        # Build response before any background work
+        response = TicketResponse.model_validate(ticket)
+
+    # Only create initial task if ticket is approved (REQ-THA-007)
+    # IMPORTANT: This must happen AFTER commit so ticket is visible in new session
+    if should_create_task:
+        queue.enqueue_task(
+            ticket_id=ticket_id_for_task,
+            phase_id=phase_for_task,
+            task_type="analyze_requirements",
+            description=f"Analyze requirements for: {title_for_task}",
+            priority=priority_for_task,
+            session=None,  # Creates own session, ticket already committed
+        )
+
+    # Fire-and-forget: Log reasoning event and publish event
+    # These don't need to block the response
+    log_reasoning_event(
+        db=db,
+        entity_type="ticket",
+        entity_id=ticket_id,
+        event_type="ticket_created",
+        title="Ticket Created",
+        description=f"Created ticket: {ticket_data.title}",
+        agent=requested_by_agent_id,
+        details={
+            "context": ticket_data.description,
+            "created_by": requested_by_agent_id or "user",
+            "phase": ticket_data.phase_id,
+            "priority": ticket_data.priority,
+        },
+    )
+
+    # Publish TICKET_CREATED event for orchestrator instant wakeup
+    event_bus.publish(
+        SystemEvent(
+            event_type="TICKET_CREATED",
             entity_type="ticket",
-            entity_id=str(ticket.id),
-            event_type="ticket_created",
-            title="Ticket Created",
-            description=f"Created ticket: {ticket.title}",
-            agent=requested_by_agent_id,
-            details={
-                "context": ticket.description,
-                "created_by": requested_by_agent_id or "user",
-                "phase": ticket.phase_id,
-                "priority": ticket.priority,
+            entity_id=ticket_id,
+            payload={
+                "title": ticket_data.title,
+                "priority": ticket_data.priority,
+                "phase_id": ticket_data.phase_id,
             },
         )
+    )
 
-        # Publish TICKET_CREATED event for orchestrator instant wakeup
-        from omoi_os.services.event_bus import SystemEvent
-
-        event_bus.publish(
-            SystemEvent(
-                event_type="TICKET_CREATED",
-                entity_type="ticket",
-                entity_id=str(ticket.id),
-                payload={
-                    "title": ticket.title,
-                    "priority": ticket.priority,
-                    "phase_id": ticket.phase_id,
-                },
-            )
-        )
-
-        return TicketResponse.model_validate(ticket)
+    return response
 
 
 class DuplicateCheckRequest(BaseModel):
@@ -341,7 +413,7 @@ async def get_ticket(
     db: DatabaseService = Depends(get_db_service),
 ):
     """
-    Get a ticket by ID.
+    Get a ticket by ID (async).
 
     Args:
         ticket_id: Ticket ID
@@ -350,8 +422,11 @@ async def get_ticket(
     Returns:
         Ticket instance
     """
-    with db.get_session() as session:
-        ticket = session.get(Ticket, ticket_id)
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Ticket).filter(Ticket.id == str(ticket_id))
+        )
+        ticket = result.scalar_one_or_none()
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
         return TicketResponse.model_validate(ticket)
@@ -363,17 +438,24 @@ async def get_ticket_context(
     db: DatabaseService = Depends(get_db_service),
 ):
     """
-    Retrieve stored aggregated context and summary for a ticket.
+    Retrieve stored aggregated context and summary for a ticket (async).
     """
-    with db.get_session() as session:
-        ticket = session.get(Ticket, ticket_id)
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Ticket).filter(Ticket.id == str(ticket_id))
+        )
+        ticket = result.scalar_one_or_none()
         if not ticket:
             raise HTTPException(status_code=404, detail="Ticket not found")
-        session.expunge(ticket)
+
+        # Extract values before session closes
+        context = ticket.context or {}
+        summary = ticket.context_summary
+
     return {
         "ticket_id": str(ticket_id),
-        "full_context": ticket.context or {},
-        "summary": ticket.context_summary,
+        "full_context": context,
+        "summary": summary,
     }
 
 

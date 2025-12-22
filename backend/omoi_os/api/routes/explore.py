@@ -349,6 +349,272 @@ def _model_to_conversation(conv: ExploreConversation) -> Conversation:
     )
 
 
+# ============================================================================
+# Async Database Helpers (Non-blocking)
+# ============================================================================
+
+
+async def _list_conversations_async(
+    db: DatabaseService,
+    project_id: str,
+    limit: int = 10,
+) -> tuple[list[ConversationSummary], int]:
+    """List conversations for a project (ASYNC - non-blocking)."""
+    from sqlalchemy import func, select
+
+    async with db.get_async_session() as session:
+        # Check if any conversations exist
+        count_result = await session.execute(
+            select(func.count(ExploreConversation.id)).filter(
+                ExploreConversation.project_id == project_id
+            )
+        )
+        count = count_result.scalar() or 0
+
+        # Seed demo data if no conversations exist (sync within async context)
+        if count == 0:
+            await _seed_demo_conversations_async(session, project_id)
+
+        # Get conversations sorted by updated_at
+        result = await session.execute(
+            select(ExploreConversation)
+            .filter(ExploreConversation.project_id == project_id)
+            .order_by(ExploreConversation.updated_at.desc())
+            .limit(limit)
+        )
+        conversations = result.scalars().all()
+
+        # Get total count
+        total_result = await session.execute(
+            select(func.count(ExploreConversation.id)).filter(
+                ExploreConversation.project_id == project_id
+            )
+        )
+        total = total_result.scalar() or 0
+
+        summaries = [
+            ConversationSummary(
+                id=c.id,
+                title=c.title,
+                last_message=c.last_message,
+                timestamp=_format_time_ago(c.updated_at),
+            )
+            for c in conversations
+        ]
+
+        return summaries, total
+
+
+async def _create_welcome_conversation_async(
+    session, project_id: str
+) -> ExploreConversation:
+    """Create initial conversation with welcome message (ASYNC)."""
+    conv = ExploreConversation(
+        project_id=project_id,
+        title="Getting Started",
+        last_message="Welcome! Ask me anything about this codebase.",
+    )
+    session.add(conv)
+    await session.flush()  # Get the ID
+
+    welcome_msg = ExploreMessage(
+        conversation_id=conv.id,
+        role="assistant",
+        content="""## Welcome to AI Explore! 👋
+
+I can help you understand this codebase. Try asking:
+
+- **"Explain the authentication flow"** - Understand how auth works
+- **"Show me the database schema"** - See data models
+- **"What tests are failing?"** - Check test status
+- **"Find security issues"** - Run a security scan
+- **"Suggest improvements"** - Get code review feedback
+
+What would you like to explore?""",
+    )
+    session.add(welcome_msg)
+
+    return conv
+
+
+async def _seed_demo_conversations_async(
+    session, project_id: str
+) -> list[ExploreConversation]:
+    """Seed demo conversations for a project (ASYNC)."""
+    from datetime import timedelta
+
+    now = utc_now()
+    conversations = []
+
+    # First: Getting Started conversation
+    conv1 = await _create_welcome_conversation_async(session, project_id)
+    conversations.append(conv1)
+
+    # Second: Auth analysis conversation
+    conv2 = ExploreConversation(
+        project_id=project_id,
+        title="Authentication flow analysis",
+        last_message="The auth module uses JWT tokens with refresh...",
+    )
+    conv2.created_at = now - timedelta(hours=2)
+    conv2.updated_at = now - timedelta(hours=2)
+    session.add(conv2)
+    conversations.append(conv2)
+
+    # Third: Database questions conversation
+    conv3 = ExploreConversation(
+        project_id=project_id,
+        title="Database schema questions",
+        last_message="The user table has the following relations...",
+    )
+    conv3.created_at = now - timedelta(days=1)
+    conv3.updated_at = now - timedelta(days=1)
+    session.add(conv3)
+    conversations.append(conv3)
+
+    await session.commit()
+    for c in conversations:
+        await session.refresh(c)
+
+    return conversations
+
+
+async def _create_conversation_async(
+    db: DatabaseService, project_id: str
+) -> Conversation:
+    """Create a new conversation (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        conv = await _create_welcome_conversation_async(session, project_id)
+        await session.commit()
+        await session.refresh(conv)
+
+        return _model_to_conversation(conv)
+
+
+async def _get_conversation_async(
+    db: DatabaseService, project_id: str, conversation_id: str
+) -> Optional[Conversation]:
+    """Get a conversation with all messages (ASYNC - non-blocking)."""
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
+
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(ExploreConversation)
+            .options(selectinload(ExploreConversation.messages))
+            .filter(
+                ExploreConversation.id == conversation_id,
+                ExploreConversation.project_id == project_id,
+            )
+        )
+        conv = result.scalar_one_or_none()
+
+        if not conv:
+            return None
+
+        return _model_to_conversation(conv)
+
+
+async def _send_message_async(
+    db: DatabaseService,
+    project_id: str,
+    conversation_id: str,
+    content: str,
+) -> Optional[tuple[Message, Message]]:
+    """Send a message and get AI response (ASYNC - non-blocking)."""
+    from sqlalchemy import func, select
+
+    async with db.get_async_session() as session:
+        # Check conversation exists
+        result = await session.execute(
+            select(ExploreConversation).filter(
+                ExploreConversation.id == conversation_id,
+                ExploreConversation.project_id == project_id,
+            )
+        )
+        conv = result.scalar_one_or_none()
+
+        if not conv:
+            return None
+
+        # Create user message
+        user_msg = ExploreMessage(
+            conversation_id=conversation_id,
+            role="user",
+            content=content,
+        )
+        session.add(user_msg)
+        await session.flush()
+
+        # Generate AI response
+        ai_content = _generate_ai_response(content, project_id)
+        ai_msg = ExploreMessage(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=ai_content,
+        )
+        session.add(ai_msg)
+        await session.flush()
+
+        # Update conversation metadata
+        conv.last_message = ai_content[:100] + "..." if len(ai_content) > 100 else ai_content
+
+        # Update title if this is the first user message
+        count_result = await session.execute(
+            select(func.count(ExploreMessage.id)).filter(
+                ExploreMessage.conversation_id == conversation_id,
+                ExploreMessage.role == "user",
+            )
+        )
+        user_message_count = count_result.scalar() or 0
+
+        if user_message_count == 1:
+            conv.title = content[:50] + "..." if len(content) > 50 else content
+
+        await session.commit()
+        await session.refresh(user_msg)
+        await session.refresh(ai_msg)
+
+        user_message = Message(
+            id=user_msg.id,
+            role=user_msg.role,
+            content=user_msg.content,
+            timestamp=user_msg.timestamp,
+        )
+        assistant_message = Message(
+            id=ai_msg.id,
+            role=ai_msg.role,
+            content=ai_msg.content,
+            timestamp=ai_msg.timestamp,
+        )
+
+        return user_message, assistant_message
+
+
+async def _delete_conversation_async(
+    db: DatabaseService, project_id: str, conversation_id: str
+) -> bool:
+    """Delete a conversation (ASYNC - non-blocking)."""
+    from sqlalchemy import select
+
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(ExploreConversation).filter(
+                ExploreConversation.id == conversation_id,
+                ExploreConversation.project_id == project_id,
+            )
+        )
+        conv = result.scalar_one_or_none()
+
+        if not conv:
+            return False
+
+        await session.delete(conv)
+        await session.commit()
+
+        return True
+
+
 def _create_welcome_conversation(session, project_id: str) -> ExploreConversation:
     """Create initial conversation with welcome message."""
     conv = ExploreConversation(
@@ -433,47 +699,13 @@ async def list_conversations(
     db: DatabaseService = Depends(get_db_service),
 ):
     """List conversations for a project."""
-    with db.get_session() as session:
-        # Check if any conversations exist
-        count = (
-            session.query(ExploreConversation)
-            .filter(ExploreConversation.project_id == project_id)
-            .count()
-        )
+    # Use async database operations (non-blocking)
+    summaries, total = await _list_conversations_async(db, project_id, limit)
 
-        # Seed demo data if no conversations exist
-        if count == 0:
-            _seed_demo_conversations(session, project_id)
-
-        # Get conversations sorted by updated_at
-        conversations = (
-            session.query(ExploreConversation)
-            .filter(ExploreConversation.project_id == project_id)
-            .order_by(ExploreConversation.updated_at.desc())
-            .limit(limit)
-            .all()
-        )
-
-        total = (
-            session.query(ExploreConversation)
-            .filter(ExploreConversation.project_id == project_id)
-            .count()
-        )
-
-        summaries = [
-            ConversationSummary(
-                id=c.id,
-                title=c.title,
-                last_message=c.last_message,
-                timestamp=_format_time_ago(c.updated_at),
-            )
-            for c in conversations
-        ]
-
-        return ConversationListResponse(
-            conversations=summaries,
-            total_count=total,
-        )
+    return ConversationListResponse(
+        conversations=summaries,
+        total_count=total,
+    )
 
 
 @router.post("/project/{project_id}/conversations", response_model=ConversationResponse)
@@ -482,12 +714,10 @@ async def create_conversation(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Create a new conversation."""
-    with db.get_session() as session:
-        conv = _create_welcome_conversation(session, project_id)
-        session.commit()
-        session.refresh(conv)
+    # Use async database operations (non-blocking)
+    conversation = await _create_conversation_async(db, project_id)
 
-        return ConversationResponse(conversation=_model_to_conversation(conv))
+    return ConversationResponse(conversation=conversation)
 
 
 @router.get(
@@ -500,20 +730,13 @@ async def get_conversation(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Get a conversation with all messages."""
-    with db.get_session() as session:
-        conv = (
-            session.query(ExploreConversation)
-            .filter(
-                ExploreConversation.id == conversation_id,
-                ExploreConversation.project_id == project_id,
-            )
-            .first()
-        )
+    # Use async database operations (non-blocking)
+    conversation = await _get_conversation_async(db, project_id, conversation_id)
 
-        if not conv:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-        return ConversationResponse(conversation=_model_to_conversation(conv))
+    return ConversationResponse(conversation=conversation)
 
 
 @router.post(
@@ -527,78 +750,17 @@ async def send_message(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Send a message and get AI response."""
-    with db.get_session() as session:
-        conv = (
-            session.query(ExploreConversation)
-            .filter(
-                ExploreConversation.id == conversation_id,
-                ExploreConversation.project_id == project_id,
-            )
-            .first()
-        )
+    # Use async database operations (non-blocking)
+    result = await _send_message_async(db, project_id, conversation_id, message.content)
 
-        if not conv:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+    if not result:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-        # Create user message
-        user_msg = ExploreMessage(
-            conversation_id=conversation_id,
-            role="user",
-            content=message.content,
-        )
-        session.add(user_msg)
-        session.flush()
-
-        # Generate AI response
-        ai_content = _generate_ai_response(message.content, project_id)
-        ai_msg = ExploreMessage(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=ai_content,
-        )
-        session.add(ai_msg)
-        session.flush()
-
-        # Update conversation metadata
-        conv.last_message = (
-            ai_content[:100] + "..." if len(ai_content) > 100 else ai_content
-        )
-
-        # Update title if this is the first user message
-        user_message_count = (
-            session.query(ExploreMessage)
-            .filter(
-                ExploreMessage.conversation_id == conversation_id,
-                ExploreMessage.role == "user",
-            )
-            .count()
-        )
-
-        if user_message_count == 1:
-            conv.title = (
-                message.content[:50] + "..."
-                if len(message.content) > 50
-                else message.content
-            )
-
-        session.commit()
-        session.refresh(user_msg)
-        session.refresh(ai_msg)
-
-        return MessageResponse(
-            user_message=Message(
-                id=user_msg.id,
-                role=user_msg.role,
-                content=user_msg.content,
-                timestamp=user_msg.timestamp,
-            ),
-            assistant_message=Message(
-                id=ai_msg.id,
-                role=ai_msg.role,
-                content=ai_msg.content,
-                timestamp=ai_msg.timestamp,
-            ),
-        )
+    user_message, assistant_message = result
+    return MessageResponse(
+        user_message=user_message,
+        assistant_message=assistant_message,
+    )
 
 
 @router.delete("/project/{project_id}/conversations/{conversation_id}")
@@ -608,23 +770,13 @@ async def delete_conversation(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Delete a conversation."""
-    with db.get_session() as session:
-        conv = (
-            session.query(ExploreConversation)
-            .filter(
-                ExploreConversation.id == conversation_id,
-                ExploreConversation.project_id == project_id,
-            )
-            .first()
-        )
+    # Use async database operations (non-blocking)
+    deleted = await _delete_conversation_async(db, project_id, conversation_id)
 
-        if not conv:
-            raise HTTPException(status_code=404, detail="Conversation not found")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
-        session.delete(conv)
-        session.commit()
-
-        return {"message": "Conversation deleted successfully"}
+    return {"message": "Conversation deleted successfully"}
 
 
 # ============================================================================

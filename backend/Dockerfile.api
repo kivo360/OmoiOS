@@ -30,14 +30,27 @@ ENV PYTHONPATH=/app
 # Railway uses PORT env var (default 8000)
 ENV PORT=8000
 
+# Worker configuration
+# WEB_CONCURRENCY: Number of worker processes (default: min(CPU_CORES, 4))
+# Set to 1 for development, 2-4 for production depending on available memory
+# Each worker uses ~100-300MB RAM and needs its own DB connection pool
+ENV WEB_CONCURRENCY=""
+
+# RELOAD_MODE: Set to "true" for development with auto-reload (uses uvicorn directly)
+# In reload mode, only 1 worker is used regardless of WEB_CONCURRENCY
+ENV RELOAD_MODE="false"
+
 WORKDIR /app
 
 # Copy application code
 COPY --from=builder /app /app
 
+# Copy startup script
+COPY docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
 # Expose dynamic port
 EXPOSE $PORT
 
-# Run migrations then start API server
-# For Railway, migrations run via preDeployCommand in railway.json
-CMD python -m alembic upgrade head && uvicorn omoi_os.api.main:app --host 0.0.0.0 --port $PORT
+# Run migrations then start API server via entrypoint script
+ENTRYPOINT ["/docker-entrypoint.sh"]

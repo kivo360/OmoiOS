@@ -4,6 +4,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 
 from omoi_os.api.dependencies import (
     get_agent_health_service,
@@ -26,6 +27,45 @@ from omoi_os.services.reasoning_listener import log_reasoning_event
 from omoi_os.models.agent_log import AgentLog
 
 router = APIRouter()
+
+
+# ============================================================================
+# Async Database Helpers (Non-blocking)
+# ============================================================================
+
+
+async def _store_agent_event_async(
+    db: DatabaseService,
+    agent_id: str,
+    event_type: str,
+    event_data: Dict,
+) -> None:
+    """Store agent event log (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        log_entry = AgentLog(
+            agent_id=agent_id,
+            log_type=event_type,
+            message=event_data.get("message", str(event_data)[:500]),
+            details=event_data,
+        )
+        session.add(log_entry)
+        await session.commit()
+
+
+async def _list_agents_async(db: DatabaseService) -> List[Agent]:
+    """List all agents (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Agent))
+        agents = result.scalars().all()
+        return agents
+
+
+async def _get_agent_async(db: DatabaseService, agent_id: str) -> Optional[Agent]:
+    """Get a specific agent by ID (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Agent).filter(Agent.id == agent_id))
+        agent = result.scalar_one_or_none()
+        return agent
 
 
 def serialize_agent(agent: Agent) -> Dict:
@@ -128,16 +168,10 @@ async def report_agent_event(
     This endpoint allows sandboxed agents to stream their actions
     back to the server for real-time monitoring and trajectory analysis.
     """
-    # Store in agent_logs for trajectory analysis
-    with db.get_session() as session:
-        log_entry = AgentLog(
-            agent_id=request.agent_id,
-            log_type=request.event_type,
-            message=request.event_data.get("message", str(request.event_data)[:500]),
-            details=request.event_data,
-        )
-        session.add(log_entry)
-        session.commit()
+    # Store in agent_logs for trajectory analysis (ASYNC - non-blocking)
+    await _store_agent_event_async(
+        db, request.agent_id, request.event_type, request.event_data
+    )
 
     # Publish event for real-time monitoring
     event_bus.publish(
@@ -523,11 +557,9 @@ async def list_agents(db: DatabaseService = Depends(get_db_service)):
         List of agent dictionaries
     """
     try:
-        from omoi_os.models.agent import Agent
-
-        with db.get_session() as session:
-            agents = session.query(Agent).all()
-            return [AgentDTO(**serialize_agent(agent)) for agent in agents]
+        # Use async database operations (non-blocking)
+        agents = await _list_agents_async(db)
+        return [AgentDTO(**serialize_agent(agent)) for agent in agents]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list agents: {str(e)}")
 
@@ -545,16 +577,12 @@ async def get_agent(agent_id: str, db: DatabaseService = Depends(get_db_service)
         Agent dictionary
     """
     try:
-        from omoi_os.models.agent import Agent
+        # Use async database operations (non-blocking)
+        agent = await _get_agent_async(db, agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
-        with db.get_session() as session:
-            agent = session.query(Agent).filter(Agent.id == agent_id).first()
-            if not agent:
-                raise HTTPException(
-                    status_code=404, detail=f"Agent {agent_id} not found"
-                )
-
-            return AgentDTO(**serialize_agent(agent))
+        return AgentDTO(**serialize_agent(agent))
     except HTTPException:
         raise
     except Exception as e:

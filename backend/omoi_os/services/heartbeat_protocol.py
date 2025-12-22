@@ -4,6 +4,7 @@ import hashlib
 import json
 from typing import Dict, List, Optional, Tuple
 
+from sqlalchemy import select
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_status import AgentStatus
@@ -466,6 +467,162 @@ class HeartbeatProtocolService:
                 }
 
             # Get state-based TTL threshold
+            ttl_threshold = self._get_ttl_threshold(agent.status, agent.agent_type)
+            time_since_heartbeat = (now - last_heartbeat).total_seconds()
+            is_stale = time_since_heartbeat > ttl_threshold
+
+            return {
+                "agent_id": agent_id,
+                "status": agent.status,
+                "healthy": not is_stale,
+                "last_heartbeat": last_heartbeat.isoformat(),
+                "time_since_last_heartbeat": time_since_heartbeat,
+                "ttl_threshold": ttl_threshold,
+                "agent_type": agent.agent_type,
+                "phase_id": agent.phase_id,
+                "health_status": agent.health_status,
+                "sequence_number": agent.sequence_number,
+                "consecutive_missed_heartbeats": agent.consecutive_missed_heartbeats,
+            }
+
+    # =========================================================================
+    # ASYNC METHODS
+    # =========================================================================
+
+    async def receive_heartbeat_async(self, message: HeartbeatMessage) -> HeartbeatAck:
+        """
+        Async version: Receive and process heartbeat message.
+
+        Per async_python_patterns.md, this uses non-blocking database operations
+        for better event loop utilization.
+
+        Args:
+            message: Heartbeat message from agent
+
+        Returns:
+            HeartbeatAck with acknowledgment details
+        """
+        # Validate checksum (sync operation, no I/O)
+        if not self._validate_checksum(message):
+            return HeartbeatAck(
+                agent_id=message.agent_id,
+                sequence_number=message.sequence_number,
+                received=False,
+                message="Checksum validation failed",
+            )
+
+        async with self.db.get_async_session() as session:
+            result = await session.execute(
+                select(Agent).filter(Agent.id == message.agent_id)
+            )
+            agent = result.scalar_one_or_none()
+
+            if not agent:
+                return HeartbeatAck(
+                    agent_id=message.agent_id,
+                    sequence_number=message.sequence_number,
+                    received=False,
+                    message="Agent not found",
+                )
+
+            # Check sequence number for gaps (REQ-FT-HB-003)
+            gaps = self._detect_sequence_gaps(agent, message.sequence_number)
+
+            # Update agent heartbeat state
+            agent.last_heartbeat = message.timestamp
+            agent.sequence_number = message.sequence_number
+            agent.last_expected_sequence = message.sequence_number + 1
+
+            # Reset consecutive missed heartbeats if heartbeat received
+            if agent.consecutive_missed_heartbeats > 0:
+                agent.consecutive_missed_heartbeats = 0
+
+            # Update status if was stale
+            if agent.status in ["stale", "STALE"]:
+                if self.status_manager:
+                    try:
+                        self.status_manager.transition_status(
+                            agent.id,
+                            to_status=AgentStatus.IDLE.value,
+                            initiated_by="heartbeat_service",
+                            reason="Heartbeat received, recovering from stale state",
+                        )
+                    except Exception:
+                        agent.status = AgentStatus.IDLE.value
+                else:
+                    agent.status = AgentStatus.IDLE.value
+            agent.health_status = "healthy"
+
+            # Publish heartbeat received event
+            if self.event_bus:
+                self.event_bus.publish(
+                    SystemEvent(
+                        event_type="HEARTBEAT_RECEIVED",
+                        entity_type="agent",
+                        entity_id=message.agent_id,
+                        payload={
+                            "sequence_number": message.sequence_number,
+                            "status": message.status,
+                            "has_gaps": len(gaps) > 0,
+                            "health_metrics": message.health_metrics,
+                        },
+                    )
+                )
+
+            await session.commit()
+
+            # Build acknowledgment message
+            ack_message = None
+            if gaps:
+                ack_message = f"Sequence gaps detected: {[g['expected'] for g in gaps]}"
+
+            return HeartbeatAck(
+                agent_id=message.agent_id,
+                sequence_number=message.sequence_number,
+                received=True,
+                message=ack_message,
+            )
+
+    async def check_agent_health_with_ttl_async(self, agent_id: str) -> Dict[str, any]:
+        """
+        Async version: Check agent health using state-based TTL thresholds.
+
+        Args:
+            agent_id: ID of the agent to check
+
+        Returns:
+            Dictionary containing health information
+        """
+        async with self.db.get_async_session() as session:
+            result = await session.execute(
+                select(Agent).filter(Agent.id == agent_id)
+            )
+            agent = result.scalar_one_or_none()
+
+            if not agent:
+                return {
+                    "agent_id": agent_id,
+                    "status": "not_found",
+                    "healthy": False,
+                    "last_heartbeat": None,
+                    "health_status": "unknown",
+                }
+
+            now = utc_now()
+            last_heartbeat = agent.last_heartbeat
+
+            if not last_heartbeat:
+                return {
+                    "agent_id": agent_id,
+                    "status": agent.status,
+                    "healthy": False,
+                    "last_heartbeat": None,
+                    "time_since_last_heartbeat": None,
+                    "message": "No heartbeat recorded",
+                    "health_status": agent.health_status or "unknown",
+                    "ttl_threshold": self._get_ttl_threshold(agent.status, agent.agent_type),
+                }
+
             ttl_threshold = self._get_ttl_threshold(agent.status, agent.agent_type)
             time_since_heartbeat = (now - last_heartbeat).total_seconds()
             is_stale = time_since_heartbeat > ttl_threshold

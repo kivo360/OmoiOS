@@ -1,10 +1,11 @@
 """Projects API routes for multi-project management."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List, Dict, Any, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import select, func
 
 from omoi_os.api.dependencies import get_db_service, get_event_bus_service
 from omoi_os.models.project import Project
@@ -14,6 +15,181 @@ from omoi_os.services.event_bus import EventBusService
 from omoi_os.utils.datetime import utc_now
 
 router = APIRouter()
+
+
+# ============================================================================
+# Async Database Helpers (Non-blocking)
+# ============================================================================
+
+
+async def _create_project_async(
+    db: DatabaseService,
+    name: str,
+    description: Optional[str],
+    default_phase_id: str,
+    github_owner: Optional[str],
+    github_repo: Optional[str],
+    settings: Optional[dict],
+) -> Project:
+    """Create a new project (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        # Check if project with same name exists
+        result = await session.execute(
+            select(Project).filter(Project.name == name)
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            raise ValueError("Project with this name already exists")
+
+        project = Project(
+            name=name,
+            description=description,
+            default_phase_id=default_phase_id,
+            github_owner=github_owner,
+            github_repo=github_repo,
+            github_connected=False,
+            status="active",
+            settings=settings or {},
+        )
+
+        session.add(project)
+        await session.commit()
+        await session.refresh(project)
+        return project
+
+
+async def _list_projects_async(
+    db: DatabaseService,
+    status: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+) -> Tuple[List[Project], int]:
+    """List projects (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        query = select(Project)
+        if status:
+            query = query.filter(Project.status == status)
+
+        # Get total count
+        count_result = await session.execute(
+            select(func.count(Project.id)).filter(
+                Project.status == status if status else True
+            )
+        )
+        total = count_result.scalar() or 0
+
+        # Get projects
+        query = query.order_by(Project.created_at.desc()).limit(limit).offset(offset)
+        result = await session.execute(query)
+        projects = result.scalars().all()
+        return projects, total
+
+
+async def _get_project_async(
+    db: DatabaseService, project_id: str
+) -> Optional[Project]:
+    """Get a project by ID (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        return project
+
+
+async def _update_project_async(
+    db: DatabaseService,
+    project_id: str,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    default_phase_id: Optional[str] = None,
+    status: Optional[str] = None,
+    github_owner: Optional[str] = None,
+    github_repo: Optional[str] = None,
+    github_connected: Optional[bool] = None,
+    settings: Optional[dict] = None,
+) -> Optional[Project]:
+    """Update a project (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            return None
+
+        if name is not None:
+            project.name = name
+        if description is not None:
+            project.description = description
+        if default_phase_id is not None:
+            project.default_phase_id = default_phase_id
+        if status is not None:
+            project.status = status
+        if github_owner is not None:
+            project.github_owner = github_owner
+        if github_repo is not None:
+            project.github_repo = github_repo
+        if github_connected is not None:
+            project.github_connected = github_connected
+        if settings is not None:
+            project.settings = settings
+
+        project.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(project)
+        return project
+
+
+async def _delete_project_async(
+    db: DatabaseService, project_id: str
+) -> Optional[Project]:
+    """Soft delete a project (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            return None
+
+        project.status = "archived"
+        project.updated_at = utc_now()
+        await session.commit()
+        await session.refresh(project)
+        return project
+
+
+async def _get_project_stats_async(
+    db: DatabaseService, project_id: str
+) -> Optional[Dict[str, Any]]:
+    """Get project stats (ASYNC - non-blocking)."""
+    from omoi_os.ticketing.models import TicketCommit
+
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            return None
+
+        # Count commits
+        commit_result = await session.execute(
+            select(func.count(TicketCommit.id))
+            .select_from(TicketCommit)
+            .join(Ticket, TicketCommit.ticket_id == Ticket.id)
+        )
+        total_commits = commit_result.scalar() or 0
+
+        return {
+            "project_id": project_id,
+            "total_tickets": 0,  # Placeholder
+            "tickets_by_status": {},  # Placeholder
+            "tickets_by_phase": {},  # Placeholder
+            "active_agents": 0,  # Placeholder
+            "total_commits": total_commits,
+        }
 
 
 class ProjectCreate(BaseModel):
@@ -93,47 +269,37 @@ async def create_project(
     Returns:
         Created project
     """
-    with db.get_session() as session:
-        # Check if project with same name exists
-        existing = (
-            session.query(Project).filter(Project.name == project_data.name).first()
-        )
-        if existing:
-            raise HTTPException(
-                status_code=409, detail="Project with this name already exists"
-            )
-
-        project = Project(
+    try:
+        # Use async database operations (non-blocking)
+        project = await _create_project_async(
+            db,
             name=project_data.name,
             description=project_data.description,
             default_phase_id=project_data.default_phase_id,
             github_owner=project_data.github_owner,
             github_repo=project_data.github_repo,
-            github_connected=False,
-            status="active",
-            settings=project_data.settings or {},
+            settings=project_data.settings,
         )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
-        session.add(project)
-        session.commit()
+    # Emit event
+    from omoi_os.services.event_bus import SystemEvent
 
-        # Emit event
-        from omoi_os.services.event_bus import SystemEvent
-
-        event_bus.publish(
-            SystemEvent(
-                event_type="PROJECT_CREATED",
-                entity_type="project",
-                entity_id=project.id,
-                payload={
-                    "name": project.name,
-                    "github_owner": project.github_owner,
-                    "github_repo": project.github_repo,
-                },
-            )
+    event_bus.publish(
+        SystemEvent(
+            event_type="PROJECT_CREATED",
+            entity_type="project",
+            entity_id=project.id,
+            payload={
+                "name": project.name,
+                "github_owner": project.github_owner,
+                "github_repo": project.github_repo,
+            },
         )
+    )
 
-        return ProjectResponse.model_validate(project)
+    return ProjectResponse.model_validate(project)
 
 
 @router.get("", response_model=ProjectListResponse)
@@ -157,22 +323,13 @@ async def list_projects(
     Returns:
         List of projects
     """
-    with db.get_session() as session:
-        query = session.query(Project)
+    # Use async database operations (non-blocking)
+    projects, total = await _list_projects_async(db, status, limit, offset)
 
-        if status:
-            query = query.filter(Project.status == status)
-
-        total = query.count()
-
-        projects = (
-            query.order_by(Project.created_at.desc()).limit(limit).offset(offset).all()
-        )
-
-        return ProjectListResponse(
-            projects=[ProjectResponse.model_validate(p) for p in projects],
-            total=total,
-        )
+    return ProjectListResponse(
+        projects=[ProjectResponse.model_validate(p) for p in projects],
+        total=total,
+    )
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
@@ -190,12 +347,12 @@ async def get_project(
     Returns:
         Project details
     """
-    with db.get_session() as session:
-        project = session.get(Project, project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Use async database operations (non-blocking)
+    project = await _get_project_async(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-        return ProjectResponse.model_validate(project)
+    return ProjectResponse.model_validate(project)
 
 
 @router.patch("/{project_id}", response_model=ProjectResponse)
@@ -217,46 +374,35 @@ async def update_project(
     Returns:
         Updated project
     """
-    with db.get_session() as session:
-        project = session.get(Project, project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Use async database operations (non-blocking)
+    project = await _update_project_async(
+        db,
+        project_id,
+        name=project_data.name,
+        description=project_data.description,
+        default_phase_id=project_data.default_phase_id,
+        status=project_data.status,
+        github_owner=project_data.github_owner,
+        github_repo=project_data.github_repo,
+        github_connected=project_data.github_connected,
+        settings=project_data.settings,
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-        # Update fields
-        if project_data.name is not None:
-            project.name = project_data.name
-        if project_data.description is not None:
-            project.description = project_data.description
-        if project_data.default_phase_id is not None:
-            project.default_phase_id = project_data.default_phase_id
-        if project_data.status is not None:
-            project.status = project_data.status
-        if project_data.github_owner is not None:
-            project.github_owner = project_data.github_owner
-        if project_data.github_repo is not None:
-            project.github_repo = project_data.github_repo
-        if project_data.github_connected is not None:
-            project.github_connected = project_data.github_connected
-        if project_data.settings is not None:
-            project.settings = project_data.settings
+    # Emit event
+    from omoi_os.services.event_bus import SystemEvent
 
-        project.updated_at = utc_now()
-
-        session.commit()
-
-        # Emit event
-        from omoi_os.services.event_bus import SystemEvent
-
-        event_bus.publish(
-            SystemEvent(
-                event_type="PROJECT_UPDATED",
-                entity_type="project",
-                entity_id=project.id,
-                payload={"changes": project_data.model_dump(exclude_unset=True)},
-            )
+    event_bus.publish(
+        SystemEvent(
+            event_type="PROJECT_UPDATED",
+            entity_type="project",
+            entity_id=project.id,
+            payload={"changes": project_data.model_dump(exclude_unset=True)},
         )
+    )
 
-        return ProjectResponse.model_validate(project)
+    return ProjectResponse.model_validate(project)
 
 
 @router.delete("/{project_id}")
@@ -276,29 +422,23 @@ async def delete_project(
     Returns:
         Success message
     """
-    with db.get_session() as session:
-        project = session.get(Project, project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Use async database operations (non-blocking)
+    project = await _delete_project_async(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-        # Soft delete - set status to archived
-        project.status = "archived"
-        project.updated_at = utc_now()
+    # Emit event
+    from omoi_os.services.event_bus import SystemEvent
 
-        session.commit()
-
-        # Emit event
-        from omoi_os.services.event_bus import SystemEvent
-
-        event_bus.publish(
-            SystemEvent(
-                event_type="PROJECT_ARCHIVED",
-                entity_type="project",
-                entity_id=project.id,
-            )
+    event_bus.publish(
+        SystemEvent(
+            event_type="PROJECT_ARCHIVED",
+            entity_type="project",
+            entity_id=project.id,
         )
+    )
 
-        return {"success": True, "message": "Project archived"}
+    return {"success": True, "message": "Project archived"}
 
 
 @router.get("/{project_id}/stats", response_model=ProjectStatsResponse)
@@ -316,39 +456,9 @@ async def get_project_stats(
     Returns:
         Project statistics
     """
-    with db.get_session() as session:
-        project = session.get(Project, project_id)
-        if not project:
-            raise HTTPException(status_code=404, detail="Project not found")
+    # Use async database operations (non-blocking)
+    stats = await _get_project_stats_async(db, project_id)
+    if not stats:
+        raise HTTPException(status_code=404, detail="Project not found")
 
-        # Get tickets for this project
-        # Note: This assumes tickets will have project_id field in the future
-        # For now, we'll return basic stats
-        from sqlalchemy import func
-        from omoi_os.ticketing.models import TicketCommit
-
-        # Count tickets (when project_id is added to Ticket model)
-        # For now, return placeholder stats
-        total_tickets = 0
-        tickets_by_status = {}
-        tickets_by_phase = {}
-
-        # Count commits (if we can link via tickets)
-        total_commits = (
-            session.query(func.count(TicketCommit.id))
-            .join(Ticket, TicketCommit.ticket_id == Ticket.id)
-            .scalar()
-            or 0
-        )
-
-        # Count active agents (placeholder - would need project_id on Agent)
-        active_agents = 0
-
-        return ProjectStatsResponse(
-            project_id=project_id,
-            total_tickets=total_tickets,
-            tickets_by_status=tickets_by_status,
-            tickets_by_phase=tickets_by_phase,
-            active_agents=active_agents,
-            total_commits=total_commits,
-        )
+    return ProjectStatsResponse(**stats)
