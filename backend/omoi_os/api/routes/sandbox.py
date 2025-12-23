@@ -617,7 +617,7 @@ async def post_sandbox_event(
                     result = await session.execute(
                         select(Task)
                         .filter(Task.sandbox_id == sandbox_id)
-                        .filter(Task.status.in_(["assigned", "running"]))
+                        .filter(Task.status.in_(["claiming", "assigned", "running"]))
                     )
                     task = result.scalar_one_or_none()
                     if task:
@@ -625,7 +625,7 @@ async def post_sandbox_event(
                         logger.info(f"Found task {task_id} by sandbox_id fallback")
                     else:
                         logger.warning(
-                            f"No task found for sandbox {sandbox_id} with status assigned/running"
+                            f"No task found for sandbox {sandbox_id} with status claiming/assigned/running"
                         )
 
             if task_id:

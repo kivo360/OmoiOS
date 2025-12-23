@@ -483,7 +483,7 @@ class TaskQueueService:
                 session.query(Task)
                 .filter(
                     ownership_filter,
-                    Task.status.in_(["assigned", "running"]),
+                    Task.status.in_(["claiming", "assigned", "running"]),
                 )
                 .all()
             )
