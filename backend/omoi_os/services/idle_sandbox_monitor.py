@@ -280,19 +280,29 @@ class IdleSandboxMonitor:
             log.error("sandbox_stop_failed", error=str(e))
             # Continue to update task status even if stop fails
 
-        # 2. Update associated task status
+        # 2. Update associated task status (only if not already completed)
         task_id = None
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.sandbox_id == sandbox_id).first()
             if task:
                 task_id = str(task.id)
-                task.status = "failed"
-                task.error_message = (
-                    f"Sandbox terminated: {reason}. "
-                    f"Idle for {int(idle_duration_seconds / 60)} minutes with no work progress."
-                )
-                session.commit()
-                log.info("task_status_updated", task_id=task_id)
+                # Only mark as failed if task is still in an active state
+                # Don't overwrite completed/cancelled tasks
+                if task.status in ("pending", "claiming", "assigned", "running"):
+                    task.status = "failed"
+                    task.error_message = (
+                        f"Sandbox terminated: {reason}. "
+                        f"Idle for {int(idle_duration_seconds / 60)} minutes with no work progress."
+                    )
+                    session.commit()
+                    log.info("task_status_updated", task_id=task_id, new_status="failed")
+                else:
+                    log.info(
+                        "task_status_preserved",
+                        task_id=task_id,
+                        existing_status=task.status,
+                        reason="Task already in terminal state",
+                    )
             else:
                 log.warning("no_task_found_for_sandbox")
 
