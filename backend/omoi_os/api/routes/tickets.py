@@ -43,6 +43,7 @@ class TicketListResponse(BaseModel):
     total: int
 
 
+@router.get("/list", response_model=TicketListResponse)
 @router.get("", response_model=TicketListResponse)
 async def list_tickets(
     limit: int = 10,
