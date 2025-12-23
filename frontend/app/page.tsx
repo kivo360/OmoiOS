@@ -5,13 +5,40 @@ import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { ArrowRight, Bot, GitBranch, Zap, Shield } from "lucide-react"
+import { TicketJourney } from "@/components/landing/TicketJourney"
+import { WorkflowDiagram } from "@/components/landing/WorkflowDiagram"
+import { NightShiftLog } from "@/components/landing/NightShiftLog"
+
+const features = [
+  {
+    icon: Bot,
+    title: "Autonomous Agents",
+    description: "AI agents that understand context and execute complex tasks independently.",
+  },
+  {
+    icon: Zap,
+    title: "Phase-Based Workflows",
+    description: "Adaptive workflows that guide agents through requirements, design, and implementation.",
+  },
+  {
+    icon: GitBranch,
+    title: "GitHub Integration",
+    description: "Seamlessly connect to your repositories and manage code changes.",
+  },
+  {
+    icon: Shield,
+    title: "Spec-Driven",
+    description: "Define specifications and let agents handle the implementation details.",
+  },
+]
 
 function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="border-b border-border">
+      <header className="border-b">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <Link href="/" className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary">
@@ -32,7 +59,7 @@ function LandingPage() {
 
       {/* Hero */}
       <main className="container mx-auto px-4 py-20">
-        <div className="mx-auto max-w-3xl text-center">
+        <section className="mx-auto max-w-3xl text-center">
           <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
             Build software with
             <span className="block text-primary">autonomous AI agents</span>
@@ -47,53 +74,82 @@ function LandingPage() {
                 Start building <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
-            <Button variant="outline" size="lg" asChild>
+            <Button variant="ghost" size="lg" asChild>
               <Link href="/login">Sign in</Link>
             </Button>
           </div>
-        </div>
+        </section>
 
         {/* Features */}
-        <div className="mx-auto mt-32 max-w-5xl">
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                <Bot className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="mt-4 font-semibold">Autonomous Agents</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                AI agents that understand context and execute complex tasks independently.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                <Zap className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="mt-4 font-semibold">Phase-Based Workflows</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Adaptive workflows that guide agents through requirements, design, and implementation.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                <GitBranch className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="mt-4 font-semibold">GitHub Integration</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Seamlessly connect to your repositories and manage code changes.
-              </p>
-            </div>
-            <div className="rounded-lg border border-border bg-card p-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
-                <Shield className="h-5 w-5 text-primary" />
-              </div>
-              <h3 className="mt-4 font-semibold">Spec-Driven</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Define specifications and let agents handle the implementation details.
-              </p>
-            </div>
+        <section className="mx-auto mt-32 max-w-5xl">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+            {features.map((feature) => (
+              <Card
+                key={feature.title}
+                className="transition-all hover:bg-accent"
+              >
+                <CardHeader className="pb-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-md bg-primary/10">
+                    <feature.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <CardTitle className="mt-4 text-base">{feature.title}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
           </div>
-        </div>
+        </section>
+
+        {/* Workflow Diagram Section */}
+        <section className="mx-auto mt-32 max-w-5xl">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight">
+              How It Works
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              From a single input to a production-ready pull request—orchestrated by specialized agents.
+            </p>
+          </div>
+          <WorkflowDiagram />
+        </section>
+
+        {/* Ticket Journey Section */}
+        <section className="mx-auto mt-32 max-w-5xl">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight">
+              Watch a Ticket Come to Life
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              See how a single feature request flows through autonomous phases—from
+              requirements to production.
+            </p>
+          </div>
+          <Card className="bg-muted/50 p-6">
+            <TicketJourney
+              autoPlay={true}
+              speed="normal"
+              showPhaseInstructions={true}
+              showFeedbackLoops={true}
+            />
+          </Card>
+        </section>
+
+        {/* Night Shift Section */}
+        <section className="mx-auto mt-32 max-w-3xl">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight">
+              While You Sleep
+            </h2>
+            <p className="mt-4 text-muted-foreground">
+              Wake up to completed tasks. Agents work autonomously through the night.
+            </p>
+          </div>
+          <NightShiftLog autoPlay={true} />
+        </section>
       </main>
 
       {/* Footer */}
