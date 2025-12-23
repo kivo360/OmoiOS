@@ -95,12 +95,14 @@ class DiagnosticService:
                     continue
 
                 # Check all tasks finished
+                # Note: 'claiming' is a transient status during task assignment
                 active_tasks = (
                     session.query(Task)
                     .filter(
                         Task.ticket_id == ticket.id,
                         Task.status.in_([
                             "pending",
+                            "claiming",  # Transient status during atomic claim
                             "assigned",
                             "running",
                             "under_review",
@@ -576,7 +578,7 @@ class DiagnosticService:
                         # Sandbox mode
                         Task.sandbox_id.isnot(None),
                     ),
-                    Task.status.in_(["assigned", "running", "under_review", "validation_in_progress"]),
+                    Task.status.in_(["claiming", "assigned", "running", "under_review", "validation_in_progress"]),
                 )
                 .all()
             )
