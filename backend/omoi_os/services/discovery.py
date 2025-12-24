@@ -1,6 +1,6 @@
 """Discovery service for tracking adaptive workflow branching."""
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from omoi_os.models.task import Task
 from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.logging import get_logger
 from omoi_os.utils.datetime import utc_now
+
+if TYPE_CHECKING:
+    from omoi_os.services.title_generation_service import TitleGenerationService
+
+logger = get_logger(__name__)
 
 
 class DiscoveryService:
@@ -19,14 +25,21 @@ class DiscoveryService:
     agents discovered that led to new work being created.
     """
 
-    def __init__(self, event_bus: Optional[EventBusService] = None):
+    def __init__(
+        self,
+        event_bus: Optional[EventBusService] = None,
+        title_service: Optional["TitleGenerationService"] = None,
+    ):
         """
         Initialize discovery service.
 
         Args:
             event_bus: Optional event bus for publishing discovery events.
+            title_service: Optional title generation service for LLM-based titles.
+                If not provided, will use fallback text-based title generation.
         """
         self.event_bus = event_bus
+        self._title_service = title_service
 
     def record_discovery(
         self,
@@ -99,6 +112,7 @@ class DiscoveryService:
         spawn_priority: Optional[str] = None,
         priority_boost: bool = False,
         spawn_metadata: Optional[Dict[str, Any]] = None,
+        spawn_title: Optional[str] = None,
     ) -> tuple[TaskDiscovery, Task]:
         """
         Record discovery and immediately spawn a branch task.
@@ -121,6 +135,8 @@ class DiscoveryService:
             spawn_priority: Priority for spawned task (defaults to source task priority).
             priority_boost: Whether to boost priority.
             spawn_metadata: Metadata for spawned task.
+            spawn_title: Title for the spawned task. If not provided, auto-generates
+                from discovery_type and description.
 
         Returns:
             Tuple of (discovery_record, spawned_task).
@@ -148,11 +164,25 @@ class DiscoveryService:
                 priority_map = {"LOW": "MEDIUM", "MEDIUM": "HIGH", "HIGH": "CRITICAL"}
                 spawn_priority = priority_map.get(spawn_priority, "HIGH")
 
+        # Generate title if not provided
+        if not spawn_title:
+            # Create a concise title from the description (first 60 chars, word-bounded)
+            title_text = spawn_description[:60]
+            if len(spawn_description) > 60:
+                # Try to break at last space to avoid cutting words
+                last_space = title_text.rfind(" ")
+                if last_space > 30:
+                    title_text = title_text[:last_space] + "..."
+                else:
+                    title_text = title_text + "..."
+            spawn_title = title_text
+
         # Create spawned task
         spawned_task = Task(
             ticket_id=source_task.ticket_id,
             phase_id=spawn_phase_id,
             task_type=f"discovery_{discovery_type}",
+            title=spawn_title,
             description=spawn_description,
             priority=spawn_priority,
             status="pending",
@@ -317,7 +347,7 @@ class DiscoveryService:
 
         return discovery
 
-    def spawn_diagnostic_recovery(
+    async def spawn_diagnostic_recovery(
         self,
         session: Session,
         ticket_id: str,
@@ -357,6 +387,14 @@ class DiscoveryService:
 
         spawned_tasks = []
 
+        # Generate a meaningful title for the recovery task
+        # Use LLM-based title generation if available, otherwise fall back to text extraction
+        title = await self._generate_diagnostic_title_async(
+            task_type="discovery_diagnostic_no_result",
+            description=reason,
+            context=f"Diagnostic recovery for workflow {ticket_id}",
+        )
+
         # Spawn single recovery task (can be extended to spawn multiple based on analysis)
         _discovery, spawned_task = self.record_discovery_and_branch(
             session=session,
@@ -368,6 +406,7 @@ class DiscoveryService:
             spawn_priority=suggested_priority,
             priority_boost=True,
             spawn_metadata={"diagnostic_run_id": diagnostic_run_id},
+            spawn_title=title,
         )
 
         spawned_tasks.append(spawned_task)
@@ -377,3 +416,103 @@ class DiscoveryService:
             spawned_tasks = spawned_tasks[:max_tasks]
 
         return spawned_tasks
+
+    async def _generate_diagnostic_title_async(
+        self,
+        task_type: str,
+        description: str,
+        context: Optional[str] = None,
+    ) -> str:
+        """Generate a concise, meaningful title using LLM or fallback.
+
+        Uses TitleGenerationService if available for LLM-based generation.
+        Falls back to text extraction if LLM is unavailable or fails.
+
+        Args:
+            task_type: The task type for context.
+            description: Full description/reason text.
+            context: Additional context for the LLM.
+
+        Returns:
+            A concise title (max 100 chars).
+        """
+        # Try LLM-based generation first if available
+        if self._title_service:
+            try:
+                title = await self._title_service.generate_title(
+                    task_type=task_type,
+                    description=description,
+                    context=context,
+                )
+                logger.debug(
+                    "Generated title via LLM",
+                    title=title,
+                    task_type=task_type,
+                )
+                return title
+            except Exception as e:
+                logger.warning(
+                    "LLM title generation failed, using fallback",
+                    error=str(e),
+                    task_type=task_type,
+                )
+
+        # Fallback to text extraction
+        return self._generate_diagnostic_title_fallback(description)
+
+    def _generate_diagnostic_title_fallback(self, reason: str) -> str:
+        """Generate a concise, meaningful title from diagnostic reason.
+
+        Fallback method that extracts title from text without LLM.
+        Tries to extract the most actionable part of the reason text,
+        looking for keywords like "Root Cause:", recommendations, etc.
+
+        Args:
+            reason: Full diagnostic reason text.
+
+        Returns:
+            A concise title (max 80 chars).
+        """
+        # Try to extract root cause if present
+        if "Root Cause:" in reason:
+            parts = reason.split("Root Cause:")
+            if len(parts) > 1:
+                root_cause = parts[1].split("\n")[0].strip()
+                if root_cause:
+                    title = f"Fix: {root_cause[:70]}"
+                    return title if len(title) <= 80 else title[:77] + "..."
+
+        # Try to extract first recommendation if present
+        if "Recommendations:" in reason:
+            parts = reason.split("Recommendations:")
+            if len(parts) > 1:
+                rec_text = parts[1].strip()
+                # Find first bullet point
+                for line in rec_text.split("\n"):
+                    line = line.strip()
+                    if line.startswith("-") or line.startswith("•"):
+                        rec = line.lstrip("-•").strip()
+                        # Remove priority tags like [HIGH]
+                        if rec.startswith("["):
+                            bracket_end = rec.find("]")
+                            if bracket_end > 0:
+                                rec = rec[bracket_end + 1:].strip()
+                        if rec:
+                            title = rec[:80]
+                            return title if len(title) <= 80 else title[:77] + "..."
+
+        # Fallback: use first meaningful line, skip generic prefixes
+        lines = reason.split("\n")
+        for line in lines:
+            line = line.strip()
+            # Skip empty lines and generic prefixes
+            if not line or line.startswith("Diagnostic:") or line.startswith("Hypotheses:"):
+                continue
+            if line.startswith("-") or line.startswith("•"):
+                line = line.lstrip("-•").strip()
+            if len(line) > 10:  # Require some substance
+                title = line[:80]
+                return title if len(title) <= 80 else title[:77] + "..."
+
+        # Ultimate fallback
+        return "Diagnose and recover stuck workflow"
