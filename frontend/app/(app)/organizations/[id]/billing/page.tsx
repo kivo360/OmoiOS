@@ -18,26 +18,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
   ArrowLeft,
   CreditCard,
   DollarSign,
   Zap,
   Receipt,
-  ExternalLink,
   AlertCircle,
   Plus,
   Trash2,
   Settings,
   Loader2,
+  Crown,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useOrganization } from "@/hooks/useOrganizations"
@@ -50,7 +41,14 @@ import {
   useCreateCustomerPortal,
   useRemovePaymentMethod,
   useStripeConfig,
+  useSubscription,
+  useCancelSubscription,
+  useReactivateSubscription,
+  useCreateLifetimeCheckout,
 } from "@/hooks/useBilling"
+import { SubscriptionCard } from "@/components/billing/SubscriptionCard"
+import { UpgradeDialog } from "@/components/billing/UpgradeDialog"
+import type { SubscriptionTier } from "@/lib/api/types"
 
 interface BillingPageProps {
   params: Promise<{ id: string }>
@@ -60,11 +58,13 @@ export default function BillingPage({ params }: BillingPageProps) {
   const { id: orgId } = use(params)
   const { toast } = useToast()
   const [creditAmount, setCreditAmount] = useState("50")
-  const [buyCreditsOpen, setBuyCreditsOpen] = useState(false)
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false)
+  const [upgradeError, setUpgradeError] = useState<string | null>(null)
 
   // Fetch data
   const { data: org, isLoading: orgLoading, error: orgError } = useOrganization(orgId)
   const { data: account, isLoading: accountLoading } = useBillingAccount(orgId)
+  const { data: subscription, isLoading: subscriptionLoading } = useSubscription(orgId)
   const { data: paymentMethods, isLoading: pmLoading } = usePaymentMethods(orgId)
   const { data: invoices, isLoading: invoicesLoading } = useInvoices(orgId, { limit: 10 })
   const { data: usage, isLoading: usageLoading } = useUsage(orgId, { billed: false })
@@ -74,6 +74,9 @@ export default function BillingPage({ params }: BillingPageProps) {
   const createCheckout = useCreateCreditCheckout()
   const createPortal = useCreateCustomerPortal()
   const removePaymentMethod = useRemovePaymentMethod()
+  const cancelSubscription = useCancelSubscription()
+  const reactivateSubscription = useReactivateSubscription()
+  const createLifetimeCheckout = useCreateLifetimeCheckout()
 
   const handleBuyCredits = async () => {
     const amount = parseFloat(creditAmount)
@@ -126,6 +129,76 @@ export default function BillingPage({ params }: BillingPageProps) {
       toast({
         title: "Error",
         description: "Failed to remove payment method. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleUpgrade = () => {
+    setUpgradeError(null)
+    setUpgradeDialogOpen(true)
+  }
+
+  const handleSelectTier = async (tier: SubscriptionTier) => {
+    setUpgradeError(null)
+    try {
+      if (tier === "enterprise") {
+        // Open enterprise contact form or email
+        window.open("mailto:sales@omoios.com?subject=Enterprise%20Plan%20Inquiry", "_blank")
+        setUpgradeDialogOpen(false)
+        return
+      }
+
+      if (tier === "lifetime") {
+        const result = await createLifetimeCheckout.mutateAsync({ orgId })
+        window.location.href = result.checkout_url
+        return
+      }
+
+      // For regular subscription tiers, redirect to Stripe checkout
+      // This would need a createSubscriptionCheckout endpoint
+      // For now, we'll open the portal where users can manage subscriptions
+      const result = await createPortal.mutateAsync(orgId)
+      window.open(result.portal_url, "_blank")
+      setUpgradeDialogOpen(false)
+      toast({
+        title: "Opening Billing Portal",
+        description: "You can upgrade your subscription in the Stripe portal.",
+      })
+    } catch (error) {
+      setUpgradeError(
+        error instanceof Error ? error.message : "Failed to process upgrade. Please try again."
+      )
+    }
+  }
+
+  const handleCancelSubscription = async () => {
+    try {
+      await cancelSubscription.mutateAsync({ orgId, atPeriodEnd: true })
+      toast({
+        title: "Subscription canceled",
+        description: "Your subscription will end at the end of the current billing period.",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to cancel subscription. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleReactivateSubscription = async () => {
+    try {
+      await reactivateSubscription.mutateAsync(orgId)
+      toast({
+        title: "Subscription reactivated",
+        description: "Your subscription has been reactivated.",
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to reactivate subscription. Please try again.",
         variant: "destructive",
       })
     }
@@ -303,13 +376,29 @@ export default function BillingPage({ params }: BillingPageProps) {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="credits" className="space-y-4">
+      <Tabs defaultValue="subscription" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="subscription">
+            <Crown className="mr-2 h-4 w-4" />
+            Subscription
+          </TabsTrigger>
           <TabsTrigger value="credits">Credits</TabsTrigger>
           <TabsTrigger value="payment-methods">Payment Methods</TabsTrigger>
           <TabsTrigger value="invoices">Invoices</TabsTrigger>
           <TabsTrigger value="usage">Usage</TabsTrigger>
         </TabsList>
+
+        {/* Subscription Tab */}
+        <TabsContent value="subscription" className="space-y-4">
+          <SubscriptionCard
+            subscription={subscription}
+            isLoading={subscriptionLoading}
+            onUpgrade={handleUpgrade}
+            onManage={handleOpenPortal}
+            onCancel={handleCancelSubscription}
+            onReactivate={handleReactivateSubscription}
+          />
+        </TabsContent>
 
         {/* Credits Tab */}
         <TabsContent value="credits" className="space-y-4">
@@ -565,6 +654,16 @@ export default function BillingPage({ params }: BillingPageProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Upgrade Dialog */}
+      <UpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={setUpgradeDialogOpen}
+        currentTier={subscription?.tier || "free"}
+        onSelectTier={handleSelectTier}
+        isLoading={createLifetimeCheckout.isPending || createPortal.isPending}
+        error={upgradeError}
+      />
     </div>
   )
 }
