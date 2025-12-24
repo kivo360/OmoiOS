@@ -1,0 +1,5 @@
+{
+  "enabledPlugins": {
+    "payment-processing@claude-code-workflows": true
+  }
+}
