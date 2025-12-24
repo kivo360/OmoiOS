@@ -145,6 +145,14 @@ async def diagnostic_monitoring_loop():
 
     while not shutdown_event.is_set():
         try:
+            # First, check outcomes of previously spawned diagnostic tasks
+            # This updates failure tracking to prevent runaway spawning
+            try:
+                diagnostic_service.check_diagnostic_task_outcomes()
+            except Exception as e:
+                logger.warning("Error checking diagnostic task outcomes", error=str(e))
+
+            # Now find truly stuck workflows (with safeguards applied)
             stuck_workflows = diagnostic_service.find_stuck_workflows(
                 cooldown_seconds=diagnostic_settings.cooldown_seconds,
                 stuck_threshold_seconds=diagnostic_settings.min_stuck_time_seconds,
@@ -403,18 +411,35 @@ async def init_services():
         from omoi_os.services.discovery import DiscoveryService
         from omoi_os.services.memory import MemoryService
         from omoi_os.services.embedding import EmbeddingService
+        from omoi_os.services.title_generation_service import (
+            TitleGenerationService,
+            get_title_generation_service,
+        )
 
         embedding_service = EmbeddingService()
         memory_service = MemoryService(embedding_service, event_bus)
-        discovery_service = DiscoveryService(event_bus)
+
+        # Initialize title generation service for LLM-based task titles
+        title_service: TitleGenerationService | None = None
+        try:
+            title_service = get_title_generation_service()
+            logger.info("Title generation service initialized")
+        except Exception as e:
+            logger.warning("Title generation service not available, using fallback", error=str(e))
+
+        discovery_service = DiscoveryService(
+            event_bus=event_bus,
+            title_service=title_service,
+        )
         diagnostic_service = DiagnosticService(
             db=db,
             discovery=discovery_service,
             memory=memory_service,
             monitor=monitor_service,
             event_bus=event_bus,
+            embedding_service=embedding_service,  # Enable vector-based task deduplication
         )
-        logger.info("Diagnostic service initialized")
+        logger.info("Diagnostic service initialized (with vector deduplication)")
     except ImportError as e:
         logger.warning("Diagnostic service not available", error=str(e))
         diagnostic_service = None

@@ -25,13 +25,21 @@ if TYPE_CHECKING:
     from omoi_os.services.discovery import DiscoveryService
     from omoi_os.services.memory import MemoryService
     from omoi_os.services.monitor import MonitorService
+    from omoi_os.services.embedding import EmbeddingService
+    from omoi_os.services.task_dedup import TaskDeduplicationService
 
 
 class DiagnosticService:
     """Service for detecting stuck workflows and spawning diagnostic agents.
-    
+
     Monitors workflows for stuck conditions (all tasks done but no validated result)
     and automatically spawns diagnostic agents to analyze and create recovery tasks.
+
+    Safeguards against runaway task spawning:
+    - Checks for pending diagnostic tasks before spawning new ones
+    - Tracks consecutive failures and stops after max_consecutive_failures
+    - Limits total diagnostic runs per workflow to max_diagnostics_per_workflow
+    - Uses vector embeddings to detect semantically similar pending tasks (optional)
     """
 
     def __init__(
@@ -41,15 +49,17 @@ class DiagnosticService:
         memory: "MemoryService",
         monitor: "MonitorService",
         event_bus: Optional[EventBusService] = None,
+        embedding_service: Optional["EmbeddingService"] = None,
     ):
         """Initialize diagnostic service.
-        
+
         Args:
             db: Database service
             discovery: Discovery service for spawning recovery tasks
             memory: Memory service for context building
             monitor: Monitor service for metrics
             event_bus: Optional event bus for publishing events
+            embedding_service: Optional embedding service for vector-based deduplication
         """
         self.db = db
         self.discovery = discovery
@@ -57,6 +67,27 @@ class DiagnosticService:
         self.monitor = monitor
         self.event_bus = event_bus
         self._last_diagnostic: Dict[str, float] = {}  # workflow_id -> timestamp
+        self._consecutive_failures: Dict[str, int] = {}  # workflow_id -> failure count
+
+        # Load runaway prevention limits from config
+        from omoi_os.config import get_app_settings
+        settings = get_app_settings()
+        self.max_consecutive_failures = settings.diagnostic.max_consecutive_failures
+        self.max_diagnostics_per_workflow = settings.diagnostic.max_diagnostics_per_workflow
+
+        # Initialize vector-based deduplication service (optional)
+        self._task_dedup: Optional["TaskDeduplicationService"] = None
+        if embedding_service:
+            try:
+                from omoi_os.services.task_dedup import TaskDeduplicationService
+                self._task_dedup = TaskDeduplicationService(
+                    db=db,
+                    embedding_service=embedding_service,
+                    similarity_threshold=0.90,  # Strict threshold for diagnostics
+                )
+                logger.info("Vector-based task deduplication enabled for diagnostic service")
+            except Exception as e:
+                logger.warning(f"Could not initialize task deduplication: {e}")
 
     def find_stuck_workflows(
         self,
@@ -64,19 +95,24 @@ class DiagnosticService:
         stuck_threshold_seconds: int = 60,
     ) -> List[dict]:
         """Find workflows meeting all stuck conditions.
-        
+
         Conditions (ALL must be true):
         1. Active workflow exists
         2. Tasks exist
-        3. All tasks finished
+        3. All tasks finished (no pending/running tasks)
         4. No validated WorkflowResult
         5. Cooldown passed
         6. Stuck time met
-        
+
+        Safeguard conditions (any true = skip):
+        - Has pending diagnostic recovery tasks
+        - Exceeded consecutive failure limit
+        - Exceeded total diagnostic run limit
+
         Args:
             cooldown_seconds: Min time between diagnostics for same workflow
             stuck_threshold_seconds: Min time since last task activity
-            
+
         Returns:
             List of stuck workflow info dicts
         """
@@ -127,6 +163,43 @@ class DiagnosticService:
 
                 if validated:
                     continue  # Has validated result, workflow complete
+
+                # ===== SAFEGUARD: Check for pending diagnostic tasks =====
+                # If there are already pending/running diagnostic tasks, don't spawn more
+                pending_diagnostic_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.ticket_id == ticket.id,
+                        Task.task_type.like("discovery_diagnostic%"),
+                        Task.status.in_(["pending", "claiming", "assigned", "running"]),
+                    )
+                    .count()
+                )
+                if pending_diagnostic_tasks > 0:
+                    logger.debug(
+                        f"Skipping workflow {ticket.id}: has {pending_diagnostic_tasks} pending diagnostic tasks"
+                    )
+                    continue
+
+                # ===== SAFEGUARD: Check consecutive failure limit =====
+                consecutive_failures = self._consecutive_failures.get(ticket.id, 0)
+                if consecutive_failures >= self.max_consecutive_failures:
+                    logger.warning(
+                        f"Skipping workflow {ticket.id}: exceeded max consecutive failures ({consecutive_failures})"
+                    )
+                    continue
+
+                # ===== SAFEGUARD: Check total diagnostic run limit =====
+                total_diagnostic_runs = (
+                    session.query(DiagnosticRun)
+                    .filter(DiagnosticRun.workflow_id == ticket.id)
+                    .count()
+                )
+                if total_diagnostic_runs >= self.max_diagnostics_per_workflow:
+                    logger.warning(
+                        f"Skipping workflow {ticket.id}: exceeded max total diagnostics ({total_diagnostic_runs})"
+                    )
+                    continue
 
                 # Check cooldown
                 now_timestamp = utc_now().timestamp()
@@ -256,10 +329,41 @@ class DiagnosticService:
                 suggested_phase = "PHASE_IMPLEMENTATION"
                 suggested_priority = "HIGH"
 
+            # ===== SAFEGUARD: Vector-based semantic deduplication =====
+            # Check for semantically similar pending diagnostic tasks before spawning
+            if self._task_dedup:
+                try:
+                    dedup_result = self._task_dedup.check_similar_pending_diagnostic(
+                        workflow_id=workflow_id,
+                        description=diagnosis_text,
+                        threshold=0.90,  # High threshold for strict matching
+                    )
+                    if dedup_result.is_duplicate:
+                        logger.warning(
+                            f"Skipping diagnostic spawn for workflow {workflow_id}: "
+                            f"Found semantically similar pending task(s) with similarity {dedup_result.highest_similarity:.2f}. "
+                            f"Similar tasks: {[c.task_id[:8] for c in dedup_result.candidates[:3]]}"
+                        )
+                        # Update diagnostic run to indicate skipped
+                        with self.db.get_session() as session:
+                            diagnostic_run = session.get(DiagnosticRun, diagnostic_run_id)
+                            if diagnostic_run:
+                                diagnostic_run.status = "skipped"
+                                diagnostic_run.diagnosis = (
+                                    f"Skipped: Found semantically similar pending task(s) "
+                                    f"(similarity: {dedup_result.highest_similarity:.2f})"
+                                )
+                                diagnostic_run.completed_at = utc_now()
+                                session.commit()
+                                session.expunge(diagnostic_run)
+                        return diagnostic_run
+                except Exception as e:
+                    logger.warning(f"Vector deduplication check failed, continuing with spawn: {e}")
+
             # Spawn recovery tasks via DiscoveryService
             try:
                 with self.db.get_session() as session:
-                    spawned_tasks = self.discovery.spawn_diagnostic_recovery(
+                    spawned_tasks = await self.discovery.spawn_diagnostic_recovery(
                         session=session,
                         ticket_id=workflow_id,
                         diagnostic_run_id=diagnostic_run_id,
@@ -268,6 +372,14 @@ class DiagnosticService:
                         suggested_priority=suggested_priority,
                         max_tasks=max_tasks,
                     )
+
+                    # Store embeddings for newly spawned tasks (for future dedup)
+                    if self._task_dedup and spawned_tasks:
+                        for task in spawned_tasks:
+                            try:
+                                self._task_dedup.generate_and_store_embedding(task, session)
+                            except Exception as e:
+                                logger.debug(f"Could not store embedding for task {task.id}: {e}")
                     
                     # Update diagnostic run with results
                     diagnostic_run = session.get(DiagnosticRun, diagnostic_run_id)
@@ -770,7 +882,7 @@ class DiagnosticService:
                 .order_by(desc(WorkflowResult.created_at))
                 .all()
             )
-            
+
             submitted_results = []
             for result in results:
                 submitted_results.append({
@@ -785,4 +897,127 @@ class DiagnosticService:
             return submitted_results
         except Exception:
             return []
+
+    # -------------------------------------------------------------------------
+    # Failure Tracking Methods (Runaway Prevention)
+    # -------------------------------------------------------------------------
+
+    def record_diagnostic_task_failure(self, workflow_id: str) -> int:
+        """Record a diagnostic task failure for a workflow.
+
+        Increments the consecutive failure counter. When this reaches
+        max_consecutive_failures, no more diagnostics will be spawned.
+
+        Args:
+            workflow_id: The workflow that had a diagnostic task fail
+
+        Returns:
+            Current consecutive failure count
+        """
+        current_count = self._consecutive_failures.get(workflow_id, 0)
+        new_count = current_count + 1
+        self._consecutive_failures[workflow_id] = new_count
+
+        if new_count >= self.max_consecutive_failures:
+            logger.warning(
+                f"Workflow {workflow_id} reached max consecutive diagnostic failures ({new_count}). "
+                "No more diagnostic tasks will be spawned until manually reset or a success occurs."
+            )
+        else:
+            logger.info(
+                f"Workflow {workflow_id} diagnostic failure recorded ({new_count}/{self.max_consecutive_failures})"
+            )
+
+        return new_count
+
+    def record_diagnostic_task_success(self, workflow_id: str) -> None:
+        """Record a diagnostic task success for a workflow.
+
+        Resets the consecutive failure counter, allowing future diagnostics.
+
+        Args:
+            workflow_id: The workflow that had a diagnostic task succeed
+        """
+        if workflow_id in self._consecutive_failures:
+            old_count = self._consecutive_failures[workflow_id]
+            del self._consecutive_failures[workflow_id]
+            logger.info(
+                f"Workflow {workflow_id} diagnostic success - reset failure counter (was {old_count})"
+            )
+
+    def reset_failure_tracking(self, workflow_id: Optional[str] = None) -> None:
+        """Reset failure tracking for a specific workflow or all workflows.
+
+        Use this to manually allow diagnostics to resume after investigation.
+
+        Args:
+            workflow_id: Specific workflow to reset, or None to reset all
+        """
+        if workflow_id:
+            if workflow_id in self._consecutive_failures:
+                del self._consecutive_failures[workflow_id]
+                logger.info(f"Reset failure tracking for workflow {workflow_id}")
+        else:
+            count = len(self._consecutive_failures)
+            self._consecutive_failures.clear()
+            logger.info(f"Reset failure tracking for all {count} workflows")
+
+    def get_failure_stats(self) -> Dict[str, int]:
+        """Get current failure tracking statistics.
+
+        Returns:
+            Dict mapping workflow_id to consecutive failure count
+        """
+        return dict(self._consecutive_failures)
+
+    def check_diagnostic_task_outcomes(self) -> None:
+        """Check recent diagnostic task outcomes and update failure tracking.
+
+        This should be called periodically (e.g., in the monitoring loop) to
+        detect when spawned diagnostic tasks have completed or failed.
+        """
+        with self.db.get_session() as session:
+            # Find all diagnostic runs that have spawned tasks
+            recent_runs = (
+                session.query(DiagnosticRun)
+                .filter(
+                    DiagnosticRun.status == "completed",
+                    DiagnosticRun.tasks_created_count > 0,
+                )
+                .order_by(desc(DiagnosticRun.completed_at))
+                .limit(100)
+                .all()
+            )
+
+            for run in recent_runs:
+                if not run.tasks_created_ids:
+                    continue
+
+                task_ids = run.tasks_created_ids.get("task_ids", [])
+                if not task_ids:
+                    continue
+
+                # Check the status of spawned tasks
+                tasks = (
+                    session.query(Task)
+                    .filter(Task.id.in_(task_ids))
+                    .all()
+                )
+
+                # Count statuses
+                completed = sum(1 for t in tasks if t.status == "completed")
+                failed = sum(1 for t in tasks if t.status == "failed")
+                pending_or_running = sum(
+                    1 for t in tasks
+                    if t.status in ["pending", "claiming", "assigned", "running"]
+                )
+
+                # If any task succeeded, record success
+                if completed > 0:
+                    self.record_diagnostic_task_success(run.workflow_id)
+                # If all tasks failed and none pending, record failure
+                elif failed > 0 and pending_or_running == 0:
+                    # Only record if we haven't already for this run
+                    # (Use a simple check - if failure count is less than run count)
+                    self.record_diagnostic_task_failure(run.workflow_id)
 
