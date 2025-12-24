@@ -2,6 +2,8 @@
 
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { cn } from "@/lib/utils"
 
 interface MarkdownProps {
@@ -45,12 +47,14 @@ export function Markdown({ content, className }: MarkdownProps) {
           <li className="leading-relaxed">{children}</li>
         ),
         
-        // Code
+        // Code with syntax highlighting
         code: ({ className, children, ...props }) => {
-          const isInline = !className
+          const match = /language-(\w+)/.exec(className || "")
+          const isInline = !match && !className?.includes("language-")
+
           if (isInline) {
             return (
-              <code 
+              <code
                 className="px-1.5 py-0.5 rounded bg-muted font-mono text-[0.85em] text-foreground"
                 {...props}
               >
@@ -58,17 +62,31 @@ export function Markdown({ content, className }: MarkdownProps) {
               </code>
             )
           }
-          // Block code is handled by pre
+
+          // Block code with syntax highlighting
+          const language = match ? match[1] : "text"
+          const codeString = String(children).replace(/\n$/, "")
+
           return (
-            <code className={cn("font-mono text-sm", className)} {...props}>
-              {children}
-            </code>
+            <SyntaxHighlighter
+              style={oneDark}
+              language={language}
+              PreTag="div"
+              customStyle={{
+                margin: 0,
+                padding: "1rem",
+                borderRadius: "0.5rem",
+                fontSize: "0.875rem",
+              }}
+            >
+              {codeString}
+            </SyntaxHighlighter>
           )
         },
         pre: ({ children }) => (
-          <pre className="my-2 p-3 rounded-lg bg-zinc-900 dark:bg-zinc-950 overflow-x-auto text-zinc-100 text-sm">
+          <div className="my-3 overflow-hidden rounded-lg">
             {children}
-          </pre>
+          </div>
         ),
         
         // Blockquotes

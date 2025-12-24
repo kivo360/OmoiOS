@@ -18,6 +18,7 @@ import {
   MoreHorizontal,
   AlertCircle,
   Bot,
+  CreditCard,
 } from "lucide-react"
 import {
   DropdownMenu,
@@ -123,11 +124,18 @@ export default function OrganizationPage({ params }: OrganizationPageProps) {
             )}
           </div>
         </div>
-        <Button variant="outline" asChild>
-          <Link href={`/organizations/${id}/settings`}>
-            <Settings className="mr-2 h-4 w-4" /> Settings
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild>
+            <Link href={`/organizations/${id}/billing`}>
+              <CreditCard className="mr-2 h-4 w-4" /> Billing
+            </Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href={`/organizations/${id}/settings`}>
+              <Settings className="mr-2 h-4 w-4" /> Settings
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}

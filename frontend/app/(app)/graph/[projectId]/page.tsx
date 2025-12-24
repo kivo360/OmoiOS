@@ -58,6 +58,7 @@ import {
   Clock,
   Loader2,
   Lightbulb,
+  FolderGit2,
 } from "lucide-react"
 import { useProjectDependencyGraph } from "@/hooks/useGraph"
 import { useProject } from "@/hooks/useProjects"
@@ -142,6 +143,8 @@ interface TicketNodeData {
   priority: string
   assignee: string | null
   blockedBy: string[]
+  nodeType: "task" | "discovery" | "ticket"
+  ticketId?: string
   [key: string]: unknown
 }
 
@@ -300,6 +303,7 @@ function graphToFlowElements(
         .filter((e) => e.target === node.id)
         .map((e) => e.source),
       nodeType: node.type, // task, discovery, or ticket
+      ticketId: node.ticket_id, // For navigation
     },
   }))
 
@@ -432,8 +436,30 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
   // Handle node click
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
-      // Navigate to ticket detail
-      window.location.href = `/board/${projectId}/${node.id}`
+      const nodeData = node.data as TicketNodeData
+
+      // For ticket nodes, navigate directly to ticket on board
+      if (nodeData.nodeType === "ticket") {
+        // Node ID is "ticket-{ticketId}", extract actual ticket ID
+        const ticketId = node.id.startsWith("ticket-") ? node.id.slice(7) : node.id
+        window.location.href = `/board/${projectId}?ticket=${ticketId}`
+        return
+      }
+
+      // For task nodes, navigate to parent ticket with task highlighted
+      if (nodeData.nodeType === "task" && nodeData.ticketId) {
+        window.location.href = `/board/${projectId}?ticket=${nodeData.ticketId}&task=${node.id}`
+        return
+      }
+
+      // Discovery nodes - navigate to source ticket if available
+      if (nodeData.nodeType === "discovery" && nodeData.ticketId) {
+        window.location.href = `/board/${projectId}?ticket=${nodeData.ticketId}`
+        return
+      }
+
+      // Fallback - just go to board
+      window.location.href = `/board/${projectId}`
     },
     [projectId]
   )
@@ -463,13 +489,19 @@ export default function DependencyGraphPage({ params }: GraphPageProps) {
       <div className="flex-shrink-0 border-b bg-background px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Link
-              href={`/board/${projectId}`}
-              className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Board
-            </Link>
+            {/* Project Context Breadcrumb */}
+            <div className="flex items-center gap-2 text-sm">
+              <Link
+                href={`/projects/${projectId}`}
+                className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <FolderGit2 className="h-4 w-4" />
+                <span className="font-medium text-foreground">{project?.name || "Project"}</span>
+              </Link>
+              <span className="text-muted-foreground">/</span>
+              <span className="text-muted-foreground">Dependency Graph</span>
+            </div>
+            <Separator orientation="vertical" className="h-6" />
             <h1 className="text-xl font-bold">Dependency Graph</h1>
             <div className="flex items-center gap-2">
               <Badge variant="outline">{stats.total} nodes</Badge>
