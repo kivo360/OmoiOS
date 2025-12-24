@@ -635,6 +635,7 @@ export interface GraphNode {
   priority?: string
   phase_id?: string
   description?: string
+  ticket_id?: string
   data?: Record<string, unknown>
 }
 
@@ -945,6 +946,121 @@ export interface AssistantMessageEventData {
 export interface ThinkingEventData {
   content: string
   turn?: number
+}
+
+// ============================================================================
+// Billing Types
+// ============================================================================
+
+export interface BillingAccount {
+  id: string
+  organization_id: string
+  stripe_customer_id: string | null
+  has_payment_method: boolean
+  status: string
+  free_workflows_remaining: number
+  free_workflows_reset_at: string | null
+  credit_balance: number
+  auto_billing_enabled: boolean
+  billing_email: string | null
+  tax_exempt: boolean
+  total_workflows_completed: number
+  total_amount_spent: number
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface Invoice {
+  id: string
+  invoice_number: string
+  billing_account_id: string
+  ticket_id: string | null
+  stripe_invoice_id: string | null
+  status: string
+  period_start: string | null
+  period_end: string | null
+  subtotal: number
+  tax_amount: number
+  discount_amount: number
+  total: number
+  credits_applied: number
+  amount_due: number
+  amount_paid: number
+  currency: string
+  line_items: Record<string, unknown>[]
+  description: string | null
+  due_date: string | null
+  finalized_at: string | null
+  paid_at: string | null
+  created_at: string | null
+}
+
+export interface Payment {
+  id: string
+  billing_account_id: string
+  invoice_id: string | null
+  stripe_payment_intent_id: string | null
+  amount: number
+  currency: string
+  status: string
+  payment_method_type: string | null
+  payment_method_last4: string | null
+  payment_method_brand: string | null
+  failure_code: string | null
+  failure_message: string | null
+  refunded_amount: number
+  description: string | null
+  created_at: string | null
+  succeeded_at: string | null
+}
+
+export interface UsageRecord {
+  id: string
+  billing_account_id: string
+  ticket_id: string | null
+  usage_type: string
+  quantity: number
+  unit_price: number
+  total_price: number
+  free_tier_used: boolean
+  invoice_id: string | null
+  billed: boolean
+  usage_details: Record<string, unknown> | null
+  recorded_at: string | null
+  billed_at: string | null
+}
+
+export interface PaymentMethod {
+  id: string
+  type: string
+  card_brand: string | null
+  card_last4: string | null
+  is_default: boolean
+}
+
+export interface StripeConfig {
+  publishable_key: string | null
+  is_configured: boolean
+}
+
+export interface CheckoutResponse {
+  checkout_url: string
+  session_id: string
+}
+
+export interface PortalResponse {
+  portal_url: string
+}
+
+export interface CreditPurchaseRequest {
+  amount_usd: number
+  success_url?: string
+  cancel_url?: string
+}
+
+export interface PaymentMethodRequest {
+  payment_method_id: string
+  set_as_default?: boolean
 }
 
 // ============================================================================

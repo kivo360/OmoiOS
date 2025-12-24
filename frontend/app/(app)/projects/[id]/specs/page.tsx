@@ -21,8 +21,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, FileText, Clock, CheckCircle, AlertCircle, PlayCircle, Loader2 } from "lucide-react"
+import { ArrowLeft, Plus, FileText, Clock, CheckCircle, AlertCircle, PlayCircle, Loader2, FolderGit2 } from "lucide-react"
 import { useProjectSpecs, useCreateSpec } from "@/hooks/useSpecs"
+import { useProject } from "@/hooks/useProjects"
 
 interface SpecsPageProps {
   params: Promise<{ id: string }>
@@ -44,6 +45,7 @@ export default function SpecsPage({ params }: SpecsPageProps) {
   const [newDescription, setNewDescription] = useState("")
 
   const { data, isLoading, error } = useProjectSpecs(projectId)
+  const { data: project } = useProject(projectId)
   const createMutation = useCreateSpec()
 
   const specs = data?.specs || []
@@ -97,21 +99,25 @@ export default function SpecsPage({ params }: SpecsPageProps) {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Back Link */}
-      <Link
-        href={`/projects/${projectId}`}
-        className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeft className="mr-2 h-4 w-4" />
-        Back to Project
-      </Link>
+      {/* Project Context Breadcrumb */}
+      <div className="flex items-center gap-2 text-sm">
+        <Link
+          href={`/projects/${projectId}`}
+          className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <FolderGit2 className="h-4 w-4" />
+          <span className="font-medium text-foreground">{project?.name || "Project"}</span>
+        </Link>
+        <span className="text-muted-foreground">/</span>
+        <span className="text-muted-foreground">Specifications</span>
+      </div>
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Specifications</h1>
           <p className="text-muted-foreground">
-            Manage project specifications and requirements
+            Manage specifications and requirements for {project?.name || "this project"}
           </p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

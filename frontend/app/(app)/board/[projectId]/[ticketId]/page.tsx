@@ -52,6 +52,7 @@ import {
   AlertTriangle,
   Zap,
 } from "lucide-react"
+import { Markdown } from "@/components/ui/markdown"
 import { useTicket, useTicketContext, useTransitionTicket } from "@/hooks/useTickets"
 import { useTicketCommits } from "@/hooks/useCommits"
 import { useTasks } from "@/hooks/useTasks"
@@ -310,11 +311,11 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                   <h2 className="text-lg font-semibold mb-3">Description</h2>
                   <Card>
                     <CardContent className="p-4">
-                      <div className="prose prose-sm max-w-none dark:prose-invert">
-                        <pre className="whitespace-pre-wrap font-sans text-sm">
-                          {ticket.description || "No description provided."}
-                        </pre>
-                      </div>
+                      {ticket.description ? (
+                        <Markdown content={ticket.description} />
+                      ) : (
+                        <p className="text-muted-foreground">No description provided.</p>
+                      )}
                     </CardContent>
                   </Card>
                 </div>

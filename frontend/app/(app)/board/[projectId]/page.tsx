@@ -22,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { CreateTicketDialog } from "@/components/tickets/CreateTicketDialog"
 import {
   DndContext,
   DragOverlay,
@@ -53,8 +54,10 @@ import {
   BarChart3,
   ListFilter,
   X,
+  FolderGit2,
 } from "lucide-react"
 import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
+import { useProject } from "@/hooks/useProjects"
 import type { Ticket as ApiTicket, BoardColumn } from "@/lib/api/types"
 
 interface BoardPageProps {
@@ -313,8 +316,10 @@ export default function BoardPage({ params }: BoardPageProps) {
   const [filterPriority, setFilterPriority] = useState<string>("all")
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
-  // Fetch board data from API
+  // Fetch project and board data from API
+  const { data: project } = useProject(projectId === "all" ? undefined : projectId)
   const { data: boardData, isLoading, error } = useBoardView(projectId === "all" ? undefined : projectId)
   const moveTicket = useMoveTicket()
 
@@ -491,13 +496,18 @@ export default function BoardPage({ params }: BoardPageProps) {
         <div className="flex-shrink-0 border-b bg-background px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Link
-                href={`/projects/${projectId}`}
-                className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground"
-              >
-                <ArrowLeft className="mr-2 h-4 w-4" />
-                Back
-              </Link>
+              {/* Project Context Breadcrumb */}
+              <div className="flex items-center gap-2 text-sm">
+                <Link
+                  href={projectId === "all" ? "/projects" : `/projects/${projectId}`}
+                  className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <FolderGit2 className="h-4 w-4" />
+                  <span className="font-medium text-foreground">{project?.name || (projectId === "all" ? "All Projects" : "Project")}</span>
+                </Link>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-muted-foreground">Kanban Board</span>
+              </div>
               <h1 className="text-xl font-bold">Kanban Board</h1>
               <Badge variant="outline">
                 {filteredTickets.length} tickets
@@ -563,7 +573,7 @@ export default function BoardPage({ params }: BoardPageProps) {
               </Button>
 
               {/* Create Ticket */}
-              <Button>
+              <Button onClick={() => setIsCreateDialogOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Ticket
               </Button>
@@ -597,6 +607,13 @@ export default function BoardPage({ params }: BoardPageProps) {
             />
           )}
         </DragOverlay>
+
+        {/* Create Ticket Dialog */}
+        <CreateTicketDialog
+          open={isCreateDialogOpen}
+          onOpenChange={setIsCreateDialogOpen}
+          projectId={projectId}
+        />
       </div>
     </DndContext>
   )

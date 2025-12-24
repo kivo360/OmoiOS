@@ -2,17 +2,40 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Search, Plus, FolderGit2, Star, Clock, AlertCircle } from "lucide-react"
+import { Search, Plus, FolderGit2, Star, Clock, AlertCircle, ChevronRight } from "lucide-react"
 import { useProjects } from "@/hooks/useProjects"
 
+// Extract project ID from various route patterns
+function extractProjectIdFromPath(pathname: string): string | null {
+  // /projects/[id]/... pattern
+  const projectMatch = pathname.match(/^\/projects\/([^/]+)/)
+  if (projectMatch) return projectMatch[1]
+
+  // /board/[projectId]/... pattern
+  const boardMatch = pathname.match(/^\/board\/([^/]+)/)
+  if (boardMatch && boardMatch[1] !== "all") return boardMatch[1]
+
+  // /graph/[projectId]/... pattern
+  const graphMatch = pathname.match(/^\/graph\/([^/]+)/)
+  if (graphMatch) return graphMatch[1]
+
+  return null
+}
+
 export function ProjectsPanel() {
+  const pathname = usePathname()
   const [searchQuery, setSearchQuery] = useState("")
   const { data: projects, isLoading, error } = useProjects()
+
+  // Extract current project ID from URL
+  const currentProjectId = extractProjectIdFromPath(pathname)
 
   const filteredProjects = useMemo(() => {
     const projectList = projects?.projects ?? []
@@ -24,8 +47,71 @@ export function ProjectsPanel() {
   const activeProjects = filteredProjects.filter((p) => p.status === "active")
   const pausedProjects = filteredProjects.filter((p) => p.status === "paused" || p.status === "archived")
 
+  // Find the current project for display
+  const currentProject = useMemo(() => {
+    if (!currentProjectId) return null
+    const allProjects = projects?.projects ?? []
+    return allProjects.find((p) => p.id === currentProjectId)
+  }, [currentProjectId, projects])
+
   return (
     <div className="flex h-full flex-col">
+      {/* Current Project Indicator */}
+      {currentProject && (
+        <div className="border-b bg-primary/5 p-3">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+            Current Project
+          </div>
+          <Link
+            href={`/projects/${currentProject.id}`}
+            className="flex items-center gap-2 rounded-md bg-primary/10 border border-primary/20 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/15 transition-colors"
+          >
+            <FolderGit2 className="h-4 w-4" />
+            <span className="flex-1 truncate">{currentProject.name}</span>
+            <ChevronRight className="h-4 w-4 opacity-50" />
+          </Link>
+          {/* Quick navigation links for current project */}
+          <div className="mt-2 flex flex-wrap gap-1">
+            <Link
+              href={`/board/${currentProject.id}`}
+              className={cn(
+                "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
+                pathname.startsWith(`/board/${currentProject.id}`) && "bg-accent font-medium"
+              )}
+            >
+              Board
+            </Link>
+            <Link
+              href={`/projects/${currentProject.id}/specs`}
+              className={cn(
+                "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
+                pathname.includes(`/projects/${currentProject.id}/specs`) && "bg-accent font-medium"
+              )}
+            >
+              Specs
+            </Link>
+            <Link
+              href={`/graph/${currentProject.id}`}
+              className={cn(
+                "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
+                pathname.startsWith(`/graph/${currentProject.id}`) && "bg-accent font-medium"
+              )}
+            >
+              Graph
+            </Link>
+            <Link
+              href={`/projects/${currentProject.id}/settings`}
+              className={cn(
+                "text-xs px-2 py-1 rounded hover:bg-accent transition-colors",
+                pathname.includes(`/projects/${currentProject.id}/settings`) && "bg-accent font-medium"
+              )}
+            >
+              Settings
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="border-b p-3 space-y-3">
         <div className="relative">
@@ -67,16 +153,27 @@ export function ProjectsPanel() {
                     <Star className="h-3 w-3" />
                     Favorites
                   </div>
-                  {activeProjects.slice(0, 2).map((project) => (
-                    <Link
-                      key={project.id}
-                      href={`/projects/${project.id}`}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                    >
-                      <FolderGit2 className="h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate">{project.name}</span>
-                    </Link>
-                  ))}
+                  {activeProjects.slice(0, 2).map((project) => {
+                    const isCurrentProject = project.id === currentProjectId
+                    return (
+                      <Link
+                        key={project.id}
+                        href={`/projects/${project.id}`}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                          isCurrentProject
+                            ? "bg-primary/10 text-primary font-medium border border-primary/20"
+                            : "hover:bg-accent"
+                        )}
+                      >
+                        <FolderGit2 className={cn("h-4 w-4", isCurrentProject ? "text-primary" : "text-muted-foreground")} />
+                        <span className="flex-1 truncate">{project.name}</span>
+                        {isCurrentProject && (
+                          <ChevronRight className="h-4 w-4 text-primary opacity-50" />
+                        )}
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
 
@@ -87,19 +184,30 @@ export function ProjectsPanel() {
                     <Clock className="h-3 w-3" />
                     Active
                   </div>
-                  {activeProjects.map((project) => (
-                    <Link
-                      key={project.id}
-                      href={`/projects/${project.id}`}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent transition-colors"
-                    >
-                      <FolderGit2 className="h-4 w-4 text-muted-foreground" />
-                      <span className="flex-1 truncate">{project.name}</span>
-                      {project.status === "active" && (
-                        <span className="flex h-2 w-2 rounded-full bg-success" />
-                      )}
-                    </Link>
-                  ))}
+                  {activeProjects.map((project) => {
+                    const isCurrentProject = project.id === currentProjectId
+                    return (
+                      <Link
+                        key={project.id}
+                        href={`/projects/${project.id}`}
+                        className={cn(
+                          "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+                          isCurrentProject
+                            ? "bg-primary/10 text-primary font-medium border border-primary/20"
+                            : "hover:bg-accent"
+                        )}
+                      >
+                        <FolderGit2 className={cn("h-4 w-4", isCurrentProject ? "text-primary" : "text-muted-foreground")} />
+                        <span className="flex-1 truncate">{project.name}</span>
+                        {project.status === "active" && !isCurrentProject && (
+                          <span className="flex h-2 w-2 rounded-full bg-success" />
+                        )}
+                        {isCurrentProject && (
+                          <ChevronRight className="h-4 w-4 text-primary opacity-50" />
+                        )}
+                      </Link>
+                    )
+                  })}
                 </div>
               )}
 

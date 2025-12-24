@@ -55,8 +55,10 @@ import {
   Check,
   X,
   Link as LinkIcon,
+  FolderGit2,
 } from "lucide-react"
 import { useSpec, useProjectSpecs, useApproveRequirements, useApproveDesign } from "@/hooks/useSpecs"
+import { useProject } from "@/hooks/useProjects"
 
 interface SpecPageProps {
   params: Promise<{ id: string; specId: string }>
@@ -286,7 +288,8 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const [activeTab, setActiveTab] = useState("requirements")
   const [expandedRequirements, setExpandedRequirements] = useState<string[]>(["REQ-001"])
 
-  // Fetch spec data
+  // Fetch project and spec data
+  const { data: project } = useProject(projectId)
   const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId)
   const { data: allSpecs } = useProjectSpecs(projectId)
   const approveReqMutation = useApproveRequirements(specId)
@@ -434,13 +437,26 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
         <div className="flex-shrink-0 border-b bg-background px-6 py-4">
           <div className="flex items-start justify-between">
             <div className="space-y-1">
-              <div className="flex items-center gap-3">
+              {/* Project Context Breadcrumb */}
+              <div className="flex items-center gap-2 text-sm mb-2">
                 <Link
-                  href={`/projects/${id}/specs`}
-                  className="text-muted-foreground hover:text-foreground"
+                  href={`/projects/${projectId}`}
+                  className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  <ArrowLeft className="h-5 w-5" />
+                  <FolderGit2 className="h-4 w-4" />
+                  <span className="font-medium text-foreground">{project?.name || "Project"}</span>
                 </Link>
+                <span className="text-muted-foreground">/</span>
+                <Link
+                  href={`/projects/${projectId}/specs`}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Specifications
+                </Link>
+                <span className="text-muted-foreground">/</span>
+                <span className="text-muted-foreground truncate max-w-[200px]">{mockSpec.title}</span>
+              </div>
+              <div className="flex items-center gap-3">
                 <h1 className="text-xl font-semibold">{mockSpec.title}</h1>
                 <Badge
                   variant={
