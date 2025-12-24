@@ -90,20 +90,21 @@ class DependencyGraphService:
         include_resolved: bool = True
     ) -> Dict[str, Any]:
         """
-        Build dependency graph for entire project (all tickets).
-        
+        Build dependency graph for a project's tickets.
+
         Args:
-            project_id: Optional project ID to filter tickets
+            project_id: Project ID to filter tickets (required for proper filtering)
             include_resolved: Whether to include completed tasks
-        
+
         Returns:
             Graph structure with nodes and edges
         """
         with self.db.get_session() as session:
-            # Get all tickets (optionally filtered by project)
-            # Note: Assuming tickets might have project_id in future
-            # For now, get all tickets
-            tickets = session.query(Ticket).all()
+            # Get tickets filtered by project_id
+            query = session.query(Ticket)
+            if project_id:
+                query = query.filter(Ticket.project_id == project_id)
+            tickets = query.all()
             
             # Get all tasks for these tickets
             ticket_ids = [t.id for t in tickets]
@@ -125,20 +126,22 @@ class DependencyGraphService:
                 nodes.append({
                     "id": f"ticket-{ticket.id}",
                     "type": "ticket",
-                    "title": ticket.title or "Untitled Ticket",
+                    "label": ticket.title or "Untitled Ticket",
+                    "description": ticket.description,
                     "status": ticket.status,
                     "priority": ticket.priority,
                     "phase_id": ticket.phase_id,
-                    "is_blocked": False,
+                    "is_blocked": ticket.is_blocked,
                     "blocks_count": 0,
-                    "task_count": len(ticket_tasks)
+                    "task_count": len(ticket_tasks),
+                    "ticket_id": ticket.id,
                 })
-            
+
             # Add ticket → task edges
             for task in tasks:
                 edges.append({
-                    "from": f"ticket-{task.ticket_id}",
-                    "to": task.id,
+                    "source": f"ticket-{task.ticket_id}",
+                    "target": task.id,
                     "type": "ticket_contains",
                     "label": "contains"
                 })
@@ -172,7 +175,8 @@ class DependencyGraphService:
             nodes.append({
                 "id": task.id,
                 "type": "task",
-                "title": task.description or task.task_type or "Untitled Task",
+                "label": task.title or task.description or task.task_type or "Untitled Task",
+                "description": task.description,
                 "status": task.status,
                 "phase_id": task.phase_id,
                 "priority": task.priority,
@@ -180,6 +184,7 @@ class DependencyGraphService:
                 "is_blocked": is_blocked,
                 "blocks_count": blocks_count,
                 "assigned_agent_id": task.assigned_agent_id,
+                "ticket_id": task.ticket_id,
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "started_at": task.started_at.isoformat() if task.started_at else None,
                 "completed_at": task.completed_at.isoformat() if task.completed_at else None,
@@ -190,7 +195,8 @@ class DependencyGraphService:
             nodes.append({
                 "id": f"discovery-{discovery.id}",
                 "type": "discovery",
-                "title": discovery.description,
+                "label": discovery.description,
+                "description": discovery.description,
                 "discovery_type": discovery.discovery_type,
                 "status": discovery.resolution_status,
                 "spawned_count": len(discovery.spawned_task_ids),
@@ -216,29 +222,29 @@ class DependencyGraphService:
                 for dep_id in depends_on:
                     if dep_id in task_dict:
                         edges.append({
-                            "from": dep_id,
-                            "to": task.id,
+                            "source": dep_id,
+                            "target": task.id,
                             "type": "depends_on",
                             "label": "depends on"
                         })
-        
+
         # 2. Build parent_child edges
         for task in tasks:
             if task.parent_task_id and task.parent_task_id in task_dict:
                 edges.append({
-                    "from": task.parent_task_id,
-                    "to": task.id,
+                    "source": task.parent_task_id,
+                    "target": task.id,
                     "type": "parent_child",
                     "label": "sub-task"
                 })
-        
+
         # 3. Build spawned_from edges (discovery → task)
         for discovery in discoveries:
             for spawned_id in discovery.spawned_task_ids:
                 if spawned_id in task_dict:
                     edges.append({
-                        "from": f"discovery-{discovery.id}",
-                        "to": spawned_id,
+                        "source": f"discovery-{discovery.id}",
+                        "target": spawned_id,
                         "type": "spawned_from",
                         "label": discovery.discovery_type,
                         "discovery_id": discovery.id

@@ -24,6 +24,7 @@ from omoi_os.api.routes import (
     agents,
     alerts,
     auth,
+    billing,
     board,
     branch_workflow,
     collaboration,
@@ -672,13 +673,20 @@ async def lifespan(app: FastAPI):
     from omoi_os.services.discovery import DiscoveryService
     from omoi_os.services.memory import MemoryService
     from omoi_os.services.embedding import EmbeddingService, preload_embedding_model
+    from omoi_os.services.billing_service import BillingService
 
     # Start background preload of embedding model (if configured)
     # This allows the model to load while other services initialize
     preload_embedding_model()
 
     phase_loader = PhaseLoader()
-    result_submission_service = ResultSubmissionService(db, event_bus, phase_loader)
+
+    # Initialize billing service for workflow completion tracking
+    billing_service = BillingService(db, event_bus)
+
+    result_submission_service = ResultSubmissionService(
+        db, event_bus, phase_loader, billing_service=billing_service
+    )
 
     # Initialize diagnostic service with dependencies
     # Model will be ready immediately if preload finished, or lazy-loaded on first use
@@ -988,6 +996,7 @@ app.include_router(phases.router, prefix="/api/v1", tags=["phases"])
 app.include_router(agents.router, prefix="/api/v1", tags=["agents"])
 app.include_router(collaboration.router, prefix="/api/v1", tags=["collaboration"])
 app.include_router(costs.router, prefix="/api/v1/costs", tags=["costs"])
+app.include_router(billing.router, prefix="/api/v1/billing", tags=["billing"])
 app.include_router(guardian.router, prefix="/api/v1/guardian", tags=["guardian"])
 app.include_router(watchdog.router, prefix="/api/v1/watchdog", tags=["watchdog"])
 app.include_router(alerts.router, prefix="/api/v1", tags=["alerts"])

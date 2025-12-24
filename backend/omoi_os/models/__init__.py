@@ -12,6 +12,15 @@ from omoi_os.models.agent_message import AgentMessage, CollaborationThread
 from omoi_os.models.agent_result import AgentResult
 from omoi_os.models.auth import Session, APIKey
 from omoi_os.models.base import Base
+from omoi_os.models.billing import (
+    BillingAccount,
+    BillingAccountStatus,
+    Invoice,
+    InvoiceStatus,
+    Payment,
+    PaymentStatus,
+    UsageRecord,
+)
 from omoi_os.models.board_column import BoardColumn
 from omoi_os.models.budget import Budget, BudgetScope
 from omoi_os.models.cost_record import CostRecord
@@ -74,6 +83,8 @@ __all__ = [
     "Alert",
     "AuthorityLevel",
     "Base",
+    "BillingAccount",
+    "BillingAccountStatus",
     "BoardColumn",
     "Budget",
     "BudgetScope",
@@ -88,6 +99,8 @@ __all__ = [
     "GuardianAction",
     "HeartbeatAck",
     "HeartbeatMessage",
+    "Invoice",
+    "InvoiceStatus",
     "LearnedPattern",
     "MCPInvocation",
     "MCPPolicy",
@@ -98,6 +111,8 @@ __all__ = [
     "MonitorAnomaly",
     "Organization",
     "OrganizationMembership",
+    "Payment",
+    "PaymentStatus",
     "PhaseContext",
     "PhaseGateArtifact",
     "PhaseGateResult",
@@ -124,6 +139,7 @@ __all__ = [
     "TaskPattern",
     "Ticket",
     "TicketStatus",
+    "UsageRecord",
     "User",
     "UserCredential",
     "ValidationReview",

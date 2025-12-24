@@ -479,6 +479,10 @@ class DiagnosticSettings(OmoiBaseSettings):
     Diagnostic agent system configuration.
 
     Precedence: YAML defaults (config/base.yaml + config/<env>.yaml) < environment variables < init kwargs.
+
+    Runaway prevention settings:
+    - max_consecutive_failures: Stop spawning after N consecutive failed diagnostic runs
+    - max_diagnostics_per_workflow: Hard limit on total diagnostic runs per workflow
     """
 
     yaml_section = "diagnostic"
@@ -493,6 +497,10 @@ class DiagnosticSettings(OmoiBaseSettings):
     max_agents_to_analyze: int = 15
     max_conductor_analyses: int = 5
     max_tasks_per_run: int = 5
+
+    # Runaway prevention limits
+    max_consecutive_failures: int = 3  # Stop after N consecutive failed diagnostic runs
+    max_diagnostics_per_workflow: int = 10  # Hard limit on total runs per workflow
 
 
 class WorkerSettings(OmoiBaseSettings):

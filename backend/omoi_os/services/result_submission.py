@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+import logging
+from typing import List, Optional, TYPE_CHECKING
 
 from omoi_os.models.agent_result import AgentResult
 from omoi_os.models.task import Task
+from omoi_os.models.ticket import Ticket
 from omoi_os.models.workflow_result import WorkflowResult
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.phase_loader import PhaseLoader
 from omoi_os.services.validation_helpers import read_markdown_file
 from omoi_os.utils.datetime import utc_now
+
+if TYPE_CHECKING:
+    from omoi_os.services.billing_service import BillingService
+
+logger = logging.getLogger(__name__)
 
 
 class ResultSubmissionService:
@@ -27,17 +34,20 @@ class ResultSubmissionService:
         db: DatabaseService,
         event_bus: Optional[EventBusService] = None,
         phase_loader: Optional[PhaseLoader] = None,
+        billing_service: Optional["BillingService"] = None,
     ):
         """Initialize result submission service.
-        
+
         Args:
             db: Database service
             event_bus: Optional event bus for publishing events
             phase_loader: Optional phase loader for workflow config
+            billing_service: Optional billing service for workflow completion tracking
         """
         self.db = db
         self.event_bus = event_bus
         self.phase_loader = phase_loader or PhaseLoader()
+        self.billing_service = billing_service
 
     # -------------------------------------------------------------------------
     # Task-Level Results (AgentResult)
@@ -306,13 +316,17 @@ class ResultSubmissionService:
 
             # Determine action to take
             action_taken = "none"
-            
+            billing_recorded = False
+
             if passed:
+                # Record workflow completion for billing
+                billing_recorded = self._record_billing_usage(workflow_id)
+
                 # Load workflow config to check on_result_found
                 try:
                     config = self._load_workflow_config(workflow_id)
                     on_result_found = config.get("on_result_found", "stop_all")
-                    
+
                     if on_result_found == "stop_all":
                         # Trigger workflow termination
                         if self.event_bus:
@@ -339,6 +353,7 @@ class ResultSubmissionService:
                 "validation_status": result.status,
                 "passed": passed,
                 "action_taken": action_taken,
+                "billing_recorded": billing_recorded,
             }
 
     def list_workflow_results(self, workflow_id: str) -> List[WorkflowResult]:
@@ -392,4 +407,71 @@ class ResultSubmissionService:
                 "result_criteria": "",
                 "on_result_found": "do_nothing",
             }
+
+    def _record_billing_usage(self, workflow_id: str) -> bool:
+        """Record workflow completion for billing.
+
+        This is called when a workflow result is validated as passed,
+        indicating the workflow has been successfully completed.
+
+        Args:
+            workflow_id: ID of workflow (ticket_id)
+
+        Returns:
+            True if usage was recorded, False if billing is not configured
+        """
+        if not self.billing_service:
+            logger.debug("Billing service not configured, skipping usage recording")
+            return False
+
+        try:
+            # Get the ticket to find organization
+            with self.db.get_session() as session:
+                ticket = session.get(Ticket, workflow_id)
+                if not ticket:
+                    logger.warning(f"Ticket {workflow_id} not found for billing")
+                    return False
+
+                # Get organization from ticket's project
+                if not ticket.project_id:
+                    logger.warning(f"Ticket {workflow_id} has no project, skipping billing")
+                    return False
+
+                # Get organization ID from the project
+                from omoi_os.models.project import Project
+                project = session.get(Project, ticket.project_id)
+                if not project or not project.organization_id:
+                    logger.warning(f"No organization found for ticket {workflow_id}")
+                    return False
+
+                organization_id = project.organization_id
+
+            # Record workflow usage with billing service
+            usage_details = {
+                "workflow_id": str(workflow_id),
+                "ticket_title": ticket.title if ticket.title else "Untitled workflow",
+            }
+
+            usage_record = self.billing_service.record_workflow_usage(
+                organization_id=organization_id,
+                ticket_id=workflow_id,
+                usage_details=usage_details,
+            )
+
+            if usage_record:
+                logger.info(
+                    f"Recorded billing usage for workflow {workflow_id}, "
+                    f"org {organization_id}, charged: ${usage_record.amount:.2f}"
+                )
+                return True
+            else:
+                logger.debug(
+                    f"Workflow {workflow_id} used free tier, no charge recorded"
+                )
+                return True
+
+        except Exception as e:
+            # Log error but don't fail the workflow validation
+            logger.error(f"Failed to record billing usage for workflow {workflow_id}: {e}")
+            return False
 

@@ -143,3 +143,30 @@ demo:
   add_security_analyzer: false
   confirm_all: true
 
+billing:
+  # Currency for payments (ISO 4217)
+  currency: usd
+
+  # Workflow pricing ($10 per workflow completion)
+  workflow_price_usd: 10.0
+
+  # Free tier: workflows per month before billing starts
+  free_workflows_per_month: 5
+
+  # Minimum credit purchase in USD
+  min_credit_purchase_usd: 10.0
+
+  # Maximum credit purchase in USD (single transaction)
+  max_credit_purchase_usd: 1000.0
+
+  # Stripe URLs for checkout redirects
+  # Override via STRIPE_SUCCESS_URL, STRIPE_CANCEL_URL, STRIPE_PORTAL_RETURN_URL env vars
+  success_url: http://localhost:3000/billing/success
+  cancel_url: http://localhost:3000/billing/cancel
+  portal_return_url: http://localhost:3000/billing
+
+  # Stripe API keys (MUST be set via environment variables for security)
+  # STRIPE_API_KEY - Secret key (sk_test_... or sk_live_...)
+  # STRIPE_PUBLISHABLE_KEY - Publishable key (pk_test_... or pk_live_...)
+  # STRIPE_WEBHOOK_SECRET - Webhook signing secret (whsec_...)
+
