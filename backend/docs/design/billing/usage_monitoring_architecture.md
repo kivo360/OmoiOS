@@ -14,18 +14,31 @@ OmoiOS needs to track usage for a **pay-per-workflow** billing model where users
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| **Sandbox token extraction** | ✅ Done | `claude_sandbox_worker.py` extracts from Claude SDK |
-| **Token data storage** | ✅ Done | Stored in `sandbox_events` and `session_metadata` |
-| **CostRecord model** | ✅ Done | `cost_record.py` ready for per-call tracking |
-| **CostTrackingService** | ✅ Done | `record_llm_cost()`, aggregation, forecasting |
-| **Cost API endpoints** | ✅ Done | `/api/costs/*` routes exist |
-| **Budget enforcement** | ✅ Done | `budget_enforcer.py` with limits and alerts |
-| **Connect events → CostRecords** | ❌ TODO | Wire `agent.completed` to `record_llm_cost()` |
-| **Backend LLM tracking** | ❌ TODO | Guardian, Conductor, PydanticAI calls |
-| **Usage aggregation per ticket** | ❌ TODO | New `UsageAggregatorService` |
-| **Billing accounts & invoices** | ❌ TODO | New models and service |
-| **Stripe integration** | ❌ TODO | Payment processing |
-| **Free tier tracking** | ❌ TODO | 5 workflows/month |
+| **Cost Tracking Layer** | | |
+| Sandbox token extraction | ✅ Done | `claude_sandbox_worker.py` extracts from Claude SDK |
+| Token data storage | ✅ Done | Stored in `sandbox_events` and `session_metadata` |
+| CostRecord model | ✅ Done | `cost_record.py` ready for per-call tracking |
+| CostTrackingService | ✅ Done | `record_llm_cost()`, aggregation, forecasting |
+| Cost API endpoints | ✅ Done | `/api/costs/*` routes exist |
+| Budget enforcement | ✅ Done | `budget_enforcer.py` with limits and alerts |
+| **Billing Layer** | | |
+| BillingAccount model | ✅ Done | `billing.py` - org billing info, Stripe customer |
+| Invoice model | ✅ Done | `billing.py` - invoice generation with line items |
+| Payment model | ✅ Done | `billing.py` - payment tracking with Stripe |
+| UsageRecord model | ✅ Done | `billing.py` - per-workflow usage aggregation |
+| BillingService | ✅ Done | `billing_service.py` - usage tracking, invoicing |
+| StripeService | ✅ Done | `stripe_service.py` - full Stripe integration |
+| Billing API routes | ✅ Done | `/api/billing/*` with webhooks |
+| Free tier tracking | ✅ Done | 5 workflows/month in BillingAccount |
+| Prepaid credits | ✅ Done | Credit purchase checkout |
+| **BYO API Keys** | | |
+| UserCredential model | ✅ Done | `user_credentials.py` - stores user API keys |
+| CredentialsService | ✅ Done | `credentials.py` - credential management |
+| **Still TODO** | | |
+| Connect events → CostRecords | ❌ TODO | Wire `agent.completed` to `record_llm_cost()` |
+| Backend LLM tracking | ❌ TODO | Guardian, Conductor, PydanticAI calls |
+| Subscription model | ❌ TODO | Recurring billing with tiers |
+| Lifetime purchase tracking | ❌ TODO | One-time purchase model |
 
 ---
 
@@ -323,23 +336,34 @@ omoi_os/
     └── costs.py            # ✅ Cost & budget API endpoints
 ```
 
-### New Code to Add
+### Already Implemented (Previously Listed as "New")
 
 ```
 omoi_os/
 ├── models/
-│   ├── usage_record.py     # NEW: Unified usage per ticket
-│   ├── billing_account.py  # NEW: Customer billing info
-│   └── invoice.py          # NEW: Generated invoices
+│   ├── billing.py          # ✅ DONE: BillingAccount, Invoice, Payment, UsageRecord
+│   └── user_credentials.py # ✅ DONE: User API key storage for BYO
 ├── services/
-│   ├── usage_aggregator.py # NEW: Aggregates usage per ticket
-│   ├── billing_service.py  # NEW: Generates invoices, handles payments
-│   └── stripe_service.py   # NEW: Stripe API integration
+│   ├── billing_service.py  # ✅ DONE: Usage tracking, invoicing, credits
+│   ├── stripe_service.py   # ✅ DONE: Full Stripe API integration
+│   └── credentials.py      # ✅ DONE: BYO API key management
 └── api/routes/
-    └── billing.py          # NEW: Billing API endpoints
+    └── billing.py          # ✅ DONE: Full billing API with webhooks
+```
+
+### Still Needs Implementation
+
+```
+omoi_os/
+├── models/
+│   └── subscription.py     # NEW: Subscription tiers & recurring billing
+├── services/
+│   └── usage_aggregator.py # NEW: Connect sandbox events → cost_records
+└── api/routes/
+    └── subscriptions.py    # NEW: Subscription management endpoints
 
 config/
-└── billing.yaml            # NEW: Pricing configuration
+└── billing.yaml            # NEW: Pricing tiers configuration
 ```
 
 ---
@@ -814,29 +838,62 @@ New events published to EventBus:
 4. ❌ Decide: attribute backend LLM costs to specific tasks or track separately as "platform overhead"
 
 ### Phase 3: Usage Aggregation
-1. Create `usage_records` table and model
-2. Create `UsageAggregatorService`
-3. Calculate sandbox runtime from `SandboxEvent` timestamps
-4. Aggregate costs by ticket_id on ticket completion
-5. Use existing `/api/costs/summary` as starting point
+**Status**: Partial - UsageRecord model exists
+
+1. ✅ `usage_records` table exists (in `billing.py` models)
+2. ❌ Create `UsageAggregatorService` to connect sandbox events
+3. ❌ Calculate sandbox runtime from `SandboxEvent` timestamps
+4. ❌ Aggregate costs by ticket_id on ticket completion
+5. ✅ `/api/costs/summary` exists as reference
 
 ### Phase 4: Billing Core
-1. Create `billing_accounts` and `invoices` tables
-2. Create `BillingService`
-3. Implement free tier tracking (5 tickets/month)
-4. Hook into ticket completion to trigger billing
-5. Create billing API routes
+**Status**: ✅ COMPLETE
+
+1. ✅ `billing_accounts`, `invoices`, `payments`, `usage_records` tables exist
+2. ✅ `BillingService` implemented (`billing_service.py`)
+3. ✅ Free tier tracking (5 workflows/month) in `BillingAccount.free_workflows_remaining`
+4. ✅ Billing API routes (`/api/billing/*`)
+5. ❌ Hook ticket completion → billing (integration point)
 
 ### Phase 5: Stripe Integration
-1. Create `StripeService`
-2. Implement customer creation
-3. Implement payment processing
-4. Set up webhooks for payment events
+**Status**: ✅ COMPLETE
 
-### Phase 6: Credits System (Optional)
-1. Implement credit purchase flow
-2. Implement credit deduction on invoice
-3. Add credit balance API
+1. ✅ `StripeService` implemented (`stripe_service.py`)
+2. ✅ Customer creation via `create_customer()`
+3. ✅ Payment processing via `charge_customer_directly()`, `create_payment_intent()`
+4. ✅ Webhooks implemented (`billing.py:505-649`)
+5. ✅ Customer portal via `create_portal_session()`
+
+### Phase 6: Credits System
+**Status**: ✅ COMPLETE
+
+1. ✅ Credit purchase flow via `create_credit_purchase_session()`
+2. ✅ Credit deduction in `BillingService`
+3. ✅ Credit balance in `BillingAccount.credit_balance`
+
+### Phase 7: Subscription Tiers (NEW - Not Started)
+**Status**: Not implemented
+
+1. ❌ Create `subscriptions` table and model
+2. ❌ Implement Stripe recurring billing products
+3. ❌ Add tier-based usage limits enforcement
+4. ❌ Handle subscription lifecycle events (created, updated, canceled)
+5. ❌ Implement upgrade/downgrade with proration
+
+### Phase 8: Lifetime/One-Time Purchases (NEW - Not Started)
+**Status**: Not implemented
+
+1. ❌ Track lifetime purchase in billing_accounts or new table
+2. ❌ Handle Stripe one-time payment checkout
+3. ❌ Apply lifetime benefits (higher limits, no monthly fee)
+
+### Phase 9: BYO API Key Integration
+**Status**: ✅ Infrastructure COMPLETE, Integration Partial
+
+1. ✅ `user_credentials` table and `UserCredential` model exist
+2. ✅ `CredentialsService` for credential management
+3. ❌ Connect credentials to sandbox spawning (use user's keys)
+4. ❌ Track usage when using user-provided keys (for analytics, not billing)
 
 ---
 

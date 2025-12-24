@@ -95,10 +95,12 @@ class CostTrackingService:
         prompt_tokens: int,
         completion_tokens: int,
         agent_id: Optional[str] = None,
+        sandbox_id: Optional[str] = None,
+        billing_account_id: Optional[str] = None,
         session: Optional[Session] = None,
     ) -> CostRecord:
         """Record LLM API cost for a task execution.
-        
+
         Args:
             task_id: Task that incurred the cost
             provider: LLM provider ('openai', 'anthropic', etc.)
@@ -106,20 +108,24 @@ class CostTrackingService:
             prompt_tokens: Number of prompt tokens
             completion_tokens: Number of completion tokens
             agent_id: Agent that executed the task (optional)
+            sandbox_id: Sandbox where execution occurred (optional)
+            billing_account_id: Billing account for cost aggregation (optional)
             session: Database session (creates new if not provided)
-        
+
         Returns:
             Created CostRecord
         """
         # Calculate cost breakdown
         costs = self.calculate_cost(provider, model, prompt_tokens, completion_tokens)
         total_tokens = prompt_tokens + completion_tokens
-        
+
         def _record(sess: Session) -> CostRecord:
             # Create cost record
             cost_record = CostRecord(
                 task_id=task_id,
                 agent_id=agent_id,
+                sandbox_id=sandbox_id,
+                billing_account_id=billing_account_id,
                 provider=provider,
                 model=model,
                 prompt_tokens=prompt_tokens,
@@ -134,14 +140,14 @@ class CostTrackingService:
             sess.flush()
             sess.expunge(cost_record)  # Detach from session
             return cost_record
-        
+
         if session:
             record = _record(session)
         else:
             with self.db.get_session() as sess:
                 record = _record(sess)
                 sess.commit()
-        
+
         # Publish cost event
         if self.event_bus:
             self.event_bus.publish(
@@ -152,6 +158,8 @@ class CostTrackingService:
                     payload={
                         "task_id": task_id,
                         "agent_id": agent_id,
+                        "sandbox_id": sandbox_id,
+                        "billing_account_id": billing_account_id,
                         "provider": provider,
                         "model": model,
                         "total_cost": costs["total_cost"],
@@ -159,8 +167,132 @@ class CostTrackingService:
                     },
                 )
             )
-        
+
         return record
+
+    def record_sandbox_cost(
+        self,
+        task_id: str,
+        sandbox_id: str,
+        cost_usd: float,
+        input_tokens: int,
+        output_tokens: int,
+        model: str = "claude-sonnet-4",
+        provider: str = "anthropic",
+        agent_id: Optional[str] = None,
+        billing_account_id: Optional[str] = None,
+        session: Optional[Session] = None,
+    ) -> CostRecord:
+        """Record cost from sandbox agent.completed event.
+
+        This is called when a sandbox reports completion with cost data.
+        Uses the reported cost_usd directly instead of calculating from tokens.
+
+        Args:
+            task_id: Task that incurred the cost
+            sandbox_id: Sandbox where execution occurred
+            cost_usd: Total cost reported by the sandbox (in USD)
+            input_tokens: Input/prompt tokens used
+            output_tokens: Output/completion tokens used
+            model: Model used (default: claude-sonnet-4)
+            provider: Provider (default: anthropic)
+            agent_id: Agent that executed the task (optional)
+            billing_account_id: Billing account for cost aggregation (optional)
+            session: Database session (creates new if not provided)
+
+        Returns:
+            Created CostRecord
+        """
+        total_tokens = input_tokens + output_tokens
+
+        # Estimate cost breakdown (assume ~70/30 split for prompt/completion cost)
+        prompt_cost = cost_usd * 0.3  # Input tokens are usually cheaper
+        completion_cost = cost_usd * 0.7  # Output tokens are usually more expensive
+
+        def _record(sess: Session) -> CostRecord:
+            cost_record = CostRecord(
+                task_id=task_id,
+                agent_id=agent_id,
+                sandbox_id=sandbox_id,
+                billing_account_id=billing_account_id,
+                provider=provider,
+                model=model,
+                prompt_tokens=input_tokens,
+                completion_tokens=output_tokens,
+                total_tokens=total_tokens,
+                prompt_cost=prompt_cost,
+                completion_cost=completion_cost,
+                total_cost=cost_usd,
+                recorded_at=utc_now(),
+            )
+            sess.add(cost_record)
+            sess.flush()
+            sess.expunge(cost_record)
+            return cost_record
+
+        if session:
+            record = _record(session)
+        else:
+            with self.db.get_session() as sess:
+                record = _record(sess)
+                sess.commit()
+
+        # Publish cost event
+        if self.event_bus:
+            self.event_bus.publish(
+                SystemEvent(
+                    event_type="cost.recorded",
+                    entity_type="cost_record",
+                    entity_id=str(record.id),
+                    payload={
+                        "task_id": task_id,
+                        "sandbox_id": sandbox_id,
+                        "billing_account_id": billing_account_id,
+                        "provider": provider,
+                        "model": model,
+                        "total_cost": cost_usd,
+                        "total_tokens": total_tokens,
+                    },
+                )
+            )
+
+        return record
+
+    def get_billing_account_costs(
+        self,
+        billing_account_id: str,
+        session: Optional[Session] = None,
+    ) -> list[CostRecord]:
+        """Get all cost records for a billing account."""
+        def _get(sess: Session) -> list[CostRecord]:
+            result = sess.execute(
+                select(CostRecord).where(CostRecord.billing_account_id == billing_account_id)
+            )
+            return list(result.scalars().all())
+
+        if session:
+            return _get(session)
+        else:
+            with self.db.get_session() as sess:
+                return _get(sess)
+
+    def get_sandbox_costs(
+        self,
+        sandbox_id: str,
+        session: Optional[Session] = None,
+    ) -> list[CostRecord]:
+        """Get all cost records for a specific sandbox."""
+        def _get(sess: Session) -> list[CostRecord]:
+            result = sess.execute(
+                select(CostRecord).where(CostRecord.sandbox_id == sandbox_id)
+            )
+            return list(result.scalars().all())
+
+        if session:
+            return _get(session)
+        else:
+            with self.db.get_session() as sess:
+                return _get(sess)
 
     def get_task_costs(self, task_id: str, session: Optional[Session] = None) -> list[CostRecord]:
         """Get all cost records for a specific task."""
@@ -196,13 +328,13 @@ class CostTrackingService:
         scope_id: Optional[str] = None,
         session: Optional[Session] = None,
     ) -> dict:
-        """Get cost summary for a specific scope (ticket, agent, phase, global).
-        
+        """Get cost summary for a specific scope (ticket, agent, phase, billing_account, global).
+
         Args:
-            scope_type: 'ticket', 'agent', 'phase', or 'global'
+            scope_type: 'ticket', 'agent', 'phase', 'billing_account', or 'global'
             scope_id: ID of the scoped entity (required unless scope_type='global')
             session: Database session
-        
+
         Returns:
             dict with 'total_cost', 'total_tokens', 'record_count', breakdown by provider/model
         """
@@ -214,7 +346,7 @@ class CostTrackingService:
                 func.sum(CostRecord.total_tokens).label("total_tokens"),
                 func.count(CostRecord.id).label("record_count"),
             )
-            
+
             # Apply scope filter
             if scope_type == "agent":
                 query = query.where(CostRecord.agent_id == scope_id)
@@ -230,6 +362,8 @@ class CostTrackingService:
                 query = query.join(Task, CostRecord.task_id == Task.id).where(
                     Task.phase_id == scope_id
                 )
+            elif scope_type == "billing_account":
+                query = query.where(CostRecord.billing_account_id == scope_id)
             # 'global' scope has no filter
             
             query = query.group_by(CostRecord.provider, CostRecord.model)

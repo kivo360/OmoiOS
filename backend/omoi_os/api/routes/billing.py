@@ -10,8 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from omoi_os.api.dependencies import get_database_service
 from omoi_os.services.billing_service import BillingService, get_billing_service
+from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.stripe_service import get_stripe_service, StripeService
+from omoi_os.services.subscription_service import SubscriptionService, get_subscription_service
+from omoi_os.models.subscription import SubscriptionTier
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +120,12 @@ class CreditPurchaseRequest(BaseModel):
     cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
 
 
+class LifetimePurchaseRequest(BaseModel):
+    """Request to purchase lifetime subscription."""
+    success_url: Optional[str] = Field(None, description="Custom success redirect URL")
+    cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
+
+
 class CheckoutResponse(BaseModel):
     """Response for checkout session creation."""
     checkout_url: str
@@ -154,6 +163,75 @@ class StripeConfigResponse(BaseModel):
     is_configured: bool
 
 
+class SubscriptionResponse(BaseModel):
+    """Response model for subscription."""
+    id: str
+    organization_id: str
+    billing_account_id: str
+    tier: str
+    status: str
+    current_period_start: Optional[datetime]
+    current_period_end: Optional[datetime]
+    cancel_at_period_end: bool
+    canceled_at: Optional[datetime]
+    trial_start: Optional[datetime]
+    trial_end: Optional[datetime]
+    workflows_limit: int
+    workflows_used: int
+    workflows_remaining: int
+    agents_limit: int
+    storage_limit_gb: int
+    storage_used_gb: float
+    is_lifetime: bool
+    lifetime_purchase_date: Optional[datetime]
+    lifetime_purchase_amount: Optional[float]
+    is_byo: bool
+    byo_providers_configured: Optional[list[str]]
+    created_at: Optional[datetime]
+    updated_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CostBreakdownItem(BaseModel):
+    """Model breakdown in cost summary."""
+    provider: str
+    model: str
+    cost: float
+    tokens: int
+    records: int
+
+
+class CostSummaryResponse(BaseModel):
+    """Response model for cost summary."""
+    scope_type: str
+    scope_id: Optional[str]
+    total_cost: float
+    total_tokens: int
+    record_count: int
+    breakdown: list[CostBreakdownItem]
+
+
+class CostRecordResponse(BaseModel):
+    """Response model for individual cost record."""
+    id: str
+    task_id: str
+    agent_id: Optional[str]
+    sandbox_id: Optional[str]
+    billing_account_id: Optional[str]
+    provider: str
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    prompt_cost: float
+    completion_cost: float
+    total_cost: float
+    recorded_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # ========== Dependency Injection ==========
 
 def get_billing_service_dep(
@@ -161,6 +239,20 @@ def get_billing_service_dep(
 ) -> BillingService:
     """Get billing service instance."""
     return get_billing_service(db)
+
+
+def get_subscription_service_dep(
+    db: DatabaseService = Depends(get_database_service),
+) -> SubscriptionService:
+    """Get subscription service instance."""
+    return get_subscription_service(db)
+
+
+def get_cost_tracking_service_dep(
+    db: DatabaseService = Depends(get_database_service),
+) -> CostTrackingService:
+    """Get cost tracking service instance."""
+    return CostTrackingService(db)
 
 
 # ========== API Endpoints ==========
@@ -343,6 +435,158 @@ async def create_credit_checkout(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to create credit checkout: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+
+
+# ========== Subscription Management ==========
+
+@router.get("/account/{organization_id}/subscription", response_model=Optional[SubscriptionResponse])
+async def get_subscription(
+    organization_id: UUID,
+    subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
+):
+    """
+    Get the active subscription for an organization.
+
+    Returns null if no active subscription exists.
+    """
+    subscription = subscription_service.get_subscription(organization_id)
+    if not subscription:
+        return None
+
+    return SubscriptionResponse(
+        id=str(subscription.id),
+        organization_id=str(subscription.organization_id),
+        billing_account_id=str(subscription.billing_account_id),
+        tier=subscription.tier,
+        status=subscription.status,
+        current_period_start=subscription.current_period_start,
+        current_period_end=subscription.current_period_end,
+        cancel_at_period_end=subscription.cancel_at_period_end,
+        canceled_at=subscription.canceled_at,
+        trial_start=subscription.trial_start,
+        trial_end=subscription.trial_end,
+        workflows_limit=subscription.workflows_limit,
+        workflows_used=subscription.workflows_used,
+        workflows_remaining=subscription.workflows_remaining,
+        agents_limit=subscription.agents_limit,
+        storage_limit_gb=subscription.storage_limit_gb,
+        storage_used_gb=subscription.storage_used_gb,
+        is_lifetime=subscription.is_lifetime,
+        lifetime_purchase_date=subscription.lifetime_purchase_date,
+        lifetime_purchase_amount=subscription.lifetime_purchase_amount,
+        is_byo=subscription.is_byo,
+        byo_providers_configured=subscription.byo_providers_configured,
+        created_at=subscription.created_at,
+        updated_at=subscription.updated_at,
+    )
+
+
+@router.post("/account/{organization_id}/subscription/cancel")
+async def cancel_subscription(
+    organization_id: UUID,
+    at_period_end: bool = True,
+    subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
+):
+    """
+    Cancel the organization's subscription.
+
+    By default, cancels at the end of the current billing period.
+    Set at_period_end=False for immediate cancellation.
+    """
+    subscription = subscription_service.get_subscription(organization_id)
+    if not subscription:
+        raise HTTPException(status_code=404, detail="No active subscription found")
+
+    subscription_service.cancel_subscription(subscription.id, at_period_end=at_period_end)
+    return {"status": "success", "message": "Subscription canceled"}
+
+
+@router.post("/account/{organization_id}/subscription/reactivate")
+async def reactivate_subscription(
+    organization_id: UUID,
+    subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
+):
+    """
+    Reactivate a canceled subscription (before period end).
+    """
+    subscription = subscription_service.get_subscription(organization_id)
+    if not subscription:
+        raise HTTPException(status_code=404, detail="No subscription found")
+
+    if not subscription.cancel_at_period_end:
+        raise HTTPException(status_code=400, detail="Subscription is not pending cancellation")
+
+    subscription_service.reactivate_subscription(subscription.id)
+    return {"status": "success", "message": "Subscription reactivated"}
+
+
+# ========== Lifetime Purchase ==========
+
+# Lifetime pricing configuration (should match pricing_strategy.md)
+LIFETIME_PRICE_USD = 499.0
+LIFETIME_STRIPE_PRICE_ID = "price_lifetime_omoios"  # Configure in Stripe dashboard
+
+
+@router.post("/account/{organization_id}/lifetime/checkout", response_model=CheckoutResponse)
+async def create_lifetime_checkout(
+    organization_id: UUID,
+    request: LifetimePurchaseRequest,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+    subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
+    stripe: StripeService = Depends(get_stripe_service),
+):
+    """
+    Create a Stripe Checkout session to purchase lifetime subscription.
+
+    Lifetime subscription provides:
+    - Unlimited workflows per month
+    - Priority support
+    - All Pro features permanently
+    - One-time $499 payment (no recurring charges)
+    """
+    # Check for existing lifetime subscription
+    existing = subscription_service.get_subscription(organization_id)
+    if existing and existing.is_lifetime:
+        raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
+
+    # Get or create billing account
+    account = billing_service.get_or_create_billing_account(organization_id)
+
+    # Create Stripe checkout session for one-time payment
+    try:
+        success_url = request.success_url or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
+
+        session = stripe.stripe.checkout.Session.create(
+            mode="payment",  # One-time payment, not subscription
+            customer=account.stripe_customer_id,
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": int(LIFETIME_PRICE_USD * 100),  # In cents
+                        "product_data": {
+                            "name": "OmoiOS Lifetime Subscription",
+                            "description": "One-time purchase for lifetime access to OmoiOS Pro features",
+                        },
+                    },
+                    "quantity": 1,
+                }
+            ],
+            metadata={
+                "lifetime_purchase": "true",
+                "organization_id": str(organization_id),
+                "billing_account_id": str(account.id),
+                "purchase_amount": str(LIFETIME_PRICE_USD),
+            },
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+
+        return CheckoutResponse(checkout_url=session.url, session_id=session.id)
+    except Exception as e:
+        logger.error(f"Failed to create lifetime checkout: {e}")
         raise HTTPException(status_code=500, detail="Failed to create checkout session")
 
 
@@ -553,6 +797,26 @@ async def handle_stripe_webhook(
             # Handle refund
             await _handle_refund(event_data, billing_service)
 
+        elif event_type == "customer.subscription.created":
+            # Handle new subscription from Stripe
+            await _handle_subscription_created(event_data, billing_service)
+
+        elif event_type == "customer.subscription.updated":
+            # Handle subscription update (tier change, renewal, etc.)
+            await _handle_subscription_updated(event_data, billing_service)
+
+        elif event_type == "customer.subscription.deleted":
+            # Handle subscription cancellation
+            await _handle_subscription_deleted(event_data, billing_service)
+
+        elif event_type == "invoice.paid":
+            # Handle subscription invoice paid (reset usage for new period)
+            await _handle_subscription_invoice_paid(event_data, billing_service)
+
+        elif event_type == "invoice.payment_failed":
+            # Handle subscription payment failure (start dunning)
+            await _handle_subscription_invoice_failed(event_data, billing_service)
+
         else:
             logger.debug(f"Unhandled webhook event type: {event_type}")
 
@@ -567,6 +831,29 @@ async def handle_stripe_webhook(
 async def _handle_checkout_completed(event_data: dict, billing_service: BillingService):
     """Handle checkout.session.completed event."""
     metadata = event_data.get("metadata", {})
+
+    # Check if this is a lifetime purchase
+    if metadata.get("lifetime_purchase") == "true":
+        organization_id = metadata.get("organization_id")
+        billing_account_id = metadata.get("billing_account_id")
+        purchase_amount = float(metadata.get("purchase_amount", LIFETIME_PRICE_USD))
+
+        if organization_id and billing_account_id:
+            subscription_service = get_subscription_service(billing_service.db)
+
+            # Cancel any existing subscription first
+            existing = subscription_service.get_subscription(UUID(organization_id))
+            if existing and not existing.is_lifetime:
+                subscription_service.cancel_subscription(existing.id, at_period_end=False)
+
+            # Create lifetime subscription
+            subscription_service.create_lifetime_subscription(
+                organization_id=UUID(organization_id),
+                billing_account_id=UUID(billing_account_id),
+                purchase_amount=purchase_amount,
+            )
+            logger.info(f"Created lifetime subscription for org {organization_id} (${purchase_amount:.2f})")
+        return
 
     # Check if this is a credit purchase
     if metadata.get("credit_purchase") == "true":
@@ -646,3 +933,344 @@ async def _handle_refund(event_data: dict, billing_service: BillingService):
                 payment.refund(refund_amount)
                 sess.commit()
                 logger.info(f"Recorded refund of ${refund_amount:.2f} for payment {payment.id}")
+
+
+# ========== Subscription Webhook Handlers ==========
+
+async def _handle_subscription_created(event_data: dict, billing_service: BillingService):
+    """Handle customer.subscription.created event.
+
+    Creates or updates local subscription record when subscription is created in Stripe.
+    """
+    from datetime import datetime
+    from sqlalchemy import select
+    from omoi_os.models.billing import BillingAccount
+    from omoi_os.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier, TIER_LIMITS
+    from uuid import uuid4
+
+    stripe_subscription_id = event_data.get("id")
+    stripe_customer_id = event_data.get("customer")
+    stripe_price_id = event_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
+    stripe_product_id = event_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("product")
+    metadata = event_data.get("metadata", {})
+
+    with billing_service.db.get_session() as sess:
+        # Find billing account by Stripe customer ID
+        result = sess.execute(
+            select(BillingAccount).where(BillingAccount.stripe_customer_id == stripe_customer_id)
+        )
+        account = result.scalar_one_or_none()
+
+        if not account:
+            logger.warning(f"No billing account found for Stripe customer: {stripe_customer_id}")
+            return
+
+        # Determine tier from metadata or product
+        tier_value = metadata.get("tier", "starter")
+        try:
+            tier = SubscriptionTier(tier_value)
+        except ValueError:
+            tier = SubscriptionTier.STARTER
+
+        limits = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+
+        # Check for existing subscription
+        existing = sess.execute(
+            select(Subscription).where(
+                Subscription.stripe_subscription_id == stripe_subscription_id
+            )
+        ).scalar_one_or_none()
+
+        if existing:
+            logger.info(f"Subscription already exists for Stripe ID: {stripe_subscription_id}")
+            return
+
+        # Create new subscription
+        subscription = Subscription(
+            id=uuid4(),
+            organization_id=account.organization_id,
+            billing_account_id=account.id,
+            stripe_subscription_id=stripe_subscription_id,
+            stripe_price_id=stripe_price_id,
+            stripe_product_id=stripe_product_id,
+            tier=tier.value,
+            status=SubscriptionStatus.ACTIVE.value if event_data.get("status") == "active" else SubscriptionStatus.TRIALING.value,
+            current_period_start=datetime.fromtimestamp(event_data.get("current_period_start", 0)) if event_data.get("current_period_start") else None,
+            current_period_end=datetime.fromtimestamp(event_data.get("current_period_end", 0)) if event_data.get("current_period_end") else None,
+            workflows_limit=limits["workflows_limit"],
+            workflows_used=0,
+            agents_limit=limits["agents_limit"],
+            storage_limit_gb=limits["storage_limit_gb"],
+        )
+
+        # Handle trial
+        if event_data.get("trial_start"):
+            subscription.trial_start = datetime.fromtimestamp(event_data["trial_start"])
+        if event_data.get("trial_end"):
+            subscription.trial_end = datetime.fromtimestamp(event_data["trial_end"])
+
+        sess.add(subscription)
+        sess.commit()
+
+        logger.info(f"Created subscription {subscription.id} for org {account.organization_id} (tier: {tier.value})")
+
+
+async def _handle_subscription_updated(event_data: dict, billing_service: BillingService):
+    """Handle customer.subscription.updated event.
+
+    Updates local subscription when Stripe subscription is modified.
+    """
+    from datetime import datetime
+    from sqlalchemy import select
+    from omoi_os.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier, TIER_LIMITS
+
+    stripe_subscription_id = event_data.get("id")
+    metadata = event_data.get("metadata", {})
+
+    with billing_service.db.get_session() as sess:
+        result = sess.execute(
+            select(Subscription).where(
+                Subscription.stripe_subscription_id == stripe_subscription_id
+            )
+        )
+        subscription = result.scalar_one_or_none()
+
+        if not subscription:
+            logger.warning(f"Subscription not found for Stripe ID: {stripe_subscription_id}")
+            return
+
+        # Update status
+        stripe_status = event_data.get("status")
+        status_map = {
+            "active": SubscriptionStatus.ACTIVE.value,
+            "trialing": SubscriptionStatus.TRIALING.value,
+            "past_due": SubscriptionStatus.PAST_DUE.value,
+            "canceled": SubscriptionStatus.CANCELED.value,
+            "paused": SubscriptionStatus.PAUSED.value,
+            "incomplete": SubscriptionStatus.INCOMPLETE.value,
+        }
+        subscription.status = status_map.get(stripe_status, SubscriptionStatus.ACTIVE.value)
+
+        # Update period
+        if event_data.get("current_period_start"):
+            subscription.current_period_start = datetime.fromtimestamp(event_data["current_period_start"])
+        if event_data.get("current_period_end"):
+            subscription.current_period_end = datetime.fromtimestamp(event_data["current_period_end"])
+
+        subscription.cancel_at_period_end = event_data.get("cancel_at_period_end", False)
+
+        if event_data.get("canceled_at"):
+            subscription.canceled_at = datetime.fromtimestamp(event_data["canceled_at"])
+
+        # Update tier if changed
+        new_tier_value = metadata.get("tier")
+        if new_tier_value and new_tier_value != subscription.tier:
+            try:
+                new_tier = SubscriptionTier(new_tier_value)
+                limits = TIER_LIMITS.get(new_tier, TIER_LIMITS[SubscriptionTier.FREE])
+                subscription.tier = new_tier.value
+                subscription.workflows_limit = limits["workflows_limit"]
+                subscription.agents_limit = limits["agents_limit"]
+                subscription.storage_limit_gb = limits["storage_limit_gb"]
+                logger.info(f"Updated subscription {subscription.id} tier to {new_tier.value}")
+            except ValueError:
+                pass
+
+        sess.commit()
+        logger.info(f"Updated subscription {subscription.id} (status: {subscription.status})")
+
+
+async def _handle_subscription_deleted(event_data: dict, billing_service: BillingService):
+    """Handle customer.subscription.deleted event.
+
+    Marks local subscription as canceled when Stripe subscription is deleted.
+    """
+    from sqlalchemy import select
+    from omoi_os.models.subscription import Subscription, SubscriptionStatus
+    from omoi_os.utils.datetime import utc_now
+
+    stripe_subscription_id = event_data.get("id")
+
+    with billing_service.db.get_session() as sess:
+        result = sess.execute(
+            select(Subscription).where(
+                Subscription.stripe_subscription_id == stripe_subscription_id
+            )
+        )
+        subscription = result.scalar_one_or_none()
+
+        if not subscription:
+            logger.warning(f"Subscription not found for Stripe ID: {stripe_subscription_id}")
+            return
+
+        subscription.status = SubscriptionStatus.CANCELED.value
+        subscription.canceled_at = utc_now()
+
+        sess.commit()
+        logger.info(f"Canceled subscription {subscription.id}")
+
+
+async def _handle_subscription_invoice_paid(event_data: dict, billing_service: BillingService):
+    """Handle invoice.paid event for subscription renewals.
+
+    Resets usage counters for the new billing period.
+    """
+    from sqlalchemy import select
+    from omoi_os.models.subscription import Subscription
+
+    # Check if this is a subscription invoice
+    subscription_id = event_data.get("subscription")
+    if not subscription_id:
+        return  # Not a subscription invoice
+
+    with billing_service.db.get_session() as sess:
+        result = sess.execute(
+            select(Subscription).where(
+                Subscription.stripe_subscription_id == subscription_id
+            )
+        )
+        subscription = result.scalar_one_or_none()
+
+        if not subscription:
+            logger.warning(f"Subscription not found for Stripe ID: {subscription_id}")
+            return
+
+        # Reset usage for new period
+        subscription.reset_usage()
+
+        sess.commit()
+        logger.info(f"Reset usage for subscription {subscription.id} (invoice paid)")
+
+
+async def _handle_subscription_invoice_failed(event_data: dict, billing_service: BillingService):
+    """Handle invoice.payment_failed event for subscriptions.
+
+    Marks subscription as past_due and may trigger dunning.
+    """
+    from sqlalchemy import select
+    from omoi_os.models.subscription import Subscription, SubscriptionStatus
+    from omoi_os.models.billing import BillingAccount, BillingAccountStatus
+
+    # Check if this is a subscription invoice
+    subscription_id = event_data.get("subscription")
+    if not subscription_id:
+        return  # Not a subscription invoice
+
+    with billing_service.db.get_session() as sess:
+        result = sess.execute(
+            select(Subscription).where(
+                Subscription.stripe_subscription_id == subscription_id
+            )
+        )
+        subscription = result.scalar_one_or_none()
+
+        if not subscription:
+            logger.warning(f"Subscription not found for Stripe ID: {subscription_id}")
+            return
+
+        # Update subscription status
+        subscription.status = SubscriptionStatus.PAST_DUE.value
+
+        # Also update billing account status
+        result = sess.execute(
+            select(BillingAccount).where(
+                BillingAccount.id == subscription.billing_account_id
+            )
+        )
+        account = result.scalar_one_or_none()
+
+        if account:
+            account.status = BillingAccountStatus.SUSPENDED.value
+
+        sess.commit()
+        logger.warning(
+            f"Subscription {subscription.id} marked past_due due to payment failure"
+        )
+
+
+# ========== Cost Tracking Endpoints ==========
+
+@router.get(
+    "/account/{organization_id}/costs/summary",
+    response_model=CostSummaryResponse,
+    summary="Get cost summary for billing account",
+    description="Returns aggregated costs grouped by provider and model for a billing account.",
+)
+async def get_billing_account_cost_summary(
+    organization_id: UUID,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+    cost_service: CostTrackingService = Depends(get_cost_tracking_service_dep),
+) -> CostSummaryResponse:
+    """Get cost summary for a billing account."""
+    # Get billing account for organization
+    account = billing_service.get_billing_account(organization_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Billing account not found")
+
+    # Get cost summary
+    summary = cost_service.get_cost_summary(
+        scope_type="billing_account",
+        scope_id=str(account.id),
+    )
+
+    # Transform breakdown to response model
+    breakdown = [
+        CostBreakdownItem(
+            provider=item["provider"],
+            model=item["model"],
+            cost=item["cost"],
+            tokens=item["tokens"],
+            records=item["records"],
+        )
+        for item in summary.get("breakdown", [])
+    ]
+
+    return CostSummaryResponse(
+        scope_type=summary["scope_type"],
+        scope_id=summary.get("scope_id"),
+        total_cost=summary["total_cost"],
+        total_tokens=summary["total_tokens"],
+        record_count=summary["record_count"],
+        breakdown=breakdown,
+    )
+
+
+@router.get(
+    "/account/{organization_id}/costs",
+    response_model=list[CostRecordResponse],
+    summary="Get cost records for billing account",
+    description="Returns all cost records for a billing account.",
+)
+async def get_billing_account_costs(
+    organization_id: UUID,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+    cost_service: CostTrackingService = Depends(get_cost_tracking_service_dep),
+) -> list[CostRecordResponse]:
+    """Get cost records for a billing account."""
+    # Get billing account for organization
+    account = billing_service.get_billing_account(organization_id)
+    if not account:
+        raise HTTPException(status_code=404, detail="Billing account not found")
+
+    # Get cost records
+    records = cost_service.get_billing_account_costs(str(account.id))
+
+    return [
+        CostRecordResponse(
+            id=str(record.id),
+            task_id=record.task_id,
+            agent_id=record.agent_id,
+            sandbox_id=record.sandbox_id,
+            billing_account_id=record.billing_account_id,
+            provider=record.provider,
+            model=record.model,
+            prompt_tokens=record.prompt_tokens,
+            completion_tokens=record.completion_tokens,
+            total_tokens=record.total_tokens,
+            prompt_cost=record.prompt_cost,
+            completion_cost=record.completion_cost,
+            total_cost=record.total_cost,
+            recorded_at=record.recorded_at,
+        )
+        for record in records
+    ]
