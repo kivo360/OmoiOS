@@ -21,7 +21,7 @@ from sqlalchemy import inspect, text
 
 # revision identifiers, used by Alembic.
 revision: str = "039_add_tasks_embedding_vector"
-down_revision: Union[str, None] = "9f4e5dc42483"  # add_title_and_updated_at_to_tasks
+down_revision: Union[str, None] = "038_billing_system"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

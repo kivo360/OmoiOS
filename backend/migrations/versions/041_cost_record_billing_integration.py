@@ -13,6 +13,7 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -32,10 +33,10 @@ def upgrade() -> None:
         "ix_cost_records_sandbox_id", "cost_records", ["sandbox_id"]
     )
 
-    # Add billing_account_id column with foreign key
+    # Add billing_account_id column with foreign key (UUID to match billing_accounts.id)
     op.add_column(
         "cost_records",
-        sa.Column("billing_account_id", sa.String(), nullable=True),
+        sa.Column("billing_account_id", postgresql.UUID(as_uuid=True), nullable=True),
     )
     op.create_foreign_key(
         "fk_cost_records_billing_account_id",
