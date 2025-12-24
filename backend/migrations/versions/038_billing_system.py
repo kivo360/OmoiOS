@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "038_billing_system"
-down_revision: Union[str, None] = "037_claude_session_transcripts"
+down_revision: Union[str, None] = "9f4e5dc42483"  # add_title_and_updated_at_to_tasks
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -77,7 +77,7 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("invoice_number", sa.String(length=50), nullable=False),
         sa.Column("billing_account_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("ticket_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("ticket_id", sa.String(), nullable=True),  # VARCHAR to match tickets.id
         # Stripe integration
         sa.Column("stripe_invoice_id", sa.String(length=255), nullable=True),
         sa.Column("stripe_payment_intent_id", sa.String(length=255), nullable=True),
@@ -217,7 +217,7 @@ def upgrade() -> None:
         "usage_records",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("billing_account_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("ticket_id", postgresql.UUID(as_uuid=True), nullable=True),
+        sa.Column("ticket_id", sa.String(), nullable=True),  # VARCHAR to match tickets.id
         # Usage type
         sa.Column("usage_type", sa.String(length=50), nullable=False),
         # Quantity and pricing
