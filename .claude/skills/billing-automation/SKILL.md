@@ -529,6 +529,11 @@ class UsageBillingEngine:
         return charge
 ```
 
+## Project-Specific Implementation
+
+For OmoiOS-specific billing implementation details, see:
+- **[omoios_billing_reference.md](./omoios_billing_reference.md)** - OmoiOS infrastructure mapping
+
 ## Resources
 
 - **references/billing-cycles.md**: Billing cycle management

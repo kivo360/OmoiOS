@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from omoi_os.models.agent import Agent
     from omoi_os.models.project import Project
     from omoi_os.models.billing import BillingAccount
+    from omoi_os.models.subscription import Subscription
 
 
 class Organization(Base):
@@ -88,6 +89,11 @@ class Organization(Base):
         cascade="all, delete-orphan"
     )
     billing_account: Mapped[Optional["BillingAccount"]] = relationship(
+        back_populates="organization",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    subscription: Mapped[Optional["Subscription"]] = relationship(
         back_populates="organization",
         uselist=False,
         cascade="all, delete-orphan"

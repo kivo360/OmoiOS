@@ -21,6 +21,12 @@ from omoi_os.models.billing import (
     PaymentStatus,
     UsageRecord,
 )
+from omoi_os.models.subscription import (
+    Subscription,
+    SubscriptionStatus,
+    SubscriptionTier,
+    TIER_LIMITS,
+)
 from omoi_os.models.board_column import BoardColumn
 from omoi_os.models.budget import Budget, BudgetScope
 from omoi_os.models.cost_record import CostRecord
@@ -140,6 +146,10 @@ __all__ = [
     "Ticket",
     "TicketStatus",
     "UsageRecord",
+    "Subscription",
+    "SubscriptionStatus",
+    "SubscriptionTier",
+    "TIER_LIMITS",
     "User",
     "UserCredential",
     "ValidationReview",

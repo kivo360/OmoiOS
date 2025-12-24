@@ -22,9 +22,15 @@ from typing import Any, Literal, Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
+from sqlalchemy import select
+
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.logging import get_logger
+from omoi_os.models.billing import BillingAccount
 from omoi_os.models.task import Task
+from omoi_os.models.ticket import Ticket
+from omoi_os.models.project import Project
+from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -668,6 +674,68 @@ async def post_sandbox_event(
                         result=result,
                     )
                     logger.info(f"Successfully updated task {task_id} to completed")
+
+                    # Record cost if cost data is available
+                    cost_usd = event.event_data.get("cost_usd")
+                    if cost_usd is not None and cost_usd > 0:
+                        try:
+                            input_tokens = event.event_data.get("input_tokens", 0)
+                            output_tokens = event.event_data.get("output_tokens", 0)
+                            model = event.event_data.get("model", "claude-sonnet-4")
+
+                            # Look up billing_account_id from task -> ticket -> project -> organization
+                            billing_account_id = None
+                            async with db.get_async_session() as cost_session:
+                                # Query task with joined relationships
+                                task_result = await cost_session.execute(
+                                    select(Task).where(Task.id == task_id)
+                                )
+                                task_obj = task_result.scalar_one_or_none()
+
+                                if task_obj and task_obj.ticket_id:
+                                    ticket_result = await cost_session.execute(
+                                        select(Ticket).where(Ticket.id == task_obj.ticket_id)
+                                    )
+                                    ticket_obj = ticket_result.scalar_one_or_none()
+
+                                    if ticket_obj and ticket_obj.project_id:
+                                        project_result = await cost_session.execute(
+                                            select(Project).where(Project.id == ticket_obj.project_id)
+                                        )
+                                        project_obj = project_result.scalar_one_or_none()
+
+                                        if project_obj and project_obj.organization_id:
+                                            billing_result = await cost_session.execute(
+                                                select(BillingAccount).where(
+                                                    BillingAccount.organization_id == project_obj.organization_id
+                                                )
+                                            )
+                                            billing_account = billing_result.scalar_one_or_none()
+                                            if billing_account:
+                                                billing_account_id = str(billing_account.id)
+
+                            # Record the cost
+                            cost_service = CostTrackingService(db)
+                            cost_record = cost_service.record_sandbox_cost(
+                                task_id=task_id,
+                                sandbox_id=sandbox_id,
+                                cost_usd=cost_usd,
+                                input_tokens=input_tokens,
+                                output_tokens=output_tokens,
+                                model=model,
+                                agent_id=task_obj.assigned_agent_id if task_obj else None,
+                                billing_account_id=billing_account_id,
+                            )
+                            logger.info(
+                                f"Recorded cost for task {task_id}: ${cost_usd:.4f} "
+                                f"(billing_account={billing_account_id}, record_id={cost_record.id})"
+                            )
+                        except Exception as cost_error:
+                            # Cost recording should not block task completion
+                            logger.error(
+                                f"Failed to record cost for task {task_id}: {cost_error}",
+                                exc_info=True,
+                            )
 
                 # Handle agent.failed/error -> transition to failed (async)
                 elif event.event_type in ("agent.failed", "agent.error"):

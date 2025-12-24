@@ -17,6 +17,7 @@ from omoi_os.utils.datetime import utc_now
 
 if TYPE_CHECKING:
     from omoi_os.models.organization import Organization
+    from omoi_os.models.subscription import Subscription
 
 
 class BillingAccountStatus(str, Enum):
@@ -146,6 +147,11 @@ class BillingAccount(Base):
     )
     payments: Mapped[list["Payment"]] = relationship(
         back_populates="billing_account",
+        cascade="all, delete-orphan"
+    )
+    subscription: Mapped[Optional["Subscription"]] = relationship(
+        back_populates="billing_account",
+        uselist=False,
         cascade="all, delete-orphan"
     )
 

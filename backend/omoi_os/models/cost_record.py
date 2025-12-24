@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -13,23 +13,38 @@ from omoi_os.utils.datetime import utc_now
 
 class CostRecord(Base):
     """Record of LLM API costs for a task execution.
-    
+
     Tracks token usage and costs for each LLM API call made during task execution.
     Supports multiple providers (OpenAI, Anthropic, etc.) with different pricing models.
+
+    Billing Integration:
+    - Links to billing_account_id for cost aggregation per organization
+    - Automatically created from sandbox agent.completed events
+    - Used to track workflow costs for tier usage limits
     """
-    
+
     __tablename__ = "cost_records"
-    
+
     id: Mapped[str] = mapped_column(
         String, primary_key=True, default=lambda: str(uuid4())
     )
-    
+
     # Task and agent association
     task_id: Mapped[str] = mapped_column(
         String, ForeignKey("tasks.id"), nullable=False, index=True
     )
     agent_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("agents.id"), nullable=True, index=True
+    )
+
+    # Sandbox association (for linking to sandbox events)
+    sandbox_id: Mapped[Optional[str]] = mapped_column(
+        String(100), nullable=True, index=True
+    )
+
+    # Billing association (for cost aggregation per organization)
+    billing_account_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("billing_accounts.id"), nullable=True, index=True
     )
     
     # LLM provider information
@@ -72,6 +87,8 @@ class CostRecord(Base):
             "id": self.id,
             "task_id": self.task_id,
             "agent_id": self.agent_id,
+            "sandbox_id": self.sandbox_id,
+            "billing_account_id": self.billing_account_id,
             "provider": self.provider,
             "model": self.model,
             "prompt_tokens": self.prompt_tokens,
