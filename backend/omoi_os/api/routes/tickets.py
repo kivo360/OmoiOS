@@ -95,6 +95,7 @@ async def list_tickets(
                     "status": t.status,
                     "priority": t.priority,
                     "phase_id": t.phase_id,
+                    "project_id": t.project_id,
                     "approval_status": t.approval_status,
                     "created_at": t.created_at.isoformat() if t.created_at else None,
                 }
@@ -111,6 +112,7 @@ class TicketCreate(BaseModel):
     description: str | None = None
     phase_id: str = "PHASE_REQUIREMENTS"
     priority: str = "MEDIUM"
+    project_id: str | None = None  # Optional project association
     check_duplicates: bool = True  # Enable duplicate checking by default
     similarity_threshold: float = 0.85  # Threshold for considering duplicates
     force_create: bool = False  # Create even if duplicates found
@@ -144,6 +146,7 @@ class TicketResponse(BaseModel):
     phase_id: str
     status: str
     priority: str
+    project_id: str | None = None
     approval_status: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -257,6 +260,7 @@ async def create_ticket(
             phase_id=ticket_data.phase_id or "PHASE_BACKLOG",
             status=TicketStatus.BACKLOG.value,  # Start in backlog per REQ-TKT-SM-001
             priority=ticket_data.priority,
+            project_id=ticket_data.project_id,  # Associate ticket with project
         )
 
         # Store embedding if we generated one during dedup check

@@ -108,6 +108,18 @@ cost_tracking:
   enable_tracking: false  # Disable in tests
   enable_alerts: false
 
+billing:
+  # Test pricing (lower for testing)
+  currency: usd
+  workflow_price_usd: 1.0  # $1 per workflow for testing
+  free_workflows_per_month: 2  # Lower free tier for testing
+  min_credit_purchase_usd: 1.0
+  max_credit_purchase_usd: 100.0
+  # Test URLs
+  success_url: http://localhost:3000/billing/test-success
+  cancel_url: http://localhost:3000/billing/test-cancel
+  portal_return_url: http://localhost:3000/billing/test
+
 # Test-specific settings
 testing:
   strict_mode: true
@@ -116,4 +128,5 @@ testing:
   cleanup_after_test: true
   mock_llm_calls: true
   mock_external_apis: true
+  mock_stripe: true  # Mock Stripe API calls in tests
 
