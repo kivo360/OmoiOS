@@ -16,6 +16,10 @@ import {
   payInvoice,
   generateInvoice,
   getUsage,
+  getSubscription,
+  cancelSubscription,
+  reactivateSubscription,
+  createLifetimeCheckout,
 } from "@/lib/api/billing"
 import type {
   BillingAccount,
@@ -27,6 +31,8 @@ import type {
   PortalResponse,
   CreditPurchaseRequest,
   PaymentMethodRequest,
+  Subscription,
+  LifetimePurchaseRequest,
 } from "@/lib/api/types"
 
 // UUID validation regex - prevents API calls with invalid IDs
@@ -42,6 +48,7 @@ export const billingKeys = {
   config: () => [...billingKeys.all, "config"] as const,
   accounts: () => [...billingKeys.all, "accounts"] as const,
   account: (orgId: string) => [...billingKeys.accounts(), orgId] as const,
+  subscription: (orgId: string) => [...billingKeys.account(orgId), "subscription"] as const,
   paymentMethods: (orgId: string) => [...billingKeys.account(orgId), "payment-methods"] as const,
   invoices: (orgId: string) => [...billingKeys.account(orgId), "invoices"] as const,
   invoice: (invoiceId: string) => [...billingKeys.all, "invoice", invoiceId] as const,
@@ -242,5 +249,66 @@ export function useUsage(
     queryKey: [...billingKeys.usage(orgId!), options],
     queryFn: () => getUsage(orgId!, options),
     enabled: isValidUUID(orgId),
+  })
+}
+
+// ============================================================================
+// Subscription
+// ============================================================================
+
+/**
+ * Hook to get the active subscription for an organization
+ */
+export function useSubscription(orgId: string | undefined) {
+  return useQuery<Subscription | null>({
+    queryKey: billingKeys.subscription(orgId!),
+    queryFn: () => getSubscription(orgId!),
+    enabled: isValidUUID(orgId),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  })
+}
+
+/**
+ * Hook to cancel a subscription
+ */
+export function useCancelSubscription() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({
+      orgId,
+      atPeriodEnd = true,
+    }: {
+      orgId: string
+      atPeriodEnd?: boolean
+    }) => cancelSubscription(orgId, atPeriodEnd),
+    onSuccess: (_, { orgId }) => {
+      queryClient.invalidateQueries({ queryKey: billingKeys.subscription(orgId) })
+      queryClient.invalidateQueries({ queryKey: billingKeys.account(orgId) })
+    },
+  })
+}
+
+/**
+ * Hook to reactivate a canceled subscription
+ */
+export function useReactivateSubscription() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (orgId: string) => reactivateSubscription(orgId),
+    onSuccess: (_, orgId) => {
+      queryClient.invalidateQueries({ queryKey: billingKeys.subscription(orgId) })
+      queryClient.invalidateQueries({ queryKey: billingKeys.account(orgId) })
+    },
+  })
+}
+
+/**
+ * Hook to create a lifetime checkout session
+ */
+export function useCreateLifetimeCheckout() {
+  return useMutation<CheckoutResponse, Error, { orgId: string; request?: LifetimePurchaseRequest }>({
+    mutationFn: ({ orgId, request }) => createLifetimeCheckout(orgId, request),
   })
 }
