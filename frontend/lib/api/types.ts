@@ -1064,6 +1064,207 @@ export interface PaymentMethodRequest {
 }
 
 // ============================================================================
+// Subscription Types
+// ============================================================================
+
+export type SubscriptionTier =
+  | "free"
+  | "starter"
+  | "pro"
+  | "team"
+  | "enterprise"
+  | "lifetime"
+  | "byo"
+
+export type SubscriptionStatus =
+  | "active"
+  | "trialing"
+  | "past_due"
+  | "canceled"
+  | "paused"
+  | "incomplete"
+
+export interface Subscription {
+  id: string
+  organization_id: string
+  billing_account_id: string
+  stripe_subscription_id: string | null
+  tier: SubscriptionTier
+  status: SubscriptionStatus
+  current_period_start: string | null
+  current_period_end: string | null
+  cancel_at_period_end: boolean
+  canceled_at: string | null
+  trial_start: string | null
+  trial_end: string | null
+  workflows_limit: number
+  workflows_used: number
+  workflows_remaining: number
+  agents_limit: number
+  storage_limit_gb: number
+  storage_used_gb: number
+  is_lifetime: boolean
+  lifetime_purchase_date: string | null
+  lifetime_purchase_amount: number | null
+  is_byo: boolean
+  byo_providers_configured: string[] | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export interface LifetimePurchaseRequest {
+  success_url?: string
+  cancel_url?: string
+}
+
+// Tier configuration for display purposes
+export interface TierConfig {
+  name: string
+  displayName: string
+  price: number
+  priceLabel: string
+  workflows: number
+  workflowsLabel: string
+  agents: number
+  storageGb: number
+  features: string[]
+  highlighted?: boolean
+  ctaLabel: string
+}
+
+export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
+  free: {
+    name: "free",
+    displayName: "Free",
+    price: 0,
+    priceLabel: "$0/month",
+    workflows: 5,
+    workflowsLabel: "5 workflows/month",
+    agents: 1,
+    storageGb: 2,
+    features: [
+      "5 workflows per month",
+      "1 concurrent agent",
+      "2GB storage",
+      "Community support",
+    ],
+    ctaLabel: "Current Plan",
+  },
+  starter: {
+    name: "starter",
+    displayName: "Starter",
+    price: 29,
+    priceLabel: "$29/month",
+    workflows: 20,
+    workflowsLabel: "20 workflows/month",
+    agents: 2,
+    storageGb: 10,
+    features: [
+      "20 workflows per month",
+      "2 concurrent agents",
+      "10GB storage",
+      "Email support",
+    ],
+    ctaLabel: "Upgrade to Starter",
+  },
+  pro: {
+    name: "pro",
+    displayName: "Pro",
+    price: 79,
+    priceLabel: "$79/month",
+    workflows: 100,
+    workflowsLabel: "100 workflows/month",
+    agents: 5,
+    storageGb: 50,
+    features: [
+      "100 workflows per month",
+      "5 concurrent agents",
+      "50GB storage",
+      "Priority support",
+      "Advanced analytics",
+    ],
+    highlighted: true,
+    ctaLabel: "Upgrade to Pro",
+  },
+  team: {
+    name: "team",
+    displayName: "Team",
+    price: 199,
+    priceLabel: "$199/month",
+    workflows: 500,
+    workflowsLabel: "500 workflows/month",
+    agents: 15,
+    storageGb: 200,
+    features: [
+      "500 workflows per month",
+      "15 concurrent agents",
+      "200GB storage",
+      "Dedicated support",
+      "Team management",
+      "SSO integration",
+    ],
+    ctaLabel: "Upgrade to Team",
+  },
+  enterprise: {
+    name: "enterprise",
+    displayName: "Enterprise",
+    price: 0,
+    priceLabel: "Custom",
+    workflows: -1,
+    workflowsLabel: "Unlimited",
+    agents: -1,
+    storageGb: -1,
+    features: [
+      "Unlimited workflows",
+      "Unlimited agents",
+      "Unlimited storage",
+      "24/7 support",
+      "Custom integrations",
+      "SLA guarantee",
+      "Data isolation",
+    ],
+    ctaLabel: "Contact Sales",
+  },
+  lifetime: {
+    name: "lifetime",
+    displayName: "Lifetime",
+    price: 499,
+    priceLabel: "$499 one-time",
+    workflows: 50,
+    workflowsLabel: "50 workflows/month",
+    agents: 5,
+    storageGb: 100,
+    features: [
+      "50 workflows per month",
+      "5 concurrent agents",
+      "100GB storage",
+      "Founding member badge",
+      "No recurring charges",
+      "Lifetime updates",
+    ],
+    ctaLabel: "Claim Lifetime Access",
+  },
+  byo: {
+    name: "byo",
+    displayName: "BYO Keys",
+    price: 19,
+    priceLabel: "$19/month",
+    workflows: -1,
+    workflowsLabel: "Unlimited*",
+    agents: 10,
+    storageGb: 50,
+    features: [
+      "Unlimited workflows*",
+      "10 concurrent agents",
+      "50GB storage",
+      "Use your own API keys",
+      "Pay LLM providers directly",
+    ],
+    ctaLabel: "Setup BYO Keys",
+  },
+}
+
+// ============================================================================
 // Generic Response Types
 // ============================================================================
 
