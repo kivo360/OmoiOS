@@ -14,6 +14,8 @@ import type {
   CreditPurchaseRequest,
   PaymentMethodRequest,
   Payment,
+  Subscription,
+  LifetimePurchaseRequest,
 } from "./types"
 
 // ============================================================================
@@ -164,4 +166,52 @@ export async function getUsage(
     endpoint += `?billed=${options.billed}`
   }
   return api.get<UsageRecord[]>(endpoint)
+}
+
+// ============================================================================
+// Subscription Management
+// ============================================================================
+
+/**
+ * Get the active subscription for an organization
+ */
+export async function getSubscription(organizationId: string): Promise<Subscription | null> {
+  return api.get<Subscription | null>(`/api/v1/billing/account/${organizationId}/subscription`)
+}
+
+/**
+ * Cancel the subscription for an organization
+ * @param atPeriodEnd - If true, cancel at end of billing period. If false, cancel immediately.
+ */
+export async function cancelSubscription(
+  organizationId: string,
+  atPeriodEnd: boolean = true
+): Promise<{ status: string; message: string }> {
+  return api.post<{ status: string; message: string }>(
+    `/api/v1/billing/account/${organizationId}/subscription/cancel?at_period_end=${atPeriodEnd}`
+  )
+}
+
+/**
+ * Reactivate a canceled subscription
+ */
+export async function reactivateSubscription(
+  organizationId: string
+): Promise<{ status: string; message: string }> {
+  return api.post<{ status: string; message: string }>(
+    `/api/v1/billing/account/${organizationId}/subscription/reactivate`
+  )
+}
+
+/**
+ * Create a checkout session for lifetime purchase
+ */
+export async function createLifetimeCheckout(
+  organizationId: string,
+  request?: LifetimePurchaseRequest
+): Promise<CheckoutResponse> {
+  return api.post<CheckoutResponse>(
+    `/api/v1/billing/account/${organizationId}/lifetime/checkout`,
+    request
+  )
 }
