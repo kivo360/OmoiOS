@@ -7,6 +7,7 @@ from uuid import uuid4
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pgvector.sqlalchemy import Vector
 
 from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
@@ -123,6 +124,12 @@ class Task(Base):
     review_done: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )  # Whether the latest validation cycle has completed successfully
+
+    # Embedding for semantic search and duplicate detection
+    # Dimension must match EmbeddingSettings.dimensions (default 1536)
+    embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
+        Vector(1536), nullable=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
