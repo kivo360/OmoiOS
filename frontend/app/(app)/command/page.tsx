@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo, useEffect, useCallback } from "react"
+import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 import { PromptInput, ModelSelector, RepoSelector, Project, Repository } from "@/components/command"
@@ -8,13 +8,21 @@ import { useProjects } from "@/hooks/useProjects"
 import { useConnectedRepositories } from "@/hooks/useGitHub"
 import { useCreateTicket } from "@/hooks/useTickets"
 import { useEvents, type SystemEvent } from "@/hooks/useEvents"
+import { listTasks } from "@/lib/api/tasks"
 import { Loader2 } from "lucide-react"
 
-type LaunchState = 
+type LaunchState =
   | { status: "idle" }
   | { status: "creating_ticket"; prompt: string }
   | { status: "waiting_for_sandbox"; ticketId: string; prompt: string }
   | { status: "redirecting"; sandboxId: string }
+
+// All event types the backend might send for sandbox creation
+const SANDBOX_EVENT_TYPES = [
+  "SANDBOX_CREATED",   // Original expected type
+  "SANDBOX_SPAWNED",   // Orchestrator worker sends this (uppercase)
+  "sandbox.spawned",   // DaytonaSpawner sends this (lowercase with dot)
+]
 
 export default function CommandCenterPage() {
   const router = useRouter()
@@ -56,20 +64,34 @@ export default function CommandCenterPage() {
     }
   }, [projects, selectedProject])
 
+  // Track if we've already redirected to prevent double redirects
+  const hasRedirectedRef = useRef(false)
+
+  // Helper to handle successful sandbox detection
+  const handleSandboxReady = useCallback((sandboxId: string) => {
+    if (hasRedirectedRef.current) return // Prevent double redirect
+    hasRedirectedRef.current = true
+    setLaunchState({ status: "redirecting", sandboxId })
+    toast.success("Sandbox launched!")
+    router.push(`/sandbox/${sandboxId}`)
+  }, [router])
+
   // Handle event from WebSocket that signals sandbox is ready
   const handleEvent = useCallback((event: SystemEvent) => {
-    // Look for sandbox-related events
+    console.log("[Command] Received event:", event.event_type, event.entity_type, event.entity_id)
+
+    // Look for sandbox-related events (check all known event types)
     if (
       event.entity_type === "sandbox" &&
-      event.event_type === "SANDBOX_CREATED"
+      SANDBOX_EVENT_TYPES.includes(event.event_type)
     ) {
-      const sandboxId = event.entity_id
+      const sandboxId = event.entity_id || (event.payload?.sandbox_id as string)
       if (sandboxId) {
-        setLaunchState({ status: "redirecting", sandboxId })
-        toast.success("Sandbox launched!")
-        router.push(`/sandbox/${sandboxId}`)
+        handleSandboxReady(sandboxId)
+        return
       }
     }
+
     // Also check for task events that include sandbox_id
     if (
       event.entity_type === "task" &&
@@ -77,11 +99,10 @@ export default function CommandCenterPage() {
       event.payload?.sandbox_id
     ) {
       const sandboxId = event.payload.sandbox_id as string
-      setLaunchState({ status: "redirecting", sandboxId })
-      toast.success("Sandbox launched!")
-      router.push(`/sandbox/${sandboxId}`)
+      handleSandboxReady(sandboxId)
+      return
     }
-  }, [router])
+  }, [handleSandboxReady])
 
   // Subscribe to events when waiting for sandbox
   const isWaitingForSandbox = launchState.status === "waiting_for_sandbox"
@@ -95,17 +116,53 @@ export default function CommandCenterPage() {
     onEvent: handleEvent,
   })
 
-  // Timeout for sandbox creation (60 seconds)
+  // Fallback polling for sandbox_id (in case WebSocket events are missed)
+  // Also includes timeout after 60 seconds
   useEffect(() => {
-    if (launchState.status !== "waiting_for_sandbox") return
+    if (launchState.status !== "waiting_for_sandbox") {
+      // Reset redirect flag when going back to idle
+      if (launchState.status === "idle") {
+        hasRedirectedRef.current = false
+      }
+      return
+    }
 
-    const timeout = setTimeout(() => {
-      toast.error("Sandbox creation timed out. Please try again.")
-      setLaunchState({ status: "idle" })
-    }, 60000)
+    const ticketId = launchState.ticketId
+    let pollCount = 0
+    const maxPolls = 20 // 20 polls * 3s = 60s timeout
 
-    return () => clearTimeout(timeout)
-  }, [launchState])
+    // Poll for tasks with sandbox_id every 3 seconds
+    const pollInterval = setInterval(async () => {
+      pollCount++
+      console.log(`[Command] Polling for sandbox (attempt ${pollCount}/${maxPolls})...`)
+
+      try {
+        // Fetch recent tasks and look for one matching our ticket
+        const tasks = await listTasks({ limit: 20 })
+        const matchingTask = tasks.find(
+          (task) => task.ticket_id === ticketId && task.sandbox_id
+        )
+
+        if (matchingTask?.sandbox_id) {
+          console.log("[Command] Found sandbox via polling:", matchingTask.sandbox_id)
+          clearInterval(pollInterval)
+          handleSandboxReady(matchingTask.sandbox_id)
+          return
+        }
+      } catch (error) {
+        console.error("[Command] Polling error:", error)
+      }
+
+      // Timeout after max polls
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval)
+        toast.error("Sandbox creation timed out. Please try again.")
+        setLaunchState({ status: "idle" })
+      }
+    }, 3000)
+
+    return () => clearInterval(pollInterval)
+  }, [launchState, handleSandboxReady])
 
   const handleSubmit = async (prompt: string) => {
     try {
