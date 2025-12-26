@@ -80,7 +80,7 @@ monitoring:
   max_concurrent_analyses: 5
 
 diagnostic:
-  enabled: true
+  enabled: false  # DISABLED - runaway loop detected, see sandbox_lifecycle_state_machine.md
   cooldown_seconds: 60
   min_stuck_time_seconds: 60
   max_agents_to_analyze: 15

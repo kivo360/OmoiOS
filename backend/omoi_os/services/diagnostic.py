@@ -164,6 +164,68 @@ class DiagnosticService:
                 if validated:
                     continue  # Has validated result, workflow complete
 
+                # ===== SAFEGUARD: All tasks completed successfully without failures =====
+                # Simple tasks (like creating a Python script) don't always produce
+                # a WorkflowResult, but if all tasks completed and none failed,
+                # the workflow succeeded - don't spawn diagnostics!
+                completed_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.ticket_id == ticket.id,
+                        Task.status == "completed",
+                    )
+                    .count()
+                )
+                failed_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.ticket_id == ticket.id,
+                        Task.status == "failed",
+                    )
+                    .count()
+                )
+
+                # If we have completed tasks and NO failed tasks, workflow succeeded
+                # This prevents runaway diagnostics for simple successful workflows
+                if completed_tasks > 0 and failed_tasks == 0:
+                    logger.debug(
+                        f"Skipping workflow {ticket.id}: all {completed_tasks} tasks completed successfully (no WorkflowResult needed)"
+                    )
+                    continue
+
+                # ===== SAFEGUARD: Diagnostic tasks already attempted for failed original tasks =====
+                # Count COMPLETED diagnostic tasks - if we already tried diagnostics and they
+                # completed but the original task is still failed, stop spawning more.
+                # The workflow needs human intervention, not more diagnostic loops.
+                completed_diagnostic_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.ticket_id == ticket.id,
+                        Task.task_type.like("discovery_diagnostic%"),
+                        Task.status == "completed",
+                    )
+                    .count()
+                )
+
+                # Count non-diagnostic failed tasks (original work that failed)
+                failed_original_tasks = (
+                    session.query(Task)
+                    .filter(
+                        Task.ticket_id == ticket.id,
+                        Task.status == "failed",
+                        ~Task.task_type.like("discovery_diagnostic%"),
+                    )
+                    .count()
+                )
+
+                if completed_diagnostic_tasks > 0 and failed_original_tasks > 0:
+                    logger.info(
+                        f"Skipping workflow {ticket.id}: {completed_diagnostic_tasks} diagnostic tasks "
+                        f"completed but {failed_original_tasks} original task(s) still failed - "
+                        "needs human review, not more diagnostics"
+                    )
+                    continue
+
                 # ===== SAFEGUARD: Check for pending diagnostic tasks =====
                 # If there are already pending/running diagnostic tasks, don't spawn more
                 pending_diagnostic_tasks = (
@@ -198,6 +260,16 @@ class DiagnosticService:
                 if total_diagnostic_runs >= self.max_diagnostics_per_workflow:
                     logger.warning(
                         f"Skipping workflow {ticket.id}: exceeded max total diagnostics ({total_diagnostic_runs})"
+                    )
+                    continue
+
+                # ===== SAFEGUARD: Check clone readiness =====
+                # Skip diagnostics for workflows that can't clone code into sandbox
+                # (missing project, GitHub config, or user token)
+                clone_ready, clone_reason = self._check_clone_readiness(session, ticket)
+                if not clone_ready:
+                    logger.debug(
+                        f"Skipping workflow {ticket.id}: not clone-ready ({clone_reason})"
                     )
                     continue
 
@@ -367,7 +439,7 @@ class DiagnosticService:
                         session=session,
                         ticket_id=workflow_id,
                         diagnostic_run_id=diagnostic_run_id,
-                        reason=diagnosis_text[:500],  # Truncate if too long
+                        reason=diagnosis_text[:2000],  # Allow detailed context for task description
                         suggested_phase=suggested_phase,
                         suggested_priority=suggested_priority,
                         max_tasks=max_tasks,
@@ -641,6 +713,83 @@ class DiagnosticService:
     # -------------------------------------------------------------------------
     # Helper Methods
     # -------------------------------------------------------------------------
+
+    def _check_clone_readiness(self, session, ticket: Ticket) -> tuple[bool, str]:
+        """Check if a workflow/ticket can clone code into a sandbox.
+
+        Verifies the complete chain:
+        Ticket → Project → Project.created_by → User → user.attributes.github_access_token
+
+        If ticket is not linked to a project, attempts to auto-assign it to a
+        suitable project that has valid GitHub config and an owner with a token.
+
+        Args:
+            session: Database session
+            ticket: The ticket to check
+
+        Returns:
+            Tuple of (is_ready: bool, reason: str)
+        """
+        from omoi_os.models.user import User
+        from omoi_os.models.project import Project
+
+        # Check 1: Ticket must be linked to a project
+        # Orphan tickets cannot be diagnosed - they need to be created with a project
+        # Auto-assignment is dangerous in multi-user environments (could assign to wrong user's project)
+        if not ticket.project_id:
+            logger.warning(
+                f"Skipping diagnostic for orphan ticket {ticket.id} - "
+                "ticket must be linked to a project at creation time"
+            )
+            return False, "ticket_not_linked_to_project"
+
+        # Check 2: Project must exist
+        project = ticket.project
+        if not project:
+            return False, "project_not_found"
+
+        # Check 3: Project must have GitHub config
+        if not project.github_owner or not project.github_repo:
+            return False, "project_missing_github_config"
+
+        # Check 4: Project must have an owner (created_by)
+        if not project.created_by:
+            return False, "project_has_no_owner"
+
+        # Check 5: Owner must exist
+        owner = session.get(User, project.created_by)
+        if not owner:
+            return False, "project_owner_not_found"
+
+        # Check 6: Owner must have GitHub access token
+        attrs = owner.attributes or {}
+        if not attrs.get("github_access_token"):
+            return False, "owner_missing_github_token"
+
+        # All checks passed - clone should work
+        return True, "ready"
+
+    def _project_is_clone_ready(self, session, project) -> bool:
+        """Check if a project is ready for cloning (has owner with token).
+
+        Args:
+            session: Database session
+            project: Project to check
+
+        Returns:
+            True if project can clone repos, False otherwise
+        """
+        from omoi_os.models.user import User
+
+        if not project.created_by:
+            return False
+
+        owner = session.get(User, project.created_by)
+        if not owner:
+            return False
+
+        attrs = owner.attributes or {}
+        return bool(attrs.get("github_access_token"))
 
     def _get_task_distribution(self, session, workflow_id: str) -> dict:
         """Get task count by phase for a workflow."""

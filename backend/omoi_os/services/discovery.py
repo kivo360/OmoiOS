@@ -434,7 +434,7 @@ class DiscoveryService:
             context: Additional context for the LLM.
 
         Returns:
-            A concise title (max 100 chars).
+            A concise title (max 70 chars).
         """
         # Try LLM-based generation first if available
         if self._title_service:
@@ -471,7 +471,7 @@ class DiscoveryService:
             reason: Full diagnostic reason text.
 
         Returns:
-            A concise title (max 80 chars).
+            A concise title (max 70 chars).
         """
         # Try to extract root cause if present
         if "Root Cause:" in reason:
@@ -479,8 +479,8 @@ class DiscoveryService:
             if len(parts) > 1:
                 root_cause = parts[1].split("\n")[0].strip()
                 if root_cause:
-                    title = f"Fix: {root_cause[:70]}"
-                    return title if len(title) <= 80 else title[:77] + "..."
+                    title = f"Fix: {root_cause[:60]}"
+                    return title if len(title) <= 70 else title[:67] + "..."
 
         # Try to extract first recommendation if present
         if "Recommendations:" in reason:
@@ -498,8 +498,8 @@ class DiscoveryService:
                             if bracket_end > 0:
                                 rec = rec[bracket_end + 1:].strip()
                         if rec:
-                            title = rec[:80]
-                            return title if len(title) <= 80 else title[:77] + "..."
+                            title = rec[:70]
+                            return title if len(title) <= 70 else title[:67] + "..."
 
         # Fallback: use first meaningful line, skip generic prefixes
         lines = reason.split("\n")
@@ -511,8 +511,8 @@ class DiscoveryService:
             if line.startswith("-") or line.startswith("•"):
                 line = line.lstrip("-•").strip()
             if len(line) > 10:  # Require some substance
-                title = line[:80]
-                return title if len(title) <= 80 else title[:77] + "..."
+                title = line[:70]
+                return title if len(title) <= 70 else title[:67] + "..."
 
         # Ultimate fallback
         return "Diagnose and recover stuck workflow"
