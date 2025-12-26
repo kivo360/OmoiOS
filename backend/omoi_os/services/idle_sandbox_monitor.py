@@ -66,6 +66,10 @@ class IdleSandboxMonitor:
     # Heartbeat timeout (90 seconds - sandbox is dead if no heartbeat for this long)
     HEARTBEAT_TIMEOUT = timedelta(seconds=90)
 
+    # Stuck running threshold (10 minutes - if agent reports "running" but no work events,
+    # consider it stuck even though it claims to be working)
+    STUCK_RUNNING_THRESHOLD = timedelta(minutes=10)
+
     def __init__(
         self,
         db: DatabaseService,
@@ -118,6 +122,8 @@ class IdleSandboxMonitor:
             - sandbox_id: The sandbox ID
             - last_work_at: Timestamp of last work event (or None)
             - last_heartbeat_at: Timestamp of last heartbeat (or None)
+            - heartbeat_status: Status from last heartbeat ('idle', 'running', etc.)
+            - has_completed: Whether agent.completed event was seen
             - is_alive: Whether sandbox has recent heartbeats
             - is_idle: Whether sandbox is alive but has no recent work
             - idle_duration_seconds: How long the sandbox has been idle
@@ -145,24 +151,107 @@ class IdleSandboxMonitor:
                 .first()
             )
 
+            # Check if agent.completed event exists (agent finished its work)
+            # Get the LATEST completion event timestamp so we can check if work
+            # happened after completion (agent was resumed)
+            completed_event = (
+                session.query(SandboxEvent)
+                .filter(
+                    SandboxEvent.sandbox_id == sandbox_id,
+                    SandboxEvent.event_type == "agent.completed",
+                )
+                .order_by(SandboxEvent.created_at.desc())
+                .first()
+            )
+            completed_at = completed_event.created_at if completed_event else None
+
+            # Check if work happened AFTER the last completion (agent resumed work)
+            # If so, the completion is "stale" and agent is effectively running again
+            has_completed = False
+            if completed_at:
+                if last_work and last_work.created_at > completed_at:
+                    # Work happened after completion - agent resumed
+                    has_completed = False
+                    logger.debug(
+                        "sandbox_completion_reset_by_resumed_work",
+                        sandbox_id=sandbox_id,
+                        completed_at=completed_at.isoformat(),
+                        last_work_at=last_work.created_at.isoformat(),
+                    )
+                else:
+                    # No work after completion - agent is truly done
+                    has_completed = True
+
             now = utc_now()
 
             # Determine if alive (has recent heartbeat)
             is_alive = False
+            heartbeat_status = None
             if last_heartbeat:
                 heartbeat_age = now - last_heartbeat.created_at
                 is_alive = heartbeat_age < self.HEARTBEAT_TIMEOUT
+                # Extract status from heartbeat payload
+                if last_heartbeat.event_data:
+                    heartbeat_status = last_heartbeat.event_data.get("status")
 
             # Determine if idle (alive but no recent work)
+            # IMPORTANT: Several conditions mean the sandbox is NOT idle:
+            # 1. Agent has completed (agent.completed event seen) - work is done
+            # 2. Heartbeat reports 'running' status - agent is actively working
             is_idle = False
             idle_duration_seconds = 0
 
+            # Track if agent is stuck (reports running but no actual work)
+            is_stuck_running = False
+
             if is_alive:
-                if not last_work:
-                    # Never did any work - considered idle from start
+                # If agent has completed, it's not idle - it finished its work
+                if has_completed:
+                    is_idle = False
+                    idle_duration_seconds = 0
+                    logger.debug(
+                        "sandbox_not_idle_agent_completed",
+                        sandbox_id=sandbox_id,
+                    )
+                # If agent reports itself as 'running', check for stuck condition
+                elif heartbeat_status == "running":
+                    # Check if agent is "stuck running" - reports running but no work
+                    if last_work:
+                        work_age = now - last_work.created_at
+                        if work_age > self.STUCK_RUNNING_THRESHOLD:
+                            # Agent claims running but hasn't done work in 10+ minutes
+                            # This is a stuck agent - force terminate
+                            is_idle = True
+                            is_stuck_running = True
+                            idle_duration_seconds = work_age.total_seconds()
+                            logger.warning(
+                                "sandbox_stuck_running_detected",
+                                sandbox_id=sandbox_id,
+                                heartbeat_status=heartbeat_status,
+                                work_age_seconds=work_age.total_seconds(),
+                            )
+                        else:
+                            # Agent is running and has done work recently enough
+                            is_idle = False
+                            idle_duration_seconds = 0
+                            logger.debug(
+                                "sandbox_not_idle_agent_running",
+                                sandbox_id=sandbox_id,
+                                heartbeat_status=heartbeat_status,
+                            )
+                    else:
+                        # Never did any work but claims running - give it time
+                        # (might still be initializing)
+                        is_idle = False
+                        idle_duration_seconds = 0
+                        logger.debug(
+                            "sandbox_not_idle_agent_running_no_work_yet",
+                            sandbox_id=sandbox_id,
+                        )
+                elif not last_work:
+                    # Never did any work AND agent doesn't report running AND not completed
                     is_idle = True
                     if last_heartbeat:
-                        # Idle since first heartbeat
                         idle_duration_seconds = (now - last_heartbeat.created_at).total_seconds()
                 else:
                     work_age = now - last_work.created_at
@@ -173,8 +262,11 @@ class IdleSandboxMonitor:
                 "sandbox_id": sandbox_id,
                 "last_work_at": last_work.created_at.isoformat() if last_work else None,
                 "last_heartbeat_at": last_heartbeat.created_at.isoformat() if last_heartbeat else None,
+                "heartbeat_status": heartbeat_status,
+                "has_completed": has_completed,
                 "is_alive": is_alive,
                 "is_idle": is_idle,
+                "is_stuck_running": is_stuck_running,
                 "idle_duration_seconds": idle_duration_seconds,
             }
 
@@ -351,19 +443,45 @@ class IdleSandboxMonitor:
                 activity = self.check_sandbox_activity(sandbox_id)
 
                 if activity["is_idle"]:
-                    log.info(
-                        "idle_sandbox_detected",
-                        sandbox_id=sandbox_id,
-                        idle_duration_seconds=activity["idle_duration_seconds"],
-                        last_work_at=activity["last_work_at"],
-                    )
+                    # Determine appropriate reason based on why it's idle
+                    if activity.get("is_stuck_running"):
+                        reason = "stuck_running"
+                        log.warning(
+                            "stuck_running_sandbox_detected",
+                            sandbox_id=sandbox_id,
+                            idle_duration_seconds=activity["idle_duration_seconds"],
+                            last_work_at=activity["last_work_at"],
+                            heartbeat_status=activity["heartbeat_status"],
+                        )
+                    else:
+                        reason = "idle_timeout"
+                        log.info(
+                            "idle_sandbox_detected",
+                            sandbox_id=sandbox_id,
+                            idle_duration_seconds=activity["idle_duration_seconds"],
+                            last_work_at=activity["last_work_at"],
+                            heartbeat_status=activity["heartbeat_status"],
+                        )
 
                     result = await self.terminate_idle_sandbox(
                         sandbox_id=sandbox_id,
-                        reason="idle_timeout",
+                        reason=reason,
                         idle_duration_seconds=activity["idle_duration_seconds"],
                     )
                     terminated.append(result)
+                elif activity["is_alive"]:
+                    # Log why we're NOT terminating this sandbox
+                    if activity["has_completed"]:
+                        log.debug(
+                            "sandbox_skipped_already_completed",
+                            sandbox_id=sandbox_id,
+                        )
+                    elif activity["heartbeat_status"] == "running":
+                        log.debug(
+                            "sandbox_skipped_agent_running",
+                            sandbox_id=sandbox_id,
+                            heartbeat_status=activity["heartbeat_status"],
+                        )
 
             except Exception as e:
                 log.error(
