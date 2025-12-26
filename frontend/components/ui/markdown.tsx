@@ -98,7 +98,70 @@ const MermaidDiagram = memo(function MermaidDiagram({ code }: { code: string }) 
   )
 })
 
+// Detect and fix ASCII tree structures that got flattened (lost newlines)
+function preprocessContent(content: string): string {
+  // Pattern to detect ASCII tree characters followed by content
+  // This catches trees where newlines were converted to spaces
+  // Look for patterns like: `├── name │` or `└── name │` or `├── name ├──`
+  const treePattern = /([├└│]──?\s+\S+[^│├└]*?)(\s+)([│├└])/g
+
+  // Check if this looks like a flattened tree (multiple tree chars on same "line")
+  const treeCharsCount = (content.match(/[├└│]/g) || []).length
+  const newlineCount = (content.match(/\n/g) || []).length
+
+  // If we have many tree chars but few newlines, it's likely flattened
+  if (treeCharsCount > 5 && treeCharsCount > newlineCount * 2) {
+    // Try to restore newlines before tree characters
+    let fixed = content
+
+    // Add newline before tree branch characters (├ └) that follow content
+    // But be careful not to break actual code blocks
+    if (!content.includes("```")) {
+      // Replace space+tree-char with newline+tree-char
+      fixed = fixed.replace(/\s+([├└]──)/g, "\n$1")
+      // Also handle the vertical bar followed by space and then content
+      fixed = fixed.replace(/([│])\s+([│├└]──)/g, "$1\n$2")
+    }
+
+    // If we made changes and it looks like a tree, wrap in code block
+    if (fixed !== content && fixed.includes("\n├──")) {
+      // Find the tree section and wrap it
+      const lines = fixed.split("\n")
+      let inTree = false
+      let treeStart = -1
+      let treeEnd = -1
+
+      for (let i = 0; i < lines.length; i++) {
+        const hasTreeChar = /[├└│]──/.test(lines[i]) || /^[`']?[\/\w].*[│]$/.test(lines[i])
+        if (hasTreeChar && !inTree) {
+          inTree = true
+          treeStart = i
+        } else if (!hasTreeChar && inTree && lines[i].trim() !== "") {
+          treeEnd = i
+          inTree = false
+        }
+      }
+
+      if (treeStart >= 0) {
+        if (treeEnd < 0) treeEnd = lines.length
+        // Wrap the tree section in a code block
+        const before = lines.slice(0, treeStart).join("\n")
+        const tree = lines.slice(treeStart, treeEnd).join("\n")
+        const after = lines.slice(treeEnd).join("\n")
+        return `${before}\n\`\`\`\n${tree}\n\`\`\`\n${after}`
+      }
+    }
+
+    return fixed
+  }
+
+  return content
+}
+
 export function Markdown({ content, className }: MarkdownProps) {
+  // Preprocess content to fix common formatting issues
+  const processedContent = preprocessContent(content)
+
   // Memoize the code component to prevent unnecessary re-renders
   const CodeComponent = useCallback(
     ({ className: codeClassName, children, ...props }: { className?: string; children?: React.ReactNode }) => {
@@ -267,7 +330,7 @@ export function Markdown({ content, className }: MarkdownProps) {
           ),
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   )

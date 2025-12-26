@@ -476,6 +476,219 @@ function FileWriteCard({
 }
 
 // ============================================================================
+// Glob Card - Tree-style file listing display
+// ============================================================================
+
+interface GlobOutput {
+  filenames: string[]
+  durationMs: number
+  numFiles: number
+  truncated: boolean
+}
+
+interface FileTreeNode {
+  name: string
+  path: string
+  isFile: boolean
+  children: Map<string, FileTreeNode>
+}
+
+function parseGlobOutput(output: string): GlobOutput | null {
+  if (!output) return null
+
+  try {
+    // Handle Python dict format with single quotes
+    const jsonLike = output
+      .replace(/'/g, '"')
+      .replace(/True/g, 'true')
+      .replace(/False/g, 'false')
+    return JSON.parse(jsonLike)
+  } catch {
+    // Try standard JSON
+    try {
+      return JSON.parse(output)
+    } catch {
+      return null
+    }
+  }
+}
+
+function buildFileTree(filenames: string[]): FileTreeNode {
+  const root: FileTreeNode = { name: "", path: "", isFile: false, children: new Map() }
+
+  for (const filepath of filenames) {
+    const parts = filepath.split("/").filter(Boolean)
+    let current = root
+    let currentPath = ""
+
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      currentPath = currentPath ? `${currentPath}/${part}` : part
+      const isFile = i === parts.length - 1
+
+      if (!current.children.has(part)) {
+        current.children.set(part, {
+          name: part,
+          path: currentPath,
+          isFile,
+          children: new Map(),
+        })
+      }
+      current = current.children.get(part)!
+    }
+  }
+
+  return root
+}
+
+interface GlobCardProps {
+  pattern: string
+  output?: string
+  status?: "running" | "completed" | "error"
+  timestamp?: string
+}
+
+function GlobCard({ pattern, output, status = "completed", timestamp }: GlobCardProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const parsed = output ? parseGlobOutput(output) : null
+  const filenames = parsed?.filenames || []
+  const numFiles = parsed?.numFiles ?? filenames.length
+  const durationMs = parsed?.durationMs
+  const truncated = parsed?.truncated || false
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(filenames.join("\n"))
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Build file tree for display
+  const fileTree = buildFileTree(filenames)
+
+  // Render tree recursively
+  const renderTree = (node: FileTreeNode, depth: number = 0, isLast: boolean = true, prefix: string = ""): React.ReactNode[] => {
+    const result: React.ReactNode[] = []
+    const children = Array.from(node.children.values()).sort((a, b) => {
+      // Directories first, then files
+      if (a.isFile !== b.isFile) return a.isFile ? 1 : -1
+      return a.name.localeCompare(b.name)
+    })
+
+    children.forEach((child, index) => {
+      const isLastChild = index === children.length - 1
+      const connector = isLastChild ? "└── " : "├── "
+      const childPrefix = prefix + (isLastChild ? "    " : "│   ")
+
+      result.push(
+        <div
+          key={child.path}
+          className={cn(
+            "flex items-center gap-1 hover:bg-muted/50 rounded px-1 -mx-1",
+            child.isFile ? "text-foreground" : "text-cyan-500 font-medium"
+          )}
+        >
+          <span className="text-muted-foreground font-mono select-none whitespace-pre">{prefix}{connector}</span>
+          {child.isFile ? (
+            <File className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : (
+            <FolderOpen className="h-3 w-3 shrink-0" />
+          )}
+          <span className="truncate">{child.name}{!child.isFile && "/"}</span>
+        </div>
+      )
+
+      if (!child.isFile && child.children.size > 0) {
+        result.push(...renderTree(child, depth + 1, isLastChild, childPrefix))
+      }
+    })
+
+    return result
+  }
+
+  // For empty results or running state
+  const isEmpty = numFiles === 0 && status !== "running"
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors">
+            <FolderOpen className="h-4 w-4 shrink-0 text-cyan-500" />
+            <span className="font-medium text-sm">Glob</span>
+            {status === "running" ? (
+              <Badge variant="secondary" className="text-[10px] h-5">
+                <Play className="h-2.5 w-2.5 mr-1 animate-pulse" />
+                Running
+              </Badge>
+            ) : (
+              <Badge
+                variant={isEmpty ? "secondary" : "default"}
+                className={cn(
+                  "text-[10px] h-5",
+                  !isEmpty && "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/20"
+                )}
+              >
+                {numFiles} file{numFiles !== 1 ? "s" : ""}
+                {truncated && "+"}
+              </Badge>
+            )}
+            <span className="flex-1 text-xs text-muted-foreground font-mono truncate">
+              {pattern}
+            </span>
+            {durationMs !== undefined && (
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                {durationMs}ms
+              </span>
+            )}
+            {timestamp && (
+              <span className="text-[10px] text-muted-foreground shrink-0">{timestamp}</span>
+            )}
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-3 py-2 bg-muted/30">
+            {isEmpty ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Search className="h-4 w-4" />
+                <span>No files found</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Results
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5" onClick={handleCopy}>
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <div className="text-xs font-mono max-h-64 overflow-y-auto space-y-0.5">
+                  {renderTree(fileTree)}
+                </div>
+                {truncated && (
+                  <div className="mt-2 text-xs text-amber-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Results truncated
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  )
+}
+
+// ============================================================================
 // Tool Card - Collapsible tool usage display
 // ============================================================================
 
@@ -948,8 +1161,22 @@ export function EventRenderer({ event, className }: EventRendererProps) {
       const command = getString(toolInput, "command")
       return (
         <div className={className}>
-          <BashCard 
+          <BashCard
             command={command}
+            output={toolResponse}
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
+    // Glob tool - tree-style file listing
+    if (tool === "Glob") {
+      const pattern = getString(toolInput, "pattern")
+      return (
+        <div className={className}>
+          <GlobCard
+            pattern={pattern}
             output={toolResponse}
             timestamp={timestamp}
           />
@@ -975,6 +1202,21 @@ export function EventRenderer({ event, className }: EventRendererProps) {
   if (event_type === "agent.tool_use") {
     const tool = getString(data, "tool")
     const toolInput = (data.tool_input || data.input || {}) as Record<string, unknown>
+
+    // Glob tool - show running state with GlobCard
+    if (tool === "Glob") {
+      const pattern = getString(toolInput, "pattern")
+      return (
+        <div className={className}>
+          <GlobCard
+            pattern={pattern}
+            status="running"
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
     return (
       <div className={className}>
         <ToolCard tool={tool} input={toolInput} status="running" timestamp={timestamp} />

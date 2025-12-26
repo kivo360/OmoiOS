@@ -13,6 +13,7 @@ interface TaskCardProps {
   taskType: string
   status: TaskStatus
   timeAgo: string
+  isSelected?: boolean
   className?: string
 }
 
@@ -51,14 +52,15 @@ export function TaskCard({
   taskType,
   status,
   timeAgo,
+  isSelected,
   className,
 }: TaskCardProps) {
   const normalizedStatus = normalizeStatus(status)
   const { icon: StatusIcon, iconClass } = statusConfig[normalizedStatus]
-  
+
   // Display title if available, otherwise fall back to task type
   const displayName = title || taskType || "Untitled Task"
-  
+
   // Link to sandbox if available, otherwise to task
   const href = sandboxId ? `/sandbox/${sandboxId}` : `/tasks/${id}`
 
@@ -67,6 +69,7 @@ export function TaskCard({
       href={href}
       className={cn(
         "block rounded-md p-2 transition-colors duration-150 hover:bg-accent",
+        isSelected && "bg-accent border-l-2 border-l-primary",
         className
       )}
     >
