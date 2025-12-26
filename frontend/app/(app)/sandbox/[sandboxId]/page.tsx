@@ -326,7 +326,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
               </TabsList>
             </div>
 
-            <TabsContent value="events" className="flex-1 flex flex-col overflow-hidden m-0 p-0">
+            <TabsContent value="events" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden">
               {/* Events scroll area */}
               <ScrollArea className="flex-1" ref={scrollRef}>
                 <div className="p-4 space-y-3">
@@ -375,8 +375,8 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
               </div>
             </TabsContent>
 
-            <TabsContent value="details" className="flex-1 overflow-auto m-0 p-4">
-              <div className="space-y-4">
+            <TabsContent value="details" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-auto">
+              <div className="p-4 space-y-4">
                 <Card>
                   <CardHeader>
                     <CardTitle>Task Information</CardTitle>
