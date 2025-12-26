@@ -173,3 +173,87 @@
     @apply hover:bg-accent transition-colors duration-150;
   }
 }
+
+/* ==========================================================================
+   KaTeX Math Rendering Styles
+   ========================================================================== */
+
+/* Base KaTeX styling */
+.katex-display {
+  @apply my-4 overflow-x-auto overflow-y-hidden;
+}
+
+.katex {
+  @apply text-base;
+  font-size: 1.1em;
+}
+
+/* Light mode KaTeX colors */
+.katex .mord,
+.katex .mrel,
+.katex .mbin,
+.katex .mopen,
+.katex .mclose,
+.katex .mpunct,
+.katex .minner {
+  color: hsl(var(--foreground));
+}
+
+/* Dark mode KaTeX colors */
+.dark .katex .mord,
+.dark .katex .mrel,
+.dark .katex .mbin,
+.dark .katex .mopen,
+.dark .katex .mclose,
+.dark .katex .mpunct,
+.dark .katex .minner {
+  color: hsl(var(--foreground));
+}
+
+/* Display math block styling */
+.katex-display > .katex {
+  @apply text-center;
+}
+
+/* Inline math styling */
+.katex:not(.katex-display .katex) {
+  @apply inline;
+}
+
+/* ==========================================================================
+   Mermaid Diagram Styles
+   ========================================================================== */
+
+/* Mermaid container */
+.mermaid {
+  @apply flex justify-center items-center w-full;
+}
+
+/* SVG styling within mermaid diagrams */
+.mermaid svg {
+  @apply max-w-full h-auto;
+}
+
+/* Dark mode mermaid text visibility */
+.dark .mermaid text {
+  fill: hsl(var(--foreground)) !important;
+}
+
+/* Mermaid node styling */
+.dark .mermaid .node rect,
+.dark .mermaid .node circle,
+.dark .mermaid .node ellipse,
+.dark .mermaid .node polygon {
+  stroke: hsl(var(--border)) !important;
+}
+
+/* Mermaid edge/line styling */
+.dark .mermaid .edgePath path {
+  stroke: hsl(var(--muted-foreground)) !important;
+}
+
+/* Mermaid label styling */
+.dark .mermaid .edgeLabel {
+  background-color: hsl(var(--background)) !important;
+  color: hsl(var(--foreground)) !important;
+}
