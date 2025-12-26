@@ -437,7 +437,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                       {task?.description && (
                         <div className="md:col-span-2">
                           <p className="text-sm font-medium text-muted-foreground">Description</p>
-                          <p className="text-sm mt-1">{task.description}</p>
+                          <p className="text-sm mt-1 whitespace-pre-wrap break-words">{task.description}</p>
                         </div>
                       )}
                     </div>
