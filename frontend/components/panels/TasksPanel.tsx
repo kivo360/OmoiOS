@@ -48,9 +48,20 @@ function normalizeStatus(status: string): TaskStatus {
   }
 }
 
-export function TasksPanel() {
+interface TasksPanelProps {
+  pathname?: string
+}
+
+export function TasksPanel({ pathname }: TasksPanelProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const { data: tasks, isLoading, error } = useSandboxTasks({ limit: 50 })
+
+  // Extract sandboxId from pathname like /sandbox/[sandboxId]
+  const selectedSandboxId = useMemo(() => {
+    if (!pathname) return null
+    const match = pathname.match(/^\/sandbox\/([^/]+)/)
+    return match ? match[1] : null
+  }, [pathname])
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return []
@@ -138,6 +149,7 @@ export function TasksPanel() {
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
                       timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
                 </div>
@@ -155,6 +167,7 @@ export function TasksPanel() {
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
                       timeAgo={formatTimeAgo(task.created_at)}
+                      isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
                 </div>
@@ -172,6 +185,7 @@ export function TasksPanel() {
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
                       timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
                 </div>
@@ -189,6 +203,7 @@ export function TasksPanel() {
                       taskType={task.task_type}
                       status={normalizeStatus(task.status)}
                       timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      isSelected={task.sandbox_id === selectedSandboxId}
                     />
                   ))}
                 </div>

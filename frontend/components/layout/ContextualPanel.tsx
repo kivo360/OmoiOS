@@ -74,7 +74,7 @@ export function ContextualPanel({
 
     // Sandbox pages get Tasks panel
     if (pathname.startsWith("/sandbox")) {
-      return <TasksPanel />
+      return <TasksPanel pathname={pathname} />
     }
 
     // Default: use activeSection-based panels

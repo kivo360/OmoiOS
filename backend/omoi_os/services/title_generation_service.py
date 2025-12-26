@@ -23,13 +23,13 @@ class TaskTitleDescription(BaseModel):
 
     title: str = Field(
         ...,
-        max_length=100,
-        description="A concise, human-readable title for the task (max 100 chars)",
+        max_length=70,
+        description="A concise, human-readable title for the task (max 70 chars)",
     )
     description: Optional[str] = Field(
         None,
-        max_length=500,
-        description="A brief description of what the task does (optional, max 500 chars)",
+        max_length=2000,
+        description="A detailed description of what the task does (max 2000 chars)",
     )
 
 
@@ -184,7 +184,7 @@ class TitleGenerationService:
     ) -> str:
         """Build prompt for title-only generation."""
         parts = [
-            f"Generate a concise title (max 100 chars) for this task:",
+            f"Generate a concise title (max 70 chars) for this task:",
             f"Task type: {task_type}",
         ]
         if description:
@@ -204,7 +204,7 @@ class TitleGenerationService:
     ) -> str:
         """Build prompt for full title and description generation."""
         parts = [
-            "Generate a concise title (max 100 chars) and brief description (max 500 chars) for this task:",
+            "Generate a concise title (max 70 chars) and detailed description (max 2000 chars) for this task:",
             f"Task type: {task_type}",
         ]
         if description:
