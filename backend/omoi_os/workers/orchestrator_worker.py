@@ -422,7 +422,7 @@ async def orchestrator_loop():
                             task_id=task_id,
                         )
 
-                        # Publish event
+                        # Publish event (include sandbox_id in payload for frontend compatibility)
                         from omoi_os.services.event_bus import SystemEvent
 
                         event_bus.publish(
@@ -431,7 +431,9 @@ async def orchestrator_loop():
                                 entity_type="sandbox",
                                 entity_id=sandbox_id,
                                 payload={
+                                    "sandbox_id": sandbox_id,  # Also in payload for easier access
                                     "task_id": task_id,
+                                    "ticket_id": str(task.ticket_id),
                                     "agent_id": agent_id,
                                     "phase_id": phase_id,
                                 },

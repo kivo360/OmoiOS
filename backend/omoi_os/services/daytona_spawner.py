@@ -404,7 +404,7 @@ class DaytonaSpawnerService:
             info.status = "running"
             info.started_at = utc_now()
 
-            # Publish event
+            # Publish event (include sandbox_id in payload for frontend compatibility)
             if self.event_bus:
                 self.event_bus.publish(
                     SystemEvent(
@@ -412,6 +412,7 @@ class DaytonaSpawnerService:
                         entity_type="sandbox",
                         entity_id=sandbox_id,
                         payload={
+                            "sandbox_id": sandbox_id,  # Also in payload for easier access
                             "task_id": task_id,
                             "agent_id": agent_id,
                             "phase_id": phase_id,
