@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 
-const heroWords = ["shipped code", "merged PRs", "real features", "production apps"]
+const heroWords = ["shipped features", "merged PRs", "done work", "real results"]
 
 const avatars = [
   { src: "/avatars/avatar-1.png", fallback: "JD" },
@@ -80,7 +80,7 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.1 }}
             className="text-4xl font-bold tracking-tight text-landing-text sm:text-5xl md:text-6xl lg:text-7xl"
           >
-            Turn feature requests into{" "}
+            Describe it. Wake up to{" "}
             <span className="text-landing-accent">
               <FlipWords words={heroWords} duration={3000} className="text-landing-accent" />
             </span>
@@ -93,8 +93,8 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-landing-text-muted md:text-xl"
           >
-            Describe what you want built. OmoiOS plans, codes, tests, and creates
-            PRs—while you review at strategic points.
+            Tell us what you want built in plain English. By morning, there&apos;s a
+            pull request waiting for your review. That&apos;s it.
           </motion.p>
 
           {/* CTAs */}

@@ -74,7 +74,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.1 }}
             className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl"
           >
-            Be First to Ship with AI
+            Ready to Stop Managing and Start Shipping?
           </motion.h2>
 
           {/* Subheadline */}
@@ -85,7 +85,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.2 }}
             className="mt-4 text-lg text-gray-400"
           >
-            Join the waitlist for early access. We&apos;re onboarding teams weekly.
+            Get early access. Describe your first feature tonight, review the PR tomorrow.
           </motion.p>
 
           {/* Form */}

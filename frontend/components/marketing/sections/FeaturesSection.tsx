@@ -16,49 +16,49 @@ import { cn } from "@/lib/utils"
 
 const features = [
   {
-    title: "Spec-Driven Development",
+    title: "You Stay in Control",
     description:
-      "Requirements → Design → Tasks → Execution. Every step documented and traceable.",
+      "Review and approve before code is written. You make the decisions—we do the work.",
     icon: Zap,
     className: "md:col-span-2",
     visual: <SpecDrivenVisual />,
   },
   {
-    title: "Guardian Agents",
+    title: "Never Worry About Stuck Tasks",
     description:
-      "Monitor trajectories every 60 seconds. Auto-detect drift and stuck states.",
+      "If something goes wrong, it gets fixed automatically. No babysitting required.",
     icon: Shield,
     className: "md:col-span-1",
     visual: <GuardianVisual />,
   },
   {
-    title: "Discovery Engine",
+    title: "Handles the Unexpected",
     description:
-      "Agents discover new requirements as they work. Workflows branch and adapt.",
+      "Discovers edge cases and missing requirements as it works. You'll be asked only when it matters.",
     icon: Lightbulb,
     className: "md:col-span-1",
     visual: <DiscoveryVisual />,
   },
   {
-    title: "Verification & Testing",
+    title: "Built-In Quality Checks",
     description:
-      "Agents verify each other's work. Failed verification spawns fix tasks automatically.",
+      "Every piece of code is tested before you see it. Problems are caught and fixed automatically.",
     icon: CheckCircle2,
     className: "md:col-span-1",
     visual: <VerificationVisual />,
   },
   {
-    title: "Self-Healing Workflows",
+    title: "Mistakes Get Fixed, Not Escalated",
     description:
-      "Agents retry, validate, and fix their own work. System learns from successful patterns.",
+      "When something breaks, it retries and self-corrects. You only hear about it when it's done.",
     icon: RefreshCw,
     className: "md:col-span-1",
     visual: <SelfHealingVisual />,
   },
   {
-    title: "Real-Time Visibility",
+    title: "See Everything, Stress About Nothing",
     description:
-      "Activity timeline shows every agent action. Drill down from overview to specific logs.",
+      "Full visibility into what's happening. Check in when you want, not because you have to.",
     icon: Eye,
     className: "md:col-span-2",
     visual: <VisibilityVisual />,
@@ -82,10 +82,10 @@ export function FeaturesSection({ className, id }: FeaturesSectionProps) {
           className="mx-auto mb-16 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            Built for Autonomous Engineering
+            Your Time Back. Your Sanity Intact.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Everything you need to ship features without the coordination overhead
+            Stop managing tickets. Start shipping products.
           </p>
         </motion.div>
 

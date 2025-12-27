@@ -10,36 +10,36 @@ const phases = [
   {
     id: "requirements",
     number: "01",
-    title: "Requirements",
+    title: "You Describe It",
     description:
-      "Describe your feature in plain English. AI generates structured requirements (EARS-style).",
+      "Write what you want in plain English. \"Add user authentication with Google login.\" That's all you need.",
     icon: Search,
     color: "bg-blue-500",
   },
   {
     id: "design",
     number: "02",
-    title: "Design",
+    title: "You Approve the Plan",
     description:
-      "Architecture diagrams, data models, and implementation plan. Review and approve before any code.",
+      "We show you exactly what will be built. You say yes, no, or make changes. Nothing happens without your OK.",
     icon: Pencil,
     color: "bg-purple-500",
   },
   {
     id: "tasks",
     number: "03",
-    title: "Planning",
+    title: "We Handle the Details",
     description:
-      "Discrete tasks with dependencies auto-generated. Kanban board populates automatically.",
+      "The boring part—breaking it into tasks, figuring out dependencies, tracking progress—all handled for you.",
     icon: ListChecks,
     color: "bg-amber-500",
   },
   {
     id: "execution",
     number: "04",
-    title: "Execution",
+    title: "You Review the Result",
     description:
-      "Agents write code, run tests, self-correct. PR created when done—you just review.",
+      "A pull request appears with working, tested code. Review it, merge it, done. Ship faster without the busywork.",
     icon: Code2,
     color: "bg-green-500",
   },
@@ -61,10 +61,10 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
           className="mx-auto mb-16 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            From idea to merged PR in 4 phases
+            Here&apos;s How Simple It Is
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            OmoiOS uses spec-driven development to ensure quality at every step
+            Four steps. You do two of them. We do the rest.
           </p>
         </motion.div>
 
@@ -135,10 +135,10 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
         >
           <div className="mb-8 text-center">
             <h3 className="text-xl font-semibold text-landing-text">
-              Watch a Ticket Come to Life
+              Watch It In Action
             </h3>
             <p className="mt-2 text-landing-text-muted">
-              See how a single feature request flows through autonomous phases
+              See a real feature go from description to done
             </p>
           </div>
 
