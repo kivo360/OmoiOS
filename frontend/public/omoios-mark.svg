@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none" aria-label="OmoiOS mark">
+  <defs>
+    <linearGradient id="goldStroke" x1="120" y1="96" x2="392" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE78A"/>
+      <stop offset="0.35" stop-color="#FFD04A"/>
+      <stop offset="1" stop-color="#FF8A2A"/>
+    </linearGradient>
+
+    <!-- Softer glow -->
+    <filter id="glow" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feColorMatrix in="blur" type="matrix"
+        values="1 0 0 0 0
+                0 0.72 0 0 0
+                0 0 0.2 0 0
+                0 0 0 0.55 0" result="glowColor"/>
+      <feMerge>
+        <feMergeNode in="glowColor"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <g filter="url(#glow)" stroke="url(#goldStroke)" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Core mark -->
+    <g stroke-width="14">
+      <circle cx="256" cy="256" r="112"/>
+      <circle cx="368" cy="256" r="112"/>
+      <circle cx="312" cy="352.99" r="112"/>
+      <circle cx="200" cy="352.99" r="112"/>
+      <circle cx="144" cy="256" r="112"/>
+      <circle cx="200" cy="159.01" r="112"/>
+      <circle cx="312" cy="159.01" r="112"/>
+    </g>
+
+    <!-- Outer rings (thinner + subtle) -->
+    <g stroke-width="10">
+      <circle cx="256" cy="256" r="210" opacity="0.55"/>
+      <circle cx="256" cy="256" r="236" opacity="0.25"/>
+    </g>
+  </g>
+</svg>
