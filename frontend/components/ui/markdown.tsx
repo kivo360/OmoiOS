@@ -6,7 +6,7 @@ import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
 import rehypeKatex from "rehype-katex"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism"
+import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { cn } from "@/lib/utils"
 import "katex/dist/katex.min.css"
 
@@ -30,19 +30,19 @@ const MermaidDiagram = memo(function MermaidDiagram({ code }: { code: string }) 
         // Dynamically import mermaid to reduce bundle size
         const mermaid = (await import("mermaid")).default
 
-        // Initialize mermaid with dark theme support
+        // Initialize mermaid with light theme
         mermaid.initialize({
           startOnLoad: false,
-          theme: "dark",
+          theme: "default",
           securityLevel: "loose",
           fontFamily: "inherit",
           themeVariables: {
-            primaryColor: "#7c3aed",
-            primaryTextColor: "#fff",
-            primaryBorderColor: "#5b21b6",
-            lineColor: "#6b7280",
-            secondaryColor: "#1f2937",
-            tertiaryColor: "#374151",
+            primaryColor: "#E5E5E5",
+            primaryTextColor: "#171717",
+            primaryBorderColor: "#D4D4D4",
+            lineColor: "#737373",
+            secondaryColor: "#FAFAFA",
+            tertiaryColor: "#F5F5F5",
           },
         })
 
@@ -187,10 +187,10 @@ export function Markdown({ content, className }: MarkdownProps) {
         return <MermaidDiagram code={codeString} />
       }
 
-      // Block code with syntax highlighting
+      // Block code with syntax highlighting - light theme
       return (
         <SyntaxHighlighter
-          style={oneDark}
+          style={oneLight}
           language={language}
           PreTag="div"
           customStyle={{
@@ -198,6 +198,7 @@ export function Markdown({ content, className }: MarkdownProps) {
             padding: "1rem",
             borderRadius: "0.5rem",
             fontSize: "0.875rem",
+            backgroundColor: "#FAFAF8", // Light beige background like screenshots
           }}
         >
           {codeString}
@@ -208,7 +209,7 @@ export function Markdown({ content, className }: MarkdownProps) {
   )
 
   return (
-    <div className={cn("prose prose-sm dark:prose-invert max-w-none", className)}>
+    <div className={cn("prose prose-sm max-w-none", className)}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[rehypeKatex]}
