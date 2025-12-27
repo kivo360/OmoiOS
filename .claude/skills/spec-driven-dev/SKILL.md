@@ -1,11 +1,242 @@
 ---
 name: spec-driven-dev
-description: Spec-driven development workflow using Claude Agent SDK Python patterns. Use when planning new features, generating requirements docs, design docs, tickets, and tasks. Creates structured artifacts in .omoi_os/ directory following the project's documentation standards (REQ-XXX-YYY requirements, Mermaid diagrams, Pydantic models, SQL schemas). Integrates with DeepWiki and Context7 for research.
+description: Spec-driven development workflow using Claude Agent SDK Python patterns. Use when planning new features, generating requirements docs, design docs, tickets, and tasks. **IMPORTANT: If MCP spec_workflow tools are available (mcp__spec_workflow__*), use them to create specs, requirements, tickets, and tasks via API. Otherwise, fall back to writing files in .omoi_os/ directory.** Integrates with DeepWiki and Context7 for research.
 ---
 
 # Spec-Driven Development
 
 Systematic workflow for turning feature ideas into structured specifications, designs, and actionable work items using Claude Agent SDK patterns.
+
+## CRITICAL: Research-First, Question-Driven Approach
+
+**BEFORE creating any specs, requirements, or designs:**
+
+### Step 0: Explore Existing Codebase & Documentation
+
+**MANDATORY**: Always explore the existing codebase and documentation FIRST to understand context, patterns, and constraints.
+
+```
+1. Search for existing docs:
+   - Read docs/ directory for architecture, requirements, and design docs
+   - Check .omoi_os/ directory for existing specs, tickets, and tasks
+   - Look for CLAUDE.md, README.md, and other project guidance files
+
+2. Explore related code:
+   - Use Grep/Glob to find related components, services, and patterns
+   - Read existing implementations that the new feature will integrate with
+   - Identify coding patterns, naming conventions, and architecture styles
+
+3. Check for prior work:
+   - Look for existing tickets, tasks, or specs related to this feature
+   - Review git history for context on similar features
+   - Find any ADRs (Architecture Decision Records) that apply
+```
+
+### Step 1: Ask Discovery Questions (MANDATORY)
+
+**NEVER proceed to design without asking thorough questions first.** Ask 5-15 questions depending on feature complexity:
+
+**Feature Clarity Questions:**
+- What specific problem does this solve? What pain point exists today?
+- Who are the primary users/actors? Secondary?
+- What does success look like? How will we measure it?
+
+**Scope & Boundaries Questions:**
+- What is explicitly IN scope? What is explicitly OUT?
+- Are there existing features this overlaps with?
+- What are the hard constraints (time, budget, technical)?
+
+**Technical Context Questions:**
+- What existing systems/services will this integrate with?
+- Are there performance requirements (latency, throughput)?
+- What data will this feature need? Where does it come from?
+- What security/privacy considerations apply?
+
+**Design Direction Questions:**
+- Are there multiple valid approaches? Which should we explore?
+- What are the trade-offs between approaches?
+- Are there existing patterns in the codebase we should follow?
+- What could go wrong? What are the risks?
+
+**Example Question Flow:**
+```
+User: "I want to add user notifications"
+
+Claude: Before designing, I need to understand the feature better. Let me ask some questions:
+
+**Scope:**
+1. What types of notifications? (in-app, email, SMS, push?)
+2. What events trigger notifications? (task complete, agent stuck, PR ready?)
+3. Should users be able to configure notification preferences?
+
+**Technical:**
+4. I see we have an EventBusService - should notifications hook into that?
+5. Do we need real-time delivery or is near-real-time (polling) acceptable?
+6. What's the expected volume of notifications per user per day?
+
+**Constraints:**
+7. Are there any third-party services we must/must not use?
+8. What's the timeline/priority for this feature?
+
+Let me know your thoughts on these, and I may have follow-up questions.
+```
+
+### Step 2: Always Create Tangible Artifacts in `.omoi_os/`
+
+Even when using MCP tools, **ALSO write local files in `.omoi_os/`** for these benefits:
+- **Reference**: AI can re-read files if context is lost
+- **Debugging**: Humans can inspect what was generated
+- **Version Control**: Files can be committed to git
+- **Portability**: Works even if MCP tools fail
+
+**Dual-Write Strategy:**
+```
+1. Call MCP tool to create in backend system
+2. ALSO write to .omoi_os/ directory with same content
+3. If MCP fails, .omoi_os/ files serve as fallback
+```
+
+### Python Scripts for API Reference
+
+Use the utility scripts in `scripts/` to interact with APIs and validate state:
+
+```bash
+# Initialize feature directory structure
+uv run python .claude/skills/spec-driven-dev/scripts/init_feature.py --feature notifications
+
+# Generate next ticket/task IDs
+uv run python .claude/skills/spec-driven-dev/scripts/generate_ids.py
+
+# Validate spec completeness
+uv run python .claude/skills/spec-driven-dev/scripts/validate_specs.py --feature notifications
+
+# Call spec workflow APIs (if backend is running)
+# These help verify MCP tool operations and debug issues
+uv run python scripts/test_spec_workflow.py --list-specs
+uv run python scripts/test_spec_workflow.py --get-spec spec-123
+```
+
+**When to use scripts:**
+- After MCP tool calls, verify the data was created correctly
+- When debugging why a spec/ticket isn't showing up
+- To list existing specs before creating new ones
+- To validate generated specs match requirements
+
+---
+
+## MCP Spec Workflow Tools (USE WHEN AVAILABLE!)
+
+**IMPORTANT**: If you have access to the `mcp__spec_workflow__*` tools, use them instead of writing files to `.omoi_os/`. These tools create specs, requirements, and tickets directly in the OmoiOS backend system.
+
+### Available MCP Tools
+
+Check if these tools are available in your current session:
+
+| Tool | Purpose | Use Instead Of |
+|------|---------|----------------|
+| `mcp__spec_workflow__create_spec` | Create a new specification | Writing `.omoi_os/requirements/*.md` |
+| `mcp__spec_workflow__add_requirement` | Add EARS-style requirement | Manually formatting requirements |
+| `mcp__spec_workflow__add_acceptance_criterion` | Add acceptance criteria | Writing criteria in markdown |
+| `mcp__spec_workflow__update_design` | Update architecture/design | Writing `.omoi_os/designs/*.md` |
+| `mcp__spec_workflow__add_spec_task` | Add task to spec | Writing `.omoi_os/tasks/*.md` |
+| `mcp__spec_workflow__create_ticket` | Create workflow ticket | Writing `.omoi_os/tickets/*.md` |
+| `mcp__spec_workflow__approve_requirements` | Move to Design phase | Manual status updates |
+| `mcp__spec_workflow__approve_design` | Move to Implementation phase | Manual status updates |
+| `mcp__spec_workflow__get_spec` | Get spec details | Reading files |
+| `mcp__spec_workflow__list_project_specs` | List all specs | Listing directories |
+| `mcp__spec_workflow__get_ticket` | Get ticket details | Reading ticket files |
+
+### MCP-Based Workflow (with Dual-Write)
+
+When MCP tools are available, follow this flow. **Always dual-write to `.omoi_os/` as backup!**
+
+```
+0. EXPLORE existing docs, code, and prior specs (MANDATORY)
+1. ASK discovery questions to understand the feature (5-15 questions)
+2. RESEARCH using DeepWiki/Context7 for external libraries/patterns
+3. Create Spec:        mcp__spec_workflow__create_spec + write .omoi_os/requirements/{feature}.md
+4. Add Requirements:   mcp__spec_workflow__add_requirement (for each) + append to local file
+5. Add Criteria:       mcp__spec_workflow__add_acceptance_criterion + append to local file
+6. Approve Reqs:       mcp__spec_workflow__approve_requirements
+7. Update Design:      mcp__spec_workflow__update_design + write .omoi_os/designs/{feature}.md
+8. Approve Design:     mcp__spec_workflow__approve_design
+9. Add Tasks:          mcp__spec_workflow__add_spec_task (for each) + write .omoi_os/tasks/TSK-{N}.md
+10. Create Ticket:     mcp__spec_workflow__create_ticket + write .omoi_os/tickets/TKT-{N}.md
+11. VERIFY:            Run scripts to confirm data was created correctly
+```
+
+**Why Dual-Write?**
+- If MCP server fails, you have local files as fallback
+- AI can re-read .omoi_os/ files if context is lost mid-conversation
+- Human reviewers can see exactly what was generated
+- Files can be committed to version control for audit trail
+
+### Example MCP Usage
+
+```python
+# 1. Create the spec
+mcp__spec_workflow__create_spec(
+    project_id="proj-123",
+    title="Real-Time Collaboration",
+    description="Enable multiple users to edit documents simultaneously"
+)
+# Returns: spec_id
+
+# 2. Add requirements (EARS format: WHEN condition, THE SYSTEM SHALL action)
+mcp__spec_workflow__add_requirement(
+    spec_id="spec-456",
+    title="Live cursor display",
+    condition="a user opens a shared document",
+    action="display all active collaborators' cursors in real-time"
+)
+
+# 3. Add acceptance criteria
+mcp__spec_workflow__add_acceptance_criterion(
+    spec_id="spec-456",
+    requirement_id="req-789",
+    text="Cursor positions update within 100ms of remote changes"
+)
+
+# 4. Approve requirements to move to Design phase
+mcp__spec_workflow__approve_requirements(spec_id="spec-456")
+
+# 5. Update design
+mcp__spec_workflow__update_design(
+    spec_id="spec-456",
+    architecture="## Architecture\n\nWebSocket-based sync using CRDT...",
+    data_model="## Data Model\n\n```sql\nCREATE TABLE collaborators...",
+    api_spec=[
+        {"method": "WS", "endpoint": "/ws/collab/{doc_id}", "description": "Real-time sync"}
+    ]
+)
+
+# 6. Approve design to move to Implementation
+mcp__spec_workflow__approve_design(spec_id="spec-456")
+
+# 7. Add tasks
+mcp__spec_workflow__add_spec_task(
+    spec_id="spec-456",
+    title="Implement CRDT data structures",
+    description="Create RGA-based CRDT for text sequences",
+    phase="Implementation",
+    priority="high"
+)
+
+# 8. Create ticket to trigger orchestrator
+mcp__spec_workflow__create_ticket(
+    title="Implement Real-Time Collaboration",
+    description="Full implementation of collaborative editing feature",
+    priority="HIGH",
+    phase_id="PHASE_IMPLEMENTATION",
+    project_id="proj-123"
+)
+```
+
+---
+
+## Fallback: File-Based Workflow
+
+If MCP tools are NOT available, fall back to writing files in `.omoi_os/` as described below.
 
 ## Workflow Overview
 
@@ -42,36 +273,103 @@ All spec artifacts are stored in `.omoi_os/`:
     └── ...
 ```
 
-## Phase 1: Feature Understanding
+## Phase 1: Feature Understanding (DEEP EXPLORATION)
 
 ### When to Enter This Phase
 - User describes a new feature idea
 - User wants to plan implementation
 - User says "let's build..." or "I want to add..."
 
-### Process
+### Process (Expanded)
 
-1. **Clarify the Feature**
-   Ask targeted questions:
-   - What problem does this solve?
+**Step 1a: Explore Existing Context FIRST**
+
+Before asking questions, gather context:
+```
+# Read project documentation
+Read docs/CLAUDE.md, docs/architecture/, docs/requirements/
+
+# Check for existing related specs
+ls .omoi_os/requirements/
+ls .omoi_os/designs/
+
+# Search codebase for related components
+Grep for related service names, models, patterns
+
+# Check for prior discussions/ADRs
+ls docs/architecture/decisions/
+```
+
+**Step 1b: Ask Thorough Discovery Questions**
+
+Ask 5-15 questions depending on complexity. Categories:
+
+1. **Problem & Value** (2-3 questions)
+   - What specific problem does this solve?
+   - What's the impact of not having this feature?
+   - How will we measure success?
+
+2. **Users & Interactions** (2-3 questions)
    - Who are the users/actors?
-   - What are the key interactions?
-   - What systems does it touch?
-   - What are the constraints?
+   - What are the key user journeys?
+   - What are the edge cases?
 
-2. **Confirm Understanding**
-   Summarize back to user with:
-   - Feature name (kebab-case identifier)
-   - One-line description
-   - Key user stories
-   - Scope boundaries (in/out)
+3. **Technical Context** (3-5 questions)
+   - What existing systems will this integrate with?
+   - What data does this need? Where does it come from?
+   - Are there performance/scale requirements?
+   - What security/auth considerations apply?
+
+4. **Constraints & Trade-offs** (2-3 questions)
+   - What's explicitly out of scope?
+   - Are there time/budget constraints?
+   - What are the risks? What could go wrong?
+
+**Step 1c: Confirm Understanding with Summary**
+
+After questions are answered, summarize:
+- Feature name (kebab-case identifier)
+- One-line description
+- Key user stories (3-5)
+- Scope boundaries (IN/OUT explicitly listed)
+- Technical constraints discovered
+- Risks identified
 
 ### Example Dialog
 
 ```
 User: "I want to add real-time collaboration to the editor"
 
-Claude: Let me clarify the feature:
+Claude: Let me first explore the codebase to understand context...
+
+[Reads docs/CLAUDE.md, checks for existing specs, searches for editor-related code]
+
+Found: We have EventBusService for real-time events, WebSocket support in the frontend.
+No existing collaboration specs found.
+
+Now, before designing, I need to understand the feature better:
+
+**Problem & Value:**
+1. What specific problem does this solve? (Multiple people editing same doc causes conflicts?)
+2. How critical is real-time? (Sub-second updates vs eventual consistency?)
+
+**Users & Scope:**
+3. Who will collaborate? (Internal team only? External guests?)
+4. What types of content? (Just text? Code? Rich formatting?)
+5. What's explicitly OUT of scope? (Comments? Video chat?)
+
+**Technical:**
+6. I see we have EventBusService - should collaboration events flow through there?
+7. What's the expected concurrent editor count per document?
+8. Do we need conflict resolution or can we use CRDT for auto-merge?
+
+**Constraints:**
+9. Any third-party services we must use or avoid?
+10. What's the timeline? MVP vs full feature?
+
+[After user answers...]
+
+**Summary:**
 
 **Feature**: real-time-collaboration
 **Description**: Enable multiple users to edit documents simultaneously with live cursors and changes
@@ -84,6 +382,15 @@ Claude: Let me clarify the feature:
 **Scope**:
 - IN: Live cursors, text sync, presence indicators
 - OUT: Voice/video, commenting (separate feature)
+
+**Technical Constraints**:
+- Must integrate with existing EventBusService
+- Max 10 concurrent editors per document
+- Use CRDT for conflict resolution
+
+**Risks Identified**:
+- Performance with large documents
+- Network latency affecting user experience
 
 Is this correct? Any changes before I proceed to research?
 ```
@@ -363,6 +670,60 @@ When updating:
 3. Update requirements → design → tickets → tasks (cascade)
 4. Note revision in document history
 
+## Recovery: When Context is Lost
+
+If you lose context mid-conversation or need to resume work on a spec:
+
+### Re-Orient from Local Files
+
+```
+1. Read the spec files to understand where you were:
+   - .omoi_os/requirements/{feature}.md - Current requirements
+   - .omoi_os/designs/{feature}.md - Current design
+   - .omoi_os/tickets/ - Existing tickets
+   - .omoi_os/tasks/ - Existing tasks
+
+2. Check MCP for current state:
+   mcp__spec_workflow__list_project_specs(project_id="...")
+   mcp__spec_workflow__get_spec(spec_id="...")
+
+3. Use scripts to verify state:
+   uv run python scripts/test_spec_workflow.py --get-spec spec-123
+```
+
+### Resume Checklist
+
+When resuming work on an existing spec:
+
+- [ ] Read .omoi_os/ files to understand current state
+- [ ] Query MCP to get live data
+- [ ] Identify what phase you're in (Requirements, Design, Implementation)
+- [ ] Check for pending questions that were never answered
+- [ ] Review any TODOs or blockers noted in files
+- [ ] Continue from where you left off
+
+### Example Recovery
+
+```
+Claude: I notice we're continuing work on the "notifications" feature. Let me check our progress...
+
+[Reads .omoi_os/requirements/notifications.md]
+[Reads .omoi_os/designs/notifications.md]
+[Calls mcp__spec_workflow__get_spec]
+
+Status:
+- Requirements: 5 defined, approved
+- Design: In progress (architecture done, API spec pending)
+- Tickets: Not yet created
+- Tasks: Not yet created
+
+Next step: Complete the API specification section of the design.
+
+Would you like me to continue from here?
+```
+
+---
+
 ## Best Practices
 
 ### Requirements
@@ -384,6 +745,12 @@ When updating:
 - Small enough to complete in one session
 - Self-contained with all context needed
 - Include test expectations
+
+### Recovery & Reference
+- ALWAYS write to .omoi_os/ even when using MCP
+- Re-read local files when resuming work
+- Use scripts to verify backend state
+- Keep local files in sync with MCP state
 
 ## Scripts
 
