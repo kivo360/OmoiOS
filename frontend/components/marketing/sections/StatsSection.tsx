@@ -8,26 +8,26 @@ const stats = [
   {
     value: 10,
     suffix: "x",
-    label: "faster feature delivery",
-    description: "from request to merged PR",
+    label: "faster shipping",
+    description: "idea to PR in hours, not weeks",
   },
   {
     value: 85,
     suffix: "%",
-    label: "less coordination time",
-    description: "engineers focus on reviews",
+    label: "less busywork",
+    description: "more building, less managing",
   },
   {
     value: 24,
     suffix: "/7",
-    label: "autonomous execution",
-    description: "agents work while you sleep",
+    label: "work gets done",
+    description: "even while you sleep",
   },
   {
-    value: 60,
-    suffix: "s",
-    label: "Guardian monitoring",
-    description: "issues detected automatically",
+    value: 0,
+    suffix: "",
+    label: "babysitting required",
+    description: "problems fix themselves",
   },
 ]
 
@@ -47,10 +47,10 @@ export function StatsSection({ className }: StatsSectionProps) {
           className="mx-auto mb-12 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            Teams Are Already Shipping Faster
+            What You Actually Get
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Early access teams are seeing real results
+            More time for what matters. Less time on what doesn&apos;t.
           </p>
         </motion.div>
 
@@ -85,7 +85,8 @@ export function StatsSection({ className }: StatsSectionProps) {
           className="mx-auto mt-16 max-w-2xl text-center"
         >
           <blockquote className="text-lg italic text-landing-text-muted">
-            &ldquo;I describe a feature Monday morning, review the PR by lunch.&rdquo;
+            &ldquo;I wrote what I wanted Monday morning. Had a working PR to review by lunch.
+            I didn&apos;t touch a single ticket or attend a single standup.&rdquo;
           </blockquote>
           <cite className="mt-4 block text-sm text-landing-text-subtle">
             — Early Access User, Series A Startup
