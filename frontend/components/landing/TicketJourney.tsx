@@ -273,12 +273,13 @@ export function TicketJourney({
 
       {/* Phase Rail */}
       <div className="relative mb-8">
-        {/* Connection Line */}
-        <div className="absolute left-0 right-0 top-8 h-0.5 bg-border" />
+        {/* Connection Line - behind nodes, centered vertically (h-16 nodes = 64px, center at 32px = top-8) */}
+        <div className="absolute left-8 right-8 top-8 z-0 h-0.5 bg-border" />
 
-        {/* Progress Line */}
+        {/* Progress Line - behind nodes */}
         <motion.div
-          className="absolute left-0 top-8 h-0.5 bg-primary"
+          className="absolute left-8 top-8 z-0 h-0.5 bg-primary"
+          style={{ maxWidth: "calc(100% - 4rem)" }}
           initial={{ width: "0%" }}
           animate={{
             width: `${((currentPhaseIndex + phaseProgress / 100) / (journeyPhases.length - 1)) * 100}%`,
@@ -295,13 +296,13 @@ export function TicketJourney({
 
             return (
               <div key={phase.id} className="flex flex-col items-center">
-                {/* Node */}
+                {/* Node - solid backgrounds so line appears behind */}
                 <motion.div
                   className={cn(
-                    "relative z-10 flex h-16 w-16 items-center justify-center rounded-xl border-2 transition-all duration-300",
-                    isComplete && "border-primary bg-primary/10",
-                    isActive && "border-primary bg-primary/20",
-                    isPending && "border-border bg-muted"
+                    "relative z-10 flex h-16 w-16 items-center justify-center rounded-xl border-2 bg-background transition-all duration-300",
+                    isComplete && "border-primary",
+                    isActive && "border-primary",
+                    isPending && "border-border"
                   )}
                   animate={isActive ? { scale: [1, 1.05, 1] } : {}}
                   transition={{
