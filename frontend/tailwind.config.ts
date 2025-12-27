@@ -76,6 +76,31 @@ const config = {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
+				},
+				// Landing Page Colors - Clean White Theme
+				landing: {
+					accent: {
+						DEFAULT: 'hsl(var(--landing-accent))',
+						light: 'hsl(var(--landing-accent-light))',
+						dark: 'hsl(var(--landing-accent-dark))',
+						foreground: 'hsl(var(--landing-accent-foreground))'
+					},
+					bg: {
+						DEFAULT: 'hsl(var(--landing-bg))',
+						muted: 'hsl(var(--landing-bg-muted))',
+						warm: 'hsl(var(--landing-bg-warm))',
+						dark: 'hsl(var(--landing-bg-dark))'
+					},
+					text: {
+						DEFAULT: 'hsl(var(--landing-text))',
+						muted: 'hsl(var(--landing-text-muted))',
+						subtle: 'hsl(var(--landing-text-subtle))',
+						inverse: 'hsl(var(--landing-text-inverse))'
+					},
+					border: {
+						DEFAULT: 'hsl(var(--landing-border))',
+						accent: 'hsl(var(--landing-border-accent) / 0.3)'
+					}
 				}
 			},
 			borderRadius: {

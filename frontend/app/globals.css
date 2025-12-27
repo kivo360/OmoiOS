@@ -4,138 +4,181 @@
 
 @layer base {
   :root {
-    /* OmoiOS Warm Cream Theme - Cursor BG Agent Inspired */
-    
+    /* OmoiOS Clean White Theme */
+
     /* Background colors */
-    --background: 48 20% 96%;        /* #F5F5F0 Warm cream */
-    --foreground: 0 0% 10%;          /* #1A1A1A Near black */
-    
+    --background: 0 0% 100%;             /* #FFFFFF Pure white */
+    --foreground: 0 0% 9%;               /* #171717 Near black */
+
+    /* =======================================================================
+       Landing Page Colors - Clean White Theme
+       ======================================================================= */
+
+    /* Accent (Neutral dark - professional) */
+    --landing-accent: 0 0% 9%;                   /* #171717 - Dark accent */
+    --landing-accent-light: 0 0% 20%;            /* #333333 - Lighter */
+    --landing-accent-dark: 0 0% 4%;              /* #0A0A0A - Darker */
+    --landing-accent-foreground: 0 0% 100%;      /* White text on accent */
+
+    /* Landing Backgrounds */
+    --landing-bg: 0 0% 100%;                     /* #FFFFFF - Pure white */
+    --landing-bg-muted: 0 0% 98%;                /* #FAFAFA - Very light gray */
+    --landing-bg-warm: 0 0% 96%;                 /* #F5F5F5 - Light gray */
+    --landing-bg-dark: 0 0% 4%;                  /* #0A0A0A - Near black */
+
+    /* Landing Text */
+    --landing-text: 0 0% 9%;                     /* #171717 - Near black */
+    --landing-text-muted: 0 0% 45%;              /* #737373 - Gray */
+    --landing-text-subtle: 0 0% 64%;             /* #A3A3A3 - Light gray */
+    --landing-text-inverse: 0 0% 100%;           /* #FFFFFF */
+
+    /* Landing Borders */
+    --landing-border: 0 0% 90%;                  /* #E5E5E5 - Light border */
+    --landing-border-accent: 0 0% 9%;            /* Uses accent color */
+
+    /* Landing Gradient Stops */
+    --landing-gradient-from: 0 0% 9%;            /* #171717 */
+    --landing-gradient-to: 0 0% 4%;              /* #0A0A0A */
+
     /* Card/Surface */
     --card: 0 0% 100%;               /* #FFFFFF White surfaces */
-    --card-foreground: 0 0% 10%;     /* #1A1A1A */
-    
+    --card-foreground: 0 0% 9%;      /* #171717 */
+
     /* Popover */
     --popover: 0 0% 100%;            /* #FFFFFF */
-    --popover-foreground: 0 0% 10%;  /* #1A1A1A */
-    
-    /* Primary - Dark accent (not blue) */
-    --primary: 0 0% 10%;             /* #1A1A1A */
-    --primary-foreground: 48 20% 96%; /* #F5F5F0 */
-    
+    --popover-foreground: 0 0% 9%;   /* #171717 */
+
+    /* Primary - Dark accent */
+    --primary: 0 0% 9%;              /* #171717 */
+    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+
     /* Secondary */
-    --secondary: 48 14% 95%;         /* Warm light gray */
-    --secondary-foreground: 0 0% 10%; /* #1A1A1A */
-    
+    --secondary: 0 0% 96%;           /* #F5F5F5 Light gray */
+    --secondary-foreground: 0 0% 9%; /* #171717 */
+
     /* Muted */
-    --muted: 48 14% 95%;             /* Warm light gray */
-    --muted-foreground: 0 0% 42%;    /* #6B6B6B Secondary text */
-    
+    --muted: 0 0% 96%;               /* #F5F5F5 Light gray */
+    --muted-foreground: 0 0% 45%;    /* #737373 Secondary text */
+
     /* Accent */
-    --accent: 48 12% 94%;            /* Warm hover state */
-    --accent-foreground: 0 0% 10%;   /* #1A1A1A */
-    
-    /* Destructive - Git red */
-    --destructive: 355 70% 47%;      /* #CB2431 */
-    --destructive-foreground: 0 0% 98%;
-    
+    --accent: 0 0% 96%;              /* #F5F5F5 Hover state */
+    --accent-foreground: 0 0% 9%;    /* #171717 */
+
+    /* Destructive - Red */
+    --destructive: 0 84% 60%;        /* #EF4444 */
+    --destructive-foreground: 0 0% 100%;
+
     /* Borders */
-    --border: 48 12% 90%;            /* #E8E8E3 Warm gray borders */
-    --input: 48 12% 90%;             /* #E8E8E3 */
-    --ring: 0 0% 10%;                /* #1A1A1A Focus ring */
-    
+    --border: 0 0% 90%;              /* #E5E5E5 Light borders */
+    --input: 0 0% 90%;               /* #E5E5E5 */
+    --ring: 0 0% 9%;                 /* #171717 Focus ring */
+
     /* Radius */
     --radius: 0.5rem;
-    
+
     /* Custom semantic colors */
-    --success: 133 59% 33%;          /* #22863A Git green */
-    --warning: 45 100% 35%;          /* #B08800 Amber */
-    --info: 212 97% 43%;             /* #0366D6 Blue */
-    
+    --success: 142 71% 45%;          /* #22C55E Green */
+    --warning: 38 92% 50%;           /* #F59E0B Amber */
+    --info: 217 91% 60%;             /* #3B82F6 Blue */
+
     /* Tertiary text */
-    --tertiary: 0 0% 61%;            /* #9B9B9B Placeholder */
-    
+    --tertiary: 0 0% 64%;            /* #A3A3A3 Placeholder */
+
     /* Chart colors */
-    --chart-1: 133 59% 33%;          /* Success green */
-    --chart-2: 212 97% 43%;          /* Info blue */
-    --chart-3: 45 100% 35%;          /* Warning amber */
-    --chart-4: 355 70% 47%;          /* Destructive red */
-    --chart-5: 0 0% 42%;             /* Muted gray */
-    
-    /* Sidebar - Slightly warmer than main */
-    --sidebar-background: 48 14% 98%; /* #FAFAF8 */
-    --sidebar-foreground: 0 0% 10%;   /* #1A1A1A */
-    --sidebar-primary: 0 0% 10%;      /* #1A1A1A */
-    --sidebar-primary-foreground: 48 20% 96%;
-    --sidebar-accent: 48 12% 94%;     /* Warm hover */
-    --sidebar-accent-foreground: 0 0% 10%;
-    --sidebar-border: 48 12% 90%;     /* #E8E8E3 */
-    --sidebar-ring: 0 0% 10%;         /* #1A1A1A */
+    --chart-1: 142 71% 45%;          /* Success green */
+    --chart-2: 217 91% 60%;          /* Info blue */
+    --chart-3: 38 92% 50%;           /* Warning amber */
+    --chart-4: 0 84% 60%;            /* Destructive red */
+    --chart-5: 0 0% 45%;             /* Muted gray */
+
+    /* Sidebar */
+    --sidebar-background: 0 0% 98%;  /* #FAFAFA */
+    --sidebar-foreground: 0 0% 9%;   /* #171717 */
+    --sidebar-primary: 0 0% 9%;      /* #171717 */
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;      /* #F5F5F5 Hover */
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 90%;      /* #E5E5E5 */
+    --sidebar-ring: 0 0% 9%;         /* #171717 */
   }
 
   .dark {
-    /* OmoiOS Dark Theme - Warm dark tones */
-    
+    /* OmoiOS Dark Theme - Clean dark */
+
     /* Background colors */
-    --background: 0 0% 12%;          /* #1E1E1E */
-    --foreground: 0 0% 90%;          /* #E5E5E5 */
-    
+    --background: 0 0% 4%;           /* #0A0A0A */
+    --foreground: 0 0% 98%;          /* #FAFAFA */
+
+    /* =======================================================================
+       Landing Page Dark Mode Colors
+       ======================================================================= */
+    --landing-bg: 0 0% 4%;                       /* #0A0A0A */
+    --landing-bg-muted: 0 0% 9%;                 /* #171717 */
+    --landing-bg-warm: 0 0% 7%;                  /* #121212 */
+    --landing-bg-dark: 0 0% 2%;                  /* #050505 */
+    --landing-text: 0 0% 98%;                    /* #FAFAFA */
+    --landing-text-muted: 0 0% 64%;              /* #A3A3A3 */
+    --landing-text-subtle: 0 0% 45%;             /* #737373 */
+    --landing-text-inverse: 0 0% 9%;             /* #171717 */
+    --landing-border: 0 0% 18%;                  /* #2E2E2E */
+
     /* Card/Surface */
-    --card: 0 0% 18%;                /* #2D2D2D */
-    --card-foreground: 0 0% 90%;     /* #E5E5E5 */
-    
+    --card: 0 0% 9%;                 /* #171717 */
+    --card-foreground: 0 0% 98%;     /* #FAFAFA */
+
     /* Popover */
-    --popover: 0 0% 18%;             /* #2D2D2D */
-    --popover-foreground: 0 0% 90%;  /* #E5E5E5 */
-    
+    --popover: 0 0% 9%;              /* #171717 */
+    --popover-foreground: 0 0% 98%;  /* #FAFAFA */
+
     /* Primary */
-    --primary: 0 0% 90%;             /* #E5E5E5 */
-    --primary-foreground: 0 0% 12%;  /* #1E1E1E */
-    
+    --primary: 0 0% 98%;             /* #FAFAFA */
+    --primary-foreground: 0 0% 9%;   /* #171717 */
+
     /* Secondary */
-    --secondary: 0 0% 18%;           /* #2D2D2D */
-    --secondary-foreground: 0 0% 90%; /* #E5E5E5 */
-    
+    --secondary: 0 0% 15%;           /* #262626 */
+    --secondary-foreground: 0 0% 98%; /* #FAFAFA */
+
     /* Muted */
-    --muted: 0 0% 18%;               /* #2D2D2D */
-    --muted-foreground: 0 0% 55%;    /* #8B8B8B */
-    
+    --muted: 0 0% 15%;               /* #262626 */
+    --muted-foreground: 0 0% 64%;    /* #A3A3A3 */
+
     /* Accent */
-    --accent: 0 0% 20%;              /* Slightly lighter hover */
-    --accent-foreground: 0 0% 90%;   /* #E5E5E5 */
-    
+    --accent: 0 0% 15%;              /* #262626 Hover */
+    --accent-foreground: 0 0% 98%;   /* #FAFAFA */
+
     /* Destructive */
-    --destructive: 355 60% 40%;      /* Darker red for dark mode */
-    --destructive-foreground: 0 0% 98%;
-    
+    --destructive: 0 62% 50%;        /* Darker red for dark mode */
+    --destructive-foreground: 0 0% 100%;
+
     /* Borders */
-    --border: 0 0% 24%;              /* #3D3D3D */
-    --input: 0 0% 24%;               /* #3D3D3D */
-    --ring: 0 0% 90%;                /* #E5E5E5 */
-    
+    --border: 0 0% 18%;              /* #2E2E2E */
+    --input: 0 0% 18%;               /* #2E2E2E */
+    --ring: 0 0% 98%;                /* #FAFAFA */
+
     /* Custom semantic colors */
-    --success: 133 50% 40%;          /* Brighter green for dark */
-    --warning: 45 90% 45%;           /* Brighter amber for dark */
-    --info: 212 90% 55%;             /* Brighter blue for dark */
-    
+    --success: 142 71% 45%;          /* Green */
+    --warning: 38 92% 50%;           /* Amber */
+    --info: 217 91% 60%;             /* Blue */
+
     /* Tertiary text */
-    --tertiary: 0 0% 36%;            /* #5B5B5B */
-    
+    --tertiary: 0 0% 45%;            /* #737373 */
+
     /* Chart colors - adjusted for dark mode */
-    --chart-1: 133 50% 40%;
-    --chart-2: 212 90% 55%;
-    --chart-3: 45 90% 45%;
-    --chart-4: 355 60% 50%;
-    --chart-5: 0 0% 55%;
-    
+    --chart-1: 142 71% 45%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 38 92% 50%;
+    --chart-4: 0 62% 50%;
+    --chart-5: 0 0% 64%;
+
     /* Sidebar */
-    --sidebar-background: 0 0% 15%;  /* #252525 */
-    --sidebar-foreground: 0 0% 90%;  /* #E5E5E5 */
-    --sidebar-primary: 0 0% 90%;     /* #E5E5E5 */
-    --sidebar-primary-foreground: 0 0% 15%;
-    --sidebar-accent: 0 0% 20%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 0 0% 24%;      /* #3D3D3D */
-    --sidebar-ring: 0 0% 90%;
+    --sidebar-background: 0 0% 7%;   /* #121212 */
+    --sidebar-foreground: 0 0% 98%;  /* #FAFAFA */
+    --sidebar-primary: 0 0% 98%;     /* #FAFAFA */
+    --sidebar-primary-foreground: 0 0% 9%;
+    --sidebar-accent: 0 0% 15%;      /* #262626 */
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 18%;      /* #2E2E2E */
+    --sidebar-ring: 0 0% 98%;
   }
 }
 
@@ -157,18 +200,18 @@
   .text-git-delete {
     color: hsl(var(--destructive));
   }
-  
+
   /* JetBrains Mono for code/line counts */
   .font-mono-code {
     font-family: 'JetBrains Mono', ui-monospace, monospace;
   }
-  
+
   /* Time group header styling */
   .time-group-header {
     @apply text-[11px] uppercase tracking-wider text-muted-foreground font-medium;
   }
-  
-  /* Warm hover state */
+
+  /* Hover state */
   .hover-warm {
     @apply hover:bg-accent transition-colors duration-150;
   }
@@ -256,4 +299,82 @@
 .dark .mermaid .edgeLabel {
   background-color: hsl(var(--background)) !important;
   color: hsl(var(--foreground)) !important;
+}
+
+/* ==========================================================================
+   Landing Page Utility Classes
+   ========================================================================== */
+
+@layer utilities {
+  /* Landing page gradient text effect */
+  .landing-gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--landing-accent)) 0%,
+      hsl(var(--landing-accent-light)) 100%
+    );
+  }
+
+  /* Landing page CTA gradient background */
+  .landing-gradient-cta {
+    background-image: linear-gradient(
+      135deg,
+      hsl(var(--landing-gradient-from)) 0%,
+      hsl(var(--landing-gradient-to)) 100%
+    );
+  }
+
+  /* Landing page dark section gradient */
+  .landing-gradient-dark {
+    background-image: linear-gradient(
+      180deg,
+      #171717 0%,
+      #0a0a0a 50%,
+      #000000 100%
+    );
+  }
+
+  /* Landing page card shadow */
+  .landing-shadow-lg {
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Landing page accent glow shadow */
+  .landing-shadow-accent {
+    box-shadow: 0 4px 24px hsl(var(--landing-accent) / 0.1);
+  }
+
+  /* Landing page accent border glow */
+  .landing-border-glow {
+    box-shadow: 0 0 0 1px hsl(var(--landing-accent) / 0.2),
+                0 4px 12px hsl(var(--landing-accent) / 0.1);
+  }
+
+  /* Landing page hover state for cards */
+  .landing-card-hover {
+    @apply transition-all duration-200;
+  }
+
+  .landing-card-hover:hover {
+    @apply -translate-y-1;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Landing page section backgrounds */
+  .landing-section-white {
+    background-color: hsl(var(--landing-bg));
+  }
+
+  .landing-section-muted {
+    background-color: hsl(var(--landing-bg-muted));
+  }
+
+  .landing-section-warm {
+    background-color: hsl(var(--landing-bg-warm));
+  }
+
+  .landing-section-dark {
+    background-color: hsl(var(--landing-bg-dark));
+  }
 }
