@@ -17,6 +17,9 @@ import type {
   APIKey,
   APIKeyWithSecret,
   MessageResponse,
+  WaitlistListResponse,
+  WaitlistApproveResponse,
+  WaitlistApproveAllResponse,
 } from "./types"
 
 // ============================================================================
@@ -121,4 +124,52 @@ export async function listApiKeys(): Promise<APIKey[]> {
  */
 export async function revokeApiKey(keyId: string): Promise<MessageResponse> {
   return api.delete<MessageResponse>(`/api/v1/auth/api-keys/${keyId}`)
+}
+
+// ============================================================================
+// Waitlist Management (Admin Only)
+// ============================================================================
+
+/**
+ * List waitlist users (admin only)
+ */
+export async function listWaitlistUsers(
+  statusFilter: "pending" | "approved" | "none" = "pending",
+  limit = 100,
+  offset = 0
+): Promise<WaitlistListResponse> {
+  return api.get<WaitlistListResponse>(
+    `/api/v1/auth/waitlist?status_filter=${statusFilter}&limit=${limit}&offset=${offset}`
+  )
+}
+
+/**
+ * Approve a single waitlist user (admin only)
+ */
+export async function approveWaitlistUser(userId: string): Promise<WaitlistApproveResponse> {
+  return api.post<WaitlistApproveResponse>(`/api/v1/auth/waitlist/${userId}/approve`)
+}
+
+/**
+ * Approve all pending waitlist users (admin only)
+ */
+export async function approveAllWaitlistUsers(): Promise<WaitlistApproveAllResponse> {
+  return api.post<WaitlistApproveAllResponse>("/api/v1/auth/waitlist/approve-all")
+}
+
+// ============================================================================
+// Waitlist Registration (Public)
+// ============================================================================
+
+/**
+ * Join the waitlist (register with pending status)
+ * This is the same as register() but named for clarity on landing pages
+ */
+export async function joinWaitlist(data: {
+  email: string
+  password: string
+  full_name?: string
+  referral_source?: string
+}): Promise<User> {
+  return register(data)
 }

@@ -17,6 +17,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for user registration."""
     password: str = Field(..., min_length=8, max_length=100)
+    referral_source: Optional[str] = Field(None, max_length=100)
 
     @field_validator('password')
     @classmethod
@@ -46,6 +47,7 @@ class UserResponse(UserBase):
     is_super_admin: bool
     avatar_url: Optional[str] = None
     attributes: Optional[dict] = None
+    waitlist_status: str = "pending"
     created_at: datetime
     last_login_at: Optional[datetime] = None
 

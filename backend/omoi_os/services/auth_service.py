@@ -153,11 +153,21 @@ class AuthService:
         email: str,
         password: str,
         full_name: Optional[str] = None,
-        department: Optional[str] = None
+        department: Optional[str] = None,
+        waitlist_metadata: Optional[dict] = None,
     ) -> User:
         """
         Register a new user.
-        
+
+        New users are added to the waitlist by default (waitlist_status='pending').
+
+        Args:
+            email: User email
+            password: User password
+            full_name: Optional full name
+            department: Optional department
+            waitlist_metadata: Optional metadata (referral_source, etc.)
+
         Raises:
             ValueError: If email already exists or password is weak
         """
@@ -173,7 +183,7 @@ class AuthService:
         if not is_valid:
             raise ValueError(error_msg)
 
-        # Create user
+        # Create user - new users go on waitlist by default
         user = User(
             email=email,
             hashed_password=self.hash_password(password),
@@ -181,7 +191,9 @@ class AuthService:
             department=department,
             is_verified=False,
             is_active=True,
-            is_super_admin=False
+            is_super_admin=False,
+            waitlist_status="pending",
+            waitlist_metadata=waitlist_metadata,
         )
 
         self.db.add(user)

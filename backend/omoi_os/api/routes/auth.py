@@ -47,11 +47,17 @@ async def register(
     User will need to verify email before full access.
     """
     try:
+        # Build waitlist metadata
+        waitlist_metadata = None
+        if request.referral_source:
+            waitlist_metadata = {"referral_source": request.referral_source}
+
         user = await auth_service.register_user(
             email=request.email,
             password=request.password,
             full_name=request.full_name,
             department=request.department,
+            waitlist_metadata=waitlist_metadata,
         )
 
         return UserResponse.model_validate(user)
@@ -377,3 +383,134 @@ async def revoke_api_key(
     await auth_service.revoke_api_key(UUID(key_id))
 
     return {"message": "API key revoked successfully"}
+
+
+# Waitlist management endpoints (admin only)
+
+
+@router.get("/waitlist")
+async def list_waitlist_users(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+    status_filter: str = "pending",
+    limit: int = 100,
+    offset: int = 0,
+):
+    """
+    List users on the waitlist.
+
+    Only super admins can access this endpoint.
+    """
+    if not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admins can manage the waitlist",
+        )
+
+    from sqlalchemy import func
+
+    # Get users with matching waitlist status
+    query = select(User).where(
+        User.waitlist_status == status_filter,
+        User.deleted_at.is_(None),
+    ).order_by(User.created_at.asc()).offset(offset).limit(limit)
+
+    result = await db.execute(query)
+    users = result.scalars().all()
+
+    # Get total count
+    count_query = select(func.count(User.id)).where(
+        User.waitlist_status == status_filter,
+        User.deleted_at.is_(None),
+    )
+    count_result = await db.execute(count_query)
+    total = count_result.scalar()
+
+    return {
+        "users": [UserResponse.model_validate(u) for u in users],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+@router.post("/waitlist/{user_id}/approve")
+async def approve_waitlist_user(
+    user_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Approve a user from the waitlist.
+
+    Only super admins can access this endpoint.
+    """
+    if not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admins can manage the waitlist",
+        )
+
+    from sqlalchemy import update
+    from uuid import UUID as PyUUID
+
+    # Update the user's waitlist status
+    result = await db.execute(
+        update(User)
+        .where(User.id == PyUUID(user_id), User.deleted_at.is_(None))
+        .values(waitlist_status="approved")
+        .returning(User)
+    )
+    await db.commit()
+
+    updated_user = result.scalar_one_or_none()
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    logger.info(f"User {user_id} approved from waitlist by {current_user.id}")
+
+    return {"message": "User approved", "user": UserResponse.model_validate(updated_user)}
+
+
+@router.post("/waitlist/approve-all")
+async def approve_all_waitlist_users(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """
+    Approve all pending waitlist users.
+
+    Only super admins can access this endpoint.
+    Use this when launching or opening the waitlist.
+    """
+    if not current_user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only super admins can manage the waitlist",
+        )
+
+    from sqlalchemy import update, func
+
+    # Count before update
+    count_result = await db.execute(
+        select(func.count(User.id)).where(
+            User.waitlist_status == "pending",
+            User.deleted_at.is_(None),
+        )
+    )
+    count = count_result.scalar()
+
+    # Update all pending users
+    await db.execute(
+        update(User)
+        .where(User.waitlist_status == "pending", User.deleted_at.is_(None))
+        .values(waitlist_status="approved")
+    )
+    await db.commit()
+
+    logger.info(f"Approved {count} waitlist users by {current_user.id}")
+
+    return {"message": f"Approved {count} users from waitlist", "count": count}

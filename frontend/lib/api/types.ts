@@ -17,6 +17,7 @@ export interface User {
   is_super_admin: boolean
   avatar_url: string | null
   attributes: Record<string, unknown> | null
+  waitlist_status: "pending" | "approved" | "none"
   created_at: string
   last_login_at: string | null
 }
@@ -26,6 +27,7 @@ export interface UserCreate {
   password: string
   full_name?: string
   department?: string
+  referral_source?: string
 }
 
 export interface UserUpdate {
@@ -70,6 +72,27 @@ export interface ResetPasswordRequest {
 export interface ChangePasswordRequest {
   current_password: string
   new_password: string
+}
+
+// ============================================================================
+// Waitlist Types
+// ============================================================================
+
+export interface WaitlistListResponse {
+  users: User[]
+  total: number
+  limit: number
+  offset: number
+}
+
+export interface WaitlistApproveResponse {
+  message: string
+  user: User
+}
+
+export interface WaitlistApproveAllResponse {
+  message: string
+  count: number
 }
 
 // ============================================================================
