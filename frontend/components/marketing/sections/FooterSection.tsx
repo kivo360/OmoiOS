@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { Github, Twitter, Linkedin, MessageCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { OmoiOSLogo } from "@/components/ui/omoios-logo"
 
 const footerLinks = {
   product: [
@@ -52,10 +53,7 @@ export function FooterSection({ className }: FooterSectionProps) {
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <Link href="/" className="inline-flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-landing-accent">
-                <span className="text-sm font-bold text-white">O</span>
-              </div>
-              <span className="font-semibold text-white">OmoiOS</span>
+              <OmoiOSLogo size="md" />
             </Link>
             <p className="mt-4 max-w-xs text-sm text-gray-400">
               Autonomous engineering execution. Turn feature requests into shipped code
