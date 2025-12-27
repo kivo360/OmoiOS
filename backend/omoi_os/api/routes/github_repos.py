@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from omoi_os.api.dependencies import get_db_service, get_current_user
+from omoi_os.api.dependencies import get_db_service, get_approved_user
 from omoi_os.logging import get_logger
 from omoi_os.models.user import User
 from omoi_os.models.project import Project
@@ -71,7 +71,7 @@ def get_github_api_service(
     return GitHubAPIService(db)
 
 
-def verify_github_connected(current_user: User = Depends(get_current_user)) -> User:
+def verify_github_connected(current_user: User = Depends(get_approved_user)) -> User:
     """Verify that the user has GitHub connected."""
     attrs = current_user.attributes or {}
     access_token = attrs.get("github_access_token")
@@ -98,7 +98,7 @@ def verify_github_connected(current_user: User = Depends(get_current_user)) -> U
 
 @router.get("/connection-status")
 async def get_github_connection_status(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
 ):
     """Get GitHub connection status and diagnostic information."""
     attrs = current_user.attributes or {}
@@ -279,7 +279,7 @@ class RepositoryInfo(BaseModel):
 
 @router.get("/connected", response_model=list[RepositoryInfo])
 async def list_connected_repositories(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """List repositories connected to projects for the current user."""

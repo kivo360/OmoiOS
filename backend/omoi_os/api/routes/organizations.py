@@ -8,7 +8,7 @@ from uuid import UUID
 
 from omoi_os.api.dependencies import (
     get_db_session,
-    get_current_user,
+    get_approved_user,
     get_authorization_service,
 )
 from omoi_os.models.user import User
@@ -33,7 +33,7 @@ router = APIRouter()
 @router.post("", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)
 async def create_organization(
     request: OrganizationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session)
 ):
     """
@@ -90,7 +90,7 @@ async def create_organization(
 
 @router.get("", response_model=List[OrganizationSummary])
 async def list_organizations(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -111,7 +111,7 @@ async def list_organizations(
 @router.get("/{org_id}", response_model=OrganizationResponse)
 async def get_organization(
     org_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -148,7 +148,7 @@ async def get_organization(
 async def update_organization(
     org_id: UUID,
     request: OrganizationUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -201,7 +201,7 @@ async def update_organization(
 @router.delete("/{org_id}")
 async def delete_organization(
     org_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -236,7 +236,7 @@ async def delete_organization(
 async def add_member(
     org_id: UUID,
     request: MembershipCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -293,7 +293,7 @@ async def add_member(
 @router.get("/{org_id}/members", response_model=List[MembershipResponse])
 async def list_members(
     org_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -340,7 +340,7 @@ async def update_member(
     org_id: UUID,
     member_id: UUID,
     request: MembershipUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -394,7 +394,7 @@ async def update_member(
 async def remove_member(
     org_id: UUID,
     member_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -440,7 +440,7 @@ async def remove_member(
 async def list_roles(
     org_id: UUID,
     include_system: bool = True,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -478,7 +478,7 @@ async def list_roles(
 async def create_role(
     org_id: UUID,
     request: RoleCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -519,7 +519,7 @@ async def update_role(
     org_id: UUID,
     role_id: UUID,
     request: RoleUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):
@@ -590,7 +590,7 @@ async def update_role(
 async def delete_role(
     org_id: UUID,
     role_id: UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthorizationService = Depends(get_authorization_service)
 ):

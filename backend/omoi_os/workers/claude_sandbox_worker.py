@@ -29,14 +29,18 @@ Environment Variables (optional - skills & subagents):
     ENABLE_SUBAGENTS    - Set to "true" to enable custom subagents
     SETTING_SOURCES     - Comma-separated: "user,project" to load skills
 
+Environment Variables (optional - MCP tools):
+    ENABLE_SPEC_TOOLS   - Set to "true" to enable spec workflow MCP tools (default: true)
+
 Environment Variables (optional - behavior):
+    SYSTEM_PROMPT       - Custom system prompt (replaces default, but append still works)
+    SYSTEM_PROMPT_APPEND - Additional text to append to system prompt (extends default)
     INITIAL_PROMPT      - Initial task prompt
     POLL_INTERVAL       - Message poll interval in seconds (default: 0.5)
     HEARTBEAT_INTERVAL  - Heartbeat interval in seconds (default: 30)
     MAX_TURNS           - Max turns per response (default: 50)
     MAX_BUDGET_USD      - Max budget in USD (default: 10.0)
     PERMISSION_MODE     - SDK permission mode (default: acceptEdits)
-    SYSTEM_PROMPT       - Custom system prompt
     ALLOWED_TOOLS       - Comma-separated tool list
     CWD                 - Working directory (default: /workspace)
 
@@ -118,11 +122,16 @@ try:
         HookInput,
         HookContext,
         HookJSONOutput,
+        # MCP tools
+        tool,
+        create_sdk_mcp_server,
     )
 
     SDK_AVAILABLE = True
+    MCP_AVAILABLE = True
 except ImportError:
     SDK_AVAILABLE = False
+    MCP_AVAILABLE = False
 
 
 # =============================================================================
@@ -197,6 +206,428 @@ class FileChangeTracker:
 
 
 # =============================================================================
+# Spec Workflow MCP Tools (Embedded for Standalone Operation)
+# =============================================================================
+
+# API timeout for spec workflow tools
+SPEC_API_TIMEOUT = 30.0
+
+
+def _format_mcp_response(text: str) -> dict[str, Any]:
+    """Format a text response in MCP tool format."""
+    return {"content": [{"type": "text", "text": text}]}
+
+
+def _format_mcp_error(error: str) -> dict[str, Any]:
+    """Format an error response in MCP tool format."""
+    return {"content": [{"type": "text", "text": f"Error: {error}"}]}
+
+
+def _get_api_base() -> str:
+    """Get API base URL from environment (CALLBACK_URL is already set by spawner)."""
+    return os.environ.get("CALLBACK_URL", "http://localhost:18000")
+
+
+# Only define tools if SDK is available
+if SDK_AVAILABLE:
+
+    @tool(
+        "create_spec",
+        "Create a new specification for a project. Specs are containers for requirements, design, and tasks.",
+        {
+            "project_id": "Project ID to create spec under (required)",
+            "title": "Title of the specification (required)",
+            "description": "Detailed description of what this spec covers (optional)",
+        },
+    )
+    async def create_spec(args: dict[str, Any]) -> dict[str, Any]:
+        """Create a new spec via API."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/specs",
+                    json={
+                        "project_id": args["project_id"],
+                        "title": args["title"],
+                        "description": args.get("description"),
+                    },
+                )
+                response.raise_for_status()
+                spec = response.json()
+                return _format_mcp_response(
+                    f"Created spec '{spec['title']}'\n"
+                    f"ID: {spec['id']}\n"
+                    f"Status: {spec['status']}\n"
+                    f"Phase: {spec['phase']}"
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "get_spec",
+        "Get full details of a specification including requirements, design, and tasks.",
+        {"spec_id": "Spec ID to retrieve (required)"},
+    )
+    async def get_spec(args: dict[str, Any]) -> dict[str, Any]:
+        """Get spec details via API."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.get(f"{api_base}/api/v1/specs/{args['spec_id']}")
+                response.raise_for_status()
+                spec = response.json()
+
+                output = f"Spec: {spec['title']}\n"
+                output += f"ID: {spec['id']}\n"
+                output += f"Status: {spec['status']} | Phase: {spec['phase']}\n"
+                output += f"Progress: {spec['progress']}%\n\n"
+
+                output += f"Requirements ({len(spec['requirements'])}):\n"
+                for req in spec["requirements"]:
+                    output += f"  [{req['status']}] {req['title']}\n"
+                    output += f"    WHEN {req['condition']}\n"
+                    output += f"    THE SYSTEM SHALL {req['action']}\n"
+                    for c in req.get("criteria", []):
+                        status = "x" if c["completed"] else " "
+                        output += f"    [{status}] {c['text']}\n"
+
+                output += f"\nTasks ({len(spec['tasks'])}):\n"
+                for task in spec["tasks"]:
+                    output += f"  [{task['status']}] {task['title']} ({task['priority']})\n"
+
+                return _format_mcp_response(output)
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "list_project_specs",
+        "List all specifications for a project.",
+        {
+            "project_id": "Project ID (required)",
+            "status": "Filter by status: draft, requirements, design, executing, completed (optional)",
+        },
+    )
+    async def list_project_specs(args: dict[str, Any]) -> dict[str, Any]:
+        """List specs for a project."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                url = f"{api_base}/api/v1/specs/project/{args['project_id']}"
+                params = {}
+                if args.get("status"):
+                    params["status"] = args["status"]
+                response = await client.get(url, params=params)
+                response.raise_for_status()
+                data = response.json()
+
+                output = f"Specs ({data['total']}):\n"
+                for spec in data["specs"]:
+                    output += f"  - {spec['title']} (ID: {spec['id']})\n"
+                    output += f"    Status: {spec['status']} | Phase: {spec['phase']}\n"
+
+                return _format_mcp_response(output)
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "add_requirement",
+        "Add an EARS-style requirement to a spec. Uses 'WHEN condition, THE SYSTEM SHALL action' format.",
+        {
+            "spec_id": "Spec ID to add requirement to (required)",
+            "title": "Brief title for the requirement (required)",
+            "condition": "EARS 'WHEN' clause - the trigger condition (required)",
+            "action": "EARS 'THE SYSTEM SHALL' clause - what the system does (required)",
+        },
+    )
+    async def add_requirement(args: dict[str, Any]) -> dict[str, Any]:
+        """Add a requirement to a spec."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/requirements",
+                    json={
+                        "title": args["title"],
+                        "condition": args["condition"],
+                        "action": args["action"],
+                    },
+                )
+                response.raise_for_status()
+                req = response.json()
+                return _format_mcp_response(
+                    f"Added requirement '{req['title']}'\n"
+                    f"ID: {req['id']}\n"
+                    f"WHEN {req['condition']}\n"
+                    f"THE SYSTEM SHALL {req['action']}"
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "add_acceptance_criterion",
+        "Add an acceptance criterion to a requirement. These define how to verify the requirement is met.",
+        {
+            "spec_id": "Spec ID (required)",
+            "requirement_id": "Requirement ID to add criterion to (required)",
+            "text": "The acceptance criterion text (required)",
+        },
+    )
+    async def add_acceptance_criterion(args: dict[str, Any]) -> dict[str, Any]:
+        """Add an acceptance criterion to a requirement."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/requirements/{args['requirement_id']}/criteria",
+                    json={"text": args["text"]},
+                )
+                response.raise_for_status()
+                criterion = response.json()
+                return _format_mcp_response(
+                    f"Added acceptance criterion\n"
+                    f"ID: {criterion['id']}\n"
+                    f"Text: {criterion['text']}"
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "update_design",
+        "Update the design artifacts for a spec including architecture, data model, and API spec.",
+        {
+            "spec_id": "Spec ID (required)",
+            "architecture": "Architecture description/diagram in markdown (optional)",
+            "data_model": "Data model description/diagram in markdown (optional)",
+            "api_spec": "List of API endpoints: [{method, endpoint, description}] (optional)",
+        },
+    )
+    async def update_design(args: dict[str, Any]) -> dict[str, Any]:
+        """Update design for a spec."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                design = {
+                    "architecture": args.get("architecture"),
+                    "data_model": args.get("data_model"),
+                    "api_spec": args.get("api_spec", []),
+                }
+                response = await client.put(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/design",
+                    json=design,
+                )
+                response.raise_for_status()
+                return _format_mcp_response(f"Updated design for spec {args['spec_id']}")
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "add_spec_task",
+        "Add a task to a specification. Tasks are discrete units of work derived from requirements.",
+        {
+            "spec_id": "Spec ID (required)",
+            "title": "Task title (required)",
+            "description": "Task description (optional)",
+            "phase": "Development phase: Implementation, Testing, Integration, etc. (default: Implementation)",
+            "priority": "Priority: low, medium, high, critical (default: medium)",
+        },
+    )
+    async def add_spec_task(args: dict[str, Any]) -> dict[str, Any]:
+        """Add a task to a spec."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/tasks",
+                    json={
+                        "title": args["title"],
+                        "description": args.get("description"),
+                        "phase": args.get("phase", "Implementation"),
+                        "priority": args.get("priority", "medium"),
+                    },
+                )
+                response.raise_for_status()
+                task = response.json()
+                return _format_mcp_response(
+                    f"Added task '{task['title']}'\n"
+                    f"ID: {task['id']}\n"
+                    f"Phase: {task['phase']}\n"
+                    f"Priority: {task['priority']}"
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "create_ticket",
+        "Create a ticket for the workflow system. Tickets represent work items that agents execute.",
+        {
+            "title": "Ticket title (required)",
+            "description": "Ticket description (optional)",
+            "priority": "Priority: LOW, MEDIUM, HIGH, CRITICAL (default: MEDIUM)",
+            "phase_id": "Initial phase: PHASE_REQUIREMENTS, PHASE_INITIAL, PHASE_IMPLEMENTATION (default: PHASE_REQUIREMENTS)",
+            "project_id": "Project ID (optional)",
+        },
+    )
+    async def create_ticket(args: dict[str, Any]) -> dict[str, Any]:
+        """Create a ticket via API."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/tickets",
+                    json={
+                        "title": args["title"],
+                        "description": args.get("description"),
+                        "priority": args.get("priority", "MEDIUM"),
+                        "phase_id": args.get("phase_id", "PHASE_REQUIREMENTS"),
+                        "project_id": args.get("project_id"),
+                    },
+                )
+                response.raise_for_status()
+                ticket = response.json()
+                return _format_mcp_response(
+                    f"Created ticket '{ticket['title']}'\n"
+                    f"ID: {ticket['id']}\n"
+                    f"Priority: {ticket['priority']}\n"
+                    f"Phase: {ticket['phase_id']}"
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "get_ticket",
+        "Get details of a ticket including its current status and tasks.",
+        {"ticket_id": "Ticket ID (required)"},
+    )
+    async def get_ticket(args: dict[str, Any]) -> dict[str, Any]:
+        """Get ticket details."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.get(f"{api_base}/api/v1/tickets/{args['ticket_id']}")
+                response.raise_for_status()
+                ticket = response.json()
+
+                output = f"Ticket: {ticket['title']}\n"
+                output += f"ID: {ticket['id']}\n"
+                output += f"Status: {ticket['status']}\n"
+                output += f"Priority: {ticket['priority']}\n"
+                output += f"Phase: {ticket['phase_id']}\n"
+                if ticket.get("description"):
+                    output += f"\nDescription:\n{ticket['description']}\n"
+
+                return _format_mcp_response(output)
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "approve_requirements",
+        "Approve all requirements for a spec and transition to the Design phase.",
+        {"spec_id": "Spec ID to approve requirements for (required)"},
+    )
+    async def approve_requirements(args: dict[str, Any]) -> dict[str, Any]:
+        """Approve requirements for a spec."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/approve-requirements"
+                )
+                response.raise_for_status()
+                return _format_mcp_response(
+                    f"Requirements approved for spec {args['spec_id']}.\n"
+                    f"Spec is now in the Design phase."
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    @tool(
+        "approve_design",
+        "Approve the design for a spec and transition to the Implementation phase.",
+        {"spec_id": "Spec ID to approve design for (required)"},
+    )
+    async def approve_design(args: dict[str, Any]) -> dict[str, Any]:
+        """Approve design for a spec."""
+        try:
+            api_base = _get_api_base()
+            async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
+                response = await client.post(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/approve-design"
+                )
+                response.raise_for_status()
+                return _format_mcp_response(
+                    f"Design approved for spec {args['spec_id']}.\n"
+                    f"Spec is now in the Implementation phase."
+                )
+        except httpx.HTTPStatusError as e:
+            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+        except Exception as e:
+            return _format_mcp_error(str(e))
+
+    # All available spec workflow tools
+    SPEC_WORKFLOW_TOOLS = [
+        create_spec,
+        get_spec,
+        list_project_specs,
+        add_requirement,
+        add_acceptance_criterion,
+        update_design,
+        add_spec_task,
+        create_ticket,
+        get_ticket,
+        approve_requirements,
+        approve_design,
+    ]
+
+    def create_spec_workflow_mcp_server():
+        """Create the MCP server with all spec workflow tools.
+
+        Returns an MCP server that can be passed to ClaudeAgentOptions.mcp_servers.
+        """
+        return create_sdk_mcp_server(name="spec_workflow", tools=SPEC_WORKFLOW_TOOLS)
+
+    def get_spec_workflow_tool_names() -> list[str]:
+        """Get list of all spec workflow tool names in MCP format.
+
+        These can be used in ClaudeAgentOptions.allowed_tools.
+
+        Returns:
+            List of tool names in format 'mcp__spec_workflow__<tool_name>'
+        """
+        return [f"mcp__spec_workflow__{t._tool_name}" for t in SPEC_WORKFLOW_TOOLS]
+
+else:
+    # SDK not available - define stubs
+    SPEC_WORKFLOW_TOOLS = []
+
+    def create_spec_workflow_mcp_server():
+        raise ImportError("claude_agent_sdk is required to create MCP servers")
+
+    def get_spec_workflow_tool_names() -> list[str]:
+        return []
+
+
+# =============================================================================
 # Configuration
 # =============================================================================
 
@@ -234,35 +665,98 @@ class WorkerConfig:
         self.permission_mode = os.environ.get("PERMISSION_MODE", "acceptEdits")
         self.cwd = os.environ.get("CWD", "/workspace")
 
-        # System prompt with subagent info
-        default_system_prompt = """You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.
+        # System prompt - use append pattern to extend rather than replace
+        # Build append text from enabled features
+        append_parts = []
 
-You have access to specialized subagents:
-- code-reviewer: For security and quality code reviews
-- test-runner: For running and analyzing tests
-- architect: For design decisions and structure analysis
-- debugger: For investigating bugs
+        # Tools configuration - SDK defaults + optional control
+        #
+        # The SDK provides a comprehensive default toolset including:
+        #   Read, Write, Bash, Edit, Glob, Grep, Task, Skill, WebFetch, WebSearch, etc.
+        #
+        # Environment variables:
+        #   ALLOWED_TOOLS: Comma-separated list to REPLACE defaults (use with caution!)
+        #   DISALLOWED_TOOLS: Comma-separated list to BLOCK specific tools from defaults
+        #
+        # Recommended approach:
+        #   - Don't set ALLOWED_TOOLS (let SDK use full defaults)
+        #   - Use DISALLOWED_TOOLS only if you need to block dangerous tools
+        #   - MCP tools are auto-registered when mcp_servers are configured
+        #
+        allowed_tools_env = os.environ.get("ALLOWED_TOOLS")
+        if allowed_tools_env:
+            # User explicitly wants to replace defaults - use their exact list
+            # WARNING: This loses SDK defaults like Skill, Task, WebSearch, etc.
+            self.allowed_tools = [t.strip() for t in allowed_tools_env.split(",") if t.strip()]
+            self.tools_mode = "replace"
+        else:
+            # Use SDK defaults (recommended) - includes all standard tools
+            self.allowed_tools = None
+            self.tools_mode = "default"
 
-You also have access to Skills loaded from .claude/skills/ directories.
-Use subagents and skills when they can help accomplish the task more effectively."""
+        # Disallowed tools - block specific tools from the default set
+        # Example: DISALLOWED_TOOLS=Bash,Write to prevent file modifications
+        disallowed_tools_env = os.environ.get("DISALLOWED_TOOLS")
+        if disallowed_tools_env:
+            self.disallowed_tools = [t.strip() for t in disallowed_tools_env.split(",") if t.strip()]
+        else:
+            self.disallowed_tools = None
 
-        self.system_prompt = os.environ.get("SYSTEM_PROMPT", default_system_prompt)
-
-        # Tools - parse comma-separated list
-        default_tools = "Read,Write,Bash,Edit,Glob,Grep"
-        self.allowed_tools = os.environ.get("ALLOWED_TOOLS", default_tools).split(",")
-
-        # Skills and subagents
+        # Skills and subagents (informational flags - SDK handles these by default)
         self.enable_skills = os.environ.get("ENABLE_SKILLS", "true").lower() == "true"
         self.enable_subagents = (
             os.environ.get("ENABLE_SUBAGENTS", "true").lower() == "true"
         )
 
-        # Add Task and Skill to allowed tools if enabled
-        if self.enable_subagents and "Task" not in self.allowed_tools:
-            self.allowed_tools.append("Task")
-        if self.enable_skills and "Skill" not in self.allowed_tools:
-            self.allowed_tools.append("Skill")
+        # MCP spec workflow tools
+        self.enable_spec_tools = (
+            os.environ.get("ENABLE_SPEC_TOOLS", "true").lower() == "true"
+        )
+
+        # Note: MCP tools are automatically available when we register MCP servers
+        # No need to explicitly add them to allowed_tools - the SDK handles this
+        if self.enable_spec_tools and MCP_AVAILABLE:
+            # Add spec tools documentation to system prompt append
+            append_parts.append("""
+## Spec Workflow MCP Tools (mcp__spec_workflow__*)
+You have access to spec workflow tools for managing specifications, requirements, and tickets:
+- create_spec: Create new specifications for a project
+- get_spec: Get spec details including requirements and tasks
+- list_project_specs: List all specs for a project
+- add_requirement: Add EARS-style requirements (WHEN/THE SYSTEM SHALL)
+- add_acceptance_criterion: Add acceptance criteria to requirements
+- update_design: Update architecture and design artifacts
+- add_spec_task: Add tasks to a specification
+- create_ticket: Create tickets for the workflow system
+- get_ticket: Get ticket details
+- approve_requirements: Approve requirements and move to Design phase
+- approve_design: Approve design and move to Implementation phase""")
+
+        # Check for custom SYSTEM_PROMPT env var or additional append content
+        custom_system_prompt = os.environ.get("SYSTEM_PROMPT")
+        system_prompt_append = os.environ.get("SYSTEM_PROMPT_APPEND", "")
+
+        if system_prompt_append:
+            append_parts.append(system_prompt_append)
+
+        # Build final system_prompt config
+        # Use preset with append to extend claude_code's default prompt
+        combined_append = "\n".join(append_parts) if append_parts else ""
+
+        if custom_system_prompt:
+            # User provided full custom prompt - use it directly with any appends
+            if combined_append:
+                self.system_prompt = custom_system_prompt + "\n" + combined_append
+            else:
+                self.system_prompt = custom_system_prompt
+        else:
+            # Use preset pattern to extend default claude_code prompt
+            # This preserves the SDK's default system prompt and appends our additions
+            self.system_prompt = {
+                "type": "preset",
+                "preset": "claude_code",
+                "append": combined_append,
+            } if combined_append else None
 
         # Setting sources for loading skills
         setting_sources_str = os.environ.get("SETTING_SOURCES", "user,project")
@@ -325,9 +819,12 @@ Continue from where we left off, acknowledging the previous context."""
             "max_turns": self.max_turns,
             "max_budget_usd": self.max_budget_usd,
             "permission_mode": self.permission_mode,
-            "allowed_tools": self.allowed_tools,
+            "tools_mode": self.tools_mode,
+            "allowed_tools": self.allowed_tools if self.allowed_tools else "SDK_DEFAULTS",
+            "disallowed_tools": self.disallowed_tools or [],
             "enable_skills": self.enable_skills,
             "enable_subagents": self.enable_subagents,
+            "enable_spec_tools": self.enable_spec_tools,
             "setting_sources": self.setting_sources,
             "cwd": self.cwd,
             "resume_session_id": self.resume_session_id or "none",
@@ -410,13 +907,21 @@ Systematically investigate issues:
 
         options_kwargs = {
             "system_prompt": self.system_prompt,
-            "allowed_tools": self.allowed_tools,
             "permission_mode": self.permission_mode,
             "max_turns": self.max_turns,
             "max_budget_usd": self.max_budget_usd,
             "cwd": cwd_path,
             "env": env,
         }
+
+        # Only set allowed_tools if explicitly configured
+        # Otherwise, SDK uses its default preset (includes all standard tools like Skill, Task, etc.)
+        if self.allowed_tools is not None:
+            options_kwargs["allowed_tools"] = self.allowed_tools
+
+        # Set disallowed_tools if configured (to block specific tools)
+        if self.disallowed_tools is not None:
+            options_kwargs["disallowed_tools"] = self.disallowed_tools
 
         # Add model if specified
         if self.model:
@@ -435,6 +940,17 @@ Systematically investigate issues:
         if self.resume_session_id:
             options_kwargs["resume"] = self.resume_session_id
             options_kwargs["fork_session"] = self.fork_session
+
+        # Add MCP servers for spec workflow tools
+        # MCP servers are registered as a dict with server names as keys
+        # Tools are automatically available once the server is registered (mcp__{server}__{tool})
+        if self.enable_spec_tools and MCP_AVAILABLE:
+            try:
+                mcp_server = create_spec_workflow_mcp_server()
+                options_kwargs["mcp_servers"] = {"spec_workflow": mcp_server}
+                logger.info("Spec workflow MCP server enabled")
+            except Exception as e:
+                logger.warning("Failed to create spec workflow MCP server", extra={"error": str(e)})
 
         # Add hooks
         hooks = {}
