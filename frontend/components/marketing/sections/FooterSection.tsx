@@ -8,29 +8,28 @@ import { OmoiOSLogo } from "@/components/ui/omoios-logo"
 const footerLinks = {
   product: [
     { label: "Features", href: "#features" },
-    { label: "Pricing", href: "#pricing" },
-    { label: "Integrations", href: "#integrations" },
-    { label: "Roadmap", href: "#roadmap" },
-    { label: "Changelog", href: "#changelog" },
+    { label: "How It Works", href: "#how-it-works" },
+    { label: "Demo", href: "#demo" },
   ],
-  developers: [
-    { label: "Documentation", href: "/docs" },
-    { label: "API Reference", href: "/docs/api" },
-    { label: "SDK", href: "/docs/sdk" },
-    { label: "Status", href: "/status" },
-  ],
-  company: [
-    { label: "About", href: "/about" },
-    { label: "Blog", href: "/blog" },
-    { label: "Careers", href: "/careers" },
-    { label: "Press", href: "/press" },
-  ],
-  legal: [
-    { label: "Privacy", href: "/privacy" },
-    { label: "Terms", href: "/terms" },
-    { label: "Security", href: "/security" },
-    { label: "DPA", href: "/dpa" },
-  ],
+  // Commented out until pages exist
+  // developers: [
+  //   { label: "Documentation", href: "/docs" },
+  //   { label: "API Reference", href: "/docs/api" },
+  //   { label: "SDK", href: "/docs/sdk" },
+  //   { label: "Status", href: "/status" },
+  // ],
+  // company: [
+  //   { label: "About", href: "/about" },
+  //   { label: "Blog", href: "/blog" },
+  //   { label: "Careers", href: "/careers" },
+  //   { label: "Press", href: "/press" },
+  // ],
+  // legal: [
+  //   { label: "Privacy", href: "/privacy" },
+  //   { label: "Terms", href: "/terms" },
+  //   { label: "Security", href: "/security" },
+  //   { label: "DPA", href: "/dpa" },
+  // ],
 }
 
 const socialLinks = [
@@ -49,7 +48,7 @@ export function FooterSection({ className }: FooterSectionProps) {
     <footer className={cn("border-t border-gray-800 bg-landing-bg-dark", className)}>
       <div className="container mx-auto px-4 py-12 md:py-16">
         {/* Main Footer Content */}
-        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-6">
+        <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
           {/* Brand Column */}
           <div className="lg:col-span-2">
             <Link href="/" className="inline-flex items-center gap-2">
@@ -94,56 +93,7 @@ export function FooterSection({ className }: FooterSectionProps) {
             </ul>
           </div>
 
-          {/* Developers Links */}
-          <div>
-            <h4 className="mb-4 text-sm font-semibold text-white">Developers</h4>
-            <ul className="space-y-3">
-              {footerLinks.developers.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-gray-400 transition-colors hover:text-white"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Company Links */}
-          <div>
-            <h4 className="mb-4 text-sm font-semibold text-white">Company</h4>
-            <ul className="space-y-3">
-              {footerLinks.company.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-gray-400 transition-colors hover:text-white"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Legal Links */}
-          <div>
-            <h4 className="mb-4 text-sm font-semibold text-white">Legal</h4>
-            <ul className="space-y-3">
-              {footerLinks.legal.map((link) => (
-                <li key={link.label}>
-                  <Link
-                    href={link.href}
-                    className="text-sm text-gray-400 transition-colors hover:text-white"
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
+          {/* Developers, Company, and Legal Links - commented out until pages exist */}
         </div>
 
         {/* Bottom Bar */}
