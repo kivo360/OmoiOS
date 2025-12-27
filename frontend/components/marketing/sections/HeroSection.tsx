@@ -14,11 +14,11 @@ import { cn } from "@/lib/utils"
 const heroWords = ["shipped features", "merged PRs", "done work", "real results"]
 
 const avatars = [
-  { src: "/avatars/avatar-1.png", fallback: "JD" },
-  { src: "/avatars/avatar-2.png", fallback: "SK" },
-  { src: "/avatars/avatar-3.png", fallback: "MP" },
-  { src: "/avatars/avatar-4.png", fallback: "AL" },
-  { src: "/avatars/avatar-5.png", fallback: "RK" },
+  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=james", fallback: "JD" },
+  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=sarah", fallback: "SK" },
+  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=mike", fallback: "MP" },
+  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=alex", fallback: "AL" },
+  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=rachel", fallback: "RK" },
 ]
 
 interface HeroSectionProps {
