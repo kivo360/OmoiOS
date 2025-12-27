@@ -1,15 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect, Suspense } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Github, Mail, Loader2, CheckCircle2, XCircle } from "lucide-react"
-import { register as apiRegister } from "@/lib/api/auth"
+import { Github, Mail, Loader2, CheckCircle2, XCircle, Sparkles } from "lucide-react"
+import { register as apiRegister, joinWaitlist } from "@/lib/api/auth"
 import { ApiError } from "@/lib/api/client"
 import { startOAuthFlow } from "@/lib/api/oauth"
 
@@ -21,18 +21,31 @@ const PASSWORD_REQUIREMENTS = [
   { id: "number", label: "One number", test: (p: string) => /\d/.test(p) },
 ]
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter()
-  
+  const searchParams = useSearchParams()
+
+  // Check if coming from waitlist
+  const isWaitlist = searchParams.get("source") === "waitlist"
+  const prefillEmail = searchParams.get("email") || ""
+
   const [formData, setFormData] = useState({
     full_name: "",
-    email: "",
+    email: prefillEmail,
     password: "",
     confirmPassword: "",
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false)
+  const [waitlistSuccess, setWaitlistSuccess] = useState(false)
+
+  // Update email if prefill changes (e.g., on navigation)
+  useEffect(() => {
+    if (prefillEmail && !formData.email) {
+      setFormData(prev => ({ ...prev, email: prefillEmail }))
+    }
+  }, [prefillEmail, formData.email])
 
   // Check which password requirements are met
   const passwordChecks = PASSWORD_REQUIREMENTS.map((req) => ({
@@ -62,14 +75,24 @@ export default function RegisterPage() {
     }
 
     try {
-      await apiRegister({
-        email: formData.email,
-        password: formData.password,
-        full_name: formData.full_name || undefined,
-      })
-
-      // Redirect to verify email page
-      router.push("/verify-email?email=" + encodeURIComponent(formData.email))
+      if (isWaitlist) {
+        // Use waitlist-specific registration with referral tracking
+        await joinWaitlist({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name || undefined,
+          referral_source: "landing_page",
+        })
+        setWaitlistSuccess(true)
+      } else {
+        // Standard registration
+        await apiRegister({
+          email: formData.email,
+          password: formData.password,
+          full_name: formData.full_name || undefined,
+        })
+        router.push("/verify-email?email=" + encodeURIComponent(formData.email))
+      }
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
@@ -94,11 +117,50 @@ export default function RegisterPage() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
+  // Waitlist success state
+  if (waitlistSuccess) {
+    return (
+      <div className="space-y-6 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+          <Sparkles className="h-8 w-8 text-primary" />
+        </div>
+        <div>
+          <CardTitle className="text-2xl">You&apos;re on the list!</CardTitle>
+          <CardDescription className="mt-2">
+            We&apos;ll notify <strong>{formData.email}</strong> when your account is approved and ready to use.
+          </CardDescription>
+        </div>
+        <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">What happens next?</p>
+          <ul className="mt-2 space-y-1 text-left">
+            <li>• Your spot on the waitlist is secured</li>
+            <li>• We&apos;ll email you when your account is approved</li>
+            <li>• Early waitlist members get priority access</li>
+          </ul>
+        </div>
+        <Button variant="outline" asChild>
+          <Link href="/">Back to home</Link>
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="text-center">
-        <CardTitle className="text-2xl">Create an account</CardTitle>
-        <CardDescription>Get started with OmoiOS today</CardDescription>
+        {isWaitlist ? (
+          <>
+            <CardTitle className="text-2xl">Complete your registration</CardTitle>
+            <CardDescription>
+              One more step to join the waitlist for <strong>{prefillEmail}</strong>
+            </CardDescription>
+          </>
+        ) : (
+          <>
+            <CardTitle className="text-2xl">Create an account</CardTitle>
+            <CardDescription>Get started with OmoiOS today</CardDescription>
+          </>
+        )}
       </div>
 
       {error && (
@@ -130,9 +192,15 @@ export default function RegisterPage() {
             value={formData.email}
             onChange={(e) => updateFormData("email", e.target.value)}
             required
-            disabled={isLoading}
+            disabled={isLoading || (isWaitlist && !!prefillEmail)}
             autoComplete="email"
+            className={isWaitlist && prefillEmail ? "bg-muted" : ""}
           />
+          {isWaitlist && prefillEmail && (
+            <p className="text-xs text-muted-foreground">
+              Email pre-filled from waitlist signup
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -148,7 +216,7 @@ export default function RegisterPage() {
             disabled={isLoading}
             autoComplete="new-password"
           />
-          
+
           {/* Password requirements checklist */}
           {showPasswordRequirements && formData.password && (
             <div className="mt-2 space-y-1 text-xs">
@@ -194,7 +262,10 @@ export default function RegisterPage() {
           disabled={isLoading || !allPasswordRequirementsMet}
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isLoading ? "Creating account..." : "Create account"}
+          {isLoading
+            ? (isWaitlist ? "Joining waitlist..." : "Creating account...")
+            : (isWaitlist ? "Join Waitlist" : "Create account")
+          }
         </Button>
       </form>
 
@@ -245,5 +316,33 @@ export default function RegisterPage() {
         </Link>
       </div>
     </div>
+  )
+}
+
+function RegisterFormSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="mx-auto h-8 w-48 animate-pulse rounded bg-muted" />
+        <div className="mx-auto mt-2 h-4 w-64 animate-pulse rounded bg-muted" />
+      </div>
+      <div className="space-y-4">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="space-y-2">
+            <div className="h-4 w-20 animate-pulse rounded bg-muted" />
+            <div className="h-10 w-full animate-pulse rounded bg-muted" />
+          </div>
+        ))}
+        <div className="h-10 w-full animate-pulse rounded bg-muted" />
+      </div>
+    </div>
+  )
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<RegisterFormSkeleton />}>
+      <RegisterForm />
+    </Suspense>
   )
 }

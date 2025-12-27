@@ -49,6 +49,12 @@ class User(Base):
     )
     attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
+    # Waitlist
+    waitlist_status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True
+    )  # 'pending', 'approved', 'none'
+    waitlist_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
