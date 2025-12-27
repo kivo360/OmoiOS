@@ -7,7 +7,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from omoi_os.api.dependencies import get_db_service, get_current_user
+from omoi_os.api.dependencies import get_db_service, get_approved_user
 from omoi_os.config import get_app_settings
 from omoi_os.logging import get_logger
 from omoi_os.models.user import User
@@ -156,7 +156,7 @@ async def get_redirect_uri_diagnostic(
 
 @router.get("/oauth/connected", response_model=ConnectedProvidersResponse)
 async def list_connected_providers(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
 ):
     """List OAuth providers connected to the current user's account."""
     try:
@@ -232,7 +232,7 @@ async def list_connected_providers(
             f"HTTPException in list_connected_providers: status={e.status_code}, "
             f"detail={e.detail}, user={current_user.id if 'current_user' in locals() else 'unknown'}"
         )
-        # Re-raise HTTP exceptions (like 401 from get_current_user)
+        # Re-raise HTTP exceptions (like 401 from get_approved_user)
         raise
     except Exception as e:
         logger.error(f"Error in list_connected_providers: {e}", exc_info=True)
@@ -409,7 +409,7 @@ async def oauth_callback(
 async def connect_provider(
     provider: str,
     oauth_service: OAuthService = Depends(get_oauth_service),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
 ):
     """
     Start OAuth flow to connect a provider to the current user's account.
@@ -427,7 +427,7 @@ async def connect_provider(
 async def disconnect_provider(
     provider: str,
     oauth_service: OAuthService = Depends(get_oauth_service),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_approved_user),
 ):
     """Disconnect an OAuth provider from the current user's account."""
     # Check if user has a password set (can't disconnect if it's the only auth method)

@@ -459,6 +459,9 @@ async def get_current_user(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        # Check waitlist status - allow login but we'll block app access elsewhere
+        # This allows users to see their waitlist status via /auth/me
+
         # Eagerly load all attributes before session closes
         # This prevents DetachedInstanceError when serializing
         # Access attributes to ensure JSONB field is loaded
@@ -470,6 +473,44 @@ async def get_current_user(
 
 
 _optional_security = HTTPBearer(auto_error=False)
+
+
+async def get_approved_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> "User":
+    """
+    Get current authenticated user, but only if they are approved (not on waitlist).
+
+    Use this dependency for routes that should be blocked for waitlist users.
+    Waitlist users will get a 403 Forbidden with a message about their status.
+
+    Args:
+        credentials: HTTP Bearer token credentials
+        db: Database service
+
+    Returns:
+        Authenticated and approved user
+
+    Raises:
+        HTTPException: If user is on waitlist (403) or not authenticated (401)
+    """
+    # First, get the authenticated user
+    user = await get_current_user(credentials, db)
+
+    # Check waitlist status
+    if hasattr(user, "waitlist_status") and user.waitlist_status != "approved":
+        logger.info(f"User {user.id} blocked - waitlist_status: {user.waitlist_status}")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={
+                "error": "waitlist_pending",
+                "message": "You're on the waitlist! We'll notify you when your account is approved.",
+                "waitlist_status": user.waitlist_status,
+            },
+        )
+
+    return user
 
 
 async def get_current_user_optional(

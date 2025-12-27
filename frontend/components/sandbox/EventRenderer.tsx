@@ -689,6 +689,216 @@ function GlobCard({ pattern, output, status = "completed", timestamp }: GlobCard
 }
 
 // ============================================================================
+// Grep Card - Search results display
+// ============================================================================
+
+interface GrepOutput {
+  mode: "files_with_matches" | "content" | "count"
+  filenames?: string[]
+  content?: string
+  numFiles?: number
+  truncated?: boolean
+  durationMs?: number
+}
+
+function parseGrepOutput(output: string): GrepOutput | null {
+  if (!output) return null
+
+  try {
+    // Handle Python dict format with single quotes
+    const jsonLike = output
+      .replace(/'/g, '"')
+      .replace(/True/g, 'true')
+      .replace(/False/g, 'false')
+    return JSON.parse(jsonLike)
+  } catch {
+    // Try standard JSON
+    try {
+      return JSON.parse(output)
+    } catch {
+      // If it's plain text content (like grep content output), return as content mode
+      if (output && !output.startsWith("{")) {
+        return { mode: "content", content: output }
+      }
+      return null
+    }
+  }
+}
+
+interface GrepCardProps {
+  pattern: string
+  path?: string
+  outputMode?: string
+  output?: string
+  status?: "running" | "completed" | "error"
+  timestamp?: string
+}
+
+function GrepCard({ pattern, path, outputMode, output, status = "completed", timestamp }: GrepCardProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [showAll, setShowAll] = useState(false)
+
+  const parsed = output ? parseGrepOutput(output) : null
+  const filenames = parsed?.filenames || []
+  const numFiles = parsed?.numFiles ?? filenames.length
+  const truncated = parsed?.truncated || false
+  const mode = parsed?.mode || outputMode || "files_with_matches"
+  const contentOutput = parsed?.content || (parsed?.mode === "content" ? output : null)
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (mode === "files_with_matches") {
+      navigator.clipboard.writeText(filenames.join("\n"))
+    } else if (contentOutput) {
+      navigator.clipboard.writeText(contentOutput)
+    }
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  // Group files by directory for better organization
+  const groupedFiles = useMemo(() => {
+    const groups: Record<string, string[]> = {}
+    for (const filepath of filenames) {
+      const parts = filepath.split("/")
+      const filename = parts.pop() || filepath
+      const dir = parts.join("/") || "."
+      if (!groups[dir]) groups[dir] = []
+      groups[dir].push(filename)
+    }
+    return groups
+  }, [filenames])
+
+  const sortedDirs = Object.keys(groupedFiles).sort()
+
+  // Limit displayed directories/files initially
+  const maxInitialDirs = 10
+  const displayDirs = showAll ? sortedDirs : sortedDirs.slice(0, maxInitialDirs)
+  const hasMoreDirs = sortedDirs.length > maxInitialDirs
+
+  // For empty results or running state
+  const isEmpty = numFiles === 0 && status !== "running"
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors">
+            <Search className="h-4 w-4 shrink-0 text-orange-500" />
+            <span className="font-medium text-sm">Grep</span>
+            {status === "running" ? (
+              <Badge variant="secondary" className="text-[10px] h-5">
+                <Play className="h-2.5 w-2.5 mr-1 animate-pulse" />
+                Running
+              </Badge>
+            ) : (
+              <Badge
+                variant={isEmpty ? "secondary" : "default"}
+                className={cn(
+                  "text-[10px] h-5",
+                  !isEmpty && "bg-orange-500/10 text-orange-600 dark:text-orange-400 hover:bg-orange-500/20"
+                )}
+              >
+                {numFiles} match{numFiles !== 1 ? "es" : ""}
+                {truncated && "+"}
+              </Badge>
+            )}
+            <span className="flex-1 text-xs text-muted-foreground font-mono truncate">
+              {pattern}
+            </span>
+            {timestamp && (
+              <span className="text-[10px] text-muted-foreground shrink-0">{timestamp}</span>
+            )}
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-3 py-2 bg-muted/30">
+            {isEmpty ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <Search className="h-4 w-4" />
+                <span>No matches found</span>
+              </div>
+            ) : mode === "files_with_matches" ? (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Files ({numFiles})
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5" onClick={handleCopy}>
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <div className="text-xs font-mono max-h-72 overflow-y-auto space-y-2">
+                  {displayDirs.map((dir) => (
+                    <div key={dir}>
+                      <div className="flex items-center gap-1.5 text-cyan-500 font-medium mb-0.5">
+                        <FolderOpen className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{dir}/</span>
+                        <span className="text-muted-foreground font-normal">
+                          ({groupedFiles[dir].length})
+                        </span>
+                      </div>
+                      <div className="ml-4 space-y-0.5">
+                        {groupedFiles[dir].map((filename) => (
+                          <div
+                            key={`${dir}/${filename}`}
+                            className="flex items-center gap-1.5 text-foreground hover:bg-muted/50 rounded px-1 -mx-1"
+                          >
+                            <File className="h-3 w-3 shrink-0 text-muted-foreground" />
+                            <span className="truncate">{filename}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {hasMoreDirs && !showAll && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowAll(true)
+                    }}
+                    className="mt-2 text-xs text-primary hover:underline"
+                  >
+                    Show all ({sortedDirs.length - maxInitialDirs} more directories)
+                  </button>
+                )}
+                {truncated && (
+                  <div className="mt-2 text-xs text-amber-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Results truncated
+                  </div>
+                )}
+              </>
+            ) : contentOutput ? (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                    Results
+                  </span>
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5" onClick={handleCopy}>
+                    {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <pre className="text-xs bg-background rounded p-2 overflow-x-auto max-h-64 overflow-y-auto font-mono border whitespace-pre-wrap">
+                  {contentOutput}
+                </pre>
+              </>
+            ) : null}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  )
+}
+
+// ============================================================================
 // Tool Card - Collapsible tool usage display
 // ============================================================================
 
@@ -1184,6 +1394,24 @@ export function EventRenderer({ event, className }: EventRendererProps) {
       )
     }
 
+    // Grep tool - search results display
+    if (tool === "Grep") {
+      const pattern = getString(toolInput, "pattern")
+      const path = getString(toolInput, "path")
+      const outputMode = getString(toolInput, "output_mode")
+      return (
+        <div className={className}>
+          <GrepCard
+            pattern={pattern}
+            path={path}
+            outputMode={outputMode}
+            output={toolResponse}
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
     // TodoWrite tool
     if (tool === "TodoWrite" && toolInput.todos) {
       const todos = toolInput.todos as Array<{ content: string; status: string }>
@@ -1210,6 +1438,24 @@ export function EventRenderer({ event, className }: EventRendererProps) {
         <div className={className}>
           <GlobCard
             pattern={pattern}
+            status="running"
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
+    // Grep tool - show running state with GrepCard
+    if (tool === "Grep") {
+      const pattern = getString(toolInput, "pattern")
+      const path = getString(toolInput, "path")
+      const outputMode = getString(toolInput, "output_mode")
+      return (
+        <div className={className}>
+          <GrepCard
+            pattern={pattern}
+            path={path}
+            outputMode={outputMode}
             status="running"
             timestamp={timestamp}
           />
