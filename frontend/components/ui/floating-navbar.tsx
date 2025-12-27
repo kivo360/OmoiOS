@@ -7,6 +7,7 @@ import {
 } from "motion/react";
 import { cn } from "@/lib/utils";
 import { ArrowRight } from "lucide-react";
+import { OmoiOSLogo } from "@/components/ui/omoios-logo";
 
 export const FloatingNav = ({
   navItems,
@@ -43,10 +44,7 @@ export const FloatingNav = ({
       >
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 pr-4">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-landing-accent">
-            <span className="text-xs font-bold text-white">O</span>
-          </div>
-          <span className="font-semibold text-landing-text">OmoiOS</span>
+          <OmoiOSLogo size="sm" textClassName="text-landing-text" />
         </Link>
 
         {/* Nav Items */}

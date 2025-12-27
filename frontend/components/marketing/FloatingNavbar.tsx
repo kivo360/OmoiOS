@@ -7,6 +7,7 @@ import { Menu, X, ArrowRight } from "lucide-react"
 import { FloatingNav } from "@/components/ui/floating-navbar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { OmoiOSLogo } from "@/components/ui/omoios-logo"
 
 const navItems = [
   { name: "Features", link: "#features" },
@@ -35,10 +36,7 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
         <div className="mx-4 mt-4 flex items-center justify-between rounded-full border border-landing-border bg-white/80 px-4 py-2 backdrop-blur-md">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-landing-accent">
-              <span className="text-sm font-bold text-white">O</span>
-            </div>
-            <span className="font-semibold text-landing-text">OmoiOS</span>
+            <OmoiOSLogo size="sm" textClassName="text-landing-text" />
           </Link>
 
           {/* Mobile Menu Button */}
