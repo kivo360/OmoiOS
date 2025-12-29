@@ -1036,10 +1036,201 @@ trace = await client.get_full_traceability(project_id)
 
 ---
 
+## Complete Sync Workflow
+
+This section provides step-by-step instructions for syncing local specs to the OmoiOS API.
+
+### Prerequisites
+
+1. **Backend running** at `http://0.0.0.0:18000` (or your API URL)
+2. **Project exists** in the system (get project ID via `spec_cli.py projects`)
+3. **Local specs** in `.omoi_os/` with proper YAML frontmatter
+
+### Step 1: Prepare Local Spec Files
+
+Ensure your files have proper YAML frontmatter:
+
+**Requirements** (`.omoi_os/requirements/{feature}.md`):
+```yaml
+---
+id: REQ-FEATURE-001
+title: Feature Name Requirements
+feature: feature-name
+created: 2025-12-29
+updated: 2025-12-29
+status: draft
+category: functional
+priority: HIGH
+design_ref: designs/feature-name.md  # Links to design
+---
+```
+
+**Designs** (`.omoi_os/designs/{feature}.md`):
+```yaml
+---
+id: DESIGN-FEATURE-001
+title: Feature Name Design
+feature: feature-name
+created: 2025-12-29
+updated: 2025-12-29
+status: draft
+requirements:
+  - REQ-FEATURE-001  # Links back to requirements
+---
+```
+
+**Tickets** (`.omoi_os/tickets/TKT-{N}.md`):
+```yaml
+---
+id: TKT-001
+title: Implement Feature
+status: backlog
+priority: HIGH
+design_ref: designs/feature-name.md
+dependencies:
+  blocked_by: []
+  blocks: []
+---
+```
+
+**Tasks** (`.omoi_os/tasks/TSK-{N}.md`):
+```yaml
+---
+id: TSK-001
+title: Create data models
+status: pending
+ticket_id: TKT-001
+estimate: M
+dependencies:
+  depends_on: []
+  blocks: [TSK-002]
+---
+```
+
+### Step 2: Validate Local Specs
+
+```bash
+cd .claude/skills/spec-driven-dev/scripts
+
+# Validate for errors (circular deps, missing refs)
+python spec_cli.py validate
+
+# Preview what you have locally
+python spec_cli.py show all
+
+# Check traceability (Requirements → Designs → Tickets → Tasks)
+python spec_cli.py show traceability
+```
+
+### Step 3: Find Your Project ID
+
+```bash
+# List all projects
+python spec_cli.py projects --api-url http://0.0.0.0:18000
+
+# Note the project ID (UUID format)
+```
+
+### Step 4: Sync Specs (Requirements & Designs)
+
+```bash
+# DRY RUN: See what would be synced (no changes made)
+python spec_cli.py sync-specs diff \
+  --project-id <project-uuid> \
+  --api-url http://0.0.0.0:18000
+
+# Output shows:
+# - CREATE: New specs that will be created
+# - UPDATE: Specs that exist but need updates
+# - SKIP: Specs already in sync
+
+# PUSH: Actually sync to API
+python spec_cli.py sync-specs push \
+  --project-id <project-uuid> \
+  --api-url http://0.0.0.0:18000
+
+# Optional: Custom spec title
+python spec_cli.py sync-specs push \
+  --project-id <project-uuid> \
+  --spec-title "Webhook Notifications" \
+  --api-url http://0.0.0.0:18000
+```
+
+### Step 5: Sync Tickets & Tasks
+
+```bash
+# DRY RUN: Preview ticket/task sync
+python spec_cli.py sync diff \
+  --project-id <project-uuid> \
+  --api-url http://0.0.0.0:18000
+
+# PUSH: Actually sync tickets and tasks
+python spec_cli.py sync push \
+  --project-id <project-uuid> \
+  --api-url http://0.0.0.0:18000
+```
+
+### Step 6: Verify in API
+
+```bash
+# View full traceability from API
+python spec_cli.py api-trace <project-uuid> \
+  --api-url http://0.0.0.0:18000
+
+# View project with all tickets/tasks
+python spec_cli.py project <project-uuid> \
+  --api-url http://0.0.0.0:18000
+```
+
+### What Gets Synced
+
+| Local File | API Entity | Linking |
+|------------|------------|---------|
+| `.omoi_os/requirements/*.md` | Spec + Requirements | `design_ref` → Design link |
+| `.omoi_os/designs/*.md` | Spec design artifact | `requirements` → Requirement links |
+| `.omoi_os/tickets/*.md` | Ticket | `design_ref` → links to spec |
+| `.omoi_os/tasks/*.md` | Task | `ticket_id` → parent ticket |
+
+### Traceability Flow
+
+```
+Requirements (EARS format)
+    ↓ design_ref
+Designs (Architecture, API specs)
+    ↓ requirements list
+Tickets (Work items)
+    ↓ ticket_id
+Tasks (Atomic units)
+```
+
+### Sync Summary Output
+
+After push, you'll see a summary:
+```
+Summary: 2 created, 1 updated, 3 skipped, 0 failed
+```
+
+- **created**: New entities added to API
+- **updated**: Existing entities modified
+- **skipped**: Already in sync (no changes needed)
+- **failed**: Errors (check messages)
+
+### Common Issues
+
+**"Spec not found"**: Run `sync-specs push` before `sync push` (specs must exist first)
+
+**"DetachedInstanceError"**: Backend session issue - restart backend
+
+**"Project not found"**: Verify project ID with `spec_cli.py projects`
+
+**Missing linked_design**: Ensure requirements have `design_ref` in frontmatter
+
+---
+
 ## References
 
-- [references/requirements_template.md](references/requirements_template.md) - Full requirements template
-- [references/design_template.md](references/design_template.md) - Full design template
-- [references/ticket_template.md](references/ticket_template.md) - Ticket template
-- [references/task_template.md](references/task_template.md) - Task template
+- [references/requirements_template.md](references/requirements_template.md) - Full requirements template with YAML frontmatter
+- [references/design_template.md](references/design_template.md) - Full design template with YAML frontmatter
+- [references/ticket_template.md](references/ticket_template.md) - Ticket template with dependencies
+- [references/task_template.md](references/task_template.md) - Task template with dependencies
 - [references/claude_sdk_patterns.md](references/claude_sdk_patterns.md) - Claude Agent SDK integration patterns
