@@ -1,9 +1,16 @@
-# Webhook Notifications Requirements
+---
+id: REQ-WEBHOOK-001
+title: Webhook Notifications Requirements
+feature: webhook-notifications
+created: 2025-12-27
+updated: 2025-12-29
+status: draft
+category: functional
+priority: HIGH
+design_ref: designs/webhook-notifications.md
+---
 
-**Feature**: webhook-notifications
-**Created**: 2025-12-27
-**Status**: Draft
-**Author**: Claude (spec-driven-dev skill)
+# Webhook Notifications Requirements
 
 ## Overview
 
