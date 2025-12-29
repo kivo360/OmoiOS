@@ -78,3 +78,6 @@ examples/workspaces/
 # MCP
 .mcp/
 
+# Media files (videos, large assets)
+media/
+
