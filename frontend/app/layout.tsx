@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono" 
 })
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.com"
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.dev"
 
 export const metadata: Metadata = {
   title: {
