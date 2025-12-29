@@ -20,19 +20,19 @@ const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://omoios.com"
 
 export const metadata: Metadata = {
   title: {
-    default: "OmoiOS - AI Agent Orchestration Platform",
+    default: "OmoiOS - Go to sleep. Wake up to finished features.",
     template: "%s | OmoiOS",
   },
   description:
-    "OmoiOS is an AI-powered multi-agent orchestration platform. Deploy autonomous agents that work while you sleep, automate complex workflows, and scale your operations with intelligent automation.",
+    "AI agents that build while you rest. Deploy autonomous agents that ship features, fix bugs, and handle complex workflows overnight. Wake up to progress.",
   keywords: [
     "AI agents",
+    "autonomous coding",
+    "AI developer tools",
+    "automated software development",
+    "overnight automation",
+    "AI pair programming",
     "agent orchestration",
-    "automation",
-    "multi-agent systems",
-    "autonomous agents",
-    "workflow automation",
-    "AI platform",
   ],
   authors: [{ name: "OmoiOS Team" }],
   creator: "OmoiOS",
@@ -43,25 +43,18 @@ export const metadata: Metadata = {
     locale: "en_US",
     url: siteUrl,
     siteName: "OmoiOS",
-    title: "OmoiOS - AI Agent Orchestration Platform",
+    title: "Go to sleep. Wake up to finished features.",
     description:
-      "Deploy autonomous AI agents that work while you sleep. Automate complex workflows and scale your operations with intelligent multi-agent orchestration.",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "OmoiOS - AI Agent Orchestration Platform",
-      },
-    ],
+      "AI agents that build while you rest. Deploy autonomous agents that ship features, fix bugs, and handle complex workflows overnight.",
+    // images handled automatically by app/opengraph-image.tsx
   },
   twitter: {
     card: "summary_large_image",
-    title: "OmoiOS - AI Agent Orchestration Platform",
+    title: "Go to sleep. Wake up to finished features.",
     description:
-      "Deploy autonomous AI agents that work while you sleep. Automate complex workflows and scale your operations.",
-    images: ["/og-image.png"],
-    creator: "@omoios",
+      "AI agents that build while you rest. Ship features overnight with autonomous agents.",
+    // images handled automatically by app/twitter-image.tsx
+    creator: "@TheGeodexes",
   },
   robots: {
     index: true,
