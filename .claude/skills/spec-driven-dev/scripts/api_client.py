@@ -22,12 +22,16 @@ Usage:
 """
 
 import asyncio
+import os
 import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
 import httpx
+
+# Default API URL - can be overridden via environment variable
+DEFAULT_API_URL = "http://localhost:18000"
 
 from models import (
     ParseResult,
@@ -84,7 +88,7 @@ class OmoiOSClient:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:18000",
+        base_url: Optional[str] = None,
         timeout: float = 30.0,
         token: Optional[str] = None,
         api_key: Optional[str] = None,
@@ -92,15 +96,26 @@ class OmoiOSClient:
         """Initialize client.
 
         Args:
-            base_url: Base URL of OmoiOS API
+            base_url: Base URL of OmoiOS API. If not provided, uses
+                      OMOIOS_API_URL environment variable, or falls back
+                      to DEFAULT_API_URL (http://localhost:18000)
             timeout: Request timeout in seconds
-            token: JWT access token for authentication
-            api_key: API key for authentication (alternative to JWT)
+            token: JWT access token for authentication. If not provided,
+                   uses OMOIOS_TOKEN environment variable.
+            api_key: API key for authentication (alternative to JWT).
+                     If not provided, uses OMOIOS_API_KEY environment variable.
         """
-        self.base_url = base_url.rstrip("/")
+        # Resolve base URL: explicit > env var > default
+        if base_url:
+            self.base_url = base_url.rstrip("/")
+        else:
+            self.base_url = os.environ.get("OMOIOS_API_URL", DEFAULT_API_URL).rstrip("/")
+
         self.timeout = timeout
-        self.token = token
-        self.api_key = api_key
+
+        # Resolve auth: explicit > env var
+        self.token = token or os.environ.get("OMOIOS_TOKEN")
+        self.api_key = api_key or os.environ.get("OMOIOS_API_KEY")
 
     async def _request(
         self,
