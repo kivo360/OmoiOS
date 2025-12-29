@@ -14,10 +14,18 @@ import {
   WaitlistCTASection,
   FooterSection,
 } from "@/components/marketing"
+import { Announcement } from "@/components/ui/announcement"
 
 function LandingPage() {
   return (
     <div className="min-h-screen bg-landing-bg">
+      {/* Announcement Banner */}
+      <Announcement
+        tag="Free for Limited Time"
+        title="Try our AI Prompt Generator — craft perfect prompts instantly"
+        href="https://prompt.omoios.dev/"
+      />
+
       {/* Floating Navigation */}
       <MarketingNavbar />
 
