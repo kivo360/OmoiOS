@@ -32,7 +32,7 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
       />
 
       {/* Mobile Header */}
-      <header className="fixed left-0 right-0 top-0 z-50 md:hidden">
+      <header className="fixed left-0 right-0 top-11 z-50 md:hidden">
         <div className="mx-4 mt-4 flex items-center justify-between rounded-full border border-landing-border bg-white/80 px-4 py-2 backdrop-blur-md">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
