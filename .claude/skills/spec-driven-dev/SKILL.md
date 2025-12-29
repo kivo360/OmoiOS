@@ -1042,9 +1042,34 @@ This section provides step-by-step instructions for syncing local specs to the O
 
 ### Prerequisites
 
-1. **Backend running** at `http://0.0.0.0:18000` (or your API URL)
+1. **Backend running** at your API URL
 2. **Project exists** in the system (get project ID via `spec_cli.py projects`)
 3. **Local specs** in `.omoi_os/` with proper YAML frontmatter
+
+### Environment Variables
+
+Set these environment variables to avoid passing flags on every command:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OMOIOS_API_URL` | Base URL of the OmoiOS API | `http://localhost:18000` |
+| `OMOIOS_API_KEY` | API key for authentication | (none) |
+| `OMOIOS_TOKEN` | JWT token for authentication | (none) |
+
+**Example setup:**
+```bash
+# Set in your shell profile (.bashrc, .zshrc, etc.)
+export OMOIOS_API_URL="http://0.0.0.0:18000"
+export OMOIOS_API_KEY="your-api-key"
+
+# Or set per-session
+OMOIOS_API_URL="http://0.0.0.0:18000" python spec_cli.py projects
+```
+
+**Priority order:**
+1. Command-line flag (e.g., `--api-url`)
+2. Environment variable (e.g., `OMOIOS_API_URL`)
+3. Default value (`http://localhost:18000`)
 
 ### Step 1: Prepare Local Spec Files
 
@@ -1125,7 +1150,10 @@ python spec_cli.py show traceability
 ### Step 3: Find Your Project ID
 
 ```bash
-# List all projects
+# List all projects (uses OMOIOS_API_URL env var or default)
+python spec_cli.py projects
+
+# Or specify URL explicitly
 python spec_cli.py projects --api-url http://0.0.0.0:18000
 
 # Note the project ID (UUID format)
@@ -1135,9 +1163,7 @@ python spec_cli.py projects --api-url http://0.0.0.0:18000
 
 ```bash
 # DRY RUN: See what would be synced (no changes made)
-python spec_cli.py sync-specs diff \
-  --project-id <project-uuid> \
-  --api-url http://0.0.0.0:18000
+python spec_cli.py sync-specs diff --project-id <project-uuid>
 
 # Output shows:
 # - CREATE: New specs that will be created
@@ -1145,41 +1171,32 @@ python spec_cli.py sync-specs diff \
 # - SKIP: Specs already in sync
 
 # PUSH: Actually sync to API
-python spec_cli.py sync-specs push \
-  --project-id <project-uuid> \
-  --api-url http://0.0.0.0:18000
+python spec_cli.py sync-specs push --project-id <project-uuid>
 
 # Optional: Custom spec title
 python spec_cli.py sync-specs push \
   --project-id <project-uuid> \
-  --spec-title "Webhook Notifications" \
-  --api-url http://0.0.0.0:18000
+  --spec-title "Webhook Notifications"
 ```
 
 ### Step 5: Sync Tickets & Tasks
 
 ```bash
 # DRY RUN: Preview ticket/task sync
-python spec_cli.py sync diff \
-  --project-id <project-uuid> \
-  --api-url http://0.0.0.0:18000
+python spec_cli.py sync diff --project-id <project-uuid>
 
 # PUSH: Actually sync tickets and tasks
-python spec_cli.py sync push \
-  --project-id <project-uuid> \
-  --api-url http://0.0.0.0:18000
+python spec_cli.py sync push --project-id <project-uuid>
 ```
 
 ### Step 6: Verify in API
 
 ```bash
 # View full traceability from API
-python spec_cli.py api-trace <project-uuid> \
-  --api-url http://0.0.0.0:18000
+python spec_cli.py api-trace <project-uuid>
 
 # View project with all tickets/tasks
-python spec_cli.py project <project-uuid> \
-  --api-url http://0.0.0.0:18000
+python spec_cli.py project <project-uuid>
 ```
 
 ### What Gets Synced
