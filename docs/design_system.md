@@ -28,44 +28,268 @@ Standard SaaS layout with optional high-density features.
 
 ## 2. Color Palette
 
-### Primary Colors (Brand)
-High-visibility blue for actions and active states.
+> **NOTE: Theme Direction (Dec 2024)**
+> - **Light Mode (Current)**: Clean white/neutral theme - implemented in `globals.css`
+> - **Dark Mode (Current)**: Clean dark neutral - implemented in `globals.css`
+> - **Dark Mode (Future)**: Golden/amber theme inspired by OG image - warm, luxurious feel
+> - Design tokens to be systematized post-launch
 
-| Name | Hex | Usage |
-|------|-----|-------|
-| **Primary 500** | `#3B82F6` | Primary actions, active tabs, focus rings |
-| **Primary 600** | `#2563EB` | Hover state |
-| **Primary 900** | `#1E3A8A` | Subtle backgrounds for active items |
+---
 
-### Neutrals (Light & Dark Modes)
-Slate-based neutrals for a technical, modern feel.
+### Current Implementation (from globals.css)
 
-| Name | Hex (Light) | Hex (Dark) | Usage |
-|------|-------------|------------|-------|
-| **Slate 900** | `#0F172A` | `#F8FAFC` | Primary text, headings |
-| **Slate 700** | `#334155` | `#E2E8F0` | Secondary text, body copy |
-| **Slate 500** | `#64748B` | `#94A3B8` | Muted text, icons, placeholders |
-| **Slate 400** | `#94A3B8` | `#64748B` | Disabled text, borders |
-| **Slate 200** | `#E2E8F0` | `#334155` | Dividers, light borders |
-| **Slate 100** | `#F1F5F9` | `#1E293B` | Secondary backgrounds |
-| **Slate 50** | `#F8FAFC` | `#0F172A` | App background |
-| **White** | `#FFFFFF` | `#1E293B` | Card backgrounds, inputs |
+#### Light Mode CSS Variables
+```css
+:root {
+  /* Core */
+  --background: 0 0% 100%;             /* #FFFFFF Pure white */
+  --foreground: 0 0% 9%;               /* #171717 Near black */
 
-### State Colors (Expanded Vocabulary)
-Distinct colors for the comprehensive agent/workflow state machine.
+  /* Card/Surface */
+  --card: 0 0% 100%;                   /* #FFFFFF White surfaces */
+  --card-foreground: 0 0% 9%;          /* #171717 */
 
-| State Group | State | Color | Hex | Usage |
-|-------------|-------|-------|-----|-------|
-| **Good** | Active/Executing | Green | `#10B981` | Agents working, tasks running |
-| **Good** | Done/Completed | Green | `#10B981` | Finished work |
-| **Neutral** | Idle/Available | Slate | `#64748B` | Agents waiting for work |
-| **Neutral** | Thinking/Planning | Blue | `#3B82F6` | Agent analyzing (pulse animation) |
-| **Neutral** | Learning | Purple | `#A855F7` | Post-task analysis |
-| **Warning** | Waiting/Blocked | Orange | `#F59E0B` | Blocked on dependency |
-| **Warning** | Rate Limited | Yellow | `#EAB308` | API throttling |
-| **Warning** | At Risk | Orange | `#F97316` | Behind schedule/budget |
-| **Critical** | Failed/Error | Red | `#EF4444` | Needs intervention |
-| **Critical** | Budget Exceeded | Red | `#DC2626` | Cost stop |
+  /* Primary - Dark accent */
+  --primary: 0 0% 9%;                  /* #171717 */
+  --primary-foreground: 0 0% 100%;     /* #FFFFFF */
+
+  /* Secondary */
+  --secondary: 0 0% 96%;               /* #F5F5F5 Light gray */
+  --secondary-foreground: 0 0% 9%;     /* #171717 */
+
+  /* Muted */
+  --muted: 0 0% 96%;                   /* #F5F5F5 Light gray */
+  --muted-foreground: 0 0% 45%;        /* #737373 Secondary text */
+
+  /* Accent */
+  --accent: 0 0% 96%;                  /* #F5F5F5 Hover state */
+  --accent-foreground: 0 0% 9%;        /* #171717 */
+
+  /* Destructive */
+  --destructive: 0 84% 60%;            /* #EF4444 */
+  --destructive-foreground: 0 0% 100%;
+
+  /* Borders */
+  --border: 0 0% 90%;                  /* #E5E5E5 Light borders */
+  --input: 0 0% 90%;                   /* #E5E5E5 */
+  --ring: 0 0% 9%;                     /* #171717 Focus ring */
+
+  /* Semantic */
+  --success: 142 71% 45%;              /* #22C55E Green */
+  --warning: 38 92% 50%;               /* #F59E0B Amber */
+  --info: 217 91% 60%;                 /* #3B82F6 Blue */
+  --tertiary: 0 0% 64%;                /* #A3A3A3 Placeholder */
+
+  /* Radius */
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar-background: 0 0% 98%;      /* #FAFAFA */
+  --sidebar-foreground: 0 0% 9%;       /* #171717 */
+  --sidebar-primary: 0 0% 9%;          /* #171717 */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 96%;          /* #F5F5F5 Hover */
+  --sidebar-accent-foreground: 0 0% 9%;
+  --sidebar-border: 0 0% 90%;          /* #E5E5E5 */
+  --sidebar-ring: 0 0% 9%;             /* #171717 */
+}
+```
+
+#### Landing Page Variables (Light Mode)
+```css
+:root {
+  /* Accent (Neutral dark - professional) */
+  --landing-accent: 0 0% 9%;                   /* #171717 - Dark accent */
+  --landing-accent-light: 0 0% 20%;            /* #333333 - Lighter */
+  --landing-accent-dark: 0 0% 4%;              /* #0A0A0A - Darker */
+  --landing-accent-foreground: 0 0% 100%;      /* White text on accent */
+
+  /* Landing Backgrounds */
+  --landing-bg: 0 0% 100%;                     /* #FFFFFF - Pure white */
+  --landing-bg-muted: 0 0% 98%;                /* #FAFAFA - Very light gray */
+  --landing-bg-warm: 0 0% 96%;                 /* #F5F5F5 - Light gray */
+  --landing-bg-dark: 0 0% 4%;                  /* #0A0A0A - Near black */
+
+  /* Landing Text */
+  --landing-text: 0 0% 9%;                     /* #171717 - Near black */
+  --landing-text-muted: 0 0% 45%;              /* #737373 - Gray */
+  --landing-text-subtle: 0 0% 64%;             /* #A3A3A3 - Light gray */
+  --landing-text-inverse: 0 0% 100%;           /* #FFFFFF */
+
+  /* Landing Borders */
+  --landing-border: 0 0% 90%;                  /* #E5E5E5 - Light border */
+  --landing-border-accent: 0 0% 9%;            /* Uses accent color */
+
+  /* Landing Gradient Stops */
+  --landing-gradient-from: 0 0% 9%;            /* #171717 */
+  --landing-gradient-to: 0 0% 4%;              /* #0A0A0A */
+}
+```
+
+#### Current Dark Mode CSS Variables
+```css
+.dark {
+  /* Core */
+  --background: 0 0% 4%;               /* #0A0A0A */
+  --foreground: 0 0% 98%;              /* #FAFAFA */
+
+  /* Card/Surface */
+  --card: 0 0% 9%;                     /* #171717 */
+  --card-foreground: 0 0% 98%;         /* #FAFAFA */
+
+  /* Primary */
+  --primary: 0 0% 98%;                 /* #FAFAFA */
+  --primary-foreground: 0 0% 9%;       /* #171717 */
+
+  /* Secondary */
+  --secondary: 0 0% 15%;               /* #262626 */
+  --secondary-foreground: 0 0% 98%;    /* #FAFAFA */
+
+  /* Muted */
+  --muted: 0 0% 15%;                   /* #262626 */
+  --muted-foreground: 0 0% 64%;        /* #A3A3A3 */
+
+  /* Accent */
+  --accent: 0 0% 15%;                  /* #262626 Hover */
+  --accent-foreground: 0 0% 98%;       /* #FAFAFA */
+
+  /* Borders */
+  --border: 0 0% 18%;                  /* #2E2E2E */
+  --input: 0 0% 18%;                   /* #2E2E2E */
+  --ring: 0 0% 98%;                    /* #FAFAFA */
+
+  /* Sidebar */
+  --sidebar-background: 0 0% 7%;       /* #121212 */
+  --sidebar-foreground: 0 0% 98%;      /* #FAFAFA */
+  --sidebar-primary: 0 0% 98%;         /* #FAFAFA */
+  --sidebar-primary-foreground: 0 0% 9%;
+  --sidebar-accent: 0 0% 15%;          /* #262626 */
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 18%;          /* #2E2E2E */
+  --sidebar-ring: 0 0% 98%;
+}
+```
+
+---
+
+### Tailwind Color Mappings (from tailwind.config.ts)
+
+```typescript
+colors: {
+  border: 'hsl(var(--border))',
+  input: 'hsl(var(--input))',
+  ring: 'hsl(var(--ring))',
+  background: 'hsl(var(--background))',
+  foreground: 'hsl(var(--foreground))',
+  success: 'hsl(var(--success))',
+  warning: 'hsl(var(--warning))',
+  info: 'hsl(var(--info))',
+  tertiary: 'hsl(var(--tertiary))',
+  primary: {
+    DEFAULT: 'hsl(var(--primary))',
+    foreground: 'hsl(var(--primary-foreground))'
+  },
+  secondary: {
+    DEFAULT: 'hsl(var(--secondary))',
+    foreground: 'hsl(var(--secondary-foreground))'
+  },
+  destructive: {
+    DEFAULT: 'hsl(var(--destructive))',
+    foreground: 'hsl(var(--destructive-foreground))'
+  },
+  muted: {
+    DEFAULT: 'hsl(var(--muted))',
+    foreground: 'hsl(var(--muted-foreground))'
+  },
+  accent: {
+    DEFAULT: 'hsl(var(--accent))',
+    foreground: 'hsl(var(--accent-foreground))'
+  },
+  popover: {
+    DEFAULT: 'hsl(var(--popover))',
+    foreground: 'hsl(var(--popover-foreground))'
+  },
+  card: {
+    DEFAULT: 'hsl(var(--card))',
+    foreground: 'hsl(var(--card-foreground))'
+  },
+  sidebar: {
+    DEFAULT: 'hsl(var(--sidebar-background))',
+    foreground: 'hsl(var(--sidebar-foreground))',
+    primary: 'hsl(var(--sidebar-primary))',
+    'primary-foreground': 'hsl(var(--sidebar-primary-foreground))',
+    accent: 'hsl(var(--sidebar-accent))',
+    'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+    border: 'hsl(var(--sidebar-border))',
+    ring: 'hsl(var(--sidebar-ring))'
+  },
+  landing: {
+    accent: {
+      DEFAULT: 'hsl(var(--landing-accent))',
+      light: 'hsl(var(--landing-accent-light))',
+      dark: 'hsl(var(--landing-accent-dark))',
+      foreground: 'hsl(var(--landing-accent-foreground))'
+    },
+    bg: {
+      DEFAULT: 'hsl(var(--landing-bg))',
+      muted: 'hsl(var(--landing-bg-muted))',
+      warm: 'hsl(var(--landing-bg-warm))',
+      dark: 'hsl(var(--landing-bg-dark))'
+    },
+    text: {
+      DEFAULT: 'hsl(var(--landing-text))',
+      muted: 'hsl(var(--landing-text-muted))',
+      subtle: 'hsl(var(--landing-text-subtle))',
+      inverse: 'hsl(var(--landing-text-inverse))'
+    },
+    border: {
+      DEFAULT: 'hsl(var(--landing-border))',
+      accent: 'hsl(var(--landing-border-accent) / 0.3)'
+    }
+  }
+}
+```
+
+---
+
+### Future Golden Dark Theme (Planned)
+
+#### Golden Palette (Primary Brand - Used in OG Images)
+The signature OmoiOS golden theme - warm amber tones that evoke "overnight automation" and premium feel.
+
+| Name | Hex | HSL (approx) | Usage |
+|------|-----|--------------|-------|
+| **Gold Light** | `#FFE78A` | `46 100% 77%` | Gradient start, highlights |
+| **Gold Primary** | `#FFD04A` | `44 100% 64%` | Primary accent, gradient mid |
+| **Gold Warm** | `#FF8A2A` | `24 100% 58%` | Gradient end, emphasis |
+| **Amber Glow** | `rgba(255,200,50,0.15)` | - | Subtle backgrounds, pills |
+| **Amber Border** | `rgba(255,200,50,0.2)` | - | Subtle borders |
+
+#### Future Dark Theme Backgrounds (Golden/Brown)
+```css
+/* Future .dark-golden or enhanced .dark theme */
+Background gradient: linear-gradient(145deg, #2d2618 0%, #1a150d 50%, #0f0c08 100%)
+Warm overlay: radial-gradient(ellipse at 30% 30%, rgba(255,200,50,0.12), transparent)
+```
+
+| Name | Hex | HSL (approx) | Usage |
+|------|-----|--------------|-------|
+| **Dark Warm 100** | `#2d2618` | `36 30% 13%` | Lightest dark background |
+| **Dark Warm 200** | `#1a150d` | `37 33% 8%` | Mid dark background |
+| **Dark Warm 300** | `#0f0c08` | `34 30% 4%` | Deepest dark background |
+| **Text on Dark** | `rgba(255,230,180,0.9)` | - | Primary text on dark |
+| **Muted on Dark** | `rgba(255,230,200,0.6)` | - | Secondary text on dark |
+
+---
+
+### Semantic State Colors
+
+| State Group | State | Color | Hex | CSS Variable |
+|-------------|-------|-------|-----|--------------|
+| **Good** | Success/Done | Green | `#22C55E` | `--success: 142 71% 45%` |
+| **Neutral** | Info/Thinking | Blue | `#3B82F6` | `--info: 217 91% 60%` |
+| **Warning** | Warning/Blocked | Amber | `#F59E0B` | `--warning: 38 92% 50%` |
+| **Critical** | Error/Failed | Red | `#EF4444` | `--destructive: 0 84% 60%` |
 
 ---
 
@@ -280,4 +504,46 @@ The interface uses subtle borders and background contrast (Linear-style).
 - **Status Pulse**: Active agents/tasks have subtle opacity pulse (1s loop)
 - **New Item Flash**: Newly added items flash highlight then fade
 - **Hover-to-Reveal**: Additional metadata appears on hover
+
+---
+
+## 10. Design Tokens (Future)
+
+> **Status**: Planned for post-launch implementation
+> **Priority**: Low (launch first, systematize later)
+
+### Token Architecture (Planned)
+When implemented, design tokens will follow this structure:
+
+```
+tokens/
+├── colors/
+│   ├── brand.json       # Golden theme colors
+│   ├── semantic.json    # success, error, warning, info
+│   └── neutral.json     # Grays/slates
+├── typography/
+│   ├── fonts.json
+│   └── scale.json
+├── spacing.json
+├── radii.json
+├── shadows.json
+└── themes/
+    ├── light.json       # Current clean theme
+    └── dark.json        # Golden/amber theme
+```
+
+### Dark Theme Vision
+The dark theme should feel like the OG image - warm, premium, "nighttime productivity":
+
+- **Background**: Rich warm browns (`#2d2618` → `#1a150d` → `#0f0c08`)
+- **Accent**: Golden gradients (`#FFE78A` → `#FFD04A` → `#FF8A2A`)
+- **Text**: Warm off-white (`rgba(255,230,180,0.9)`)
+- **Glow effects**: Subtle amber radial gradients for depth
+- **Feel**: Like working in a warm, luxurious command center at night
+
+### Implementation Notes
+- Use CSS custom properties for easy theming
+- Consider `next-themes` for theme switching
+- Tailwind CSS can consume tokens via `tailwind.config.js`
+- shadcn/ui components already support dark mode via CSS variables
 
