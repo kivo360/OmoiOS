@@ -1,8 +1,15 @@
 # Reality-Contact Outreach Playbook (2 Weeks)
 
-**Created**: 2025-12-15  
-**Owner**: Founder  
+**Created**: 2025-12-15
+**Updated**: 2025-12-29
+**Owner**: Founder
 **Purpose**: Increase contact with reality by forcing external, falsifiable outcomes: repo access → PR opened → PR merged → repeat ticket → paid pilot.
+
+> **Related Documents**:
+> - [Marketing Overview](./marketing_overview.md) - Core positioning and messaging
+> - [Go-to-Market Strategy](./go_to_market_strategy.md) - Full GTM plan
+> - [Sub-Niche Targeting](./sub_niche_targeting.md) - Specific software sub-niches with targeting
+> - [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) - Non-software market opportunities
 
 ---
 
@@ -66,8 +73,10 @@ Copy this block into Notes and update once/day:
 
 ### Day 1 (set up + list building)
 - Choose your **wedge** (one sentence).
+  - See [Sub-Niche Targeting](./sub_niche_targeting.md) for software-focused wedges (recommended: Communication Integrations or Audit Logging)
+  - See [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) for non-software wedges (real estate, legal, healthcare admin, etc.)
 - Create a list of **30 targets** for ONE approach (2A/2B/2C) + 10 backups.
-- Prepare: short Loom or 2–4 screenshots showing the “ticket → PR” path (optional but helpful).
+- Prepare: short Loom or 2–4 screenshots showing the "ticket → PR" path (optional but helpful).
 
 ### Days 2–4 (outreach burst)
 - Send **10 touches/day**.

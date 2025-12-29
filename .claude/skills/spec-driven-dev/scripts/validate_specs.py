@@ -2,6 +2,8 @@
 """
 Validate spec documents for completeness and consistency.
 
+Uses YAML frontmatter validation (consistent with parse_specs.py).
+
 Usage:
     python validate_specs.py [--path PATH]
     python validate_specs.py --requirements
@@ -20,6 +22,8 @@ import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import yaml
 
 
 @dataclass
@@ -48,10 +52,39 @@ def get_project_root() -> Path:
     return current
 
 
+def parse_frontmatter(content: str) -> tuple[dict | None, str]:
+    """Extract YAML frontmatter and markdown body from content.
+
+    Returns:
+        Tuple of (frontmatter dict or None if missing, remaining markdown body)
+    """
+    if not content.startswith("---"):
+        return None, content
+
+    # Find end of frontmatter
+    end_match = re.search(r"\n---\s*\n", content[3:])
+    if not end_match:
+        return None, content
+
+    frontmatter_text = content[3 : end_match.start() + 3]
+    body = content[end_match.end() + 3 :]
+
+    try:
+        frontmatter = yaml.safe_load(frontmatter_text)
+    except yaml.YAMLError:
+        return None, content
+
+    if not isinstance(frontmatter, dict):
+        return None, content
+
+    return frontmatter, body
+
+
 def validate_requirements(file_path: Path) -> ValidationResult:
     """Validate a requirements document."""
     result = ValidationResult(file=file_path, doc_type="requirements")
     content = file_path.read_text()
+    frontmatter, body = parse_frontmatter(content)
 
     # Check for required sections
     required_sections = [
@@ -77,13 +110,18 @@ def validate_requirements(file_path: Path) -> ValidationResult:
     if not has_normative:
         result.warnings.append("No normative language found (SHALL/MUST/SHOULD/MAY)")
 
-    # Check for status
-    if "**Status**:" not in content:
-        result.warnings.append("Missing Status field")
-
-    # Check for created date
-    if "**Created**:" not in content:
-        result.warnings.append("Missing Created date")
+    # Check for status - support both YAML frontmatter and markdown
+    if frontmatter:
+        if "status" not in frontmatter:
+            result.warnings.append("Missing status field in frontmatter")
+        if "created" not in frontmatter:
+            result.warnings.append("Missing created field in frontmatter")
+    else:
+        # Fallback to old markdown style check
+        if "**Status**:" not in content:
+            result.warnings.append("Missing Status field (no frontmatter found)")
+        if "**Created**:" not in content:
+            result.warnings.append("Missing Created date (no frontmatter found)")
 
     return result
 
@@ -92,6 +130,7 @@ def validate_design(file_path: Path) -> ValidationResult:
     """Validate a design document."""
     result = ValidationResult(file=file_path, doc_type="design")
     content = file_path.read_text()
+    frontmatter, body = parse_frontmatter(content)
 
     # Check for required sections
     required_sections = [
@@ -111,9 +150,13 @@ def validate_design(file_path: Path) -> ValidationResult:
     if "Responsibilities" not in content:
         result.warnings.append("No component responsibilities documented")
 
-    # Check for status
-    if "**Status**:" not in content:
-        result.warnings.append("Missing Status field")
+    # Check for status - support both YAML frontmatter and markdown
+    if frontmatter:
+        if "status" not in frontmatter:
+            result.warnings.append("Missing status field in frontmatter")
+    else:
+        if "**Status**:" not in content:
+            result.warnings.append("Missing Status field (no frontmatter found)")
 
     # Check for related requirements link
     if "requirements" not in content.lower() and "Requirements" not in content:
@@ -123,70 +166,129 @@ def validate_design(file_path: Path) -> ValidationResult:
 
 
 def validate_ticket(file_path: Path) -> ValidationResult:
-    """Validate a ticket document."""
+    """Validate a ticket document (YAML frontmatter format)."""
     result = ValidationResult(file=file_path, doc_type="ticket")
     content = file_path.read_text()
+    frontmatter, body = parse_frontmatter(content)
 
-    # Check for TKT-XXX format
-    tkt_pattern = r"TKT-(?:[A-Z]+-)?(\d{3})"
-    tkts = re.findall(tkt_pattern, content)
+    if not frontmatter:
+        result.errors.append("Missing YAML frontmatter")
+        return result
 
-    if not tkts:
-        result.errors.append("No ticket ID found (expected TKT-XXX format)")
+    # Check for ticket ID in frontmatter
+    if "id" not in frontmatter:
+        result.errors.append("Missing 'id' field in frontmatter")
+    elif not frontmatter["id"].startswith("TKT-"):
+        result.errors.append(f"Invalid ticket ID format: {frontmatter['id']} (expected TKT-XXX)")
 
-    # Check for required fields
-    required_fields = [
-        "**Status**:",
-        "**Priority**:",
-    ]
+    # Check for required fields in frontmatter
+    required_fields = {
+        "id": "Ticket ID (e.g., TKT-001)",
+        "title": "Ticket title",
+        "status": "Status (backlog, in_progress, done, etc.)",
+        "priority": "Priority (LOW, MEDIUM, HIGH, CRITICAL)",
+        "estimate": "Estimate (XS, S, M, L, XL)",
+        "created": "Created date",
+        "updated": "Updated date",
+    }
 
-    for field_name in required_fields:
-        if field_name not in content:
-            result.errors.append(f"Missing required field: {field_name}")
+    for field_key, description in required_fields.items():
+        if field_key not in frontmatter:
+            result.errors.append(f"Missing required field: {field_key} ({description})")
 
-    # Check for acceptance criteria
-    if "## Acceptance Criteria" not in content:
-        result.warnings.append("Missing Acceptance Criteria section")
+    # Validate status value
+    valid_statuses = ["backlog", "ready", "in_progress", "review", "done", "blocked"]
+    if frontmatter.get("status") and frontmatter["status"] not in valid_statuses:
+        result.warnings.append(f"Non-standard status: {frontmatter['status']} (expected one of: {', '.join(valid_statuses)})")
 
-    # Check for traceability
-    if "## Traceability" not in content and "**Requirements**:" not in content:
-        result.warnings.append("Missing traceability to requirements")
+    # Validate priority value
+    valid_priorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    if frontmatter.get("priority") and frontmatter["priority"] not in valid_priorities:
+        result.warnings.append(f"Non-standard priority: {frontmatter['priority']} (expected one of: {', '.join(valid_priorities)})")
+
+    # Validate estimate value
+    valid_estimates = ["XS", "S", "M", "L", "XL"]
+    if frontmatter.get("estimate") and frontmatter["estimate"] not in valid_estimates:
+        result.warnings.append(f"Non-standard estimate: {frontmatter['estimate']} (expected one of: {', '.join(valid_estimates)})")
+
+    # Check for acceptance criteria in body
+    if "## Acceptance Criteria" not in body:
+        result.warnings.append("Missing Acceptance Criteria section in body")
+
+    # Check for requirements traceability
+    if not frontmatter.get("requirements"):
+        result.warnings.append("No requirements linked (consider adding requirements field)")
+
+    # Check for dependency structure
+    deps = frontmatter.get("dependencies", {})
+    if deps:
+        expected_dep_fields = ["blocked_by", "blocks", "related"]
+        for dep_field in expected_dep_fields:
+            if dep_field not in deps:
+                result.warnings.append(f"Missing dependencies.{dep_field} field")
 
     return result
 
 
 def validate_task(file_path: Path) -> ValidationResult:
-    """Validate a task document."""
+    """Validate a task document (YAML frontmatter format)."""
     result = ValidationResult(file=file_path, doc_type="task")
     content = file_path.read_text()
+    frontmatter, body = parse_frontmatter(content)
 
-    # Check for TSK-XXX format
-    tsk_pattern = r"TSK-(?:[A-Z]+-)?(\d{3})"
-    tsks = re.findall(tsk_pattern, content)
+    if not frontmatter:
+        result.errors.append("Missing YAML frontmatter")
+        return result
 
-    if not tsks:
-        result.errors.append("No task ID found (expected TSK-XXX format)")
+    # Check for task ID in frontmatter
+    if "id" not in frontmatter:
+        result.errors.append("Missing 'id' field in frontmatter")
+    elif not frontmatter["id"].startswith("TSK-"):
+        result.errors.append(f"Invalid task ID format: {frontmatter['id']} (expected TSK-XXX)")
 
-    # Check for parent ticket reference
-    if "**Parent Ticket**:" not in content and "TKT-" not in content:
-        result.errors.append("Missing parent ticket reference")
+    # Check for required fields in frontmatter
+    required_fields = {
+        "id": "Task ID (e.g., TSK-001)",
+        "title": "Task title",
+        "status": "Status (pending, in_progress, done, etc.)",
+        "parent_ticket": "Parent ticket ID (e.g., TKT-001)",
+        "estimate": "Estimate (XS, S, M, L, XL)",
+        "created": "Created date",
+    }
 
-    # Check for required fields
-    required_fields = [
-        "**Status**:",
-    ]
+    for field_key, description in required_fields.items():
+        if field_key not in frontmatter:
+            result.errors.append(f"Missing required field: {field_key} ({description})")
 
-    for field_name in required_fields:
-        if field_name not in content:
-            result.errors.append(f"Missing required field: {field_name}")
+    # Check parent ticket reference format
+    if frontmatter.get("parent_ticket") and not frontmatter["parent_ticket"].startswith("TKT-"):
+        result.errors.append(f"Invalid parent_ticket format: {frontmatter['parent_ticket']} (expected TKT-XXX)")
 
-    # Check for deliverables
-    if "## Deliverables" not in content:
-        result.warnings.append("Missing Deliverables section")
+    # Validate status value
+    valid_statuses = ["pending", "in_progress", "review", "done", "blocked"]
+    if frontmatter.get("status") and frontmatter["status"] not in valid_statuses:
+        result.warnings.append(f"Non-standard status: {frontmatter['status']} (expected one of: {', '.join(valid_statuses)})")
 
-    # Check for acceptance criteria
-    if "## Acceptance Criteria" not in content:
-        result.warnings.append("Missing Acceptance Criteria section")
+    # Validate estimate value
+    valid_estimates = ["XS", "S", "M", "L", "XL"]
+    if frontmatter.get("estimate") and frontmatter["estimate"] not in valid_estimates:
+        result.warnings.append(f"Non-standard estimate: {frontmatter['estimate']} (expected one of: {', '.join(valid_estimates)})")
+
+    # Check for objective/description in body
+    if "## Objective" not in body and "## Description" not in body:
+        result.warnings.append("Missing Objective/Description section in body")
+
+    # Check for acceptance criteria in body
+    if "## Acceptance Criteria" not in body:
+        result.warnings.append("Missing Acceptance Criteria section in body")
+
+    # Check for dependency structure
+    deps = frontmatter.get("dependencies", {})
+    if deps:
+        expected_dep_fields = ["depends_on", "blocks"]
+        for dep_field in expected_dep_fields:
+            if dep_field not in deps:
+                result.warnings.append(f"Missing dependencies.{dep_field} field")
 
     return result
 

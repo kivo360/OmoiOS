@@ -410,6 +410,62 @@ async def list_tasks(
     ]
 
 
+class TaskCreate(BaseModel):
+    """Request model for creating a task."""
+
+    ticket_id: str
+    title: str
+    description: str
+    task_type: str = "implementation"
+    priority: str = "MEDIUM"
+    phase_id: str = "PHASE_IMPLEMENTATION"
+    dependencies: Optional[Dict[str, Any]] = None  # {"depends_on": ["task_id_1"]}
+
+
+@router.post("", response_model=dict, status_code=201)
+async def create_task(
+    task_data: TaskCreate,
+    queue: TaskQueueService = Depends(get_task_queue),
+):
+    """
+    Create a new task for a ticket.
+
+    This endpoint allows direct task creation for testing and spec-driven development.
+
+    Args:
+        task_data: Task creation data including ticket_id, title, description
+        queue: Task queue service for task creation
+
+    Returns:
+        Created task with ID and details
+    """
+    try:
+        task = queue.enqueue_task(
+            ticket_id=task_data.ticket_id,
+            phase_id=task_data.phase_id,
+            task_type=task_data.task_type,
+            description=task_data.description,
+            priority=task_data.priority,
+            dependencies=task_data.dependencies,
+            title=task_data.title,
+        )
+
+        return {
+            "id": task.id,
+            "ticket_id": task.ticket_id,
+            "phase_id": task.phase_id,
+            "task_type": task.task_type,
+            "title": task.title,
+            "description": task.description,
+            "priority": task.priority,
+            "status": task.status,
+            "dependencies": task.dependencies,
+            "created_at": task.created_at.isoformat(),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/{task_id}/dependencies", response_model=dict)
 async def get_task_dependencies(
     task_id: str,

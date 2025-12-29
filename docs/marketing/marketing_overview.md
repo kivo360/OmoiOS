@@ -1,8 +1,15 @@
 # OmoiOS Marketing Overview
 
-**Created**: 2025-12-15  
-**Status**: Draft  
+**Created**: 2025-12-15
+**Updated**: 2025-12-29
+**Status**: Draft
 **Purpose**: Clear buyer-facing positioning, messaging, and focus for OmoiOS.
+
+> **Related Documents**:
+> - [Sub-Niche Targeting](./sub_niche_targeting.md) - Specific software sub-niches (2 layers deep)
+> - [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) - Non-software market opportunities
+> - [Go-to-Market Strategy](./go_to_market_strategy.md) - Full GTM plan and launch sequence
+> - [Reality Outreach Playbook](./reality_contact_outreach_playbook.md) - Outreach tactics
 
 ---
 
@@ -144,6 +151,23 @@ Turn feature requests into reviewed PRs with spec-driven, multi-agent workflows.
 
 ---
 
-## The focus statement (so you don’t drift)
+## The focus statement (so you don't drift)
 
 **OmoiOS is for teams who want autonomous execution with oversight: fewer coordination cycles, adaptive workflows via discovery, and reviewable PR-based delivery.**
+
+---
+
+## Niche Focus (pick one, prove it, expand)
+
+The messaging above is foundational, but winning requires **niche focus**. See:
+
+- **[Sub-Niche Targeting](./sub_niche_targeting.md)** - Software-focused niches broken into 2 layers:
+  - Primary recommendation: Communication Platform Integrations (Slack/Teams/Discord)
+  - Secondary recommendation: Audit Logging & Compliance Features
+
+- **[Cross-Market Niche Ideas](./cross_market_niche_ideas.md)** - Non-software markets where spec-driven execution applies:
+  - 15 industries from real estate to insurance to agriculture
+  - Evaluation framework for scoring opportunities
+  - Quick validation tactics
+
+**Rule**: Pick one niche. Prove it works (3-5 merged PRs, 1 repeat customer). Then expand.

@@ -1,8 +1,15 @@
 # OmoiOS — Go-to-Market Strategy
 
-**Created**: 2025-12-15  
-**Status**: Draft  
+**Created**: 2025-12-15
+**Updated**: 2025-12-29
+**Status**: Draft
 **Purpose**: Define target users, positioning, launch strategy, acquisition channels, metrics, expansion, and an open source strategy for OmoiOS.
+
+> **Related Documents**:
+> - [Marketing Overview](./marketing_overview.md) - Core positioning and messaging
+> - [Sub-Niche Targeting](./sub_niche_targeting.md) - Specific software sub-niches (2 layers deep)
+> - [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) - Non-software market opportunities
+> - [Reality Outreach Playbook](./reality_contact_outreach_playbook.md) - Outreach tactics
 
 ---
 
@@ -157,7 +164,11 @@ Instead claim:
 
 Avoid early:
 - Large greenfield rewrites
-- “Magic product work” with unclear requirements
+- "Magic product work" with unclear requirements
+
+> **Deep Dive**: See [Sub-Niche Targeting](./sub_niche_targeting.md) for these broken into 2 layers with specific targeting, pain points, and messaging hooks.
+>
+> **Beyond Software**: See [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) for 15 industries outside pure software where spec-driven execution applies (real estate, legal, healthcare admin, etc.).
 
 ### 5.4 Pricing direction (choose one early)
 - **Per active agent / runtime** (transparent to buyer, maps to cost)
