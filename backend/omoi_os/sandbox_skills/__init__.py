@@ -6,11 +6,14 @@ for Claude agents to use during task execution.
 Usage:
     from omoi_os.sandbox_skills import get_skills_for_upload
 
-    # Get all skills
+    # Get all skills (includes all files: SKILL.md, scripts, references, etc.)
     skills = get_skills_for_upload()
 
     # Get specific skills
     skills = get_skills_for_upload(["spec-driven-dev", "code-review"])
+
+    # Get only SKILL.md files (backward compatible)
+    skills = get_skills_for_upload(include_all_files=False)
 
     # Upload to sandbox
     for skill_path, content in skills.items():
@@ -52,15 +55,55 @@ def get_skill_content(skill_name: str) -> Optional[str]:
     return None
 
 
+def get_skill_files(skill_name: str) -> dict[str, str]:
+    """Get all files for a skill (SKILL.md, scripts, references, etc.).
+
+    Args:
+        skill_name: Name of the skill directory.
+
+    Returns:
+        Dict mapping relative paths to file content.
+        Example: {"SKILL.md": "...", "scripts/api_client.py": "..."}
+    """
+    skill_dir = Path(__file__).parent / skill_name
+    if not skill_dir.exists():
+        return {}
+
+    result = {}
+
+    # Walk through all files in the skill directory
+    for file_path in skill_dir.rglob("*"):
+        if file_path.is_file():
+            # Skip __pycache__ and .pyc files
+            if "__pycache__" in str(file_path) or file_path.suffix == ".pyc":
+                continue
+
+            # Get relative path from skill directory
+            relative_path = file_path.relative_to(skill_dir)
+
+            # Read file content (text files only)
+            try:
+                content = file_path.read_text()
+                result[str(relative_path)] = content
+            except UnicodeDecodeError:
+                # Skip binary files
+                continue
+
+    return result
+
+
 def get_skills_for_upload(
     skill_names: Optional[list[str]] = None,
     install_path: str = "/root/.claude/skills",
+    include_all_files: bool = True,
 ) -> dict[str, str]:
     """Get skills ready for upload to a sandbox.
 
     Args:
         skill_names: Specific skills to include. If None, includes all always_include skills.
         install_path: Path in sandbox where skills will be installed.
+        include_all_files: If True, include all files (scripts, references, etc.).
+                          If False, only include SKILL.md files.
 
     Returns:
         Dict mapping sandbox file paths to file content.
@@ -80,11 +123,18 @@ def get_skills_for_upload(
     result = {}
 
     for skill_name in skill_names:
-        content = get_skill_content(skill_name)
-        if content:
-            # Create path like: /root/.claude/skills/code-review/SKILL.md
-            sandbox_path = f"{install_path}/{skill_name}/SKILL.md"
-            result[sandbox_path] = content
+        if include_all_files:
+            # Get all files for the skill
+            skill_files = get_skill_files(skill_name)
+            for relative_path, content in skill_files.items():
+                sandbox_path = f"{install_path}/{skill_name}/{relative_path}"
+                result[sandbox_path] = content
+        else:
+            # Only get SKILL.md (backward compatible)
+            content = get_skill_content(skill_name)
+            if content:
+                sandbox_path = f"{install_path}/{skill_name}/SKILL.md"
+                result[sandbox_path] = content
 
     return result
 
