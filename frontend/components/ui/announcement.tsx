@@ -1,63 +1,58 @@
 "use client"
 
-import { ArrowUpRightIcon, X } from "lucide-react"
-import { useState } from "react"
+import type { ComponentProps, HTMLAttributes } from "react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 
-export interface AnnouncementProps {
-  tag?: string
-  title: string
-  href: string
-  className?: string
-  dismissible?: boolean
+export type AnnouncementProps = ComponentProps<typeof Badge> & {
+  themed?: boolean
 }
 
-export function Announcement({
-  tag,
-  title,
-  href,
+export const Announcement = ({
+  variant = "outline",
+  themed = false,
   className,
-  dismissible = true,
-}: AnnouncementProps) {
-  const [isVisible, setIsVisible] = useState(true)
+  ...props
+}: AnnouncementProps) => (
+  <Badge
+    variant={variant}
+    className={cn(
+      "group gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-shadow hover:shadow-md",
+      themed && "border-landing-accent/30 bg-landing-accent/10 text-landing-accent hover:bg-landing-accent/20",
+      className
+    )}
+    {...props}
+  />
+)
 
-  if (!isVisible) return null
+export type AnnouncementTagProps = HTMLAttributes<HTMLSpanElement>
 
-  return (
-    <div
-      className={cn(
-        "relative flex w-full items-center justify-center gap-2 bg-landing-accent px-4 py-2.5 text-sm text-white",
-        className
-      )}
-    >
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="flex items-center gap-2 transition-opacity hover:opacity-90"
-      >
-        {tag && (
-          <Badge
-            variant="secondary"
-            className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium text-white hover:bg-white/30"
-          >
-            {tag}
-          </Badge>
-        )}
-        <span className="font-medium">{title}</span>
-        <ArrowUpRightIcon className="h-4 w-4 shrink-0" />
-      </a>
+export const AnnouncementTag = ({
+  className,
+  ...props
+}: AnnouncementTagProps) => (
+  <span
+    className={cn(
+      "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground",
+      "group-[.themed]:bg-landing-accent/20 group-[.themed]:text-landing-accent",
+      className
+    )}
+    {...props}
+  />
+)
 
-      {dismissible && (
-        <button
-          onClick={() => setIsVisible(false)}
-          className="absolute right-3 rounded-sm p-1 opacity-70 transition-opacity hover:opacity-100"
-          aria-label="Dismiss announcement"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      )}
-    </div>
-  )
-}
+export type AnnouncementTitleProps = HTMLAttributes<HTMLSpanElement>
+
+export const AnnouncementTitle = ({
+  className,
+  ...props
+}: AnnouncementTitleProps) => (
+  <span
+    className={cn(
+      "flex items-center gap-1 text-foreground",
+      "group-[.themed]:text-landing-accent",
+      className
+    )}
+    {...props}
+  />
+)

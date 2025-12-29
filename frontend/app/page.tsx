@@ -14,17 +14,25 @@ import {
   WaitlistCTASection,
   FooterSection,
 } from "@/components/marketing"
-import { Announcement } from "@/components/ui/announcement"
+import { Announcement, AnnouncementTag, AnnouncementTitle } from "@/components/ui/announcement"
+import { ArrowUpRightIcon } from "lucide-react"
+import Link from "next/link"
 
 function LandingPage() {
   return (
     <div className="min-h-screen bg-landing-bg">
       {/* Announcement Banner */}
-      <Announcement
-        tag="Free for Limited Time"
-        title="Try our AI Prompt Generator — craft perfect prompts instantly"
-        href="https://prompt.omoios.dev/"
-      />
+      <div className="flex justify-center bg-landing-bg-muted py-3">
+        <Link href="https://prompt.omoios.dev/" target="_blank" rel="noopener noreferrer">
+          <Announcement themed className="themed cursor-pointer">
+            <AnnouncementTag>Free for Limited Time</AnnouncementTag>
+            <AnnouncementTitle>
+              Try our AI Prompt Generator
+              <ArrowUpRightIcon className="h-4 w-4 shrink-0 opacity-60" />
+            </AnnouncementTitle>
+          </Announcement>
+        </Link>
+      </div>
 
       {/* Floating Navigation */}
       <MarketingNavbar />
