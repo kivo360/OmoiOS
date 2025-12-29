@@ -759,6 +759,282 @@ This skill includes utility scripts in `scripts/`:
 - `init_feature.py` - Initialize directory structure for new feature
 - `generate_ids.py` - Generate next ticket/task IDs
 - `validate_specs.py` - Validate spec documents for completeness
+- `spec_cli.py` - **Main CLI** for viewing, validating, and syncing specs
+- `api_client.py` - Direct HTTP client for OmoiOS API (bypasses MCP)
+- `parse_specs.py` - Parser for .omoi_os/ markdown files
+- `models.py` - Data models with cross-ticket dependency logic
+
+---
+
+## Spec CLI (spec_cli.py)
+
+The main CLI tool for working with specs locally and syncing to the API.
+
+### View Local Specs
+
+```bash
+# From the scripts directory:
+cd .claude/skills/spec-driven-dev/scripts
+
+# Show all specs (requirements, designs, tickets, tasks, traceability)
+python spec_cli.py show all
+
+# Show only requirements (EARS format)
+python spec_cli.py show requirements
+
+# Show only designs
+python spec_cli.py show designs
+
+# Show only tickets
+python spec_cli.py show tickets
+
+# Show only tasks (with blocking reasons)
+python spec_cli.py show tasks
+
+# Show task dependency graph (within tickets)
+python spec_cli.py show graph
+
+# Show cross-ticket dependency graph
+python spec_cli.py show ticket-graph
+
+# Show full traceability matrix (Requirements → Designs → Tickets → Tasks)
+python spec_cli.py show traceability
+
+# Show only ready tasks (not blocked)
+python spec_cli.py show ready
+
+# Validate specs (circular deps, missing refs)
+python spec_cli.py validate
+
+# Export to JSON (includes all specs + traceability stats)
+python spec_cli.py export json
+```
+
+### API Integration
+
+```bash
+# List all projects
+python spec_cli.py projects --api-url http://0.0.0.0:18000
+
+# Show project with all tickets and tasks
+python spec_cli.py project <project-id> --api-url http://0.0.0.0:18000
+
+# Dry-run sync (see what would change)
+python spec_cli.py sync diff --api-url http://0.0.0.0:18000 --project-id <id>
+
+# Push local specs to API
+python spec_cli.py sync push --api-url http://0.0.0.0:18000 --project-id <id>
+```
+
+### Sync Specs to API (Requirements & Designs)
+
+```bash
+# Sync local requirements and designs to API specs
+# This creates or updates specs with EARS-format requirements
+
+# Dry-run: See what would be synced
+python spec_cli.py sync-specs diff --project-id <id> --api-url http://0.0.0.0:18000
+
+# Push: Actually create/update specs
+python spec_cli.py sync-specs push --project-id <id> --api-url http://0.0.0.0:18000
+
+# Optional: Specify a custom spec title
+python spec_cli.py sync-specs push --project-id <id> --spec-title "My Feature Spec"
+```
+
+### View API Traceability
+
+```bash
+# View full traceability from API: Specs → Requirements → Tickets → Tasks
+python spec_cli.py api-trace <project-id> --api-url http://0.0.0.0:18000
+```
+
+### Authentication Options
+
+```bash
+# Via API key (recommended)
+python spec_cli.py sync push --api-key <key> ...
+# Or set OMOIOS_API_KEY environment variable
+
+# Via JWT token
+python spec_cli.py sync push --token <jwt> ...
+# Or set OMOIOS_TOKEN environment variable
+
+# Via email/password login
+python spec_cli.py sync push --email user@example.com --password secret ...
+# Or set OMOIOS_EMAIL and OMOIOS_PASSWORD environment variables
+```
+
+### Sync Behavior
+
+The sync command uses **create-or-skip** logic:
+- **CREATE**: If ticket/task doesn't exist (matched by title)
+- **UPDATE**: If exists but description differs
+- **SKIP**: If exists with same description
+
+---
+
+## Cross-Ticket Dependencies
+
+Tasks can be blocked by dependencies at two levels:
+
+### 1. Task-Level Dependencies (within a ticket)
+
+```yaml
+# In .omoi_os/tasks/TSK-002.md
+dependencies:
+  depends_on: [TSK-001]  # Must complete TSK-001 first
+  blocks: [TSK-003]      # TSK-003 waits for this
+```
+
+### 2. Ticket-Level Dependencies (cross-ticket)
+
+```yaml
+# In .omoi_os/tickets/TKT-002.md
+dependencies:
+  blocked_by: [TKT-001]  # ALL tasks in TKT-002 wait for ALL tasks in TKT-001
+  blocks: [TKT-003]      # TKT-003 waits for this ticket
+  related: []            # Informational only
+```
+
+### How Cross-Ticket Blocking Works
+
+When a ticket has `blocked_by: [TKT-001]`:
+1. ALL tasks in that ticket are blocked
+2. They remain blocked until ALL tasks in TKT-001 have `status: done`
+3. The CLI shows: `[BLOCKED: blocked by ticket(s): TKT-001]`
+
+### Viewing Dependency Graphs
+
+```bash
+# Task dependencies (within tickets)
+python spec_cli.py show graph
+# Output:
+# └─> TSK-001 (Add models)
+#     └─> TSK-002 (Create migration)
+#         └─> TSK-003 (Implement service)
+
+# Cross-ticket dependencies
+python spec_cli.py show ticket-graph
+# Output:
+# └─> [○] TKT-001 (Webhook Infrastructure) [6 tasks]
+#     └─> [○] TKT-002 (Slack/Discord Integration) [2 tasks]
+# Legend: ✓ = all tasks complete, ○ = incomplete
+```
+
+---
+
+## Direct API Client (api_client.py)
+
+For programmatic access to the OmoiOS API without MCP:
+
+```python
+from api_client import OmoiOSClient
+
+# Initialize client
+client = OmoiOSClient(
+    base_url="http://0.0.0.0:18000",
+    api_key="your-api-key"  # or token="jwt-token"
+)
+
+# List projects
+projects = await client.list_projects()
+
+# Get project with tickets and tasks
+data = await client.get_project_with_tickets(project_id)
+
+# List tickets for a project
+tickets = await client.list_tickets(project_id)
+
+# Create a ticket
+from models import ParsedTicket
+success, msg = await client.create_ticket(parsed_ticket, project_id)
+
+# Create a task
+from models import ParsedTask
+success, msg = await client.create_task(parsed_task, ticket_api_id)
+
+# Full sync from local specs (tickets/tasks)
+from parse_specs import SpecParser
+parser = SpecParser()
+result = parser.parse_all()
+summary = await client.sync(result, project_id)
+```
+
+### Spec/Requirement/Design API Operations
+
+```python
+# === SPEC OPERATIONS ===
+
+# Create a new spec
+success, msg, spec_id = await client.create_spec(
+    title="My Feature Spec",
+    project_id="project-uuid",
+    description="Optional description"
+)
+
+# Get spec by ID
+spec = await client.get_spec(spec_id)
+
+# List all specs for a project
+specs = await client.list_specs(project_id)
+
+# === REQUIREMENT OPERATIONS (EARS Format) ===
+
+# Add a requirement using EARS format
+success, msg, req_id = await client.add_requirement(
+    spec_id=spec_id,
+    title="User authentication",
+    condition="a user submits valid credentials",  # WHEN clause
+    action="authenticate the user and create a session"  # SHALL clause
+)
+
+# Add acceptance criterion to a requirement
+success, msg = await client.add_acceptance_criterion(
+    spec_id=spec_id,
+    requirement_id=req_id,
+    text="Session token expires after 24 hours"
+)
+
+# === DESIGN OPERATIONS ===
+
+# Update spec's design artifact
+success, msg = await client.update_design(
+    spec_id=spec_id,
+    architecture="## Architecture\n\nJWT-based auth with refresh tokens...",
+    data_model="## Data Model\n\n```sql\nCREATE TABLE sessions...",
+    api_spec=[
+        {"method": "POST", "path": "/api/auth/login", "description": "User login"},
+        {"method": "POST", "path": "/api/auth/logout", "description": "User logout"}
+    ]
+)
+
+# === SYNC LOCAL SPECS TO API ===
+
+# Sync local requirements and designs to API specs
+from parse_specs import SpecParser
+from models import ParseResult
+
+parser = SpecParser()
+result: ParseResult = parser.parse_all()
+
+# Dry-run: See what would change
+summary = await client.sync_specs(result, project_id, dry_run=True)
+
+# Actual sync: Create/update specs
+summary = await client.sync_specs(result, project_id)
+
+# Diff only (shorthand for dry_run=True)
+summary = await client.diff_specs(result, project_id)
+
+# === FULL TRACEABILITY ===
+
+# Get complete traceability from API
+# Returns: Specs → Requirements → Tickets → Tasks
+trace = await client.get_full_traceability(project_id)
+```
+
+---
 
 ## References
 

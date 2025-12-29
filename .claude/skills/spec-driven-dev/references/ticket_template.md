@@ -2,24 +2,35 @@
 
 Use this template for `.omoi_os/tickets/TKT-{NUM}.md` files.
 
+**IMPORTANT**: All ticket files MUST include YAML frontmatter for programmatic parsing.
+
 ---
+
+## Template
 
 ```markdown
-# TKT-{NUM}: {Ticket Title}
-
-**Status**: backlog | analyzing | building | testing | done | blocked
-**Priority**: CRITICAL | HIGH | MEDIUM | LOW
-**Estimate**: S | M | L | XL
-**Created**: {YYYY-MM-DD}
-**Updated**: {YYYY-MM-DD}
-
-## Traceability
-
-**Requirements**: {REQ-XXX-YYY, REQ-XXX-YYY}
-**Design Reference**: {designs/feature-name.md#section}
-**Feature**: {feature-name}
-
 ---
+id: TKT-{NUM}
+title: {Ticket Title}
+status: backlog  # backlog | analyzing | building | testing | done | blocked
+priority: MEDIUM  # CRITICAL | HIGH | MEDIUM | LOW
+estimate: M  # S | M | L | XL
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+feature: {feature-name}
+requirements:
+  - REQ-XXX-YYY
+design_ref: designs/{feature-name}.md
+tasks:
+  - TSK-{NUM}
+  - TSK-{NUM}
+dependencies:
+  blocked_by: []  # Tickets that must complete before this can start
+  blocks: []      # Tickets that cannot start until this completes
+  related: []     # Tickets that are related but not blocking
+---
+
+# TKT-{NUM}: {Ticket Title}
 
 ## Description
 
@@ -45,32 +56,6 @@ Use this template for `.omoi_os/tickets/TKT-{NUM}.md` files.
 - [ ] All unit tests pass
 - [ ] Integration tests pass
 - [ ] Documentation updated
-
----
-
-## Dependencies
-
-### Blocks
-{Tickets that cannot start until this completes}
-- {TKT-XXX: Reason}
-
-### Blocked By
-{Tickets that must complete before this can start}
-- {TKT-XXX: Reason}
-
-### Related
-{Tickets that are related but not blocking}
-- {TKT-XXX: Relationship}
-
----
-
-## Tasks
-
-| Task ID | Description | Status | Assignee |
-|---------|-------------|--------|----------|
-| TSK-{NUM} | {Task description} | pending | - |
-| TSK-{NUM} | {Task description} | pending | - |
-| TSK-{NUM} | {Task description} | pending | - |
 
 ---
 
@@ -113,16 +98,28 @@ Use this template for `.omoi_os/tickets/TKT-{NUM}.md` files.
 ## Notes
 
 {Additional notes, decisions, or context}
+```
 
 ---
 
-## History
+## Frontmatter Field Reference
 
-| Date | Action | By |
-|------|--------|-----|
-| {YYYY-MM-DD} | Created | {Author} |
-| {YYYY-MM-DD} | {Action} | {Author} |
-```
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique ticket ID (TKT-001, TKT-FEAT-001) |
+| `title` | string | Yes | Human-readable ticket title |
+| `status` | string | Yes | Current status (see Status Definitions) |
+| `priority` | string | Yes | Priority level (CRITICAL/HIGH/MEDIUM/LOW) |
+| `estimate` | string | Yes | T-shirt size (S/M/L/XL) |
+| `created` | date | Yes | Creation date (YYYY-MM-DD) |
+| `updated` | date | Yes | Last update date (YYYY-MM-DD) |
+| `feature` | string | No | Feature name for grouping |
+| `requirements` | list | No | Linked requirement IDs |
+| `design_ref` | string | No | Path to design document |
+| `tasks` | list | No | Child task IDs |
+| `dependencies.blocked_by` | list | No | Ticket IDs that must complete first |
+| `dependencies.blocks` | list | No | Ticket IDs waiting on this |
+| `dependencies.related` | list | No | Related ticket IDs (non-blocking) |
 
 ---
 
@@ -131,6 +128,7 @@ Use this template for `.omoi_os/tickets/TKT-{NUM}.md` files.
 ### Format
 ```
 TKT-{NUM}
+TKT-{PREFIX}-{NUM}
 ```
 
 ### Numbering
@@ -176,10 +174,37 @@ TKT-{NUM}
 
 ---
 
+## Dependency Rules
+
+1. **No Circular Dependencies**: A ticket cannot be blocked by itself or create a cycle
+2. **Explicit Over Implicit**: Always list dependencies in frontmatter, not just in prose
+3. **Use `related` for Informational Links**: Non-blocking relationships go in `related`
+4. **Keep Chains Short**: Prefer max 3-4 levels of dependency depth
+
+### Example Dependency Graph
+
+```
+TKT-001 (Infrastructure)
+  └─ blocks: TKT-002, TKT-003
+
+TKT-002 (User Model)
+  ├─ blocked_by: TKT-001
+  └─ blocks: TKT-004
+
+TKT-003 (API Framework)
+  ├─ blocked_by: TKT-001
+  └─ blocks: TKT-004
+
+TKT-004 (User API)
+  └─ blocked_by: TKT-002, TKT-003
+```
+
+---
+
 ## Best Practices
 
 1. **One Component Per Ticket** - Scope to a single major component or feature slice
 2. **Clear Acceptance Criteria** - Every criterion should be testable
-3. **Explicit Dependencies** - Document all blockers and blocked tickets
-4. **Task Breakdown** - Every ticket should have associated tasks
+3. **Explicit Dependencies** - Document all blockers in frontmatter
+4. **Task Breakdown** - Every ticket should have associated tasks in `tasks` field
 5. **Traceability** - Always link to requirements and design docs

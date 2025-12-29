@@ -78,7 +78,20 @@ async def _create_spec_async(
         session.add(new_spec)
         await session.commit()
         await session.refresh(new_spec)
-        return new_spec
+
+        # Re-query with eager loading to avoid DetachedInstanceError
+        # when accessing relationships after session closes
+        result = await session.execute(
+            select(SpecModel)
+            .filter(SpecModel.id == new_spec.id)
+            .options(
+                selectinload(SpecModel.requirements).selectinload(
+                    SpecRequirementModel.criteria
+                ),
+                selectinload(SpecModel.tasks),
+            )
+        )
+        return result.scalar_one()
 
 
 async def _get_spec_async(
@@ -134,8 +147,20 @@ async def _update_spec_async(
             spec.phase = phase
 
         await session.commit()
-        await session.refresh(spec)
-        return spec
+
+        # Re-query with eager loading to avoid DetachedInstanceError
+        # when accessing relationships after session closes
+        result = await session.execute(
+            select(SpecModel)
+            .filter(SpecModel.id == spec_id)
+            .options(
+                selectinload(SpecModel.requirements).selectinload(
+                    SpecRequirementModel.criteria
+                ),
+                selectinload(SpecModel.tasks),
+            )
+        )
+        return result.scalar_one_or_none()
 
 
 async def _delete_spec_async(db: DatabaseService, spec_id: str) -> bool:
@@ -159,6 +184,7 @@ async def _add_requirement_async(
     title: str,
     condition: str,
     action: str,
+    linked_design: Optional[str] = None,
 ) -> Optional[SpecRequirementModel]:
     """Add a requirement to a spec (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
@@ -176,6 +202,7 @@ async def _add_requirement_async(
             condition=condition,
             action=action,
             status="pending",
+            linked_design=linked_design,
         )
         session.add(new_req)
         await session.commit()
@@ -191,6 +218,7 @@ async def _update_requirement_async(
     condition: Optional[str] = None,
     action: Optional[str] = None,
     status: Optional[str] = None,
+    linked_design: Optional[str] = None,
 ) -> Optional[SpecRequirementModel]:
     """Update a requirement (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
@@ -214,6 +242,8 @@ async def _update_requirement_async(
             req.action = action
         if status is not None:
             req.status = status
+        if linked_design is not None:
+            req.linked_design = linked_design
 
         await session.commit()
         await session.refresh(req)
@@ -506,6 +536,7 @@ class RequirementCreate(BaseModel):
     title: str
     condition: str
     action: str
+    linked_design: Optional[str] = None  # Link to design section/ID
 
 
 class RequirementUpdate(BaseModel):
@@ -513,6 +544,7 @@ class RequirementUpdate(BaseModel):
     condition: Optional[str] = None
     action: Optional[str] = None
     status: Optional[str] = None
+    linked_design: Optional[str] = None  # Link to design section/ID
 
 
 class CriterionCreate(BaseModel):
@@ -697,7 +729,7 @@ async def add_requirement(
     """Add a requirement to a spec."""
     # Use async database operations (non-blocking)
     new_req = await _add_requirement_async(
-        db, spec_id, req.title, req.condition, req.action
+        db, spec_id, req.title, req.condition, req.action, req.linked_design
     )
     if not new_req:
         raise HTTPException(status_code=404, detail="Spec not found")
@@ -723,7 +755,8 @@ async def update_requirement(
     """Update a requirement."""
     # Use async database operations (non-blocking)
     req = await _update_requirement_async(
-        db, spec_id, req_id, updates.title, updates.condition, updates.action, updates.status
+        db, spec_id, req_id, updates.title, updates.condition, updates.action,
+        updates.status, updates.linked_design
     )
     if not req:
         raise HTTPException(status_code=404, detail="Requirement not found")

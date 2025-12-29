@@ -5,14 +5,21 @@ Use this template for `.omoi_os/requirements/{feature-name}.md` files.
 ---
 
 ```markdown
-# {Feature Name} Requirements
-
-**Created**: {YYYY-MM-DD}
-**Status**: Draft | Review | Approved
-**Purpose**: {One-line purpose statement}
-**Related**: {Links to related docs}
-
 ---
+id: REQ-{DOMAIN}-001
+title: {Feature Name} Requirements
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft
+category: functional
+priority: HIGH
+design_ref: designs/{feature-name}.md
+condition: "{EARS WHEN clause - triggering condition}"
+action: "{EARS SHALL clause - expected behavior}"
+---
+
+# {Feature Name} Requirements
 
 ## Document Overview
 
@@ -199,6 +206,25 @@ class {Entity}Response(BaseModel):
 |---------|------|--------|---------|
 | 1.0 | {YYYY-MM-DD} | {Author} | Initial draft |
 ```
+
+---
+
+## Frontmatter Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique requirement ID (REQ-DOMAIN-001) |
+| `title` | string | Yes | Human-readable title |
+| `feature` | string | Yes | Feature name (kebab-case) |
+| `created` | date | Yes | Creation date (YYYY-MM-DD) |
+| `updated` | date | Yes | Last update date (YYYY-MM-DD) |
+| `status` | string | Yes | draft, review, approved |
+| `category` | string | Yes | functional, non-functional, constraint |
+| `priority` | string | Yes | CRITICAL, HIGH, MEDIUM, LOW |
+| `design_ref` | string | No | Path to linked design doc (e.g., `designs/feature.md`) |
+| `condition` | string | No | EARS "WHEN" clause |
+| `action` | string | No | EARS "THE SYSTEM SHALL" clause |
+| `tickets` | list | No | Linked ticket IDs implementing this requirement |
 
 ---
 

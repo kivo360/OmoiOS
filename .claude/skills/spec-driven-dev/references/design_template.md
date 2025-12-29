@@ -5,14 +5,19 @@ Use this template for `.omoi_os/designs/{feature-name}.md` files.
 ---
 
 ```markdown
-# {Feature Name} - Product Design Document
-
-**Created**: {YYYY-MM-DD}
-**Status**: Draft | Review | Approved
-**Purpose**: Design specification for {feature description}.
-**Related**: {Requirements doc}, {Other design docs}
-
 ---
+id: DESIGN-{FEATURE}-001
+title: {Feature Name} Design
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft
+requirements:
+  - REQ-{DOMAIN}-001
+  - REQ-{DOMAIN}-002
+---
+
+# {Feature Name} - Product Design Document
 
 ## Document Overview
 
@@ -336,6 +341,40 @@ sequenceDiagram
 
 ---
 
+## Frontmatter Field Reference
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | Yes | Unique design ID (DESIGN-FEATURE-001) |
+| `title` | string | Yes | Human-readable title |
+| `feature` | string | Yes | Feature name (kebab-case) |
+| `created` | date | Yes | Creation date (YYYY-MM-DD) |
+| `updated` | date | Yes | Last update date (YYYY-MM-DD) |
+| `status` | string | Yes | draft, review, approved |
+| `requirements` | list | No | List of requirement IDs this design implements |
+| `tickets` | list | No | Linked ticket IDs for this design |
+
+---
+
+## Design ID Conventions
+
+### Format
+```
+DESIGN-{FEATURE}-{NUM}
+```
+
+### Examples
+- `DESIGN-AUTH-001` - Authentication system design
+- `DESIGN-WEBHOOK-001` - Webhook notifications design
+- `DESIGN-SYNC-001` - Data synchronization design
+
+### Numbering
+- Start at 001
+- Increment sequentially within feature
+- Don't reuse deleted numbers
+
+---
+
 ## Best Practices
 
 1. **Architecture First** - Start with high-level before diving into details
@@ -343,3 +382,4 @@ sequenceDiagram
 3. **Concrete Examples** - Include pseudocode and example payloads
 4. **Integration Focus** - Clearly define boundaries and contracts
 5. **Traceability** - Link back to requirements throughout
+6. **Bidirectional Links** - Reference requirements in frontmatter, link design from requirements
