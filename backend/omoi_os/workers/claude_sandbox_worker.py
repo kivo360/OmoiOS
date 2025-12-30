@@ -138,6 +138,152 @@ except ImportError:
 
 
 # =============================================================================
+# Iteration State Tracking (Continuous Mode)
+# =============================================================================
+
+
+@dataclass
+class IterationState:
+    """Tracks state across iterations for continuous execution mode.
+
+    When enabled, the worker runs in a loop until:
+    - Validation passes (code pushed, PR created)
+    - Limits are reached (max_runs, max_cost, max_duration)
+    - 3 consecutive errors occur
+    """
+    iteration_num: int = 0                    # Current iteration
+    successful_iterations: int = 0            # Completed successfully
+    error_count: int = 0                      # Consecutive errors
+    total_cost: float = 0.0                   # Accumulated cost
+    completion_signal_count: int = 0          # Consecutive completion signals
+    start_time: Optional[float] = None        # For duration tracking
+    last_session_id: Optional[str] = None     # For potential resume
+    validation_passed: bool = False           # Whether git validation passed
+    validation_feedback: str = ""             # Feedback from validation
+
+    # Track what's been accomplished
+    tests_passed: bool = False
+    code_committed: bool = False
+    code_pushed: bool = False
+    pr_created: bool = False
+
+    def to_event_data(self) -> dict:
+        """Convert state to event payload."""
+        import time
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        return {
+            "iteration_num": self.iteration_num,
+            "successful_iterations": self.successful_iterations,
+            "error_count": self.error_count,
+            "total_cost_usd": self.total_cost,
+            "completion_signal_count": self.completion_signal_count,
+            "elapsed_seconds": elapsed,
+            "last_session_id": self.last_session_id,
+            "validation_passed": self.validation_passed,
+            "tests_passed": self.tests_passed,
+            "code_committed": self.code_committed,
+            "code_pushed": self.code_pushed,
+            "pr_created": self.pr_created,
+        }
+
+
+# =============================================================================
+# Git Validation (for continuous mode completion checking)
+# =============================================================================
+
+
+def check_git_status(cwd: str) -> dict[str, Any]:
+    """Check git status for validation.
+
+    Returns dict with:
+    - is_clean: No uncommitted changes
+    - is_pushed: Not ahead of remote
+    - has_pr: PR exists for current branch
+    - branch_name: Current branch
+    - errors: List of validation errors
+    """
+    result = {
+        "is_clean": False,
+        "is_pushed": False,
+        "has_pr": False,
+        "branch_name": None,
+        "status_output": "",
+        "errors": [],
+    }
+
+    try:
+        # Get current branch
+        branch_result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if branch_result.returncode == 0:
+            result["branch_name"] = branch_result.stdout.strip()
+
+        # Check git status
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        result["status_output"] = status_result.stdout
+        result["is_clean"] = status_result.returncode == 0 and not status_result.stdout.strip()
+
+        if not result["is_clean"]:
+            result["errors"].append("Uncommitted changes detected")
+
+        # Check if ahead of remote
+        status_verbose = subprocess.run(
+            ["git", "status"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        status_text = status_verbose.stdout
+
+        if "Your branch is ahead" in status_text:
+            result["is_pushed"] = False
+            result["errors"].append("Code not pushed to remote")
+        elif "Your branch is up to date" in status_text or "nothing to commit" in status_text:
+            result["is_pushed"] = True
+        else:
+            # If we can't determine, assume it's pushed
+            result["is_pushed"] = True
+
+        # Check for PR using gh CLI
+        try:
+            pr_result = subprocess.run(
+                ["gh", "pr", "view", "--json", "number,title,state"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if pr_result.returncode == 0 and pr_result.stdout.strip():
+                result["has_pr"] = True
+            else:
+                result["has_pr"] = False
+                result["errors"].append("No PR found for current branch")
+        except FileNotFoundError:
+            result["errors"].append("GitHub CLI (gh) not available")
+        except subprocess.TimeoutExpired:
+            result["errors"].append("Timeout checking PR status")
+
+    except subprocess.TimeoutExpired:
+        result["errors"].append("Timeout running git commands")
+    except Exception as e:
+        result["errors"].append(f"Git validation error: {str(e)}")
+
+    return result
+
+
+# =============================================================================
 # File Change Tracking
 # =============================================================================
 
@@ -911,6 +1057,38 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         # Use this to provide a summary of previous conversation
         self.conversation_context = os.environ.get("CONVERSATION_CONTEXT", "")
 
+        # =================================================================
+        # Continuous Mode Settings
+        # =================================================================
+        # When enabled, the worker runs in a loop until task truly completes
+        # or limits are reached. This ensures tasks don't stop due to
+        # context length issues.
+
+        # Enable continuous mode by default for implementation and validation
+        # These modes need to ensure work is ACTUALLY completed
+        continuous_default = self.execution_mode in ("implementation", "validation")
+        self.continuous_mode = (
+            os.environ.get("CONTINUOUS_MODE", str(continuous_default)).lower() == "true"
+        )
+
+        # Iteration limits
+        self.max_iterations = int(os.environ.get("MAX_ITERATIONS", "10"))
+        self.max_total_cost_usd = float(os.environ.get("MAX_TOTAL_COST_USD", "20.0"))
+        self.max_duration_seconds = int(os.environ.get("MAX_DURATION_SECONDS", "3600"))  # 1 hour
+        self.max_consecutive_errors = int(os.environ.get("MAX_CONSECUTIVE_ERRORS", "3"))
+
+        # Completion detection
+        self.completion_signal = os.environ.get("COMPLETION_SIGNAL", "TASK_COMPLETE")
+        self.completion_threshold = int(os.environ.get("COMPLETION_THRESHOLD", "1"))
+
+        # Notes file for cross-iteration context preservation
+        self.notes_file = os.environ.get("NOTES_FILE", "ITERATION_NOTES.md")
+
+        # Git validation requirements for implementation mode completion
+        self.require_clean_git = os.environ.get("REQUIRE_CLEAN_GIT", "true").lower() == "true"
+        self.require_code_pushed = os.environ.get("REQUIRE_CODE_PUSHED", "true").lower() == "true"
+        self.require_pr_created = os.environ.get("REQUIRE_PR_CREATED", "true").lower() == "true"
+
         # Append conversation context to system prompt if provided (for hydration)
         # NOTE: Must be after conversation_context is initialized above
         if self.conversation_context:
@@ -958,6 +1136,16 @@ Continue from where we left off, acknowledging the previous context."""
             "fork_session": self.fork_session,
             "has_session_transcript": bool(self.session_transcript_b64),
             "has_conversation_context": bool(self.conversation_context),
+            # Continuous mode settings
+            "continuous_mode": self.continuous_mode,
+            "max_iterations": self.max_iterations,
+            "max_total_cost_usd": self.max_total_cost_usd,
+            "max_duration_seconds": self.max_duration_seconds,
+            "max_consecutive_errors": self.max_consecutive_errors,
+            "completion_signal": self.completion_signal,
+            "require_clean_git": self.require_clean_git,
+            "require_code_pushed": self.require_code_pushed,
+            "require_pr_created": self.require_pr_created,
         }
 
     def get_custom_agents(self) -> dict:
@@ -1359,7 +1547,12 @@ def setup_github_workspace(config: WorkerConfig) -> bool:
 
 
 class SandboxWorker:
-    """Main worker orchestrator with comprehensive event tracking."""
+    """Main worker orchestrator with comprehensive event tracking.
+
+    Supports both single-run and continuous modes:
+    - Single-run: Execute task once and wait for messages
+    - Continuous: Iterate until task truly completes (code pushed, PR created)
+    """
 
     def __init__(self, config: WorkerConfig):
         self.config = config
@@ -1369,6 +1562,9 @@ class SandboxWorker:
         self.turn_count = 0
         self.reporter: Optional[EventReporter] = None
         self.file_tracker = FileChangeTracker()
+
+        # Iteration state for continuous mode
+        self.iteration_state = IterationState()
 
     def _setup_signal_handlers(self):
         """Setup graceful shutdown on SIGTERM/SIGINT."""
@@ -1841,6 +2037,238 @@ class SandboxWorker:
 
         return None, final_output
 
+    # =========================================================================
+    # Continuous Mode Helper Methods
+    # =========================================================================
+
+    def _should_continue_iteration(self) -> bool:
+        """Check if iteration should continue in continuous mode."""
+        import time
+        state = self.iteration_state
+        config = self.config
+
+        # Check if validation already passed
+        if state.validation_passed:
+            return False
+
+        # Check completion signal threshold
+        if state.completion_signal_count >= config.completion_threshold:
+            # Only stop if validation passed
+            if not state.validation_passed:
+                # Continue to allow agent to fix issues
+                logger.info("Completion signal reached but validation not passed - continuing")
+                state.completion_signal_count = 0  # Reset to allow more iterations
+            else:
+                return False
+
+        # Check max iterations
+        if state.successful_iterations >= config.max_iterations:
+            return False
+
+        # Check max cost
+        if state.total_cost >= config.max_total_cost_usd:
+            return False
+
+        # Check max duration
+        if state.start_time:
+            elapsed = time.time() - state.start_time
+            if elapsed >= config.max_duration_seconds:
+                return False
+
+        # Check consecutive errors
+        if state.error_count >= config.max_consecutive_errors:
+            return False
+
+        # Check shutdown signal
+        if self._should_stop:
+            return False
+
+        return True
+
+    def _get_stop_reason(self) -> str:
+        """Determine why the iteration loop stopped."""
+        import time
+        state = self.iteration_state
+        config = self.config
+
+        if state.validation_passed:
+            return "validation_passed"
+        if state.completion_signal_count >= config.completion_threshold:
+            return "completion_signal"
+        if state.successful_iterations >= config.max_iterations:
+            return "max_iterations_reached"
+        if state.total_cost >= config.max_total_cost_usd:
+            return "max_cost_reached"
+        if state.start_time:
+            elapsed = time.time() - state.start_time
+            if elapsed >= config.max_duration_seconds:
+                return "max_duration_reached"
+        if state.error_count >= config.max_consecutive_errors:
+            return "consecutive_errors"
+        if self._should_stop:
+            return "shutdown_signal"
+        return "unknown"
+
+    async def _run_validation(self):
+        """Run git validation to check if work is truly complete."""
+        state = self.iteration_state
+        config = self.config
+
+        logger.info("Running git validation...")
+
+        git_status = check_git_status(config.cwd)
+
+        # Update state with validation results
+        state.code_committed = git_status["is_clean"]
+        state.code_pushed = git_status["is_pushed"]
+        state.pr_created = git_status["has_pr"]
+
+        # Determine if validation passed based on config requirements
+        validation_errors = []
+
+        if config.require_clean_git and not git_status["is_clean"]:
+            validation_errors.append("Uncommitted changes exist")
+
+        if config.require_code_pushed and not git_status["is_pushed"]:
+            validation_errors.append("Code not pushed to remote")
+
+        if config.require_pr_created and not git_status["has_pr"]:
+            validation_errors.append("No PR created")
+
+        if not validation_errors:
+            state.validation_passed = True
+            state.validation_feedback = "All validation checks passed"
+            logger.info("Git validation PASSED")
+        else:
+            state.validation_passed = False
+            state.validation_feedback = "; ".join(validation_errors)
+            logger.info("Git validation FAILED", extra={"errors": validation_errors})
+
+            # Update notes file with validation feedback for next iteration
+            self._update_notes_with_validation(validation_errors, git_status)
+
+        # Report validation result
+        if self.reporter:
+            await self.reporter.report(
+                "iteration.validation",
+                {
+                    "iteration_num": state.iteration_num,
+                    "passed": state.validation_passed,
+                    "feedback": state.validation_feedback,
+                    "git_status": {
+                        "is_clean": git_status["is_clean"],
+                        "is_pushed": git_status["is_pushed"],
+                        "has_pr": git_status["has_pr"],
+                        "branch_name": git_status["branch_name"],
+                    },
+                    "errors": validation_errors,
+                },
+            )
+
+    def _update_notes_with_validation(self, errors: list[str], git_status: dict):
+        """Update notes file with validation feedback for next iteration."""
+        config = self.config
+        notes_path = Path(config.cwd) / config.notes_file
+
+        try:
+            existing = notes_path.read_text() if notes_path.exists() else ""
+
+            feedback_section = f"""
+
+## VALIDATION FAILED - Iteration {self.iteration_state.iteration_num}
+
+The completion signal was detected, but validation checks failed.
+**You must fix these issues before the task is truly complete:**
+
+### Issues Found:
+"""
+            for error in errors:
+                feedback_section += f"- ❌ {error}\n"
+
+            feedback_section += f"""
+### Git Status:
+- Branch: {git_status.get('branch_name', 'unknown')}
+- Clean working directory: {'✅ Yes' if git_status['is_clean'] else '❌ No'}
+- Code pushed to remote: {'✅ Yes' if git_status['is_pushed'] else '❌ No'}
+- PR exists: {'✅ Yes' if git_status['has_pr'] else '❌ No'}
+
+### Required Actions:
+"""
+            if not git_status["is_clean"]:
+                feedback_section += "1. Stage and commit all changes: `git add -A && git commit -m \"...\"`\n"
+            if not git_status["is_pushed"]:
+                feedback_section += "2. Push code to remote: `git push`\n"
+            if not git_status["has_pr"]:
+                feedback_section += "3. Create a pull request: `gh pr create --title \"...\" --body \"...\"`\n"
+
+            feedback_section += f"""
+**After fixing these issues, include `{config.completion_signal}` in your response again.**
+"""
+
+            notes_path.write_text(existing + feedback_section)
+            logger.info("Updated notes file with validation feedback")
+
+        except Exception as e:
+            logger.warning("Failed to update notes with validation feedback", extra={"error": str(e)})
+
+    def _build_iteration_prompt(self, base_task: str) -> str:
+        """Build enhanced prompt with iteration context."""
+        config = self.config
+        state = self.iteration_state
+
+        # Read notes file if exists
+        notes_content = ""
+        notes_path = Path(config.cwd) / config.notes_file
+        if notes_path.exists():
+            try:
+                notes_content = notes_path.read_text()
+            except Exception:
+                pass
+
+        # First iteration - return base task with completion instructions
+        if state.iteration_num == 1:
+            prompt = f"""{base_task}
+
+---
+
+## Completion Requirements (IMPORTANT)
+
+When you have completed the task, you MUST:
+1. Ensure all tests pass
+2. Commit all changes: `git add -A && git commit -m "..."`
+3. Push to remote: `git push`
+4. Create a PR: `gh pr create --title "..." --body "..."`
+
+**When all work is done and pushed, include the phrase `{config.completion_signal}` in your response.**
+"""
+            return prompt
+
+        # Subsequent iterations - include notes file and previous context
+        prompt = f"""## Continuing Task (Iteration {state.iteration_num})
+
+This is a continuation of your previous work. Please review the notes below and complete any remaining work.
+
+### Original Task:
+{base_task}
+
+### Previous Iteration Notes:
+{notes_content if notes_content else "(No notes from previous iterations)"}
+
+### Current Status:
+- Iterations completed: {state.successful_iterations}
+- Validation passed: {state.validation_passed}
+- Code committed: {state.code_committed}
+- Code pushed: {state.code_pushed}
+- PR created: {state.pr_created}
+
+### What to do:
+1. Review the validation feedback above (if any)
+2. Fix any issues identified
+3. Ensure all work is committed, pushed, and a PR exists
+4. Include `{config.completion_signal}` when truly done
+"""
+        return prompt
+
     async def run(self):
         """Main worker loop with comprehensive event tracking."""
         self._setup_signal_handlers()
@@ -1926,20 +2354,188 @@ class SandboxWorker:
                         )
 
                         if initial_task and initial_task.strip():
-                            logger.info("Processing initial task", extra={"task_preview": initial_task[:100]})
-                            try:
-                                await client.query(initial_task)
-                                await self._process_messages(client)
-                            except Exception as e:
-                                logger.error("Failed to process initial task", extra={"error": str(e)}, exc_info=True)
-                                if self.reporter:
-                                    await self.reporter.report(
-                                        "agent.error",
+                            # Initialize iteration state
+                            import time
+                            self.iteration_state.start_time = time.time()
+
+                            if self.config.continuous_mode:
+                                # =================================================
+                                # CONTINUOUS MODE: Iterate until task truly completes
+                                # =================================================
+                                logger.info("=" * 40)
+                                logger.info("CONTINUOUS MODE ENABLED")
+                                logger.info("=" * 40)
+                                logger.info(
+                                    "Will iterate until: validation_passed OR max_iterations=%d OR max_cost=$%.2f OR max_duration=%ds",
+                                    self.config.max_iterations,
+                                    self.config.max_total_cost_usd,
+                                    self.config.max_duration_seconds,
+                                )
+
+                                # Report continuous mode start
+                                await reporter.report(
+                                    "continuous.started",
+                                    {
+                                        "goal": initial_task[:500],
+                                        "limits": {
+                                            "max_iterations": self.config.max_iterations,
+                                            "max_cost_usd": self.config.max_total_cost_usd,
+                                            "max_duration_seconds": self.config.max_duration_seconds,
+                                        },
+                                        "completion_signal": self.config.completion_signal,
+                                        "completion_threshold": self.config.completion_threshold,
+                                        "validation_requirements": {
+                                            "require_clean_git": self.config.require_clean_git,
+                                            "require_code_pushed": self.config.require_code_pushed,
+                                            "require_pr_created": self.config.require_pr_created,
+                                        },
+                                    },
+                                    source="worker",
+                                )
+
+                                # Iteration loop
+                                while self._should_continue_iteration():
+                                    self.iteration_state.iteration_num += 1
+                                    iteration_prompt = self._build_iteration_prompt(initial_task)
+
+                                    # Report iteration start
+                                    await reporter.report(
+                                        "iteration.started",
                                         {
-                                            "error": f"Initial task failed: {str(e)}",
-                                            "phase": "initial_task",
+                                            "iteration_num": self.iteration_state.iteration_num,
+                                            "prompt_preview": iteration_prompt[:500],
+                                            **self.iteration_state.to_event_data(),
                                         },
                                     )
+
+                                    logger.info(
+                                        "Starting iteration %d",
+                                        self.iteration_state.iteration_num,
+                                        extra={"state": self.iteration_state.to_event_data()}
+                                    )
+
+                                    try:
+                                        await client.query(iteration_prompt)
+                                        result, output = await self._process_messages(client)
+
+                                        if result:
+                                            # Track cost
+                                            iteration_cost = getattr(result, "total_cost_usd", 0.0) or 0.0
+                                            self.iteration_state.total_cost += iteration_cost
+                                            self.iteration_state.last_session_id = getattr(result, "session_id", None)
+
+                                            # Check for completion signal in output
+                                            output_text = "\n".join(output) if output else ""
+                                            if self.config.completion_signal in output_text:
+                                                self.iteration_state.completion_signal_count += 1
+                                                logger.info(
+                                                    "Completion signal detected (%d/%d)",
+                                                    self.iteration_state.completion_signal_count,
+                                                    self.config.completion_threshold,
+                                                )
+
+                                                await reporter.report(
+                                                    "iteration.completion_signal",
+                                                    {
+                                                        "iteration_num": self.iteration_state.iteration_num,
+                                                        "signal_count": self.iteration_state.completion_signal_count,
+                                                        "threshold": self.config.completion_threshold,
+                                                    },
+                                                )
+
+                                                # Run git validation
+                                                await self._run_validation()
+
+                                                # If validation passed, we're done!
+                                                if self.iteration_state.validation_passed:
+                                                    logger.info("Validation PASSED - task truly complete!")
+                                                    break
+                                            else:
+                                                # No completion signal - reset counter
+                                                self.iteration_state.completion_signal_count = 0
+
+                                            self.iteration_state.successful_iterations += 1
+                                            self.iteration_state.error_count = 0
+
+                                            # Report iteration completion
+                                            await reporter.report(
+                                                "iteration.completed",
+                                                {
+                                                    "iteration_num": self.iteration_state.iteration_num,
+                                                    "cost_usd": iteration_cost,
+                                                    "output_preview": output_text[:1000] if output_text else None,
+                                                    **self.iteration_state.to_event_data(),
+                                                },
+                                            )
+                                        else:
+                                            # No result - iteration failed
+                                            self.iteration_state.error_count += 1
+                                            await reporter.report(
+                                                "iteration.failed",
+                                                {
+                                                    "iteration_num": self.iteration_state.iteration_num,
+                                                    "error": "No result message received",
+                                                    "error_count": self.iteration_state.error_count,
+                                                },
+                                            )
+
+                                    except Exception as e:
+                                        self.iteration_state.error_count += 1
+                                        logger.error(
+                                            "Iteration %d failed",
+                                            self.iteration_state.iteration_num,
+                                            extra={"error": str(e)},
+                                            exc_info=True,
+                                        )
+                                        await reporter.report(
+                                            "iteration.failed",
+                                            {
+                                                "iteration_num": self.iteration_state.iteration_num,
+                                                "error": str(e),
+                                                "error_type": type(e).__name__,
+                                                "error_count": self.iteration_state.error_count,
+                                            },
+                                        )
+
+                                # Report continuous mode completion
+                                stop_reason = self._get_stop_reason()
+                                await reporter.report(
+                                    "continuous.completed",
+                                    {
+                                        "stop_reason": stop_reason,
+                                        **self.iteration_state.to_event_data(),
+                                    },
+                                )
+
+                                logger.info(
+                                    "Continuous mode completed",
+                                    extra={
+                                        "stop_reason": stop_reason,
+                                        "iterations": self.iteration_state.iteration_num,
+                                        "successful": self.iteration_state.successful_iterations,
+                                        "total_cost": self.iteration_state.total_cost,
+                                        "validation_passed": self.iteration_state.validation_passed,
+                                    }
+                                )
+
+                            else:
+                                # =================================================
+                                # SINGLE-RUN MODE: Execute once (original behavior)
+                                # =================================================
+                                logger.info("Processing initial task (single-run mode)", extra={"task_preview": initial_task[:100]})
+                                try:
+                                    await client.query(initial_task)
+                                    await self._process_messages(client)
+                                except Exception as e:
+                                    logger.error("Failed to process initial task", extra={"error": str(e)}, exc_info=True)
+                                    if self.reporter:
+                                        await self.reporter.report(
+                                            "agent.error",
+                                            {
+                                                "error": f"Initial task failed: {str(e)}",
+                                                "phase": "initial_task",
+                                            },
+                                        )
                         else:
                             logger.warning(
                                 "No initial task provided - worker will wait for messages"
