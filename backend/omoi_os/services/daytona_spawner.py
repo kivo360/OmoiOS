@@ -570,6 +570,7 @@ class DaytonaSpawnerService:
                 )
 
             sandbox = daytona.create(params=params, timeout=120)
+            logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
 
             # Store sandbox reference
             info = self._sandboxes.get(sandbox_id)
@@ -577,22 +578,35 @@ class DaytonaSpawnerService:
                 info.extra_data["daytona_sandbox"] = sandbox
                 info.extra_data["daytona_sandbox_id"] = sandbox.id
 
-            # Set environment variables and start the worker
+        except ImportError as e:
+            # Daytona SDK not available - use mock for local testing
+            logger.warning(f"Daytona SDK import failed: {e}, using mock sandbox")
+            await self._create_mock_sandbox(sandbox_id, env_vars)
+            return  # Don't try to start worker in mock sandbox here
+        except Exception as e:
+            logger.error(f"Failed to create Daytona sandbox: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            await self._create_mock_sandbox(sandbox_id, env_vars)
+            return  # Don't try to start worker in mock sandbox here
+
+        # Start worker OUTSIDE the try/except so errors are not silently swallowed
+        # This ensures we see exactly what fails during worker startup
+        try:
             # Pass effective_continuous_mode from spawn_for_task to control worker logging
             await self._start_worker_in_sandbox(
                 sandbox, env_vars, runtime, execution_mode,
                 continuous_mode=effective_continuous_mode or False
             )
-
-            logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
-
-        except ImportError as e:
-            # Daytona SDK not available - use mock for local testing
-            logger.warning(f"Daytona SDK import failed: {e}, using mock sandbox")
-            await self._create_mock_sandbox(sandbox_id, env_vars)
+            logger.info(f"Worker started successfully in sandbox {sandbox.id}")
         except Exception as e:
-            logger.error(f"Failed to create Daytona sandbox: {e}")
-            await self._create_mock_sandbox(sandbox_id, env_vars)
+            # Log worker startup errors clearly - don't fall back to mock!
+            # The sandbox exists, we just failed to start the worker
+            logger.error(f"Failed to start worker in sandbox {sandbox.id}: {e}")
+            import traceback
+            logger.error(f"Worker startup traceback: {traceback.format_exc()}")
+            # Re-raise so the caller knows something went wrong
+            raise RuntimeError(f"Worker startup failed in sandbox {sandbox.id}: {e}") from e
 
     async def _start_worker_in_sandbox(
         self,
