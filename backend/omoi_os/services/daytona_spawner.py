@@ -456,6 +456,7 @@ class DaytonaSpawnerService:
                 labels=sandbox_labels,
                 runtime=runtime,
                 execution_mode=execution_mode,
+                continuous_mode=effective_continuous_mode,
             )
 
             # Update status
@@ -505,6 +506,7 @@ class DaytonaSpawnerService:
         labels: Dict[str, str],
         runtime: str = "openhands",
         execution_mode: str = "implementation",
+        continuous_mode: bool = False,
     ) -> None:
         """Create a Daytona sandbox via their API.
 
@@ -516,6 +518,7 @@ class DaytonaSpawnerService:
             labels: Labels for sandbox organization
             runtime: Agent runtime - "openhands" or "claude"
             execution_mode: Skill loading mode - determines which skills are loaded
+            continuous_mode: Whether continuous iteration mode is enabled
         """
         try:
             from daytona import (
@@ -593,10 +596,10 @@ class DaytonaSpawnerService:
         # Start worker OUTSIDE the try/except so errors are not silently swallowed
         # This ensures we see exactly what fails during worker startup
         try:
-            # Pass effective_continuous_mode from spawn_for_task to control worker logging
+            # Pass continuous_mode from spawn_for_task to control worker logging
             await self._start_worker_in_sandbox(
                 sandbox, env_vars, runtime, execution_mode,
-                continuous_mode=effective_continuous_mode or False
+                continuous_mode=continuous_mode
             )
             logger.info(f"Worker started successfully in sandbox {sandbox.id}")
         except Exception as e:
