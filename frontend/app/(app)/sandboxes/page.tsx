@@ -24,7 +24,7 @@ import { useSandboxTasks } from "@/hooks/useTasks"
 import { useQueryClient } from "@tanstack/react-query"
 import { taskKeys } from "@/hooks/useTasks"
 
-type TaskStatus = "pending" | "running" | "completed" | "failed"
+type TaskStatus = "pending" | "running" | "completed" | "failed" | "pending_validation" | "validating"
 
 function normalizeStatus(status: string): TaskStatus {
   const lower = status.toLowerCase()
@@ -44,6 +44,10 @@ function normalizeStatus(status: string): TaskStatus {
     case "error":
     case "cancelled":
       return "failed"
+    case "pending_validation":
+      return "pending_validation"
+    case "validating":
+      return "validating"
     default:
       return "pending"
   }
@@ -69,6 +73,8 @@ const statusConfig: Record<TaskStatus, { icon: typeof Clock; color: string; bgCo
   running: { icon: Loader2, color: "text-blue-500", bgColor: "bg-blue-500/10", label: "Running" },
   completed: { icon: CheckCircle, color: "text-green-500", bgColor: "bg-green-500/10", label: "Completed" },
   failed: { icon: XCircle, color: "text-red-500", bgColor: "bg-red-500/10", label: "Failed" },
+  pending_validation: { icon: Clock, color: "text-purple-500", bgColor: "bg-purple-500/10", label: "Awaiting Validation" },
+  validating: { icon: Loader2, color: "text-purple-500", bgColor: "bg-purple-500/10", label: "Validating" },
 }
 
 export default function SandboxesPage() {
@@ -99,14 +105,14 @@ export default function SandboxesPage() {
 
   // Count by status
   const statusCounts = useMemo(() => {
-    if (!tasks) return { pending: 0, running: 0, completed: 0, failed: 0 }
+    if (!tasks) return { pending: 0, running: 0, completed: 0, failed: 0, pending_validation: 0, validating: 0 }
     return tasks.reduce(
       (acc, task) => {
         const status = normalizeStatus(task.status)
         acc[status]++
         return acc
       },
-      { pending: 0, running: 0, completed: 0, failed: 0 }
+      { pending: 0, running: 0, completed: 0, failed: 0, pending_validation: 0, validating: 0 }
     )
   }, [tasks])
 
@@ -164,7 +170,7 @@ export default function SandboxesPage() {
             >
               All
             </Button>
-            {(["running", "pending", "completed", "failed"] as TaskStatus[]).map((status) => {
+            {(["running", "validating", "pending_validation", "pending", "completed", "failed"] as TaskStatus[]).map((status) => {
               const config = statusConfig[status]
               const count = statusCounts[status]
               return (

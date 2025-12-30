@@ -3,7 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { useCallback, useState, useMemo } from "react"
+import { useCallback, useState, useMemo, useEffect } from "react"
 import { sandboxApi } from "@/lib/api/sandbox"
 import { useEvents, type SystemEvent } from "./useEvents"
 import type {
@@ -66,20 +66,22 @@ export function useSandboxTask(sandboxId: string | null, options: { enabled?: bo
 
 /**
  * Fetch sandbox trajectory (events without heartbeats, with summary)
+ * Supports cursor-based pagination for infinite scroll
  */
 export function useSandboxTrajectory(
   sandboxId: string | null,
   options: {
     limit?: number
-    offset?: number
+    cursor?: string | null
+    direction?: "older" | "newer"
     enabled?: boolean
   } = {}
 ) {
-  const { limit = 100, offset = 0, enabled = true } = options
+  const { limit = 100, cursor, direction, enabled = true } = options
 
   return useQuery({
-    queryKey: [...sandboxKeys.trajectory(sandboxId || ""), { limit, offset }],
-    queryFn: () => sandboxApi.getTrajectory(sandboxId!, { limit, offset }),
+    queryKey: [...sandboxKeys.trajectory(sandboxId || ""), { limit, cursor, direction }],
+    queryFn: () => sandboxApi.getTrajectory(sandboxId!, { limit, cursor, direction }),
     enabled: enabled && !!sandboxId,
   })
 }
@@ -184,10 +186,17 @@ export function useSandboxMessages(sandboxId: string | null, options: { enabled?
 // ============================================================================
 
 /**
- * Combined hook for monitoring a sandbox with real-time events and message sending
+ * Combined hook for monitoring a sandbox with real-time events, message sending,
+ * and cursor-based infinite scroll pagination.
  */
 export function useSandboxMonitor(sandboxId: string | null) {
   const queryClient = useQueryClient()
+
+  // State for infinite scroll pagination
+  const [olderEvents, setOlderEvents] = useState<SandboxEvent[]>([])
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [hasMore, setHasMore] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
   // Real-time events
   const {
@@ -201,6 +210,7 @@ export function useSandboxMonitor(sandboxId: string | null) {
   })
 
   // Historical events (for initial load)
+  // Request 100 events per page (events are returned newest-first from API)
   const {
     data: historicalData,
     isLoading: isLoadingHistory,
@@ -210,29 +220,73 @@ export function useSandboxMonitor(sandboxId: string | null) {
     enabled: !!sandboxId,
   })
 
+  // Reset pagination state when sandbox changes
+  useEffect(() => {
+    setOlderEvents([])
+    setNextCursor(null)
+    setHasMore(false)
+  }, [sandboxId])
+
+  // Update cursor and hasMore when initial data loads
+  useEffect(() => {
+    if (historicalData) {
+      setNextCursor(historicalData.next_cursor)
+      setHasMore(historicalData.has_more)
+    }
+  }, [historicalData])
+
   // Send message mutation
   const sendMessageMutation = useSendSandboxMessage()
 
-  // Memoize historical events reference
-  const historicalEvents = useMemo(
-    () => historicalData?.events || [],
+  // Memoize historical events reference (initial page)
+  // API returns events newest-first, so we reverse to get chronological order for display
+  const initialEvents = useMemo(
+    () => (historicalData?.events || []).slice().reverse(),
     [historicalData?.events]
   )
 
-  // Combine historical and real-time events with memoization
-  // Real-time events are newer, so they go first
-  const uniqueEvents = useMemo(() => {
-    const allEvents = [...realtimeEvents, ...historicalEvents]
+  // Load more older events (for infinite scroll)
+  const loadMoreEvents = useCallback(async () => {
+    if (!sandboxId || !nextCursor || isLoadingMore) return
 
-    // Deduplicate by event type + created_at (rough dedup)
-    return allEvents.reduce((acc, event) => {
-      const key = `${event.event_type}-${event.created_at}`
-      if (!acc.some((e) => `${e.event_type}-${e.created_at}` === key)) {
-        acc.push(event)
-      }
-      return acc
-    }, [] as SandboxEvent[])
-  }, [realtimeEvents, historicalEvents])
+    setIsLoadingMore(true)
+    try {
+      const data = await sandboxApi.getTrajectory(sandboxId, {
+        limit: 100,
+        cursor: nextCursor,
+        direction: "older",
+      })
+
+      // Reverse to get chronological order (oldest first within this batch)
+      const newEvents = data.events.slice().reverse()
+      // Prepend older events (they go before the initial events)
+      setOlderEvents((prev) => [...newEvents, ...prev])
+      setNextCursor(data.next_cursor)
+      setHasMore(data.has_more)
+    } catch (error) {
+      console.error("Failed to load more events:", error)
+    } finally {
+      setIsLoadingMore(false)
+    }
+  }, [sandboxId, nextCursor, isLoadingMore])
+
+  // Combine all events: older (loaded via infinite scroll) + initial + realtime
+  // Order: oldest first (chronological)
+  const uniqueEvents = useMemo(() => {
+    // olderEvents are already chronological (oldest first)
+    // initialEvents are already chronological (oldest first within initial page)
+    // realtimeEvents are newest first, so we need to handle them carefully
+    const allEvents = [...olderEvents, ...initialEvents, ...realtimeEvents]
+
+    // Deduplicate by event ID (most reliable) or fallback to type+timestamp
+    const seen = new Set<string>()
+    return allEvents.filter((event) => {
+      const key = event.id || `${event.event_type}-${event.created_at}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [olderEvents, initialEvents, realtimeEvents])
 
   // Memoize sendMessage callback
   const sendMessage = useCallback(
@@ -246,18 +300,27 @@ export function useSandboxMonitor(sandboxId: string | null) {
     [sandboxId, sendMessageMutation]
   )
 
-  // Memoize refresh callback
+  // Memoize refresh callback - also clears loaded older events
   const refresh = useCallback(() => {
     if (sandboxId) {
+      setOlderEvents([])
+      setNextCursor(null)
+      setHasMore(false)
       queryClient.invalidateQueries({ queryKey: sandboxKeys.trajectory(sandboxId) })
     }
   }, [sandboxId, queryClient])
+
+  // Clear all events including loaded older events
+  const clearAllEvents = useCallback(() => {
+    setOlderEvents([])
+    clearEvents()
+  }, [clearEvents])
 
   return {
     // Events
     events: uniqueEvents,
     realtimeEvents,
-    historicalEvents,
+    historicalEvents: [...olderEvents, ...initialEvents],
     heartbeatSummary: historicalData?.heartbeat_summary,
     totalEvents: historicalData?.total_events || 0,
 
@@ -268,10 +331,15 @@ export function useSandboxMonitor(sandboxId: string | null) {
     isLoadingHistory,
     historyError,
 
+    // Pagination
+    hasMore,
+    isLoadingMore,
+    loadMoreEvents,
+
     // Actions
     sendMessage,
     isSendingMessage: sendMessageMutation.isPending,
-    clearEvents,
+    clearEvents: clearAllEvents,
 
     // Refresh
     refresh,

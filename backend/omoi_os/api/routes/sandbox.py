@@ -919,13 +919,18 @@ class TrajectorySummaryResponse(BaseModel):
     - Excluding heartbeat events from the main event list
     - Providing a summary of heartbeats (count, first, last)
     - Filtering out noise to show meaningful trajectory events
+    - Supporting cursor-based pagination for infinite scroll
     """
 
     sandbox_id: str
     events: list[SandboxEventItem]
     heartbeat_summary: HeartbeatSummary
     total_events: int  # Total including heartbeats
-    trajectory_events: int  # Count excluding heartbeats
+    trajectory_events: int  # Count excluding heartbeats and noise
+    # Cursor-based pagination
+    next_cursor: Optional[str] = None  # ID of oldest event in this batch (for loading older)
+    prev_cursor: Optional[str] = None  # ID of newest event in this batch (for loading newer)
+    has_more: bool = False  # Whether there are more events to load
 
 
 def query_sandbox_events(
@@ -1110,7 +1115,7 @@ async def get_sandbox_events(
 def query_trajectory_summary(
     db: DatabaseService,
     sandbox_id: str,
-    limit: int = 100,
+    limit: int = 500,
 ) -> dict:
     """
     Query trajectory events with heartbeat aggregation (SYNC version).
@@ -1119,11 +1124,12 @@ def query_trajectory_summary(
     - Excluding heartbeat events from the main list
     - Aggregating heartbeat info (count, first, last)
     - Returning only meaningful trajectory events
+    - Returning events in descending order (newest first) so users always see latest
 
     Args:
         db: Database service
         sandbox_id: Sandbox identifier
-        limit: Maximum non-heartbeat events to return
+        limit: Maximum non-heartbeat events to return (default 500)
 
     Returns:
         Dict with events, heartbeat_summary, and counts
@@ -1160,11 +1166,12 @@ def query_trajectory_summary(
         last_heartbeat = heartbeat_stats.last if heartbeat_stats else None
 
         # Get non-heartbeat events (the actual trajectory)
+        # Order by DESCENDING (newest first) so we get the most recent events
         trajectory_events = (
             session.query(SandboxEvent)
             .filter(SandboxEvent.sandbox_id == sandbox_id)
             .filter(~SandboxEvent.event_type.in_(heartbeat_types))
-            .order_by(SandboxEvent.created_at.asc())  # Chronological order
+            .order_by(SandboxEvent.created_at.desc())  # Newest first
             .limit(limit)
             .all()
         )
@@ -1198,30 +1205,37 @@ async def query_trajectory_summary_async(
     db: DatabaseService,
     sandbox_id: str,
     limit: int = 100,
+    cursor: Optional[str] = None,
+    direction: str = "older",
 ) -> dict:
     """
     Query trajectory events with heartbeat aggregation (ASYNC version - non-blocking).
 
     This provides a cleaner view by:
-    - Excluding heartbeat events from the main list
+    - Excluding heartbeat and noisy events from the main list
     - Aggregating heartbeat info (count, first, last)
     - Returning only meaningful trajectory events
+    - Supporting cursor-based pagination for infinite scroll
 
     Args:
         db: Database service
         sandbox_id: Sandbox identifier
-        limit: Maximum non-heartbeat events to return
+        limit: Maximum events to return per page (default 100)
+        cursor: Event ID to paginate from (cursor-based pagination)
+        direction: "older" to load events older than cursor, "newer" for newer
 
     Returns:
-        Dict with events, heartbeat_summary, and counts
+        Dict with events, heartbeat_summary, counts, and pagination cursors
     """
-    from sqlalchemy import func, select
+    from sqlalchemy import func, select, and_, or_
 
     from omoi_os.models.sandbox_event import SandboxEvent
 
     async with db.get_async_session() as session:
-        # Define heartbeat event types to exclude from main list
-        heartbeat_types = ["agent.heartbeat", "heartbeat"]
+        # Event types to exclude from trajectory
+        # - Heartbeats: Just noise, summarized separately
+        # - Explore subagent tool_use/tool_result for Read/Glob/Grep: Very noisy file reads
+        excluded_event_types = ["agent.heartbeat", "heartbeat"]
 
         # Get total count of all events
         total_result = await session.execute(
@@ -1239,7 +1253,7 @@ async def query_trajectory_summary_async(
                 func.max(SandboxEvent.created_at).label("last"),
             )
             .filter(SandboxEvent.sandbox_id == sandbox_id)
-            .filter(SandboxEvent.event_type.in_(heartbeat_types))
+            .filter(SandboxEvent.event_type.in_(["agent.heartbeat", "heartbeat"]))
         )
         heartbeat_stats = heartbeat_result.first()
 
@@ -1247,17 +1261,104 @@ async def query_trajectory_summary_async(
         first_heartbeat = heartbeat_stats.first if heartbeat_stats else None
         last_heartbeat = heartbeat_stats.last if heartbeat_stats else None
 
-        # Get non-heartbeat events (the actual trajectory)
-        trajectory_result = await session.execute(
-            select(SandboxEvent)
-            .filter(SandboxEvent.sandbox_id == sandbox_id)
-            .filter(~SandboxEvent.event_type.in_(heartbeat_types))
-            .order_by(SandboxEvent.created_at.asc())  # Chronological order
-            .limit(limit)
+        # Build base query for trajectory events
+        base_filter = and_(
+            SandboxEvent.sandbox_id == sandbox_id,
+            ~SandboxEvent.event_type.in_(excluded_event_types),
         )
-        trajectory_events = trajectory_result.scalars().all()
 
-        trajectory_count = len(trajectory_events)
+        # If cursor provided, get the cursor event's created_at for pagination
+        cursor_timestamp = None
+        if cursor:
+            cursor_result = await session.execute(
+                select(SandboxEvent.created_at).filter(SandboxEvent.id == cursor)
+            )
+            cursor_row = cursor_result.first()
+            if cursor_row:
+                cursor_timestamp = cursor_row[0]
+
+        # Build pagination filter
+        if cursor_timestamp:
+            if direction == "older":
+                # Get events older than cursor (created_at < cursor's created_at)
+                pagination_filter = and_(
+                    base_filter,
+                    SandboxEvent.created_at < cursor_timestamp
+                )
+            else:
+                # Get events newer than cursor (created_at > cursor's created_at)
+                pagination_filter = and_(
+                    base_filter,
+                    SandboxEvent.created_at > cursor_timestamp
+                )
+        else:
+            pagination_filter = base_filter
+
+        # Query events - newest first for "older" direction, oldest first for "newer"
+        if direction == "older":
+            trajectory_result = await session.execute(
+                select(SandboxEvent)
+                .filter(pagination_filter)
+                .order_by(SandboxEvent.created_at.desc())
+                .limit(limit + 1)  # +1 to check if there are more
+            )
+        else:
+            trajectory_result = await session.execute(
+                select(SandboxEvent)
+                .filter(pagination_filter)
+                .order_by(SandboxEvent.created_at.asc())
+                .limit(limit + 1)
+            )
+
+        trajectory_events = list(trajectory_result.scalars().all())
+
+        # Check if there are more events
+        has_more = len(trajectory_events) > limit
+        if has_more:
+            trajectory_events = trajectory_events[:limit]
+
+        # For "newer" direction, reverse to maintain newest-first order
+        if direction == "newer":
+            trajectory_events = list(reversed(trajectory_events))
+
+        # Filter out noisy explore subagent events
+        # These are tool_use/tool_result events with Read/Glob/Grep from explore subagents
+        def is_noisy_explore_event(event: SandboxEvent) -> bool:
+            if event.event_type not in ("agent.tool_use", "agent.tool_result"):
+                return False
+            if not event.event_data:
+                return False
+            # Check if it's from an explore subagent
+            tool = event.event_data.get("tool", "")
+            tool_input = event.event_data.get("tool_input", {})
+            # Filter Read/Glob/Grep that are clearly explore operations
+            if tool in ("Read", "Glob", "Grep"):
+                # Keep if it's the main agent (no subagent context)
+                # Filter if it looks like bulk exploration
+                if isinstance(tool_input, dict):
+                    # Glob with ** patterns is exploratory
+                    pattern = tool_input.get("pattern", "")
+                    if tool == "Glob" and "**" in str(pattern):
+                        return True
+                    # Grep searches are usually exploratory
+                    if tool == "Grep":
+                        return True
+            return False
+
+        # Apply noise filter
+        filtered_events = [e for e in trajectory_events if not is_noisy_explore_event(e)]
+
+        trajectory_count = len(filtered_events)
+
+        # Build cursors for pagination
+        next_cursor = None  # Cursor for loading older events
+        prev_cursor = None  # Cursor for loading newer events
+
+        if filtered_events:
+            # Oldest event in batch is cursor for "load older"
+            next_cursor = str(filtered_events[-1].id) if has_more else None
+            # Newest event in batch is cursor for "load newer" (when scrolling back up)
+            prev_cursor = str(filtered_events[0].id)
 
         return {
             "sandbox_id": sandbox_id,
@@ -1270,7 +1371,7 @@ async def query_trajectory_summary_async(
                     "source": e.source,
                     "created_at": e.created_at,
                 }
-                for e in trajectory_events
+                for e in filtered_events
             ],
             "heartbeat_summary": {
                 "count": heartbeat_count,
@@ -1279,45 +1380,63 @@ async def query_trajectory_summary_async(
             },
             "total_events": total_count,
             "trajectory_events": trajectory_count,
+            "next_cursor": next_cursor,
+            "prev_cursor": prev_cursor,
+            "has_more": has_more,
         }
 
 
 @router.get("/{sandbox_id}/trajectory", response_model=TrajectorySummaryResponse)
 async def get_sandbox_trajectory(
     sandbox_id: str,
-    limit: int = Query(default=100, le=500, ge=1, description="Max events to return"),
+    limit: int = Query(default=100, le=1000, ge=1, description="Max events to return per page"),
+    cursor: Optional[str] = Query(default=None, description="Event ID cursor for pagination"),
+    direction: str = Query(default="older", description="Load 'older' or 'newer' events from cursor"),
 ) -> TrajectorySummaryResponse:
     """
-    Get trajectory summary for a sandbox with heartbeat aggregation.
+    Get trajectory summary for a sandbox with heartbeat aggregation and cursor-based pagination.
 
     This endpoint is optimized for viewing agent activity by:
     - Excluding heartbeat events from the main event list
     - Providing a summary of heartbeats (count, first timestamp, last timestamp)
-    - Returning events in chronological order (oldest to newest)
+    - Filtering noisy explore subagent events (Glob/Grep)
+    - Supporting cursor-based infinite scroll pagination
 
+    Pagination:
+    - Initial load: No cursor, returns newest events first
+    - Load older: Pass `cursor=next_cursor` with `direction=older`
+    - Load newer: Pass `cursor=prev_cursor` with `direction=newer`
+
+    The frontend should reverse the order for chronological display if needed.
     Much faster than fetching all events when there are many heartbeats.
 
     Args:
         sandbox_id: Sandbox identifier (from URL path)
-        limit: Maximum number of trajectory events to return (default: 100, max: 500)
+        limit: Maximum number of trajectory events to return per page (default: 100, max: 1000)
+        cursor: Event ID to paginate from (for infinite scroll)
+        direction: "older" to load events older than cursor, "newer" for newer events
 
     Returns:
-        TrajectorySummaryResponse with filtered events and heartbeat summary
+        TrajectorySummaryResponse with filtered events, heartbeat summary, and pagination cursors
 
     Example:
-        GET /api/v1/sandboxes/sandbox-abc123/trajectory?limit=50
+        Initial load: GET /api/v1/sandboxes/sandbox-abc123/trajectory?limit=100
+        Load more: GET /api/v1/sandboxes/sandbox-abc123/trajectory?limit=100&cursor=event-id&direction=older
 
         Response:
         {
             "sandbox_id": "sandbox-abc123",
-            "events": [...],  // Non-heartbeat events only
+            "events": [...],  // Non-heartbeat, non-noise events only
             "heartbeat_summary": {
                 "count": 150,
                 "first_heartbeat": "2025-12-19T10:00:00Z",
                 "last_heartbeat": "2025-12-19T10:25:00Z"
             },
             "total_events": 165,
-            "trajectory_events": 15
+            "trajectory_events": 15,
+            "next_cursor": "event-id-123",  // For loading older events
+            "prev_cursor": "event-id-456",  // For loading newer events
+            "has_more": true
         }
     """
     try:
@@ -1327,6 +1446,8 @@ async def get_sandbox_trajectory(
             db=db,
             sandbox_id=sandbox_id,
             limit=limit,
+            cursor=cursor,
+            direction=direction,
         )
         return TrajectorySummaryResponse(
             sandbox_id=result["sandbox_id"],
@@ -1334,17 +1455,19 @@ async def get_sandbox_trajectory(
             heartbeat_summary=HeartbeatSummary(**result["heartbeat_summary"]),
             total_events=result["total_events"],
             trajectory_events=result["trajectory_events"],
+            next_cursor=result.get("next_cursor"),
+            prev_cursor=result.get("prev_cursor"),
+            has_more=result.get("has_more", False),
         )
     except Exception as e:
-        logger.error(f"Failed to get trajectory for sandbox {sandbox_id}: {e}")
-        # Return empty response if error
-        return TrajectorySummaryResponse(
-            sandbox_id=sandbox_id,
-            events=[],
-            heartbeat_summary=HeartbeatSummary(count=0),
-            total_events=0,
-            trajectory_events=0,
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(
+            f"Failed to get trajectory for sandbox {sandbox_id}: {e}\n{error_details}"
         )
+        # Re-raise to let FastAPI handle the error and return a proper 500 response
+        # This makes debugging easier - the frontend will see the error instead of empty events
+        raise
 
 
 # ============================================================================
