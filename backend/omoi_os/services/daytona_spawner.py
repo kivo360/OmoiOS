@@ -134,6 +134,7 @@ class DaytonaSpawnerService:
         extra_env: Optional[Dict[str, str]] = None,
         labels: Optional[Dict[str, str]] = None,
         runtime: str = "openhands",  # "openhands" or "claude"
+        execution_mode: str = "implementation",  # "exploration", "implementation", "validation"
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -145,6 +146,10 @@ class DaytonaSpawnerService:
             extra_env: Additional environment variables
             labels: Labels for the sandbox
             runtime: Agent runtime to use - "openhands" (default) or "claude"
+            execution_mode: Skill loading mode - determines which skills are loaded
+                - "exploration": For feature definition (creates specs/tickets/tasks)
+                - "implementation": For task execution (writes code, default)
+                - "validation": For verifying implementation
 
         Returns:
             Sandbox ID
@@ -175,6 +180,7 @@ class DaytonaSpawnerService:
         env_vars = {
             "AGENT_ID": agent_id,
             "TASK_ID": task_id,
+            "EXECUTION_MODE": execution_mode,  # Controls prompt and skill behavior
             "MCP_SERVER_URL": self.mcp_server_url,
             "CALLBACK_URL": base_url,  # For EventReporter to use correct API URL
             "PHASE_ID": phase_id,
@@ -305,11 +311,14 @@ class DaytonaSpawnerService:
         # Handle session resumption for Claude runtime
         if runtime == "claude" and self.db:
             resume_session_id = None
+            resume_from_task = extra_env.get("RESUME_FROM_TASK") if extra_env else None
+
             if extra_env and extra_env.get("RESUME_SESSION_ID"):
                 resume_session_id = extra_env["RESUME_SESSION_ID"]
             elif extra_env and extra_env.get("resume_session_id"):
                 resume_session_id = extra_env["resume_session_id"]
 
+            # Option 1: Resume by session_id
             if resume_session_id:
                 # Retrieve session transcript from database
                 from omoi_os.api.routes.sandbox import get_session_transcript
@@ -324,6 +333,24 @@ class DaytonaSpawnerService:
                 else:
                     logger.warning(
                         f"Session transcript not found for {resume_session_id}, starting fresh session"
+                    )
+
+            # Option 2: Resume by task_id (looks up session from the task's previous runs)
+            elif resume_from_task:
+                from omoi_os.api.routes.sandbox import get_session_transcript_for_task
+
+                session_id, transcript_b64 = get_session_transcript_for_task(
+                    self.db, resume_from_task
+                )
+                if session_id and transcript_b64:
+                    env_vars["RESUME_SESSION_ID"] = session_id
+                    env_vars["SESSION_TRANSCRIPT_B64"] = transcript_b64
+                    logger.info(
+                        f"Retrieved session transcript for task {resume_from_task[:8]}... (session: {session_id[:8]}...)"
+                    )
+                else:
+                    logger.debug(
+                        f"No session transcript found for task {resume_from_task}, starting fresh session"
                     )
 
         # Add extra env vars (can override transcript if explicitly provided)
@@ -398,6 +425,7 @@ class DaytonaSpawnerService:
                 env_vars=env_vars,
                 labels=sandbox_labels,
                 runtime=runtime,
+                execution_mode=execution_mode,
             )
 
             # Update status
@@ -446,6 +474,7 @@ class DaytonaSpawnerService:
         env_vars: Dict[str, str],
         labels: Dict[str, str],
         runtime: str = "openhands",
+        execution_mode: str = "implementation",
     ) -> None:
         """Create a Daytona sandbox via their API.
 
@@ -456,6 +485,7 @@ class DaytonaSpawnerService:
             env_vars: Environment variables to set in sandbox
             labels: Labels for sandbox organization
             runtime: Agent runtime - "openhands" or "claude"
+            execution_mode: Skill loading mode - determines which skills are loaded
         """
         try:
             from daytona import (
@@ -518,7 +548,7 @@ class DaytonaSpawnerService:
                 info.extra_data["daytona_sandbox_id"] = sandbox.id
 
             # Set environment variables and start the worker
-            await self._start_worker_in_sandbox(sandbox, env_vars, runtime)
+            await self._start_worker_in_sandbox(sandbox, env_vars, runtime, execution_mode)
 
             logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
 
@@ -535,6 +565,7 @@ class DaytonaSpawnerService:
         sandbox: Any,
         env_vars: Dict[str, str],
         runtime: str = "openhands",
+        execution_mode: str = "implementation",
     ) -> None:
         """Start the sandbox worker inside the Daytona sandbox.
 
@@ -542,6 +573,7 @@ class DaytonaSpawnerService:
             sandbox: Daytona sandbox instance
             env_vars: Environment variables for the worker
             runtime: Agent runtime - "openhands" or "claude"
+            execution_mode: Skill loading mode - determines which skills are loaded
         """
         # Extract git clone parameters (don't pass token to env vars for security)
         github_repo = env_vars.pop("GITHUB_REPO", None)
@@ -621,13 +653,16 @@ class DaytonaSpawnerService:
 
         # Upload Claude skills to sandbox (Claude runtime only)
         if runtime == "claude":
-            logger.info("Uploading Claude skills to sandbox...")
+            logger.info(f"Uploading Claude skills for '{execution_mode}' mode...")
             try:
                 # Create skills directory
                 sandbox.process.exec("mkdir -p /root/.claude/skills")
 
-                # Get skills and upload each one
-                skills = get_skills_for_upload()
+                # Get skills based on execution mode
+                # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
+                # - implementation: git-workflow, code-review, etc. (for executing tasks)
+                # - validation: code-review, test-writer (for validating implementation)
+                skills = get_skills_for_upload(mode=execution_mode)
                 for skill_path, content in skills.items():
                     # Create parent directory for skill
                     parent_dir = "/".join(skill_path.rsplit("/", 1)[:-1])
@@ -636,7 +671,7 @@ class DaytonaSpawnerService:
                     sandbox.fs.upload_file(content.encode("utf-8"), skill_path)
                     logger.debug(f"Uploaded skill: {skill_path}")
 
-                logger.info(f"Uploaded {len(skills)} Claude skills to sandbox")
+                logger.info(f"Uploaded {len(skills)} Claude skills for '{execution_mode}' mode")
             except Exception as e:
                 logger.warning(f"Failed to upload Claude skills: {e}")
                 # Continue without skills - agent can still function

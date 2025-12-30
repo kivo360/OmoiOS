@@ -72,72 +72,91 @@ OmoiOS follows a **spec-driven autonomous engineering workflow** where users des
 
 ## Dashboard Layout
 
+### Current Implementation
+
+The UI uses a three-column layout with IconRail navigation and route-aware contextual panels.
+
+**Key Components:**
+- `frontend/components/layout/IconRail.tsx` - Primary navigation
+- `frontend/components/layout/ContextualPanel.tsx` - Route-aware sidebar
+- `frontend/components/panels/TasksPanel.tsx` - Sandbox tasks grouped by status
+
 ### Main Dashboard Structure
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Header: Logo | Projects | 🛡️ Guardian | Search | Notifications | Profile  │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌─────────┐  ┌──────────────────────────────────────┐   │
-│  │ Sidebar │  │  Main Content Area                    │   │
-│  │         │  │                                       │   │
-│  │ • Home  │  │  ┌────────────────────────────────┐ │   │
-│  │ • Board │  │  │ Overview Section                │ │   │
-│  │ • Graph │  │  │ • Total Specs: 5                │ │   │
-│  │ • Specs │  │  │ • Active Agents: 3              │ │   │
-│  │ • Stats │  │  │ • Tickets in Progress: 12        │ │   │
-│  │ • Agents│  │  │ • Recent Commits: 8              │ │   │
-│  │ • Cost  │  │  │ • Guardian: 🟢 Monitoring        │ │   │
-│  │ • Memory│  │  │ • System Health: 94%            │ │   │
-│  │ • Audit │  │  │ • Budget: 78% used              │ │   │
-│  │ • Health│  │  └────────────────────────────────┘ │   │
-│  │         │  │  ┌────────────────────────────────┐ │   │
-│  │         │  │  │ Active Specs Grid               │ │   │
-│  │         │  │  │                                │ │   │
-│  │         │  │  │ ┌──────────┐  ┌──────────┐   │ │   │
-│  │         │  │  │ │ Spec 1    │  │ Spec 2    │   │ │   │
-│  │         │  │  │ │ Progress: │  │ Progress: │   │ │   │
-│  │         │  │  │ │ ████░░ 60%│  │ ██████ 80%│   │ │   │
-│  │         │  │  │ └──────────┘  └──────────┘   │ │   │
-│  │         │  │  └────────────────────────────────┘ │   │
-│  │         │  │                                       │   │
-│  │         │  │  ┌────────────────────────────────┐ │   │
-│  │         │  │  │ Quick Actions                   │ │   │
-│  │         │  │  │ [+ New Spec] [+ New Project]   │ │   │
-│  │         │  │  └────────────────────────────────┘ │   │
-│  └─────────┘  └──────────────────────────────────────┘   │
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Right Sidebar (Collapsible)                        │  │
-│  │  Recent Activity Feed                                │  │
-│  │  • Spec "Auth System" requirements approved          │  │
-│  │  • Agent worker-1 completed task "Setup JWT"        │  │
-│  │  • Discovery: Bug found in login flow               │  │
-│  │  • 🛡️ Guardian intervention sent to worker-2        │  │
-│  │  • 🔄 Monitoring cycle completed (5 agents checked) │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                                                                         │
+│  ┌──────┐  ┌─────────────────┐  ┌──────────────────────────────────┐  │
+│  │Icon  │  │ Contextual      │  │  Main Content Area                │  │
+│  │Rail  │  │ Panel           │  │                                   │  │
+│  │      │  │                 │  │  Route-specific content:          │  │
+│  │ Logo │  │ Route-aware     │  │                                   │  │
+│  │      │  │ sidebar that    │  │  /command → Prompt input +        │  │
+│  │ ──── │  │ changes based   │  │             loading state         │  │
+│  │ Term │  │ on pathname:    │  │                                   │  │
+│  │ Proj │  │                 │  │  /sandbox/:id → Event stream +    │  │
+│  │ Phas │  │ /command →      │  │                 agent chat        │  │
+│  │ Sand │  │   TasksPanel    │  │                                   │  │
+│  │ Anal │  │                 │  │  /projects → Project grid         │  │
+│  │ Orgs │  │ /sandbox/* →    │  │                                   │  │
+│  │      │  │   TasksPanel    │  │  /phases → Workflow phases        │  │
+│  │ ──── │  │                 │  │                                   │  │
+│  │ Sett │  │ /projects →     │  │  /sandboxes → All sandboxes       │  │
+│  │      │  │   ProjectsPanel │  │                                   │  │
+│  │      │  │                 │  │  /analytics → Metrics dashboard   │  │
+│  │      │  │ /phases →       │  │                                   │  │
+│  │      │  │   PhasesPanel   │  │  /organizations → Team mgmt       │  │
+│  │      │  │                 │  │                                   │  │
+│  └──────┘  └─────────────────┘  └──────────────────────────────────┘  │
+│                                                                         │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Dashboard Sections:**
-- **Overview Section**: Key metrics (total specs, active agents, tickets in progress, recent commits, Guardian status, system health)
-- **Active Specs Grid**: Cards showing all active specs with progress bars
-- **Quick Actions**: Buttons for common actions (+ New Spec, + New Project)
-- **Recent Activity Sidebar**: Chronological feed of recent events including monitoring cycles (collapsible)
-- **Guardian Status Indicator**: Real-time monitoring system status in header (🛡️ icon)
+### IconRail Navigation
 
-**Managing Multiple Specs:**
-- Dashboard shows grid view of all active specs
-- Each spec card displays:
-  - Spec name and description
-  - Progress bar (0-100%)
-  - Status badge (Draft, Requirements, Design, Tasks, Executing, Completed)
-  - Last updated timestamp
-  - Quick actions ([View] [Edit] [Export])
-- Filter options: All | Active | Completed | Draft
-- Search bar to find specs by name
+| Icon | Section | Route | Description |
+|------|---------|-------|-------------|
+| Terminal | Command | `/command` | Primary entry point - describe what to build |
+| FolderGit2 | Projects | `/projects` | Project management and selection |
+| Workflow | Phases | `/phases` | Workflow phase configuration |
+| Box | Sandboxes | `/sandboxes` | List of all sandbox executions |
+| BarChart3 | Analytics | `/analytics` | Usage metrics and performance |
+| Building2 | Organizations | `/organizations` | Team and org management |
+| Settings | Settings | `/settings` | User and system preferences |
+
+### ContextualPanel Mapping
+
+| Route Pattern | Panel | Content |
+|---------------|-------|---------|
+| `/command` | TasksPanel | Sandboxes grouped by status (Running, Pending, Completed, Failed) |
+| `/sandbox/*` | TasksPanel | Same as above, with current sandbox highlighted |
+| `/projects` | ProjectsPanel | Project list and quick actions |
+| `/phases` | PhasesPanel | Phase configuration |
+| `/sandboxes` | TasksPanel | Full sandbox history |
+
+### TasksPanel Structure
+
+The TasksPanel groups sandbox tasks by execution status:
+
+```
+┌─────────────────────┐
+│ Running             │  ← Currently executing sandboxes
+│ ├─ Payment API      │
+│ └─ Auth System      │
+├─────────────────────┤
+│ Pending             │  ← Queued for execution
+│ └─ Database Setup   │
+├─────────────────────┤
+│ Completed           │  ← Successfully finished
+│ ├─ User Profile     │
+│ └─ API Routes       │
+├─────────────────────┤
+│ Failed              │  ← Execution errors
+│ └─ Image Upload     │
+└─────────────────────┘
+```
+
+Clicking any task navigates to `/sandbox/:sandboxId` for detailed monitoring.
 
 ---
 

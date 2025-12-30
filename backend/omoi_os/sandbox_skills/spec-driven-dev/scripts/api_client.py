@@ -164,9 +164,11 @@ class OmoiOSClient:
         Returns:
             Tuple of (success, message/error)
         """
+        # Use full_body for rich AI context, fallback to description
+        description_text = ticket.full_body if ticket.full_body else ticket.description
         payload = {
             "title": ticket.title,
-            "description": ticket.description,
+            "description": description_text,
             "priority": ticket.priority,
             "phase_id": "PHASE_IMPLEMENTATION",  # Default phase
         }
@@ -229,10 +231,12 @@ class OmoiOSClient:
         if task.dependencies.depends_on:
             dependencies = {"depends_on": task.dependencies.depends_on}
 
+        # Use full_body for rich AI context, fallback to objective
+        description_text = task.full_body if task.full_body else task.objective
         payload = {
             "ticket_id": ticket_api_id,
             "title": task.title,
-            "description": task.objective,
+            "description": description_text,
             "task_type": "implementation",  # Default type
             "priority": "MEDIUM",  # Default priority
             "phase_id": "PHASE_IMPLEMENTATION",
@@ -775,9 +779,10 @@ class OmoiOSClient:
             if existing:
                 ticket_api_ids[ticket.id] = existing["id"]
 
-                # Check if description needs update
+                # Check if description needs update (use full_body for rich context)
+                description_text = ticket.full_body if ticket.full_body else ticket.description
                 existing_desc = existing.get("description", "") or ""
-                if existing_desc.strip() != ticket.description.strip():
+                if existing_desc.strip() != description_text.strip():
                     if dry_run:
                         summary.add(
                             SyncResult(
@@ -789,7 +794,7 @@ class OmoiOSClient:
                         )
                     else:
                         success, msg = await self.update_ticket_description(
-                            existing["id"], ticket.description
+                            existing["id"], description_text
                         )
                         summary.add(
                             SyncResult(
@@ -843,9 +848,10 @@ class OmoiOSClient:
             existing = task_by_title.get(task.title)
 
             if existing:
-                # Check if description needs update
+                # Check if description needs update (use full_body for rich context)
+                description_text = task.full_body if task.full_body else task.objective
                 existing_desc = existing.get("description", "") or ""
-                if existing_desc.strip() != task.objective.strip():
+                if existing_desc.strip() != description_text.strip():
                     if dry_run:
                         summary.add(
                             SyncResult(
@@ -857,7 +863,7 @@ class OmoiOSClient:
                         )
                     else:
                         success, msg = await self.update_task_description(
-                            existing["id"], task.objective
+                            existing["id"], description_text
                         )
                         summary.add(
                             SyncResult(

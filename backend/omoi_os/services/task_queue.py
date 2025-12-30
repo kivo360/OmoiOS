@@ -1512,3 +1512,198 @@ class TaskQueueService:
 
             result = await session.execute(stmt)
             return list(result.scalars().all())
+
+    # =========================================================================
+    # CONCURRENCY CONTROL METHODS
+    # =========================================================================
+    # These methods help enforce concurrency limits per project to prevent
+    # spawning too many sandboxes at once.
+
+    def get_running_count_by_project(self, project_id: str) -> int:
+        """
+        Get the count of currently running tasks for a project.
+
+        Running tasks include those in 'claiming', 'assigned', or 'running' status.
+        This is used to enforce concurrency limits per project.
+
+        Args:
+            project_id: UUID of the project
+
+        Returns:
+            Count of running tasks for the project
+        """
+        from omoi_os.models.ticket import Ticket
+
+        with self.db.get_session() as session:
+            # Join tasks with tickets to filter by project
+            count = (
+                session.query(Task)
+                .join(Ticket, Task.ticket_id == Ticket.id)
+                .filter(
+                    Ticket.project_id == project_id,
+                    Task.status.in_(["claiming", "assigned", "running"]),
+                )
+                .count()
+            )
+            return count
+
+    async def get_running_count_by_project_async(self, project_id: str) -> int:
+        """
+        Async version: Get the count of currently running tasks for a project.
+
+        Args:
+            project_id: UUID of the project
+
+        Returns:
+            Count of running tasks for the project
+        """
+        from sqlalchemy import func
+        from omoi_os.models.ticket import Ticket
+
+        async with self.db.get_async_session() as session:
+            stmt = (
+                select(func.count(Task.id))
+                .join(Ticket, Task.ticket_id == Ticket.id)
+                .filter(
+                    Ticket.project_id == project_id,
+                    Task.status.in_(["claiming", "assigned", "running"]),
+                )
+            )
+            result = await session.execute(stmt)
+            return result.scalar() or 0
+
+    def get_project_for_task(self, task_id: str) -> Optional[str]:
+        """
+        Get the project ID for a task (via its ticket).
+
+        Args:
+            task_id: UUID of the task
+
+        Returns:
+            Project ID if found, None otherwise
+        """
+        from omoi_os.models.ticket import Ticket
+
+        with self.db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+            if not task:
+                return None
+
+            ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+            if not ticket:
+                return None
+
+            return ticket.project_id
+
+    def get_next_task_with_concurrency_limit(
+        self,
+        max_concurrent_per_project: int = 5,
+        phase_id: Optional[str] = None,
+        agent_capabilities: Optional[List[str]] = None,
+    ) -> Task | None:
+        """
+        Get highest-scored pending task that respects project concurrency limits.
+
+        This method extends get_next_task() by also checking that the task's
+        project hasn't exceeded its concurrency limit before claiming.
+
+        Args:
+            max_concurrent_per_project: Maximum concurrent tasks per project (default: 5)
+            phase_id: Phase identifier to filter by (None = any phase)
+            agent_capabilities: Optional list of agent capabilities for matching
+
+        Returns:
+            Task object or None if no eligible tasks available
+        """
+        from omoi_os.models.ticket import Ticket
+
+        with self.db.get_session() as session:
+            # Get pending tasks without sandbox
+            query = session.query(Task).filter(
+                Task.status == "pending",
+                Task.sandbox_id.is_(None),
+            )
+            if phase_id is not None:
+                query = query.filter(Task.phase_id == phase_id)
+            tasks = query.all()
+
+            if not tasks:
+                return None
+
+            # Filter out tasks with incomplete dependencies, capability mismatches,
+            # AND tasks whose projects have hit concurrency limits
+            available_tasks = []
+            project_running_counts: dict[str, int] = {}
+
+            for task in tasks:
+                if not self._check_dependencies_complete(session, task):
+                    continue
+
+                if agent_capabilities is not None and not self._check_capability_match(
+                    task, agent_capabilities
+                ):
+                    continue
+
+                # Get project ID for this task
+                ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                if not ticket or not ticket.project_id:
+                    # Tasks without a project are allowed (no limit)
+                    task.score = self.scorer.compute_score(task)
+                    available_tasks.append(task)
+                    continue
+
+                project_id = ticket.project_id
+
+                # Check/cache running count for this project
+                if project_id not in project_running_counts:
+                    count = (
+                        session.query(Task)
+                        .join(Ticket, Task.ticket_id == Ticket.id)
+                        .filter(
+                            Ticket.project_id == project_id,
+                            Task.status.in_(["claiming", "assigned", "running"]),
+                        )
+                        .count()
+                    )
+                    project_running_counts[project_id] = count
+
+                # Skip if project is at capacity
+                if project_running_counts[project_id] >= max_concurrent_per_project:
+                    logger.debug(
+                        f"Project {project_id} at capacity ({project_running_counts[project_id]}/{max_concurrent_per_project}), "
+                        f"skipping task {task.id}"
+                    )
+                    continue
+
+                # Compute score and add to available tasks
+                task.score = self.scorer.compute_score(task)
+                available_tasks.append(task)
+
+            if not available_tasks:
+                return None
+
+            # Sort by score descending
+            task = max(available_tasks, key=lambda t: t.score)
+
+            # Atomic claim using raw SQL
+            result = session.execute(
+                text("""
+                    UPDATE tasks
+                    SET status = 'claiming', score = :score
+                    WHERE id = :task_id
+                    AND status = 'pending'
+                    AND sandbox_id IS NULL
+                    RETURNING id
+                """),
+                {"task_id": str(task.id), "score": task.score}
+            )
+            claimed_row = result.fetchone()
+            session.commit()
+
+            if not claimed_row:
+                logger.debug(f"Task {task.id} was claimed by another process, skipping")
+                return None
+
+            session.refresh(task)
+            session.expunge(task)
+            return task

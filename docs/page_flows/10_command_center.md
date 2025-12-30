@@ -2,7 +2,34 @@
 
 **Part of**: [Page Flow Documentation](./README.md)
 
-**Design Reference**: Cursor BG Agent - warm cream background (#F5F5F0), minimal header, left sidebar with agent history, centered prompt input.
+**Note**: The Command Center is the primary landing page for authenticated users. It follows a sandbox-based approach where users describe what they want to build, and the system spawns an isolated sandbox environment with an AI agent.
+
+---
+
+## Current Implementation
+
+The Command Center (`/command`) is implemented in `/frontend/app/(app)/command/page.tsx` and uses:
+- **TasksPanel** in the ContextualPanel (sidebar) showing running/completed/failed tasks grouped by status
+- **PromptInput** component for the main text input
+- **RepoSelector** for selecting project/repository context
+- **ModelSelector** for choosing the AI model
+
+### Layout Structure
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ IconRail │ ContextualPanel (TasksPanel)  │   Main Content   │
+│   56px   │          256px                │      flex-1      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Submission Flow
+
+1. User types prompt and submits
+2. Frontend creates a ticket via `POST /api/v1/tickets`
+3. Frontend subscribes to WebSocket events, waiting for `SANDBOX_SPAWNED`
+4. Fallback polling every 3s checks for tasks with `sandbox_id`
+5. When sandbox is ready, redirects to `/sandbox/:sandboxId`
 
 ---
 
@@ -10,14 +37,12 @@
 
 | Element | Specification |
 |---------|---------------|
-| Background | Warm cream #F5F5F0 |
-| Sidebar Width | 220px (collapsible) |
+| Background | bg-background (theme-aware) |
+| Sidebar Width | 256px (collapsible to 40px) |
 | Prompt Max-Width | 700px (centered) |
-| Agent Card | Status icon + Task name + Time + Line changes (+X -Y) + Repo |
-| Line Changes | JetBrains Mono, green (#22863A) for +, red (#CB2431) for - |
-| Time Groups | TODAY, THIS WEEK, THIS MONTH (11px uppercase, muted) |
-| Header | Minimal - right-aligned 🛡️ Guardian indicator + Dashboard link + Profile avatar |
-| Guardian Indicator | 🟢 Active (monitoring) / 🟡 Paused / 🔴 Issue - clickable to /health |
+| Task Card | Status icon + Task name + Time ago |
+| Status Groups | RUNNING, PENDING, COMPLETED, FAILED |
+| Header | Minimal header with MinimalHeader component |
 
 ---
 ### Flow 33: Command Center (Primary Landing Page)
@@ -289,68 +314,63 @@
 
 ---
 
-### Flow 35: Recent Agents Sidebar
+### Flow 35: TasksPanel Sidebar (Current Implementation)
+
+The sidebar uses `TasksPanel` component which groups tasks by status:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  COMPONENT: Recent Agents Sidebar                            │
+│  COMPONENT: TasksPanel (ContextualPanel sidebar)             │
 │                                                              │
 │  ┌────────────────┐                                         │
 │  │                │                                         │
-│  │  Search agents │                                         │
-│  │  [🔍________] │                                         │
-│  │               │                                         │
-│  │  + New Agent  │ ← Quick action to start fresh           │
-│  │               │                                         │
+│  │  [Search tasks.]│                                        │
+│  │  [Filter][Sort]│                                         │
+│  │                │                                         │
+│  │  [+ New Task]  │ ← Links to /command                    │
+│  │                │                                         │
 │  │  ─────────── │                                         │
-│  │  Today        │                                         │
+│  │  RUNNING      │                                         │
 │  │               │                                         │
 │  │  ┌──────────┐ │                                         │
-│  │  │ ✓ Auth   │ │ ← Completed (green check)              │
-│  │  │   system │ │                                         │
-│  │  │   1h     │ │                                         │
-│  │  │   proj-a │ │ ← Repo indicator                       │
-│  │  └──────────┘ │                                         │
-│  │               │                                         │
-│  │  ┌──────────┐ │                                         │
-│  │  │ ⟳ Fix    │ │ ← In Progress (spinner)                │
-│  │  │   API    │ │                                         │
-│  │  │   29 -10 │ │ ← +lines/-lines indicator              │
-│  │  │   proj-b │ │                                         │
+│  │  │⟳ Fix auth│ │ ← Running (spinner icon)               │
+│  │  │  running │ │                                         │
+│  │  │  5m      │ │                                         │
 │  │  └──────────┘ │                                         │
 │  │               │                                         │
 │  │  ─────────── │                                         │
-│  │  This Week   │                                         │
+│  │  PENDING      │                                         │
 │  │               │                                         │
 │  │  ┌──────────┐ │                                         │
-│  │  │ ✓ Tests  │ │                                         │
-│  │  │   87 -34 │ │                                         │
-│  │  │   1d     │ │                                         │
-│  │  └──────────┘ │                                         │
-│  │               │                                         │
-│  │  ┌──────────┐ │                                         │
-│  │  │ ✗ DB mig │ │ ← Failed (red X)                       │
-│  │  │   Errored│ │                                         │
-│  │  │   2d     │ │                                         │
+│  │  │⏳ Setup  │ │ ← Pending (clock icon)                  │
+│  │  │  pending │ │                                         │
+│  │  │  10m     │ │                                         │
 │  │  └──────────┘ │                                         │
 │  │               │                                         │
 │  │  ─────────── │                                         │
-│  │  This Month  │                                         │
-│  │  ... more    │                                         │
+│  │  COMPLETED    │                                         │
+│  │               │                                         │
+│  │  ┌──────────┐ │                                         │
+│  │  │✓ Add dash│ │ ← Completed (check icon)               │
+│  │  │  completed│ │                                         │
+│  │  │  1h      │ │                                         │
+│  │  └──────────┘ │                                         │
 │  │               │                                         │
 │  │  ─────────── │                                         │
-│  │  Errored     │ ← Quick filter for failed agents        │
-│  │  Expired     │ ← Quick filter for timed out            │
+│  │  FAILED       │                                         │
 │  │               │                                         │
-│  │  ─────────── │                                         │
-│  │  [Settings ⚙]│                                         │
-│  │  [Help ?]   │                                         │
+│  │  ┌──────────┐ │                                         │
+│  │  │✗ DB mig  │ │ ← Failed (X icon)                      │
+│  │  │  failed  │ │                                         │
+│  │  │  2h      │ │                                         │
+│  │  └──────────┘ │                                         │
+│  │               │                                         │
 │  └────────────────┘                                         │
 │                                                              │
-│          │ Click on agent card                              │
+│          │ Click on task card                               │
 │          ▼                                                  │
 │                                                              │
-│  Navigates to: /agents/:agentId (Agent Detail View)         │
+│  Navigates to: /sandbox/:sandboxId (Sandbox Detail View)    │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
 ```
@@ -507,7 +527,7 @@
 
 ## Navigation Summary
 
-### Main Routes (Updated)
+### Main Routes (Updated for Sandbox-Based UI)
 
 ```
 / (Landing - unauthenticated)
@@ -519,14 +539,11 @@
 ├── /reset-password (Password reset confirmation)
 ├── /onboarding (First-time user)
 │
-└── / (Authenticated - Command Center) ← PRIMARY
+└── /command (Authenticated - Command Center) ← PRIMARY
     │
-    ├── /analytics (Analytics Dashboard) ← SECONDARY
+    ├── /sandbox/:sandboxId (Sandbox Detail View) ← MAIN WORKFLOW
     │
-    ├── /health (System Health Dashboard) ← MONITORING
-    │   ├── /health/trajectories (Active Trajectory Analyses)
-    │   ├── /health/interventions (Intervention History)
-    │   └── /health/settings (Monitoring Configuration)
+    ├── /sandboxes (Sandbox list)
     │
     ├── /projects (Project list)
     │   ├── /projects/new (Create project)
@@ -535,21 +552,22 @@
     │   ├── /projects/:id/specs (Specs list)
     │   └── /projects/:id/specs/:specId (Spec viewer)
     │
+    ├── /phases (Phase management)
+    │
     ├── /board/:projectId (Kanban board)
     │   └── /board/:projectId/:ticketId (Ticket detail)
     │
     ├── /graph/:projectId (Dependency graph)
     │   └── /graph/:projectId/:ticketId (Ticket graph)
     │
-    ├── /agents (Agent list)
-    │   ├── /agents/spawn (Spawn agent)
-    │   ├── /agents/:agentId (Agent detail)
-    │   └── /agents/:agentId/workspace (Workspace detail)
+    ├── /analytics (Analytics Dashboard)
     │
-    ├── /workspaces (Workspace list)
-    │   └── /workspaces/:agentId (Workspace detail)
+    ├── /health (System Health Dashboard)
+    │   ├── /health/trajectories (Active Trajectory Analyses)
+    │   ├── /health/interventions (Intervention History)
+    │   └── /health/settings (Monitoring Configuration)
     │
-    ├── /commits/:commitSha (Commit diff viewer)
+    ├── /organizations (Organization management)
     │
     └── /settings (User settings)
         ├── /settings/profile (User profile)
@@ -560,14 +578,12 @@
 
 ### Key User Actions (Updated)
 
-1. **Command Center Flow**: / → Select Project → Type Task → Submit → Agent Detail View
-2. **Quick Project Start**: / → Select Unconnected Repo → Type Task → Auto-Create Project + Spawn Agent
-3. **Connect New Repo**: / → Connect New Repository → OAuth → Creates Project → Type Task → Spawn Agent
-4. **Analytics Access**: / → Click "Analytics" in nav → Analytics Dashboard
-5. **Agent History**: / → Click agent in sidebar → Agent Detail View
-6. **Return to Command**: Any page → Click logo or "Command" → /
-7. **System Health Access**: Any page → Click 🛡️ Guardian indicator → Quick Status Popover → View System Health → /health
-8. **Quick Intervention**: Any page → Click 🛡️ indicator (🟡/🔴) → See agent status → Send Intervention
+1. **Primary Flow**: /command → Type Task → Submit → Wait for Sandbox → Auto-redirect to /sandbox/:sandboxId
+2. **Monitor Sandbox**: /sandbox/:sandboxId → View Events Tab → Watch real-time agent activity
+3. **Send Message**: /sandbox/:sandboxId → Type message → Send to agent
+4. **View Task History**: /command → Click task in sidebar → /sandbox/:sandboxId
+5. **Return to Command**: Any page → Click Terminal icon in IconRail → /command
+6. **System Health Access**: Any page → Navigate to /health via IconRail or links
 
 ---
 

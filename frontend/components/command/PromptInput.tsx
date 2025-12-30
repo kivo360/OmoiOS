@@ -10,6 +10,7 @@ interface PromptInputProps {
   onSubmit?: (prompt: string) => void
   isLoading?: boolean
   placeholder?: string
+  submitLabel?: string
   className?: string
 }
 
@@ -17,6 +18,7 @@ export function PromptInput({
   onSubmit,
   isLoading = false,
   placeholder = "Ask Cursor to build, fix bugs, explore",
+  submitLabel,
   className,
 }: PromptInputProps) {
   const [value, setValue] = useState("")
@@ -76,17 +78,20 @@ export function PromptInput({
           </div>
           <Button
             type="button"
-            size="icon"
-            className="h-8 w-8"
+            size={submitLabel ? "sm" : "icon"}
+            className={submitLabel ? "h-8 gap-1.5 px-3" : "h-8 w-8"}
             onClick={handleSubmit}
             disabled={!value.trim() || isLoading}
           >
             {isLoading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <ArrowUp className="h-4 w-4" />
+              <>
+                {submitLabel && <span>{submitLabel}</span>}
+                <ArrowUp className="h-4 w-4" />
+              </>
             )}
-            <span className="sr-only">Submit</span>
+            {!submitLabel && <span className="sr-only">Submit</span>}
           </Button>
         </div>
       </div>

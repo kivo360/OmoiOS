@@ -104,7 +104,86 @@
     - Progress dashboard: Metrics update live
 ```
 
-#### 3.2 Monitoring Views
+#### 3.2 Sandbox-Based Monitoring (Frontend)
+
+The frontend provides real-time monitoring through the sandbox detail view at `/sandbox/:sandboxId`.
+
+**Current Implementation:**
+- `frontend/app/(app)/sandbox/[sandboxId]/page.tsx` - Sandbox detail view
+- `frontend/hooks/use-sandbox-monitor.ts` - WebSocket event streaming
+- `frontend/components/sandbox/EventRenderer.tsx` - Event visualization
+
+**Sandbox Detail View Structure:**
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│  IconRail  │  TasksPanel          │  Sandbox Detail View              │
+│            │  (grouped by status) │                                   │
+│            │                      │  ┌──────────────────────────────┐ │
+│            │  Running:            │  │ Tabs: [Events] [Details]     │ │
+│            │  ├─ Current sandbox  │  ├──────────────────────────────┤ │
+│            │  │   (highlighted)   │  │                              │ │
+│            │  │                   │  │ Real-time Event Stream:      │ │
+│            │  Completed:          │  │                              │ │
+│            │  ├─ Payment API      │  │ 10:23 agent.thinking         │ │
+│            │  └─ Auth System      │  │   "Analyzing requirements"   │ │
+│            │                      │  │                              │ │
+│            │                      │  │ 10:24 agent.tool_use         │ │
+│            │                      │  │   Tool: Read file.ts         │ │
+│            │                      │  │                              │ │
+│            │                      │  │ 10:25 agent.file_edited      │ │
+│            │                      │  │   Modified: src/api.ts       │ │
+│            │                      │  │                              │ │
+│            │                      │  └──────────────────────────────┘ │
+│            │                      │                                   │
+│            │                      │  ┌──────────────────────────────┐ │
+│            │                      │  │ Message Input                │ │
+│            │                      │  │ [Type a message to agent...] │ │
+│            │                      │  └──────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**WebSocket Event Types:**
+| Event | Description |
+|-------|-------------|
+| `SANDBOX_SPAWNED` | Sandbox created and agent assigned |
+| `agent.thinking` | Agent reasoning/planning |
+| `agent.tool_use` | Agent using a tool (Read, Edit, Bash, etc.) |
+| `agent.tool_completed` | Tool execution finished with result |
+| `agent.file_edited` | File was modified |
+| `agent.message` | Agent output message |
+| `TASK_COMPLETED` | Sandbox execution finished |
+
+**EventRenderer - Beautiful Event Display:**
+
+The `EventRenderer` component (`frontend/components/sandbox/EventRenderer.tsx`) provides specialized rendering for each event type:
+
+| Card Type | Used For | Features |
+|-----------|----------|----------|
+| **MessageCard** | Agent/user messages | Markdown rendering, "Thinking" indicator with amber styling |
+| **FileWriteCard** | Write/Edit tool results | Cursor-style diff view, syntax highlighting (oneDark theme), language icons (🐍 Python, ⚛️ React, 🦀 Rust, etc.), line numbers, +/- stats |
+| **BashCard** | Terminal commands | `$` prompt styling, stdout/stderr parsing, exit code badges, dark terminal theme |
+| **GlobCard** | File search results | Tree-style directory listing with folder icons, file counts |
+| **GrepCard** | Code search results | Grouped by directory, match counts, expandable |
+| **TodoCard** | Task lists | Status icons (✓ completed, ▶ in progress, ⏱ pending), progress tracking |
+| **ToolCard** | Generic tools | Collapsible with input/output JSON display |
+
+**Syntax Highlighting:**
+- Uses `react-syntax-highlighter` with Prism + oneDark theme
+- Auto-detects language from file extension
+- Supports 40+ languages (Python, TypeScript, Rust, Go, etc.)
+
+**User Interactions:**
+- View real-time event stream as agent works
+- Switch between Events and Details tabs
+- Send messages to agent while it's running
+- Navigate between sandboxes via TasksPanel
+- Expand/collapse code blocks
+- Copy code with one click
+
+---
+
+#### 3.3 Extended Monitoring Views (Planned)
 
 **Kanban Board View:**
 ```
@@ -206,7 +285,7 @@ Workspace Isolation Features:
 - Merge conflict logging: All resolutions logged for audit
 ```
 
-#### 3.3 Discovery & Workflow Branching
+#### 3.4 Discovery & Workflow Branching
 
 ```
 Agent working on Task A discovers bug:
@@ -265,7 +344,7 @@ Agent working on Task A discovers bug:
 - Discoveries saved for future reference
 - Collective intelligence improves over time
 
-#### 3.4 Collective Intelligence & Memory System
+#### 3.5 Collective Intelligence & Memory System
 
 **How Agents Learn from Each Other:**
 
@@ -344,7 +423,7 @@ Agent A encounters PostgreSQL timeout error:
 
 > 💡 **For user-facing memory management flows**, see [11_cost_memory_management.md](./11_cost_memory_management.md) (Memory Search, Patterns, Insights).
 
-#### 3.5 Guardian Interventions
+#### 3.6 Guardian Interventions
 
 ```
 Guardian monitors agent trajectories every 60 seconds:
@@ -373,7 +452,7 @@ Guardian monitors agent trajectories every 60 seconds:
 - Add constraint: Add new requirement
 - Inject tool call: Force specific action
 
-#### 3.6 System Health & Monitoring Dashboard
+#### 3.7 System Health & Monitoring Dashboard
 
 ```
 User can view System Health at any time via header indicator or sidebar:

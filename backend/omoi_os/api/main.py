@@ -196,12 +196,29 @@ async def orchestrator_loop():
                             session.add(agent)
                             session.commit()
 
-                        # Spawn sandbox
+                        # Determine execution mode from task type
+                        # Default to implementation for legacy orchestrator loop
+                        execution_mode = "implementation"
+                        if hasattr(task, "task_type") and task.task_type:
+                            # Use exploration mode for spec-creation tasks
+                            if task.task_type in (
+                                "explore_codebase", "create_spec", "create_requirements",
+                                "create_design", "create_tickets", "create_tasks",
+                                "analyze_dependencies", "define_feature"
+                            ):
+                                execution_mode = "exploration"
+                            elif task.task_type in (
+                                "validate", "validate_implementation", "review_code", "run_tests"
+                            ):
+                                execution_mode = "validation"
+
+                        # Spawn sandbox with appropriate skills for execution mode
                         sandbox_id = await daytona_spawner.spawn_for_task(
                             task_id=task_id,
                             agent_id=agent_id,
                             phase_id=phase_id,
                             agent_type=agent_type,
+                            execution_mode=execution_mode,
                         )
 
                         # Update task with sandbox info

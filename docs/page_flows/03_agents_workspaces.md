@@ -1,133 +1,256 @@
-# 3 Agents Workspaces
+# 3 Sandboxes & Agent Execution
 
 **Part of**: [Page Flow Documentation](./README.md)
 
+**Note**: The UI has shifted from an "agent-based" approach to a "sandbox-based" approach. Users interact with sandboxes (isolated execution environments) rather than directly spawning agents. Sandboxes are created automatically when tasks are launched from the Command Center.
+
 ---
-### Flow 4: Agent Management & Spawning
+
+## Architecture Overview
+
+The sandbox-based workflow follows this pattern:
+
+```
+Command Center (/command)
+        │
+        │ User describes what they want to build
+        ▼
+   Create Ticket (API)
+        │
+        │ Backend orchestrator receives ticket
+        ▼
+   Spawn Sandbox (Automatic)
+        │
+        │ Agent runs in isolated sandbox
+        ▼
+   Sandbox Detail View (/sandbox/:sandboxId)
+        │
+        │ Real-time events stream via WebSocket
+        ▼
+   User monitors progress & can send messages
+```
+
+---
+
+## UI Components
+
+### IconRail Navigation
+
+The vertical icon navigation includes these sections:
+
+| Icon | Section | Route | Description |
+|------|---------|-------|-------------|
+| Terminal | Command | `/command` | Primary landing - launch new tasks |
+| FolderGit2 | Projects | `/projects` | Project management |
+| Workflow | Phases | `/phases` | Phase management |
+| Box | Sandboxes | `/sandboxes` | View all sandboxes |
+| BarChart3 | Analytics | `/analytics` | Usage analytics |
+| Building2 | Organizations | `/organizations` | Organization settings |
+| Settings | Settings | `/settings` | User settings |
+
+### ContextualPanel (Sidebar)
+
+The contextual sidebar changes based on the current route:
+
+| Route | Panel | Content |
+|-------|-------|---------|
+| `/command` | TasksPanel | Running/Pending/Completed/Failed tasks grouped by status |
+| `/sandbox/*` | TasksPanel | Same task list with selected sandbox highlighted |
+| `/projects` | ProjectsPanel | Project list with favorites/active sections |
+| `/phases` | PhasesPanel | Phase configuration |
+| `/board/*` | ProjectsPanel | Project context for board view |
+| `/health` | HealthPanel | System health metrics |
+| `/graph/*` | GraphFiltersPanel | Graph filter options |
+
+---
+
+### Flow 4: Sandbox-Based Execution (Current Implementation)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│          PAGE: /agents (Agent List)                         │
+│          PAGE: /command (Command Center)                     │
 │                                                              │
-│  ┌──────────────────────────────────────────────────────┐   │
-│  │  Agents                                               │   │
-│  │                                                       │   │
-│  │  [Spawn Agent] [View Health]                         │   │
-│  │                                                       │   │
-│  │  ┌──────────────────────────────────────────────┐  │   │
-│  │  │ Agent: worker-1                                │  │   │
-│  │  │ Status: 🟢 Active                               │  │   │
-│  │  │ Phase: IMPLEMENTATION                          │  │   │
-│  │  │ Current Task: "Implement JWT"                  │  │   │
-│  │  │ Heartbeat: 5s ago ✓                            │  │   │
-│  │  │ [View Details] [Intervene]                     │  │   │
-│  │  └──────────────────────────────────────────────┘  │   │
-│  │                                                       │   │
-│  │  ┌──────────────────────────────────────────────┐  │   │
-│  │  │ Agent: worker-2                                │  │   │
-│  │  │ Status: 🟡 Idle                                 │  │   │
-│  │  │ Phase: INTEGRATION                             │  │   │
-│  │  │ Current Task: None                             │  │   │
-│  │  │ Heartbeat: 2s ago ✓                            │  │   │
-│  │  │ [View Details] [Assign Task]                   │  │   │
-│  │  └──────────────────────────────────────────────┘  │   │
-│  │                                                       │   │
-│  │  ┌──────────────────────────────────────────────┐  │   │
-│  │  │ Agent: worker-3                                │  │   │
-│  │  │ Status: 🔴 Stuck                                │  │   │
-│  │  │ Phase: IMPLEMENTATION                          │  │   │
-│  │  │ Current Task: "Setup OAuth2"                   │  │   │
-│  │  │ Heartbeat: 95s ago ⚠️                          │  │   │
-│  │  │ Guardian: Intervention sent 30s ago            │  │   │
-│  │  │ [View Details] [Force Intervene]              │  │   │
-│  │  └──────────────────────────────────────────────┘  │   │
-│  └──────────────────────────────────────────────────────┘   │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ IconRail │ ContextualPanel (TasksPanel)  │ Main Content │ │
+│  ├──────────┼───────────────────────────────┼──────────────┤ │
+│  │          │                               │              │ │
+│  │  [Logo]  │ [Search tasks...]             │ "What would  │ │
+│  │          │ [Filter] [Sort]               │  you like    │ │
+│  │ Terminal │ [+ New Task]                  │  to build?"  │ │
+│  │ (active) │                               │              │ │
+│  │          │ RUNNING                       │ ┌──────────┐ │ │
+│  │ Projects │ ┌────────────────────────┐   │ │[Prompt   ]│ │ │
+│  │          │ │⟳ Fix authentication    │   │ │[input... ]│ │ │
+│  │ Phases   │ │  running • 5m          │   │ └──────────┘ │ │
+│  │          │ └────────────────────────┘   │              │ │
+│  │ Sandbox  │                               │ [Model ▼]   │ │
+│  │          │ COMPLETED                     │              │ │
+│  │ Analytics│ ┌────────────────────────┐   │ ┌──────────┐ │ │
+│  │          │ │✓ Add user dashboard    │   │ │📁 repo ▼ │ │ │
+│  │ Orgs     │ │  completed • 1h        │   │ │⎇ main ▼  │ │ │
+│  │          │ └────────────────────────┘   │ └──────────┘ │ │
+│  │ Settings │                               │              │ │
+│  │          │ FAILED                        │              │ │
+│  │          │ ┌────────────────────────┐   │              │ │
+│  │          │ │✗ DB migration          │   │              │ │
+│  │          │ │  failed • 2h           │   │              │ │
+│  │          │ └────────────────────────┘   │              │ │
+│  └──────────┴───────────────────────────────┴──────────────┘ │
 │                                                              │
 └───────────────────────────┬──────────────────────────────────┘
                             │
-                            │ Click "Spawn Agent"
+                            │ User types prompt and submits
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│        PAGE: /agents/spawn (Spawn Agent Modal)             │
+│          PAGE: /command (Launching State)                    │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Spawn New Agent                                     │   │
 │  │                                                      │   │
-│  │  Agent Type:                                        │   │
-│  │  ○ Worker (Execution)                               │   │
-│  │  ○ Planner (Planning)                               │   │
-│  │  ○ Validator (Testing)                             │   │
+│  │  ┌─────────────────────────────────────────────────┐│   │
+│  │  │ ⟳ Creating task...                              ││   │
+│  │  │ ⟳ Launching sandbox environment...               ││   │
+│  │  └─────────────────────────────────────────────────┘│   │
 │  │                                                      │   │
-│  │  Phase Assignment:                                  │   │
-│  │  [Select Phase ▼]                                    │   │
-│  │  • PHASE_INITIAL                                     │   │
-│  │  • PHASE_IMPLEMENTATION                              │   │
-│  │  • PHASE_INTEGRATION                                 │   │
-│  │  • PHASE_REFACTORING                                 │   │
-│  │                                                      │   │
-│  │  Capabilities:                                      │   │
-│  │  ☑ File Editing                                     │   │
-│  │  ☑ Terminal Access                                  │   │
-│  │  ☑ Code Generation                                  │   │
-│  │  ☐ Testing                                          │   │
-│  │                                                      │   │
-│  │  Project:                                           │   │
-│  │  [Select Project ▼]                                 │   │
-│  │                                                      │   │
-│  │  [Cancel] [Spawn Agent]                             │   │
 │  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│  Steps:                                                     │
+│  1. Create ticket via API                                   │
+│  2. Wait for SANDBOX_SPAWNED event via WebSocket           │
+│  3. Redirect to /sandbox/:sandboxId                        │
 │                                                              │
 └───────────────────────────┬──────────────────────────────────┘
                             │
-                            │ Click "Spawn Agent"
+                            │ Sandbox created, redirect triggered
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│      PAGE: /agents/:agentId (Agent Detail View)            │
+│      PAGE: /sandbox/:sandboxId (Sandbox Detail View)         │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │ IconRail │ ContextualPanel (TasksPanel)  │ Main Content │ │
+│  ├──────────┼───────────────────────────────┼──────────────┤ │
+│  │          │                               │              │ │
+│  │  [Logo]  │ [Search tasks...]             │ ← Back to    │ │
+│  │          │                               │   Command    │ │
+│  │ Terminal │ RUNNING                       │              │ │
+│  │          │ ┌────────────────────────┐   │ 🤖 Task Name │ │
+│  │ Projects │ │⟳ Fix authentication    │←──│ [Running]    │ │
+│  │          │ │  selected • running    │   │              │ │
+│  │ Phases   │ └────────────────────────┘   │ sandbox-id   │ │
+│  │          │                               │              │ │
+│  │ Sandbox  │ COMPLETED                     │ [🟢 Live]    │ │
+│  │ (active) │ ...                           │ [Refresh]    │ │
+│  │          │                               │              │ │
+│  │ Analytics│                               │ [Events]     │ │
+│  │          │                               │ [Details]    │ │
+│  │ Orgs     │                               │              │ │
+│  │          │                               │ ┌──────────┐ │ │
+│  │ Settings │                               │ │ agent.   │ │ │
+│  │          │                               │ │ thinking │ │ │
+│  │          │                               │ │ ...      │ │ │
+│  │          │                               │ │          │ │ │
+│  │          │                               │ │ agent.   │ │ │
+│  │          │                               │ │ tool_use │ │ │
+│  │          │                               │ │ Read()   │ │ │
+│  │          │                               │ └──────────┘ │ │
+│  │          │                               │              │ │
+│  │          │                               │ ┌──────────┐ │ │
+│  │          │                               │ │[Message ]│ │ │
+│  │          │                               │ │[to agent]│ │ │
+│  │          │                               │ └──────────┘ │ │
+│  └──────────┴───────────────────────────────┴──────────────┘ │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+### Flow 5: Sandbox Detail View Features
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      PAGE: /sandbox/:sandboxId - Events Tab                  │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Agent: worker-1                                      │   │
-│  │  Status: 🟢 Active                                    │   │
-│  │  Phase: IMPLEMENTATION                                │   │
+│  │  ← Back to Command                                   │   │
+│  │                                                      │   │
+│  │  🤖 Build Authentication System                      │   │
+│  │  [Running] sandbox-abc123                           │   │
+│  │                                   [🟢 Live] [⟳]     │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Tabs: [Overview] [Trajectory] [Tasks] [Logs]       │   │
+│  │  [Events]  [Details]                                 │   │
+│  │  ^^^^^^^^ (active)                                   │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Overview Tab                                        │   │
+│  │  Events Stream (real-time via WebSocket)            │   │
 │  │                                                      │   │
-│  │  Current Task: "Implement JWT"                      │   │
-│  │  Progress: 60%                                      │   │
-│  │  Heartbeat: 5s ago ✓                                │   │
+│  │  ┌────────────────────────────────────────────────┐│   │
+│  │  │ 💭 agent.thinking                              ││   │
+│  │  │ "I'll analyze the codebase structure..."       ││   │
+│  │  └────────────────────────────────────────────────┘│   │
 │  │                                                      │   │
-│  │  Recent Activity:                                   │   │
-│  │  • Started task "Implement JWT" 10m ago             │   │
-│  │  • Committed changes 5m ago                         │   │
-│  │  • Guardian intervention 2m ago                      │   │
+│  │  ┌────────────────────────────────────────────────┐│   │
+│  │  │ 🔧 agent.tool_completed - Read                 ││   │
+│  │  │ src/auth/login.ts                             ││   │
+│  │  │ ▼ Show content                                 ││   │
+│  │  └────────────────────────────────────────────────┘│   │
 │  │                                                      │   │
-│  │  [View Trajectory] [Send Intervention]             │   │
+│  │  ┌────────────────────────────────────────────────┐│   │
+│  │  │ ✏️ agent.tool_completed - Write                ││   │
+│  │  │ src/auth/jwt.ts (new file)                    ││   │
+│  │  │ ▼ Show diff                                    ││   │
+│  │  └────────────────────────────────────────────────┘│   │
+│  │                                                      │   │
+│  │  ┌────────────────────────────────────────────────┐│   │
+│  │  │ 💻 agent.tool_completed - Bash                 ││   │
+│  │  │ $ npm install jsonwebtoken                     ││   │
+│  │  │ ▼ Show output                                  ││   │
+│  │  └────────────────────────────────────────────────┘│   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  Trajectory Tab                                      │   │
+│  │  [Send a message to the agent...]                   │   │
+│  │  [____________________________________] [Send]      │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│      PAGE: /sandbox/:sandboxId - Details Tab                 │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  [Events]  [Details]                                 │   │
+│  │            ^^^^^^^^^ (active)                        │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Task Information                                   │   │
 │  │                                                      │   │
-│  │  Alignment Score: 78%                               │   │
-│  │  ┌──────────────────────────────────────────────┐  │   │
-│  │  │ Timeline:                                     │  │   │
-│  │  │                                              │  │   │
-│  │  │  [10m] Started task                          │  │   │
-│  │  │  [8m]  Analyzing requirements                │  │   │
-│  │  │  [6m]  Writing code                          │  │   │
-│  │  │  [4m]  Guardian: "Focus on core flow"       │  │   │
-│  │  │  [2m]  Adjusted approach                     │  │   │
-│  │  │  [now] Testing implementation               │  │   │
-│  │  │                                              │  │   │
-│  │  └──────────────────────────────────────────────┘  │   │
+│  │  Task ID:     task-xyz789                           │   │
+│  │  Sandbox ID:  sandbox-abc123                        │   │
+│  │  Status:      [Running]                             │   │
+│  │  Priority:    Medium                                │   │
+│  │  Task Type:   implementation                        │   │
+│  │  Phase:       PHASE_IMPLEMENTATION                  │   │
+│  │  Created:     Dec 30, 2025 10:30 AM                │   │
+│  │  Started:     Dec 30, 2025 10:31 AM                │   │
 │  │                                                      │   │
-│  │  [View Full Trajectory]                            │   │
+│  │  Description:                                       │   │
+│  │  Build an authentication system with OAuth2...     │   │
+│  └──────────────────────────────────────────────────────┘   │
+│                                                              │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Event Summary                                      │   │
+│  │                                                      │   │
+│  │  Total Events:  47                                  │   │
+│  │  Tool Uses:     23                                  │   │
+│  │  File Edits:    8                                   │   │
 │  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 └─────────────────────────────────────────────────────────────┘
@@ -137,195 +260,163 @@
 
 ## API Integration
 
-### Backend Endpoints
+### Backend Endpoints (Sandbox-Based)
 
-All agent endpoints are prefixed with `/api/v1/`.
-
----
-
-### GET /api/v1/agents
-**Description:** List all registered agents
-
-**Response (200):**
-```json
-[
-  {
-    "agent_id": "uuid",
-    "agent_type": "worker",
-    "phase_id": "PHASE_IMPLEMENTATION",
-    "status": "idle",
-    "capabilities": ["python", "analysis"],
-    "capacity": 2,
-    "health_status": "healthy",
-    "tags": ["python"],
-    "last_heartbeat": "2025-01-15T10:00:00Z",
-    "created_at": "2025-01-15T09:00:00Z"
-  }
-]
+#### Task Creation (via Command Center)
 ```
-
----
-
-### POST /api/v1/agents/register
-**Description:** Register a new agent
+POST /api/v1/tickets
+```
+Creates a ticket which triggers the orchestrator to spawn a sandbox.
 
 **Request Body:**
 ```json
 {
-  "agent_type": "worker",
+  "title": "Build authentication system",
+  "description": "Full prompt text...",
   "phase_id": "PHASE_IMPLEMENTATION",
-  "capabilities": ["python", "javascript", "analysis"],
-  "capacity": 2,
-  "status": "idle",
-  "tags": ["frontend", "backend"]
+  "priority": "MEDIUM",
+  "check_duplicates": false,
+  "force_create": true
 }
 ```
 
 **Response (201):**
 ```json
 {
-  "agent_id": "uuid",
-  "agent_type": "worker",
-  "phase_id": "PHASE_IMPLEMENTATION",
-  "status": "idle",
-  "capabilities": ["python", "javascript", "analysis"],
-  "capacity": 2,
-  "health_status": "healthy",
-  "tags": ["frontend", "backend"],
-  "last_heartbeat": null,
-  "created_at": "2025-01-15T10:00:00Z"
+  "id": "ticket-uuid",
+  "title": "Build authentication system",
+  "status": "OPEN",
+  "phase_id": "PHASE_IMPLEMENTATION"
 }
 ```
 
 ---
 
-### GET /api/v1/agents/{agent_id}
-**Description:** Get specific agent details
+#### WebSocket Events (Real-Time Updates)
 
-**Path Params:** `agent_id` (string)
+The frontend subscribes to events via WebSocket at `/api/v1/events/stream`.
 
----
+**Sandbox Events:**
+- `SANDBOX_CREATED` / `SANDBOX_SPAWNED` / `sandbox.spawned` - Sandbox is ready
+- `TASK_STARTED` - Task execution began
+- `TASK_SANDBOX_ASSIGNED` - Sandbox assigned to task
 
-### PATCH /api/v1/agents/{agent_id}
-**Description:** Update agent properties
-
-**Request Body (all fields optional):**
-```json
-{
-  "capabilities": ["python", "go"],
-  "capacity": 3,
-  "status": "busy",
-  "tags": ["high-priority"],
-  "health_status": "degraded"
-}
-```
+**Agent Events (streamed to sandbox detail page):**
+- `agent.thinking` - Agent reasoning
+- `agent.tool_use` - Tool invocation started
+- `agent.tool_completed` - Tool finished with result
+- `agent.file_edited` - File modification
+- `agent.message` - Agent text output
 
 ---
 
-### GET /api/v1/agents/health
-**Description:** Get health status for all agents
+#### GET /api/v1/tasks
+**Description:** List tasks (used by TasksPanel)
 
 **Query Params:**
-- `timeout_seconds` (optional): Custom timeout for stale detection (default: 90)
+- `limit` (optional): Max tasks to return
+- `status` (optional): Filter by status
 
 **Response (200):**
 ```json
 [
   {
-    "agent_id": "uuid",
-    "health_status": "healthy",
-    "last_heartbeat": "2025-01-15T10:00:00Z",
-    "seconds_since_heartbeat": 15,
-    "is_stale": false
+    "id": "task-uuid",
+    "title": "Build authentication system",
+    "task_type": "implementation",
+    "status": "running",
+    "sandbox_id": "sandbox-uuid",
+    "ticket_id": "ticket-uuid",
+    "created_at": "2025-12-30T10:30:00Z",
+    "started_at": "2025-12-30T10:31:00Z"
   }
 ]
 ```
 
 ---
 
-### GET /api/v1/agents/{agent_id}/health
-**Description:** Get health for specific agent
-
----
-
-### GET /api/v1/agents/statistics
-**Description:** Get comprehensive agent statistics
+#### GET /api/v1/tasks/by-sandbox/:sandboxId
+**Description:** Get task associated with a sandbox
 
 **Response (200):**
 ```json
 {
-  "total_agents": 10,
-  "by_status": { "idle": 5, "busy": 3, "maintenance": 2 },
-  "by_type": { "worker": 8, "monitor": 2 },
-  "by_health": { "healthy": 8, "degraded": 1, "stale": 1 }
+  "id": "task-uuid",
+  "title": "Build authentication system",
+  "description": "Full prompt...",
+  "task_type": "implementation",
+  "status": "running",
+  "sandbox_id": "sandbox-uuid",
+  "priority": "MEDIUM",
+  "phase_id": "PHASE_IMPLEMENTATION",
+  "created_at": "2025-12-30T10:30:00Z",
+  "started_at": "2025-12-30T10:31:00Z"
 }
 ```
 
 ---
 
-### POST /api/v1/agents/{agent_id}/heartbeat
-**Description:** Send heartbeat from agent
+#### GET /api/v1/sandboxes/:sandboxId/events
+**Description:** Get historical events for a sandbox (WebSocket provides real-time)
+
+**Response (200):**
+```json
+[
+  {
+    "id": "event-uuid",
+    "sandbox_id": "sandbox-uuid",
+    "event_type": "agent.thinking",
+    "event_data": {
+      "content": "I'll analyze the codebase..."
+    },
+    "created_at": "2025-12-30T10:31:05Z"
+  }
+]
+```
+
+---
+
+#### POST /api/v1/sandboxes/:sandboxId/message
+**Description:** Send a message to the agent in a sandbox
 
 **Request Body:**
 ```json
 {
-  "agent_id": "uuid",
-  "sequence_number": 42,
-  "health_metrics": {
-    "cpu_percent": 45.5,
-    "memory_percent": 60.2,
-    "disk_percent": 35.0
-  },
-  "current_task_id": "task-uuid",
-  "checksum": "sha256-hash"
+  "content": "Can you also add password validation?"
 }
 ```
 
 **Response (200):**
 ```json
 {
-  "received": true,
-  "acknowledged_sequence": 42,
-  "server_timestamp": "2025-01-15T10:00:00Z",
-  "message": "Heartbeat acknowledged"
+  "success": true,
+  "message_id": "msg-uuid"
 }
 ```
 
 ---
 
-### GET /api/v1/agents/search
-**Description:** Search for agents by capabilities
+## Component Summary
 
-**Query Params:**
-- `capabilities`: List of required capabilities
-- `phase_id` (optional): Limit to specific phase
-- `agent_type` (optional): Filter by agent type
-- `limit` (default: 5, max: 20)
+### TasksPanel (`/components/panels/TasksPanel.tsx`)
+- Displays tasks grouped by status (Running, Pending, Completed, Failed)
+- Search/filter functionality
+- Highlights selected sandbox when on `/sandbox/:sandboxId` route
+- "New Task" button links to `/command`
 
-**Response (200):**
-```json
-[
-  {
-    "agent": { "agent_id": "uuid", "...": "..." },
-    "match_score": 0.85,
-    "matched_capabilities": ["python", "analysis"]
-  }
-]
-```
+### Command Page (`/app/(app)/command/page.tsx`)
+- Primary prompt input for describing tasks
+- Repository/branch selector
+- Model selector
+- Shows launch progress states
+- Automatically redirects to sandbox when ready
 
----
-
-### GET /api/v1/agents/stale
-**Description:** Get list of stale agents
-
----
-
-### POST /api/v1/agents/cleanup-stale
-**Description:** Mark stale agents for cleanup
-
-**Query Params:**
-- `timeout_seconds` (optional): Custom timeout
-- `mark_as` (default: "timeout"): Status to mark stale agents
+### Sandbox Detail Page (`/app/(app)/sandbox/[sandboxId]/page.tsx`)
+- Real-time event streaming via WebSocket
+- Events tab: Shows agent activity (thinking, tool use, file edits)
+- Details tab: Task metadata and event summary
+- Message input: Send messages to agent
+- Connection status indicator (Live/Disconnected)
 
 ---
 
