@@ -25,7 +25,7 @@ workspace:
 
 integrations:
   # Production URL for Daytona sandboxes (they run in remote cloud)
-  mcp_server_url: https://omoi-api-production.up.railway.app/mcp
+  mcp_server_url: https://api.omoios.dev/mcp
   enable_mcp_tools: true
 
 embedding:

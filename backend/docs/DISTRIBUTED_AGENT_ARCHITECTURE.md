@@ -57,8 +57,8 @@ Agents only need HTTP access to the MCP server. No direct database connections, 
 ## Production Deployment
 
 ### URLs
-- **API**: `https://omoi-api-production.up.railway.app`
-- **MCP Endpoint**: `https://omoi-api-production.up.railway.app/mcp/`
+- **API**: `https://api.omoios.dev`
+- **MCP Endpoint**: `https://api.omoios.dev/mcp/`
 
 ### Services (Railway)
 | Service | Purpose |
@@ -77,7 +77,7 @@ from omoi_os.tools.mcp_tools import register_mcp_tools_with_agent
 # Add all 27 MCP tools to an agent
 agent_tools = register_mcp_tools_with_agent(
     agent_tools=[],
-    mcp_url="https://omoi-api-production.up.railway.app/mcp/"
+    mcp_url="https://api.omoios.dev/mcp/"
 )
 ```
 
