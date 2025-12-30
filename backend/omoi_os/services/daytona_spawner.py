@@ -757,21 +757,10 @@ class DaytonaSpawnerService:
 
                 # Create settings.local.json with FULL permissions
                 # This is a sandbox environment - allow everything without prompts
+                # Using "*" wildcard to allow ALL tools including future additions
                 settings_content = """{
   "permissions": {
-    "allow": [
-      "Bash(*)",
-      "Read(*)",
-      "Write(*)",
-      "Edit(*)",
-      "MultiEdit(*)",
-      "Glob(*)",
-      "Grep(*)",
-      "WebFetch(*)",
-      "TodoWrite(*)",
-      "Task(*)",
-      "mcp__*"
-    ],
+    "allow": ["*"],
     "deny": []
   }
 }"""
