@@ -211,14 +211,27 @@ class DaytonaSpawnerService:
         # - True: Force enable
         # - False: Force disable
         effective_continuous_mode = continuous_mode
+        logger.info(
+            "SPAWNER: Continuous mode decision",
+            extra={
+                "continuous_mode_param": continuous_mode,
+                "runtime": runtime,
+                "execution_mode": execution_mode,
+                "task_id": task_id,
+            }
+        )
         if continuous_mode is None and runtime == "claude":
             # Auto-enable for implementation and validation modes
             # These modes need to ensure tasks complete fully (code pushed, PR created)
             effective_continuous_mode = execution_mode in ("implementation", "validation")
-            if effective_continuous_mode:
-                logger.info(
-                    f"Auto-enabling continuous mode for '{execution_mode}' mode"
-                )
+            logger.info(
+                "SPAWNER: Auto-determined continuous mode",
+                extra={
+                    "effective_continuous_mode": effective_continuous_mode,
+                    "execution_mode": execution_mode,
+                    "is_implementation_or_validation": execution_mode in ("implementation", "validation"),
+                }
+            )
 
         # Add continuous mode settings if enabled
         if effective_continuous_mode and runtime == "claude":
@@ -227,7 +240,23 @@ class DaytonaSpawnerService:
             env_vars.setdefault("MAX_ITERATIONS", "10")
             env_vars.setdefault("MAX_TOTAL_COST_USD", "20.0")
             env_vars.setdefault("MAX_DURATION_SECONDS", "3600")  # 1 hour
-            logger.info("Continuous mode enabled for sandbox")
+            logger.info(
+                "SPAWNER: Continuous mode ENABLED",
+                extra={
+                    "max_iterations": env_vars.get("MAX_ITERATIONS"),
+                    "max_cost_usd": env_vars.get("MAX_TOTAL_COST_USD"),
+                    "max_duration_seconds": env_vars.get("MAX_DURATION_SECONDS"),
+                }
+            )
+        else:
+            logger.info(
+                "SPAWNER: Continuous mode DISABLED",
+                extra={
+                    "effective_continuous_mode": effective_continuous_mode,
+                    "runtime": runtime,
+                    "reason": "not claude runtime" if runtime != "claude" else "continuous_mode=False",
+                }
+            )
 
         # Set validation requirements based on task_requirements (LLM-analyzed) or execution_mode
         # task_requirements takes precedence when provided, as it's based on intelligent analysis

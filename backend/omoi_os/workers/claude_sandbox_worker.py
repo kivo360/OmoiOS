@@ -1070,8 +1070,21 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         # Enable continuous mode by default for implementation and validation
         # These modes need to ensure work is ACTUALLY completed
         continuous_default = self.execution_mode in ("implementation", "validation")
+        continuous_env = os.environ.get("CONTINUOUS_MODE", "")
         self.continuous_mode = (
-            os.environ.get("CONTINUOUS_MODE", str(continuous_default)).lower() == "true"
+            continuous_env.lower() == "true" if continuous_env else continuous_default
+        )
+
+        # Log continuous mode configuration for debugging
+        logger.info(
+            "WORKER: Continuous mode configuration",
+            extra={
+                "continuous_mode": self.continuous_mode,
+                "continuous_env_var": continuous_env or "(not set)",
+                "continuous_default": continuous_default,
+                "execution_mode": self.execution_mode,
+                "task_id": self.task_id,
+            }
         )
 
         # Iteration limits
@@ -1091,6 +1104,31 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         self.require_clean_git = os.environ.get("REQUIRE_CLEAN_GIT", "true").lower() == "true"
         self.require_code_pushed = os.environ.get("REQUIRE_CODE_PUSHED", "true").lower() == "true"
         self.require_pr_created = os.environ.get("REQUIRE_PR_CREATED", "true").lower() == "true"
+
+        # Log full continuous mode settings
+        if self.continuous_mode:
+            logger.info(
+                "WORKER: Continuous mode ENABLED with settings",
+                extra={
+                    "max_iterations": self.max_iterations,
+                    "max_total_cost_usd": self.max_total_cost_usd,
+                    "max_duration_seconds": self.max_duration_seconds,
+                    "max_consecutive_errors": self.max_consecutive_errors,
+                    "completion_signal": self.completion_signal,
+                    "completion_threshold": self.completion_threshold,
+                    "require_clean_git": self.require_clean_git,
+                    "require_code_pushed": self.require_code_pushed,
+                    "require_pr_created": self.require_pr_created,
+                }
+            )
+        else:
+            logger.info(
+                "WORKER: Continuous mode DISABLED - running single iteration only",
+                extra={
+                    "execution_mode": self.execution_mode,
+                    "continuous_env_var": continuous_env or "(not set)",
+                }
+            )
 
         # Append conversation context to system prompt if provided (for hydration)
         # NOTE: Must be after conversation_context is initialized above
@@ -2451,13 +2489,24 @@ This is a continuation of your previous work. Please review the notes below and 
                             import time
                             self.iteration_state.start_time = time.time()
 
+                            # Log mode decision for debugging
+                            logger.info(
+                                "WORKER RUN: Mode decision point",
+                                extra={
+                                    "continuous_mode": self.config.continuous_mode,
+                                    "execution_mode": self.config.execution_mode,
+                                    "task_id": self.config.task_id,
+                                    "initial_task_preview": initial_task[:200],
+                                }
+                            )
+
                             if self.config.continuous_mode:
                                 # =================================================
                                 # CONTINUOUS MODE: Iterate until task truly completes
                                 # =================================================
-                                logger.info("=" * 40)
-                                logger.info("CONTINUOUS MODE ENABLED")
-                                logger.info("=" * 40)
+                                logger.info("=" * 60)
+                                logger.info("WORKER RUN: CONTINUOUS MODE ACTIVATED")
+                                logger.info("=" * 60)
                                 logger.info(
                                     "Will iterate until: validation_passed OR max_iterations=%d OR max_cost=$%.2f OR max_duration=%ds",
                                     self.config.max_iterations,
@@ -2615,7 +2664,18 @@ This is a continuation of your previous work. Please review the notes below and 
                                 # =================================================
                                 # SINGLE-RUN MODE: Execute once (original behavior)
                                 # =================================================
-                                logger.info("Processing initial task (single-run mode)", extra={"task_preview": initial_task[:100]})
+                                logger.info("=" * 60)
+                                logger.info("WORKER RUN: SINGLE-RUN MODE (no iteration)")
+                                logger.info("=" * 60)
+                                logger.info(
+                                    "WORKER RUN: Single-run mode - task will execute ONCE only",
+                                    extra={
+                                        "execution_mode": self.config.execution_mode,
+                                        "task_id": self.config.task_id,
+                                        "continuous_mode": self.config.continuous_mode,
+                                        "task_preview": initial_task[:200],
+                                    }
+                                )
                                 try:
                                     await client.query(initial_task)
                                     await self._process_messages(client)
