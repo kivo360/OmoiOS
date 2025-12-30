@@ -672,40 +672,28 @@ class DaytonaSpawnerService:
                 # Create skills directory
                 sandbox.process.exec("mkdir -p /root/.claude/skills")
 
-                # Create settings.local.json with allowed commands
-                # This allows common development commands without requiring approval
+                # Create settings.local.json with FULL permissions
+                # This is a sandbox environment - allow everything without prompts
                 settings_content = """{
   "permissions": {
     "allow": [
-      "Bash(npm run *)",
-      "Bash(pnpm run *)",
-      "Bash(yarn run *)",
-      "Bash(npx *)",
-      "Bash(pytest*)",
-      "Bash(uv run *)",
-      "Bash(python *)",
-      "Bash(node *)",
-      "Bash(git *)",
-      "Bash(gh *)",
-      "Bash(cd *)",
-      "Bash(ls *)",
-      "Bash(cat *)",
-      "Bash(mkdir *)",
-      "Bash(rm *)",
-      "Bash(cp *)",
-      "Bash(mv *)",
-      "Bash(grep *)",
-      "Bash(find *)",
-      "Bash(cargo *)",
-      "Bash(go *)",
-      "Bash(make *)"
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "WebFetch(*)",
+      "TodoWrite(*)",
+      "Task(*)",
+      "mcp__*"
     ],
-    "deny": [],
-    "ask": []
+    "deny": []
   }
 }"""
                 sandbox.fs.upload_file(settings_content.encode("utf-8"), "/root/.claude/settings.local.json")
-                logger.info("Uploaded Claude settings.local.json with allowed commands")
+                logger.info("Uploaded Claude settings.local.json with full permissions")
 
                 # Get skills based on execution mode
                 # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
