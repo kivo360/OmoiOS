@@ -623,7 +623,18 @@ class ContinuousSandboxWorker(SandboxWorker):
             return False
 
     async def _run_validation(self):
-        """Run git validation to check if work is truly complete."""
+        """Run git validation to check if work is truly complete.
+
+        Handles two scenarios:
+        1. Implementation tasks: Require clean git, code pushed, and PR created
+        2. Research/analysis tasks: No code changes, so skip git validation
+
+        Detection of research tasks:
+        - Working directory is clean (no changes made)
+        - Not ahead of remote (nothing to push)
+        - On main/master branch (no feature branch created)
+        - OR execution_mode is "exploration"
+        """
         state = self.iteration_state
         config = self.continuous_config
 
@@ -636,7 +647,53 @@ class ContinuousSandboxWorker(SandboxWorker):
         state.code_pushed = git_status["is_pushed"]
         state.pr_created = git_status["has_pr"]
 
-        # Determine if validation passed
+        # CRITICAL: Detect research/analysis tasks that don't produce code changes
+        # These tasks should pass validation without requiring a PR
+        is_research_task = (
+            # Clean working directory (no uncommitted changes)
+            git_status["is_clean"] and
+            # Not ahead of remote (nothing to push)
+            git_status["is_pushed"] and
+            # On main/master branch (no feature branch was created)
+            git_status.get("branch_name") in ("main", "master", None)
+        )
+
+        # Also treat exploration mode as research (no code changes expected)
+        if hasattr(config, "execution_mode") and config.execution_mode == "exploration":
+            is_research_task = True
+
+        if is_research_task:
+            logger.info(
+                "Detected research/analysis task - no code changes needed",
+                extra={
+                    "branch": git_status.get("branch_name"),
+                    "is_clean": git_status["is_clean"],
+                    "is_pushed": git_status["is_pushed"],
+                }
+            )
+            state.validation_passed = True
+            state.validation_feedback = "Research/analysis task completed - no code changes required"
+
+            # Report validation result for research task
+            await self.reporter.report(
+                "iteration.validation",
+                {
+                    "iteration_num": state.iteration_num,
+                    "passed": True,
+                    "feedback": state.validation_feedback,
+                    "task_type": "research",
+                    "git_status": {
+                        "is_clean": git_status["is_clean"],
+                        "is_pushed": git_status["is_pushed"],
+                        "has_pr": git_status["has_pr"],
+                        "branch_name": git_status["branch_name"],
+                    },
+                    "errors": [],
+                },
+            )
+            return
+
+        # Standard validation for implementation tasks
         validation_errors = []
 
         if config.require_clean_git and not git_status["is_clean"]:
