@@ -1031,8 +1031,11 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
                 "append": combined_append,
             } if combined_append else None
 
-        # Setting sources for loading skills
-        setting_sources_str = os.environ.get("SETTING_SOURCES", "user,project")
+        # Setting sources for loading skills and settings
+        # - user: ~/.claude/settings.json (user-level defaults)
+        # - project: .claude/settings.json (project-specific overrides)
+        # - local: ~/.claude.json or .claude.json (per-user project state)
+        setting_sources_str = os.environ.get("SETTING_SOURCES", "user,project,local")
         self.setting_sources = [
             s.strip() for s in setting_sources_str.split(",") if s.strip()
         ]
