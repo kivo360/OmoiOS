@@ -911,6 +911,10 @@ export interface TrajectorySummaryResponse {
   heartbeat_summary: HeartbeatSummary
   total_events: number
   trajectory_events: number
+  // Cursor-based pagination
+  next_cursor: string | null  // Cursor for loading older events
+  prev_cursor: string | null  // Cursor for loading newer events
+  has_more: boolean           // Whether there are more events to load
 }
 
 export interface SandboxEventsListResponse {

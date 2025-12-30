@@ -40,17 +40,20 @@ export async function getSandboxEvents(
 
 /**
  * Get trajectory summary for a sandbox (excludes heartbeats, provides summary)
+ * Supports cursor-based pagination for infinite scroll
  */
 export async function getSandboxTrajectory(
   sandboxId: string,
   options: {
     limit?: number
-    offset?: number
+    cursor?: string | null
+    direction?: "older" | "newer"
   } = {}
 ): Promise<TrajectorySummaryResponse> {
   const params = new URLSearchParams()
   if (options.limit) params.set("limit", options.limit.toString())
-  if (options.offset) params.set("offset", options.offset.toString())
+  if (options.cursor) params.set("cursor", options.cursor)
+  if (options.direction) params.set("direction", options.direction)
 
   const query = params.toString()
   return api.get<TrajectorySummaryResponse>(

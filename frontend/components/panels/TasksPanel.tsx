@@ -43,6 +43,10 @@ function normalizeStatus(status: string): TaskStatus {
     case "error":
     case "cancelled":
       return "failed"
+    case "pending_validation":
+      return "pending_validation"
+    case "validating":
+      return "validating"
     default:
       return "pending"
   }
@@ -89,8 +93,16 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
     normalizeStatus(t.status) === "failed"
   )
   
-  const pendingTasks = filteredTasks.filter((t) => 
+  const pendingTasks = filteredTasks.filter((t) =>
     normalizeStatus(t.status) === "pending"
+  )
+
+  const pendingValidationTasks = filteredTasks.filter((t) =>
+    normalizeStatus(t.status) === "pending_validation"
+  )
+
+  const validatingTasks = filteredTasks.filter((t) =>
+    normalizeStatus(t.status) === "validating"
   )
 
   return (
@@ -141,6 +153,42 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                 <div className="space-y-1">
                   <TimeGroupHeader>Running</TimeGroupHeader>
                   {runningTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      id={task.id}
+                      sandboxId={task.sandbox_id}
+                      title={task.title}
+                      taskType={task.task_type}
+                      status={normalizeStatus(task.status)}
+                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      isSelected={task.sandbox_id === selectedSandboxId}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {validatingTasks.length > 0 && (
+                <div className="space-y-1">
+                  <TimeGroupHeader>Validating</TimeGroupHeader>
+                  {validatingTasks.map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      id={task.id}
+                      sandboxId={task.sandbox_id}
+                      title={task.title}
+                      taskType={task.task_type}
+                      status={normalizeStatus(task.status)}
+                      timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                      isSelected={task.sandbox_id === selectedSandboxId}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {pendingValidationTasks.length > 0 && (
+                <div className="space-y-1">
+                  <TimeGroupHeader>Pending Validation</TimeGroupHeader>
+                  {pendingValidationTasks.map((task) => (
                     <TaskCard
                       key={task.id}
                       id={task.id}

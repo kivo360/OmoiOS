@@ -1707,3 +1707,96 @@ class TaskQueueService:
             session.refresh(task)
             session.expunge(task)
             return task
+
+    def get_next_validation_task(
+        self,
+        max_concurrent_per_project: int = 5,
+    ) -> Task | None:
+        """
+        Get next task that needs validation (status = 'pending_validation').
+
+        This method is used by the orchestrator to spawn validation sandboxes
+        for tasks that have completed implementation and need review.
+
+        Args:
+            max_concurrent_per_project: Maximum concurrent tasks per project (default: 5)
+
+        Returns:
+            Task object or None if no tasks need validation
+        """
+        from omoi_os.models.ticket import Ticket
+
+        with self.db.get_session() as session:
+            # Get pending_validation tasks
+            query = session.query(Task).filter(
+                Task.status == "pending_validation",
+            )
+            tasks = query.all()
+
+            if not tasks:
+                return None
+
+            # Filter by project concurrency limits
+            available_tasks = []
+            project_running_counts: dict[str, int] = {}
+
+            for task in tasks:
+                # Get project ID for this task
+                ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                if not ticket or not ticket.project_id:
+                    # Tasks without a project are allowed (no limit)
+                    available_tasks.append(task)
+                    continue
+
+                project_id = ticket.project_id
+
+                # Check/cache running count for this project
+                if project_id not in project_running_counts:
+                    count = (
+                        session.query(Task)
+                        .join(Ticket, Task.ticket_id == Ticket.id)
+                        .filter(
+                            Ticket.project_id == project_id,
+                            Task.status.in_(["claiming", "assigned", "running", "validating"]),
+                        )
+                        .count()
+                    )
+                    project_running_counts[project_id] = count
+
+                # Skip if project is at capacity
+                if project_running_counts[project_id] >= max_concurrent_per_project:
+                    logger.debug(
+                        f"Project {project_id} at capacity ({project_running_counts[project_id]}/{max_concurrent_per_project}), "
+                        f"skipping validation task {task.id}"
+                    )
+                    continue
+
+                available_tasks.append(task)
+
+            if not available_tasks:
+                return None
+
+            # Get oldest pending_validation task (FIFO for validation)
+            task = min(available_tasks, key=lambda t: t.updated_at or t.created_at)
+
+            # Atomic claim: set status to 'validating'
+            result = session.execute(
+                text("""
+                    UPDATE tasks
+                    SET status = 'validating'
+                    WHERE id = :task_id
+                    AND status = 'pending_validation'
+                    RETURNING id
+                """),
+                {"task_id": str(task.id)}
+            )
+            claimed_row = result.fetchone()
+            session.commit()
+
+            if not claimed_row:
+                logger.debug(f"Validation task {task.id} was claimed by another process, skipping")
+                return None
+
+            session.refresh(task)
+            session.expunge(task)
+            return task

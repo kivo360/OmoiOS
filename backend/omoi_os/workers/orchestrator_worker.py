@@ -661,7 +661,175 @@ async def orchestrator_loop():
                     log.info("task_assigned", agent_id=agent_id)
 
             else:
+                # No pending tasks - check for validation tasks
                 log.debug("no_pending_tasks")
+
+            # Also check for tasks needing validation (in addition to pending tasks)
+            # This spawns validation sandboxes for tasks in pending_validation status
+            if sandbox_execution and daytona_spawner:
+                validation_task = queue.get_next_validation_task(
+                    max_concurrent_per_project=max_concurrent_per_project,
+                )
+                if validation_task:
+                    val_task_id = str(validation_task.id)
+                    val_phase_id = validation_task.phase_id or "PHASE_IMPLEMENTATION"
+
+                    val_log = log.bind(
+                        task_id=val_task_id,
+                        phase=val_phase_id,
+                        ticket_id=str(validation_task.ticket_id),
+                        task_type="validation",
+                    )
+                    val_log.info(
+                        "validation_task_found",
+                        task_status=validation_task.status,
+                        original_task_type=validation_task.task_type,
+                    )
+
+                    try:
+                        # Extract task data for validation sandbox
+                        import json
+                        import base64
+
+                        extra_env: dict[str, str] = {}
+                        user_id_for_token = None
+
+                        with db.get_session() as session:
+                            from omoi_os.models.ticket import Ticket
+                            from omoi_os.models.user import User
+
+                            ticket = session.get(Ticket, validation_task.ticket_id)
+                            if ticket:
+                                extra_env["TICKET_ID"] = str(ticket.id)
+                                extra_env["TICKET_TITLE"] = ticket.title or ""
+                                extra_env["TICKET_DESCRIPTION"] = ticket.description or ""
+
+                                # Include task data with validation context
+                                task_data = {
+                                    "task_id": str(validation_task.id),
+                                    "task_type": validation_task.task_type,
+                                    "task_description": validation_task.description or "",
+                                    "task_priority": validation_task.priority,
+                                    "phase_id": validation_task.phase_id,
+                                    "ticket_id": str(ticket.id),
+                                    "ticket_title": ticket.title or "",
+                                    "ticket_description": ticket.description or "",
+                                    "validation_mode": True,  # Signals this is a validation run
+                                    "implementation_result": validation_task.result or {},  # Previous implementation result
+                                }
+
+                                task_json = json.dumps(task_data)
+                                extra_env["TASK_DATA_BASE64"] = base64.b64encode(
+                                    task_json.encode()
+                                ).decode()
+
+                                if ticket.project:
+                                    if ticket.project.created_by:
+                                        user_id_for_token = ticket.project.created_by
+                                        extra_env["USER_ID"] = str(user_id_for_token)
+                                    owner = ticket.project.github_owner
+                                    repo = ticket.project.github_repo
+                                    if owner and repo:
+                                        extra_env["GITHUB_REPO"] = f"{owner}/{repo}"
+
+                            if user_id_for_token:
+                                user = session.get(User, user_id_for_token)
+                                if user:
+                                    attrs = user.attributes or {}
+                                    github_token = attrs.get("github_access_token")
+                                    if github_token:
+                                        extra_env["GITHUB_TOKEN"] = github_token
+
+                        # Register validation agent
+                        from omoi_os.models.agent import Agent
+                        from uuid import uuid4
+
+                        agent_id = str(uuid4())
+                        with db.get_session() as session:
+                            agent = Agent(
+                                id=agent_id,
+                                agent_type="validator",
+                                phase_id=val_phase_id,
+                                capabilities=["validation", "code-review", "test-runner"],
+                                status="RUNNING",
+                                tags=["sandbox", "daytona", "validation"],
+                                health_status="healthy",
+                            )
+                            session.add(agent)
+                            session.commit()
+
+                        sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "claude")
+
+                        val_log.info(
+                            "spawning_validation_sandbox",
+                            agent_id=agent_id,
+                            runtime=sandbox_runtime,
+                        )
+
+                        # Spawn with validation execution mode
+                        sandbox_id = await daytona_spawner.spawn_for_task(
+                            task_id=val_task_id,
+                            agent_id=agent_id,
+                            phase_id=val_phase_id,
+                            agent_type="validator",
+                            extra_env=extra_env if extra_env else None,
+                            runtime=sandbox_runtime,
+                            execution_mode="validation",  # Force validation mode
+                        )
+
+                        # Update task with sandbox info
+                        queue.assign_task(validation_task.id, agent_id)
+
+                        with db.get_session() as session:
+                            task_obj = (
+                                session.query(Task).filter(Task.id == validation_task.id).first()
+                            )
+                            if task_obj:
+                                task_obj.sandbox_id = sandbox_id
+                                task_obj.status = "running"  # Move from validating to running
+                                session.commit()
+
+                        stats["tasks_processed"] += 1
+                        val_log.info(
+                            "validation_sandbox_spawned",
+                            sandbox_id=sandbox_id,
+                            agent_id=agent_id,
+                        )
+
+                        # Publish event
+                        from omoi_os.services.event_bus import SystemEvent
+
+                        event_bus.publish(
+                            SystemEvent(
+                                event_type="VALIDATION_SANDBOX_SPAWNED",
+                                entity_type="sandbox",
+                                entity_id=sandbox_id,
+                                payload={
+                                    "sandbox_id": sandbox_id,
+                                    "task_id": val_task_id,
+                                    "ticket_id": str(validation_task.ticket_id),
+                                    "agent_id": agent_id,
+                                    "execution_mode": "validation",
+                                },
+                            )
+                        )
+
+                    except Exception as spawn_error:
+                        import traceback
+
+                        error_details = traceback.format_exc()
+                        stats["tasks_failed"] += 1
+                        val_log.error(
+                            "validation_sandbox_spawn_failed",
+                            error=str(spawn_error),
+                            traceback=error_details,
+                        )
+                        # Reset task status to pending_validation for retry
+                        queue.update_task_status(
+                            validation_task.id,
+                            "pending_validation",
+                            error_message=f"Validation sandbox spawn failed: {spawn_error}",
+                        )
 
             # Hybrid wait: event-driven with polling fallback
             # - If TASK_CREATED event fires, wake up immediately

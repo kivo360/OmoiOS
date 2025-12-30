@@ -132,6 +132,9 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     sendMessage,
     isSendingMessage,
     refresh,
+    hasMore,
+    isLoadingMore,
+    loadMoreEvents,
   } = useSandboxMonitor(sandboxId)
 
   // Filter and sort events, deduplicating redundant events
@@ -348,6 +351,26 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
               {/* Events scroll area */}
               <ScrollArea className="flex-1" ref={scrollRef}>
                 <div className="p-4 space-y-3">
+                  {/* Load More button at top for loading older events */}
+                  {hasMore && (
+                    <div className="flex justify-center pb-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadMoreEvents}
+                        disabled={isLoadingMore}
+                      >
+                        {isLoadingMore ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Loading...
+                          </>
+                        ) : (
+                          "Load older events"
+                        )}
+                      </Button>
+                    </div>
+                  )}
                   {isLoadingHistory ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
