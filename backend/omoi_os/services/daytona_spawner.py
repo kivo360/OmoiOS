@@ -757,10 +757,33 @@ class DaytonaSpawnerService:
 
                 # Create settings.local.json with FULL permissions
                 # This is a sandbox environment - allow everything without prompts
-                # Using "*" wildcard to allow ALL tools including future additions
+                # Explicitly listing ALL Claude Code tools to ensure nothing is missed
                 settings_content = """{
   "permissions": {
-    "allow": ["*"],
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "LS(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "TodoWrite(*)",
+      "Task(*)",
+      "TaskOutput(*)",
+      "Skill(*)",
+      "LSP(*)",
+      "NotebookEdit(*)",
+      "AskUserQuestion(*)",
+      "KillShell(*)",
+      "EnterPlanMode(*)",
+      "ExitPlanMode(*)",
+      "mcp__*(*)",
+      "*"
+    ],
     "deny": []
   }
 }"""
