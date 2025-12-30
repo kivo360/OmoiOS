@@ -45,7 +45,8 @@ def get_sandbox_logs(sandbox_id: str):
 
             # Try to find by label
             result = daytona.list()
-            sandboxes = getattr(result, "sandboxes", result)
+            # PaginatedSandboxes has .items attribute with the actual list
+            sandboxes = getattr(result, "items", None) or getattr(result, "sandboxes", result)
 
             target_sandbox = None
             for sb in sandboxes:
@@ -166,14 +167,8 @@ def list_sandboxes():
         daytona = Daytona(config)
         result = daytona.list()
 
-        # Handle paginated response
-        sandboxes = (
-            getattr(result, "items", result)
-            if hasattr(result, "items")
-            else list(result)
-        )
-        if hasattr(result, "sandboxes"):
-            sandboxes = result.sandboxes
+        # Handle paginated response - PaginatedSandboxes has .items attribute
+        sandboxes = getattr(result, "items", None) or getattr(result, "sandboxes", [])
 
         print(f"Found {len(sandboxes)} sandboxes:\n")
         for sb in sandboxes[:20]:  # Limit to first 20
