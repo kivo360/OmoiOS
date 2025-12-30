@@ -795,14 +795,28 @@ You are in **implementation mode**. Your purpose is to:
 1. Execute the assigned task
 2. Write code to implement features or fix bugs
 3. Run tests to verify your implementation
-4. Create commits and pull requests when done
+4. **MANDATORY: Complete the git workflow** (commit, push, create PR)
 
 **DO NOT create new specs, tickets, or tasks.** Focus on executing this specific task.
 
-Before coding:
+### Before coding:
 1. Read the task specification carefully
 2. Check for existing patterns in the codebase
-3. Understand the requirements and acceptance criteria""")
+3. Understand the requirements and acceptance criteria
+
+### After coding is complete (MANDATORY):
+You MUST complete these steps before considering your work done:
+
+1. **Run tests**: Ensure all tests pass (`pytest`, `npm test`, etc.)
+2. **Stage and commit**: `git add -A && git commit -m "feat(scope): description"`
+3. **Push to remote**: `git push` (or `git push -u origin <branch>` for first push)
+4. **Create a Pull Request**: Use `gh pr create --title "..." --body "..."`
+
+**CRITICAL**: Your work is NOT complete until code is pushed and a PR is created.
+The validator will check for:
+- Clean git status (no uncommitted changes)
+- Code pushed to remote (not ahead of origin)
+- PR exists with proper title and description""")
 
         # Note: MCP tools are automatically available when we register MCP servers
         # No need to explicitly add them to allowed_tools - the SDK handles this
