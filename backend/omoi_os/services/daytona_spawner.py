@@ -201,6 +201,9 @@ class DaytonaSpawnerService:
             "CALLBACK_URL": base_url,  # For EventReporter to use correct API URL
             "PHASE_ID": phase_id,
             "SANDBOX_ID": sandbox_id,
+            # IS_SANDBOX=1 tells Claude Code it's running in a secure sandbox,
+            # allowing --dangerously-skip-permissions to work even as root
+            "IS_SANDBOX": "1",
         }
 
         # Determine continuous mode:
@@ -755,40 +758,17 @@ class DaytonaSpawnerService:
                 # Create skills directory
                 sandbox.process.exec("mkdir -p /root/.claude/skills")
 
-                # Create settings.local.json with FULL permissions
-                # This is a sandbox environment - allow everything without prompts
-                # Format: "ToolName" for built-in tools, "mcp__server__*" for MCP tools
-                # NOTE: Do NOT use "Bash(*)" - that's invalid syntax. Use "Bash" instead.
+                # Create minimal settings.local.json
+                # With IS_SANDBOX=1 and bypassPermissions, the allow list is not needed
+                # The SDK will skip all permission prompts automatically
                 settings_content = """{
   "permissions": {
-    "allow": [
-      "Bash",
-      "Read",
-      "Write",
-      "Edit",
-      "MultiEdit",
-      "Glob",
-      "Grep",
-      "LS",
-      "WebFetch",
-      "WebSearch",
-      "TodoWrite",
-      "Task",
-      "TaskOutput",
-      "Skill",
-      "LSP",
-      "NotebookEdit",
-      "AskUserQuestion",
-      "KillShell",
-      "EnterPlanMode",
-      "ExitPlanMode",
-      "mcp__*"
-    ],
+    "allow": [],
     "deny": []
   }
 }"""
                 sandbox.fs.upload_file(settings_content.encode("utf-8"), "/root/.claude/settings.local.json")
-                logger.info("Uploaded Claude settings.local.json with full permissions")
+                logger.info("Uploaded Claude settings.local.json (bypassPermissions mode)")
 
                 # Get skills based on execution mode
                 # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
