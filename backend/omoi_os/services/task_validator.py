@@ -154,23 +154,15 @@ class TaskValidatorService:
                 f"Task {task_id} marked as pending_validation (iteration {iteration})"
             )
 
-        # Spawn validator agent
-        validator_info = await self._spawn_validator(task_id, sandbox_id, iteration)
-
-        # Store validator info in task result for later lookup
-        if validator_info:
-            async with self.db.get_async_session() as session:
-                result = await session.execute(
-                    select(Task).filter(Task.id == task_id)
-                )
-                task = result.scalar_one_or_none()
-                if task:
-                    task.result = {
-                        **(task.result or {}),
-                        "validator_sandbox_id": validator_info["sandbox_id"],
-                        "validator_agent_id": validator_info["agent_id"],
-                    }
-                    await session.commit()
+        # NOTE: We do NOT spawn the validator here anymore.
+        # The orchestrator worker polls for pending_validation tasks and spawns
+        # validation sandboxes via get_next_validation_task(). This ensures:
+        # 1. No duplicate sandbox spawns (orchestrator uses atomic claims)
+        # 2. Consistent validation flow through the orchestrator
+        # 3. Proper concurrency limits are respected
+        #
+        # The _spawn_validator() method is kept for manual/testing use but is not
+        # called in the normal flow.
 
         # Publish event
         if self.event_bus:

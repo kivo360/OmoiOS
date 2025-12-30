@@ -2,9 +2,9 @@
 
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { Loader2, Check, X, AlertCircle, Clock } from "lucide-react"
+import { Loader2, Check, X, AlertCircle, Clock, ShieldCheck } from "lucide-react"
 
-export type TaskStatus = "pending" | "assigned" | "running" | "completed" | "failed"
+export type TaskStatus = "pending" | "assigned" | "running" | "completed" | "failed" | "pending_validation" | "validating"
 
 interface TaskCardProps {
   id: string
@@ -42,6 +42,16 @@ const statusConfig = {
     icon: X,
     iconClass: "text-destructive",
     label: "Failed",
+  },
+  pending_validation: {
+    icon: ShieldCheck,
+    iconClass: "text-purple-500",
+    label: "Awaiting Validation",
+  },
+  validating: {
+    icon: Loader2,
+    iconClass: "animate-spin text-purple-500",
+    label: "Validating",
   },
 }
 
@@ -105,6 +115,10 @@ function normalizeStatus(status: string): TaskStatus {
     case "error":
     case "cancelled":
       return "failed"
+    case "pending_validation":
+      return "pending_validation"
+    case "validating":
+      return "validating"
     default:
       return "pending"
   }
