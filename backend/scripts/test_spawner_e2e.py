@@ -33,7 +33,7 @@ async def main():
     from omoi_os.services.daytona_spawner import DaytonaSpawnerService
 
     # Check Daytona API key
-    from omoi_os.config import load_daytona_settings
+    from omoi_os.config import load_daytona_settings, get_app_settings
 
     daytona_settings = load_daytona_settings()
     if not daytona_settings.api_key:
@@ -43,11 +43,14 @@ async def main():
     print(f"✅ Daytona API Key: {daytona_settings.api_key[:12]}...")
 
     # Create spawner (no db/event_bus for this test)
+    # Use the configured MCP server URL from settings
+    settings = get_app_settings()
     spawner = DaytonaSpawnerService(
         db=None,
         event_bus=None,
-        mcp_server_url="http://localhost:18000/mcp/",
+        mcp_server_url=settings.integrations.mcp_server_url,
     )
+    print(f"   MCP Server URL: {settings.integrations.mcp_server_url}")
 
     # Test task info
     task_id = f"test-e2e-{int(time.time())}"
