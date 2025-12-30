@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { PromptInput, ModelSelector, RepoSelector, Project, Repository } from "@/components/command"
+import { PromptInput, ModelSelector, RepoSelector, Project, Repository, WorkflowModeSelector, getWorkflowModeConfig, type WorkflowMode } from "@/components/command"
 import { useProjects } from "@/hooks/useProjects"
 import { useConnectedRepositories } from "@/hooks/useGitHub"
 import { useCreateTicket } from "@/hooks/useTickets"
@@ -30,7 +30,11 @@ export default function CommandCenterPage() {
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const [selectedBranch, setSelectedBranch] = useState("main")
   const [selectedModel, setSelectedModel] = useState("opus-4.5")
+  const [selectedMode, setSelectedMode] = useState<WorkflowMode>("quick")
   const [launchState, setLaunchState] = useState<LaunchState>({ status: "idle" })
+
+  // Get mode configuration for dynamic UI
+  const modeConfig = getWorkflowModeConfig(selectedMode)
 
   // Fetch real data
   const { data: projectsData } = useProjects({ status: "active" })
@@ -168,14 +172,33 @@ export default function CommandCenterPage() {
     try {
       setLaunchState({ status: "creating_ticket", prompt })
 
-      // Create a ticket with the prompt as title/description
-      const result = await createTicketMutation.mutateAsync({
+      // Build payload based on selected mode
+      const basePayload = {
         title: prompt.slice(0, 100) + (prompt.length > 100 ? "..." : ""),
         description: prompt,
-        phase_id: "PHASE_IMPLEMENTATION",
-        priority: "MEDIUM",
+        priority: "MEDIUM" as const,
         check_duplicates: false, // Don't check for dups on command prompts
         force_create: true,
+        project_id: selectedProject?.id,
+      }
+
+      // Mode-specific parameters
+      const modePayload = selectedMode === "quick"
+        ? {
+            phase_id: "PHASE_IMPLEMENTATION",
+            workflow_mode: "quick" as const,
+            auto_spawn_sandbox: true,
+          }
+        : {
+            phase_id: "PHASE_REQUIREMENTS",
+            workflow_mode: "spec_driven" as const,
+            generate_spec: true,
+            auto_spawn_sandbox: false,
+          }
+
+      const result = await createTicketMutation.mutateAsync({
+        ...basePayload,
+        ...modePayload,
       })
 
       // Check if we got a duplicate response instead of a ticket
@@ -185,9 +208,18 @@ export default function CommandCenterPage() {
         return
       }
 
-      // Ticket created, now wait for the orchestrator to spawn a sandbox
-      toast.info("Launching sandbox...")
-      setLaunchState({ status: "waiting_for_sandbox", ticketId: result.id, prompt })
+      // Handle navigation based on mode
+      if (selectedMode === "quick") {
+        // Ticket created, now wait for the orchestrator to spawn a sandbox
+        toast.info("Launching sandbox...")
+        setLaunchState({ status: "waiting_for_sandbox", ticketId: result.id, prompt })
+      } else {
+        // Spec-driven: redirect to spec workspace
+        toast.info("Creating spec...")
+        // For now, redirect to tickets page until spec workspace is built
+        // TODO: Update to /specs/:id when spec workspace is implemented
+        router.push(`/tickets/${result.id}`)
+      }
 
     } catch (error) {
       toast.error("Failed to create task. Please try again.")
@@ -216,7 +248,7 @@ export default function CommandCenterPage() {
             What would you like to build?
           </h1>
           <p className="text-muted-foreground">
-            Describe what you want, and we'll spawn an AI agent to build it
+            {modeConfig.helperText}
           </p>
         </div>
 
@@ -224,7 +256,8 @@ export default function CommandCenterPage() {
         <PromptInput
           onSubmit={handleSubmit}
           isLoading={isLoading}
-          placeholder="Describe what you want to build..."
+          placeholder={modeConfig.placeholder}
+          submitLabel={modeConfig.submitLabel}
         />
 
         {/* Launch Status */}
@@ -247,16 +280,22 @@ export default function CommandCenterPage() {
 
         {/* Controls Row */}
         <div className="flex items-center justify-between">
-          <RepoSelector
-            projects={projects}
-            repositories={repositories}
-            selectedProject={selectedProject}
-            selectedRepo={selectedRepo}
-            selectedBranch={selectedBranch}
-            onProjectSelect={handleProjectSelect}
-            onRepoSelect={handleRepoSelect}
-            onBranchChange={setSelectedBranch}
-          />
+          <div className="flex items-center gap-3">
+            <WorkflowModeSelector
+              value={selectedMode}
+              onValueChange={setSelectedMode}
+            />
+            <RepoSelector
+              projects={projects}
+              repositories={repositories}
+              selectedProject={selectedProject}
+              selectedRepo={selectedRepo}
+              selectedBranch={selectedBranch}
+              onProjectSelect={handleProjectSelect}
+              onRepoSelect={handleRepoSelect}
+              onBranchChange={setSelectedBranch}
+            />
+          </div>
           <ModelSelector
             value={selectedModel}
             onValueChange={setSelectedModel}

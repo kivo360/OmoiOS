@@ -26,6 +26,7 @@ import {
 } from "lucide-react"
 import { useSandboxMonitor, useSandboxTask } from "@/hooks/useSandbox"
 import { EventRenderer } from "@/components/sandbox"
+import { Markdown } from "@/components/ui/markdown"
 
 interface SandboxDetailPageProps {
   params: Promise<{ sandboxId: string }>
@@ -138,19 +139,29 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     // Collect all tool_completed content keys for deduplication
     const completedToolKeys = new Set<string>()
     const completedFileContentKeys = new Set<string>()
-    
-    // First pass: collect keys from tool_completed events
+    // Collect subagent prompts to filter out duplicate user messages
+    const subagentPrompts = new Set<string>()
+
+    // First pass: collect keys from tool_completed events and subagent prompts
     for (const event of events) {
       if (event.event_type === "agent.tool_completed") {
         const toolKey = getToolUseKey(event)
         if (toolKey) completedToolKeys.add(toolKey)
-        
+
         // Track file content keys
         const contentKey = getFileContentKey(event)
         if (contentKey) completedFileContentKeys.add(contentKey)
       }
+
+      // Track subagent prompts to filter out duplicate user messages
+      if (event.event_type === "agent.subagent_invoked") {
+        const data = event.event_data as Record<string, unknown>
+        const toolInput = (data.tool_input || {}) as Record<string, unknown>
+        const prompt = (data.subagent_prompt || toolInput.prompt) as string | undefined
+        if (prompt) subagentPrompts.add(prompt)
+      }
     }
-    
+
     // Track which content keys we've already rendered
     const renderedContentKeys = new Set<string>()
     
@@ -159,13 +170,20 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
       .filter((e) => {
         // Skip hidden event types
         if (HIDDEN_EVENT_TYPES.includes(e.event_type)) return false
-        
+
+        // Skip user messages that are subagent prompts (already shown in SubagentCard)
+        if (e.event_type === "agent.user_message") {
+          const data = e.event_data as Record<string, unknown>
+          const content = (data.content || data.message) as string | undefined
+          if (content && subagentPrompts.has(content)) return false
+        }
+
         // Skip tool_use events if there's a corresponding tool_completed
         if (e.event_type === "agent.tool_use") {
           const key = getToolUseKey(e)
           if (key && completedToolKeys.has(key)) return false
         }
-        
+
         // Skip file_edited events if we have a tool_completed with the same content
         if (e.event_type === "agent.file_edited") {
           const contentKey = getFileContentKey(e)
@@ -436,8 +454,11 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                       )}
                       {task?.description && (
                         <div className="md:col-span-2">
-                          <p className="text-sm font-medium text-muted-foreground">Description</p>
-                          <p className="text-sm mt-1 whitespace-pre-wrap break-words">{task.description}</p>
+                          {/* Only show label if description doesn't start with its own heading */}
+                          {!/^#/.test(task.description.trim()) && (
+                            <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
+                          )}
+                          <Markdown content={task.description} className="text-sm" />
                         </div>
                       )}
                     </div>

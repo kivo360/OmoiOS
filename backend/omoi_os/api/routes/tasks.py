@@ -367,6 +367,60 @@ async def get_task(
     }
 
 
+class TaskUpdateRequest(BaseModel):
+    """Request model for updating a task."""
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.patch("/{task_id}", response_model=dict)
+async def update_task(
+    task_id: str,
+    update: TaskUpdateRequest,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Update task by ID.
+
+    Args:
+        task_id: Task UUID
+        update: Fields to update
+        db: Database service
+
+    Returns:
+        Updated task information
+    """
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Task).filter(Task.id == task_id)
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # Update only provided fields
+        update_data = update.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            if value is not None:
+                setattr(task, field, value)
+
+        await session.commit()
+        await session.refresh(task)
+
+        return {
+            "id": task.id,
+            "ticket_id": task.ticket_id,
+            "title": task.title,
+            "description": task.description,
+            "status": task.status,
+            "priority": task.priority,
+            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
+        }
+
+
 @router.get("", response_model=List[dict])
 async def list_tasks(
     status: str | None = None,

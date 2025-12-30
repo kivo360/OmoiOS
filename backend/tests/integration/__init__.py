@@ -1,1 +1,1 @@
-"""Integration tests for OmoiOS components."""
+"""Integration tests package."""

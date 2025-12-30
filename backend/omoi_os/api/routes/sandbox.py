@@ -536,6 +536,75 @@ async def get_session_transcript_async(db: DatabaseService, session_id: str) -> 
     return None
 
 
+def get_session_transcript_for_task(db: DatabaseService, task_id: str) -> tuple[str | None, str | None]:
+    """
+    Retrieve Claude session transcript by task_id (SYNC version).
+
+    This is useful for resuming a task that was previously run - we can find
+    the session transcript stored for that task and pass it to a new sandbox.
+
+    Args:
+        db: Database service
+        task_id: Task ID to find transcript for
+
+    Returns:
+        Tuple of (session_id, transcript_b64), or (None, None) if not found
+    """
+    try:
+        from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+
+        with db.get_session() as session:
+            # Find the most recent transcript for this task
+            transcript = (
+                session.query(ClaudeSessionTranscript)
+                .filter_by(task_id=task_id)
+                .order_by(ClaudeSessionTranscript.updated_at.desc())
+                .first()
+            )
+            if transcript:
+                return transcript.session_id, transcript.transcript_b64
+    except Exception as e:
+        logger.warning(f"Failed to retrieve session transcript for task {task_id}: {e}")
+
+    return None, None
+
+
+async def get_session_transcript_for_task_async(
+    db: DatabaseService, task_id: str
+) -> tuple[str | None, str | None]:
+    """
+    Retrieve Claude session transcript by task_id (ASYNC version - non-blocking).
+
+    This is useful for resuming a task that was previously run - we can find
+    the session transcript stored for that task and pass it to a new sandbox.
+
+    Args:
+        db: Database service
+        task_id: Task ID to find transcript for
+
+    Returns:
+        Tuple of (session_id, transcript_b64), or (None, None) if not found
+    """
+    try:
+        from sqlalchemy import select
+
+        from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+
+        async with db.get_async_session() as session:
+            result = await session.execute(
+                select(ClaudeSessionTranscript)
+                .filter_by(task_id=task_id)
+                .order_by(ClaudeSessionTranscript.updated_at.desc())
+            )
+            transcript = result.scalar_one_or_none()
+            if transcript:
+                return transcript.session_id, transcript.transcript_b64
+    except Exception as e:
+        logger.warning(f"Failed to retrieve session transcript for task {task_id}: {e}")
+
+    return None, None
+
+
 @router.post("/{sandbox_id}/events", response_model=SandboxEventResponse)
 async def post_sandbox_event(
     sandbox_id: str,
@@ -648,8 +717,11 @@ async def post_sandbox_event(
                     )
                     logger.info(f"Successfully updated task {task_id} to running")
 
-                # Handle agent.completed -> transition to completed (async)
+                # Handle agent.completed -> trigger validation or complete directly
                 elif event.event_type == "agent.completed":
+                    # Check if this is a validator agent completion
+                    is_validator = event.event_data.get("agent_type") == "validator"
+
                     # Extract result from event_data
                     result = {
                         "success": event.event_data.get("success", True),
@@ -658,6 +730,9 @@ async def post_sandbox_event(
                         "session_id": event.event_data.get("session_id"),
                         "stop_reason": event.event_data.get("stop_reason"),
                     }
+                    # Include branch name for validation workflow
+                    if "branch_name" in event.event_data and event.event_data["branch_name"]:
+                        result["branch_name"] = event.event_data["branch_name"]
                     # Include final output if available
                     if "final_output" in event.event_data:
                         result["output"] = event.event_data["final_output"]
@@ -667,13 +742,39 @@ async def post_sandbox_event(
                     else:
                         logger.debug(f"Task {task_id} completion missing final_output")
 
-                    logger.info(f"Updating task {task_id} status to completed")
-                    await task_queue.update_task_status_async(
-                        task_id=task_id,
-                        status="completed",
-                        result=result,
-                    )
-                    logger.info(f"Successfully updated task {task_id} to completed")
+                    # Check if validation is enabled
+                    validation_enabled = os.environ.get(
+                        "TASK_VALIDATION_ENABLED", "true"
+                    ).lower() in ("true", "1", "yes")
+
+                    if is_validator:
+                        # This is a validator completion - process validation result
+                        logger.info(f"Validator completed for task {task_id}")
+                        # Validation result is handled separately via validation API
+                        # Just record the cost, don't change task status here
+                    elif validation_enabled:
+                        # Implementation completed - trigger validation
+                        logger.info(
+                            f"Task {task_id} implementation complete, requesting validation"
+                        )
+                        from omoi_os.services.task_validator import get_task_validator
+
+                        validator = get_task_validator(db=db, event_bus=get_event_bus())
+                        await validator.request_validation(
+                            task_id=task_id,
+                            sandbox_id=sandbox_id,
+                            implementation_result=result,
+                        )
+                        logger.info(f"Validation requested for task {task_id}")
+                    else:
+                        # Validation disabled - mark as completed directly
+                        logger.info(f"Updating task {task_id} status to completed (validation disabled)")
+                        await task_queue.update_task_status_async(
+                            task_id=task_id,
+                            status="completed",
+                            result=result,
+                        )
+                        logger.info(f"Successfully updated task {task_id} to completed")
 
                     # Record cost if cost data is available
                     cost_usd = event.event_data.get("cost_usd")
@@ -1468,3 +1569,116 @@ async def get_messages(sandbox_id: str) -> list[MessageItem]:
     queue = _get_message_queue()
     messages = queue.get_all(sandbox_id)
     return [MessageItem(**m) for m in messages]
+
+
+# ============================================================================
+# VALIDATION API ENDPOINTS
+# ============================================================================
+
+
+class ValidationResultRequest(BaseModel):
+    """Request schema for submitting validation results."""
+
+    task_id: str = Field(..., description="Task ID that was validated")
+    passed: bool = Field(..., description="Whether validation passed")
+    feedback: str = Field(..., description="Human-readable feedback")
+    evidence: Optional[dict] = Field(
+        default=None, description="Evidence of checks performed (test output, etc.)"
+    )
+    recommendations: Optional[list[str]] = Field(
+        default=None, description="List of recommendations if validation failed"
+    )
+
+
+class ValidationResultResponse(BaseModel):
+    """Response schema for validation result submission."""
+
+    status: str
+    task_id: str
+    validation_passed: bool
+    new_task_status: str
+
+
+@router.post("/{sandbox_id}/validation-result", response_model=ValidationResultResponse)
+async def submit_validation_result(
+    sandbox_id: str,
+    validation: ValidationResultRequest,
+) -> ValidationResultResponse:
+    """
+    Submit validation result from a validator agent.
+
+    This endpoint is called by validator agents to report whether validation
+    passed or failed. Based on the result:
+    - If passed: Task is marked as "completed"
+    - If failed: Task is marked as "needs_revision" with feedback
+
+    Args:
+        sandbox_id: Sandbox identifier of the validator
+        validation: Validation result data
+
+    Returns:
+        ValidationResultResponse with new task status
+
+    Example:
+        POST /api/v1/sandboxes/validator-abc123/validation-result
+        {
+            "task_id": "task-xyz",
+            "passed": false,
+            "feedback": "Tests are failing. 3 tests failed in test_auth.py",
+            "evidence": {"test_output": "..."},
+            "recommendations": ["Fix the failing tests", "Run pytest before committing"]
+        }
+    """
+    db = get_db_service()
+
+    # Get validator agent ID from the original task's result
+    # The validator_agent_id was stored when validation was requested
+    validator_agent_id = None
+    async with db.get_async_session() as session:
+        from sqlalchemy import select
+
+        # Find the original task being validated
+        result = await session.execute(
+            select(Task).filter(Task.id == validation.task_id)
+        )
+        task = result.scalar_one_or_none()
+        if task and task.result:
+            # Get validator info stored during validation request
+            validator_agent_id = task.result.get("validator_agent_id")
+            stored_sandbox = task.result.get("validator_sandbox_id")
+            # Verify the sandbox matches (security check)
+            if stored_sandbox and stored_sandbox != sandbox_id:
+                logger.warning(
+                    f"Sandbox mismatch: expected {stored_sandbox}, got {sandbox_id}"
+                )
+
+    if not validator_agent_id:
+        # Use a placeholder if we can't find the agent
+        validator_agent_id = f"validator-{sandbox_id[:8]}"
+
+    from omoi_os.services.task_validator import get_task_validator
+
+    validator_service = get_task_validator(db=db, event_bus=get_event_bus())
+    await validator_service.handle_validation_result(
+        task_id=validation.task_id,
+        validator_agent_id=validator_agent_id,
+        passed=validation.passed,
+        feedback=validation.feedback,
+        evidence=validation.evidence,
+        recommendations=validation.recommendations,
+    )
+
+    # Determine new task status
+    new_status = "completed" if validation.passed else "needs_revision"
+
+    logger.info(
+        f"Validation result submitted for task {validation.task_id}: "
+        f"passed={validation.passed}, new_status={new_status}"
+    )
+
+    return ValidationResultResponse(
+        status="accepted",
+        task_id=validation.task_id,
+        validation_passed=validation.passed,
+        new_task_status=new_status,
+    )

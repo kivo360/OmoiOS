@@ -37,6 +37,16 @@ import {
   Plus,
   Minus,
   File,
+  Loader2,
+  Plug,
+  Database,
+  FileSearch,
+  Send,
+  Key,
+  Zap,
+  BookOpen,
+  DollarSign,
+  Hash,
 } from "lucide-react"
 import type { SandboxEvent } from "@/lib/api/types"
 import { Markdown } from "@/components/ui/markdown"
@@ -1065,14 +1075,645 @@ function TodoCard({ todos, timestamp }: TodoCardProps) {
 }
 
 // ============================================================================
+// Ask User Question Card - Beautiful question display
+// ============================================================================
+
+interface QuestionOption {
+  label: string
+  description?: string
+}
+
+interface Question {
+  question: string
+  header?: string
+  options: QuestionOption[]
+  multiSelect?: boolean
+}
+
+interface AskUserQuestionCardProps {
+  questions: Question[]
+  answer?: string
+  status?: "running" | "completed"
+  timestamp?: string
+}
+
+function AskUserQuestionCard({ questions, answer, status = "completed", timestamp }: AskUserQuestionCardProps) {
+  const isWaiting = status === "running" && !answer
+
+  return (
+    <div className="rounded-lg border bg-card overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border-b border-amber-500/20">
+        <MessageSquare className="h-4 w-4 text-amber-500 shrink-0" />
+        <span className="font-medium text-sm text-amber-600 dark:text-amber-400">
+          {isWaiting ? "Waiting for Response" : "Question"}
+        </span>
+        {isWaiting && (
+          <Badge variant="secondary" className="text-[10px] h-5 bg-amber-500/20 text-amber-600 dark:text-amber-400">
+            <Clock className="h-2.5 w-2.5 mr-1 animate-pulse" />
+            Pending
+          </Badge>
+        )}
+        {timestamp && (
+          <span className="text-[10px] text-muted-foreground ml-auto">{timestamp}</span>
+        )}
+      </div>
+
+      {/* Questions */}
+      <div className="p-3 space-y-4">
+        {questions.map((q, qIdx) => (
+          <div key={qIdx} className="space-y-2">
+            {/* Question header badge */}
+            {q.header && (
+              <Badge variant="outline" className="text-[10px] font-medium">
+                {q.header}
+              </Badge>
+            )}
+
+            {/* Question text */}
+            <p className="text-sm font-medium">{q.question}</p>
+
+            {/* Options */}
+            <div className="space-y-1.5 ml-1">
+              {q.options.map((opt, optIdx) => (
+                <div
+                  key={optIdx}
+                  className="flex items-start gap-2 px-2.5 py-2 rounded-md bg-muted/50 hover:bg-muted/70 transition-colors"
+                >
+                  <div className={cn(
+                    "mt-0.5 h-4 w-4 rounded-full border-2 shrink-0 flex items-center justify-center",
+                    q.multiSelect ? "rounded-sm" : "rounded-full",
+                    "border-muted-foreground/30"
+                  )}>
+                    {/* Empty circle/checkbox */}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium">{opt.label}</p>
+                    {opt.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* Answer if provided */}
+        {answer && (
+          <div className="mt-3 pt-3 border-t">
+            <div className="flex items-start gap-2">
+              <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">Response</p>
+                <p className="text-sm">{answer}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// MCP Tool Card - Clean display for MCP server tool calls
+// ============================================================================
+
+// Parse MCP tool name: mcp__server__tool → { server: "server", tool: "tool" }
+// Handles server names with underscores like "spec_workflow"
+// Pattern: mcp__<server>__<tool> where server/tool can contain single underscores
+function parseMcpToolName(toolName: string): { server: string; tool: string } | null {
+  if (!toolName.startsWith("mcp__")) return null
+
+  // Remove "mcp__" prefix and split by double underscore
+  const withoutPrefix = toolName.slice(5) // Remove "mcp__"
+  const lastDoubleUnderscoreIndex = withoutPrefix.lastIndexOf("__")
+
+  if (lastDoubleUnderscoreIndex === -1) return null
+
+  const server = withoutPrefix.slice(0, lastDoubleUnderscoreIndex)
+  const tool = withoutPrefix.slice(lastDoubleUnderscoreIndex + 2)
+
+  if (!server || !tool) return null
+
+  return { server, tool }
+}
+
+// Get display-friendly server name
+function formatServerName(server: string): string {
+  return server
+    .split("_")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+// Get display-friendly tool name
+function formatToolName(tool: string): string {
+  return tool
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+// Get server-specific icon and color
+function getMcpServerConfig(server: string): { icon: typeof Plug; color: string; bgColor: string } {
+  const configs: Record<string, { icon: typeof Plug; color: string; bgColor: string }> = {
+    spec_workflow: { icon: FileSearch, color: "text-violet-500", bgColor: "bg-violet-500/10" },
+    database: { icon: Database, color: "text-cyan-500", bgColor: "bg-cyan-500/10" },
+    api: { icon: Send, color: "text-blue-500", bgColor: "bg-blue-500/10" },
+    auth: { icon: Key, color: "text-amber-500", bgColor: "bg-amber-500/10" },
+  }
+  return configs[server] || { icon: Plug, color: "text-indigo-500", bgColor: "bg-indigo-500/10" }
+}
+
+interface McpToolCardProps {
+  server: string
+  tool: string
+  input: Record<string, unknown>
+  output?: string
+  status?: "running" | "completed" | "error"
+  timestamp?: string
+}
+
+function McpToolCard({ server, tool, input, output, status = "completed", timestamp }: McpToolCardProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [copiedInput, setCopiedInput] = useState(false)
+  const [copiedOutput, setCopiedOutput] = useState(false)
+
+  const config = getMcpServerConfig(server)
+  const Icon = config.icon
+  const isRunning = status === "running"
+  const hasOutput = !!output
+
+  const handleCopyInput = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    navigator.clipboard.writeText(JSON.stringify(input, null, 2))
+    setCopiedInput(true)
+    setTimeout(() => setCopiedInput(false), 2000)
+  }
+
+  const handleCopyOutput = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (output) {
+      navigator.clipboard.writeText(output)
+      setCopiedOutput(true)
+      setTimeout(() => setCopiedOutput(false), 2000)
+    }
+  }
+
+  // Format input as clean key-value pairs
+  const inputEntries = Object.entries(input)
+  const hasManyInputs = inputEntries.length > 3
+
+  // Try to parse output as JSON for nicer formatting
+  let parsedOutput: Record<string, unknown> | string | null = null
+  let isJsonOutput = false
+  if (output) {
+    try {
+      parsedOutput = JSON.parse(output)
+      isJsonOutput = typeof parsedOutput === "object" && parsedOutput !== null
+    } catch {
+      parsedOutput = output
+    }
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors">
+            <Icon className={cn("h-4 w-4 shrink-0", config.color)} />
+            <span className="font-medium text-sm">{formatToolName(tool)}</span>
+            {isRunning ? (
+              <Badge variant="secondary" className="text-[10px] h-5">
+                <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                Running
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className={cn("text-[10px] h-5", config.bgColor, config.color)}>
+                {formatServerName(server)}
+              </Badge>
+            )}
+            {/* Show first input value as summary */}
+            {inputEntries.length > 0 && (
+              <span className="flex-1 text-xs text-muted-foreground truncate">
+                {String(inputEntries[0][1]).slice(0, 40)}
+                {String(inputEntries[0][1]).length > 40 && "..."}
+              </span>
+            )}
+            {timestamp && (
+              <span className="text-[10px] text-muted-foreground shrink-0">{timestamp}</span>
+            )}
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-3 py-2 space-y-3 bg-muted/30">
+            {/* Input Section */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Input</span>
+                <Button variant="ghost" size="sm" className="h-5 px-1.5" onClick={handleCopyInput}>
+                  {copiedInput ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                </Button>
+              </div>
+              {hasManyInputs ? (
+                // Show as JSON for complex inputs
+                <pre className="text-xs bg-background rounded p-2 overflow-x-auto max-h-32 overflow-y-auto font-mono border">
+                  {JSON.stringify(input, null, 2)}
+                </pre>
+              ) : (
+                // Show as clean key-value pairs for simple inputs
+                <div className="space-y-1">
+                  {inputEntries.map(([key, value]) => (
+                    <div key={key} className="flex items-start gap-2 px-2 py-1.5 rounded bg-background border">
+                      <span className="text-xs font-medium text-muted-foreground min-w-[80px] shrink-0">
+                        {key}:
+                      </span>
+                      <span className="text-xs font-mono text-foreground break-all">
+                        {typeof value === "string" ? value : JSON.stringify(value)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Output Section */}
+            {hasOutput && (
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Output</span>
+                  <Button variant="ghost" size="sm" className="h-5 px-1.5" onClick={handleCopyOutput}>
+                    {copiedOutput ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                  </Button>
+                </div>
+                <pre className="text-xs bg-background rounded p-2 overflow-x-auto max-h-48 overflow-y-auto font-mono border whitespace-pre-wrap">
+                  {isJsonOutput ? JSON.stringify(parsedOutput, null, 2) : output}
+                </pre>
+              </div>
+            )}
+
+            {/* Running indicator */}
+            {isRunning && !hasOutput && (
+              <div className="flex items-center gap-2 py-2">
+                <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground italic">Waiting for response...</span>
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  )
+}
+
+// ============================================================================
+// Skill Invoked Card - Shows when a skill is invoked
+// ============================================================================
+
+interface SkillInvokedCardProps {
+  skillName: string
+  input?: Record<string, unknown>
+  timestamp?: string
+}
+
+function SkillInvokedCard({ skillName, input, timestamp }: SkillInvokedCardProps) {
+  // Format skill name for display
+  const displayName = skillName
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+
+  return (
+    <div className="rounded-lg border bg-card overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-violet-500/10 border-b border-violet-500/20">
+        <Zap className="h-4 w-4 text-violet-500 shrink-0" />
+        <span className="font-medium text-sm text-violet-600 dark:text-violet-400">
+          Skill Invoked
+        </span>
+        <Badge variant="secondary" className="text-[10px] h-5 bg-violet-500/20 text-violet-600 dark:text-violet-400 font-mono">
+          {skillName}
+        </Badge>
+        <span className="flex-1" />
+        {timestamp && (
+          <span className="text-[10px] text-muted-foreground">{timestamp}</span>
+        )}
+      </div>
+      <div className="px-3 py-2">
+        <p className="text-sm text-foreground">
+          Executing <span className="font-medium text-violet-600 dark:text-violet-400">{displayName}</span> skill
+        </p>
+        {input && Object.keys(input).length > 0 && (
+          <div className="mt-2 text-xs text-muted-foreground">
+            {Object.entries(input).map(([key, value]) => (
+              <span key={key} className="mr-3">
+                <span className="font-medium">{key}:</span> {String(value)}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// Subagent Card - Shows subagent invocation and completion
+// ============================================================================
+
+interface SubagentCardProps {
+  subagentType: string
+  description?: string
+  prompt?: string
+  status: "running" | "completed"
+  timestamp?: string
+  result?: string
+  usage?: { input_tokens?: number; output_tokens?: number }
+  costUsd?: number
+  durationMs?: number
+}
+
+function SubagentCard({ subagentType, description, prompt, status, timestamp, result, usage, costUsd, durationMs }: SubagentCardProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const isRunning = status === "running"
+
+  // Format subagent type for display
+  const displayType = subagentType
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+
+  // Format duration for display
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`
+    if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+    return `${(ms / 60000).toFixed(1)}m`
+  }
+
+  // Format cost for display
+  const formatCost = (cost: number) => {
+    if (cost < 0.01) return `$${cost.toFixed(4)}`
+    return `$${cost.toFixed(2)}`
+  }
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border bg-card overflow-hidden">
+        <CollapsibleTrigger asChild>
+          <button className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors">
+            <GitBranch className={cn(
+              "h-4 w-4 shrink-0",
+              isRunning ? "text-blue-500" : "text-green-500"
+            )} />
+            <span className="font-medium text-sm">
+              {isRunning ? "Subagent Running" : "Subagent Completed"}
+            </span>
+            {isRunning ? (
+              <Badge variant="secondary" className="text-[10px] h-5 bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                {displayType}
+              </Badge>
+            ) : (
+              <Badge variant="secondary" className="text-[10px] h-5 bg-green-500/10 text-green-600 dark:text-green-400">
+                <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                {displayType}
+              </Badge>
+            )}
+            {description && (
+              <span className="flex-1 text-xs text-muted-foreground truncate">
+                {description}
+              </span>
+            )}
+            {timestamp && (
+              <span className="text-[10px] text-muted-foreground shrink-0">{timestamp}</span>
+            )}
+            {isOpen ? (
+              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+            )}
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <div className="border-t px-3 py-2 bg-muted/30 space-y-3">
+            {/* Metadata row - duration, cost, tokens */}
+            {!isRunning && (durationMs || costUsd || usage) && (
+              <div className="flex flex-wrap gap-3 text-[10px] text-muted-foreground">
+                {durationMs && (
+                  <span className="flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {formatDuration(durationMs)}
+                  </span>
+                )}
+                {costUsd !== undefined && costUsd !== null && (
+                  <span className="flex items-center gap-1">
+                    <DollarSign className="h-3 w-3" />
+                    {formatCost(costUsd)}
+                  </span>
+                )}
+                {usage && (
+                  <span className="flex items-center gap-1">
+                    <Hash className="h-3 w-3" />
+                    {usage.input_tokens?.toLocaleString() || 0} in / {usage.output_tokens?.toLocaleString() || 0} out
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Prompt section */}
+            {prompt && (
+              <div>
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Prompt</span>
+                <p className="text-xs text-foreground mt-1 whitespace-pre-wrap">{prompt}</p>
+              </div>
+            )}
+
+            {/* Result section */}
+            {result && !isRunning && (
+              <div>
+                <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Result</span>
+                <div className="mt-1 p-2 rounded bg-background border">
+                  <p className="text-xs text-foreground whitespace-pre-wrap">{result}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  )
+}
+
+// ============================================================================
+// Read Card - File content display with syntax highlighting
+// ============================================================================
+
+interface ReadCardProps {
+  filePath: string
+  content?: string
+  numLines?: number
+  timestamp?: string
+  status?: "running" | "completed"
+}
+
+function ReadCard({ filePath, content, numLines, timestamp, status = "completed" }: ReadCardProps) {
+  const [expanded, setExpanded] = useState(true)
+  const [showFullContent, setShowFullContent] = useState(false)
+  const [copied, setCopied] = useState(false)
+
+  const language = getLanguageFromPath(filePath)
+  const fileName = filePath.split("/").pop() || filePath
+  const isRunning = status === "running"
+
+  // Split content into lines for display
+  const lines = content?.split("\n") || []
+  const maxLines = 30
+  const displayContent = showFullContent ? content : lines.slice(0, maxLines).join("\n")
+  const hasMoreLines = lines.length > maxLines
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (content) {
+      navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  // Get file icon based on extension
+  const getFileIcon = () => {
+    if (language === "python") return "🐍"
+    if (language === "javascript" || language === "typescript") return "📜"
+    if (language === "jsx" || language === "tsx") return "⚛️"
+    if (language === "rust") return "🦀"
+    if (language === "go") return "🐹"
+    if (language === "docker") return "🐳"
+    if (language === "json" || language === "yaml" || language === "toml") return "📋"
+    if (language === "markdown") return "📝"
+    if (language === "html" || language === "css") return "🎨"
+    return null
+  }
+
+  const fileIcon = getFileIcon()
+
+  return (
+    <div className="rounded-lg border border-border overflow-hidden bg-card">
+      {/* Header */}
+      <div
+        className="flex items-center gap-2 px-3 py-2.5 bg-blue-500/10 cursor-pointer hover:bg-blue-500/15 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <BookOpen className="h-4 w-4 text-blue-500 shrink-0" />
+        <span className="font-medium text-sm text-blue-600 dark:text-blue-400">Read</span>
+
+        {isRunning && (
+          <Badge variant="secondary" className="text-[10px] h-5">
+            <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+            Reading
+          </Badge>
+        )}
+
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          {fileIcon && <span className="text-sm">{fileIcon}</span>}
+          <span className="text-xs text-muted-foreground font-mono truncate">
+            {filePath}
+          </span>
+        </div>
+
+        {numLines && (
+          <span className="text-[10px] text-muted-foreground shrink-0">
+            {numLines} lines
+          </span>
+        )}
+
+        {content && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+            onClick={handleCopy}
+          >
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          </Button>
+        )}
+
+        {timestamp && (
+          <span className="text-[10px] text-muted-foreground shrink-0">{timestamp}</span>
+        )}
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+        )}
+      </div>
+
+      {/* Content */}
+      {expanded && content && (
+        <div className="border-t border-border">
+          <SyntaxHighlighter
+            language={language}
+            style={oneDark}
+            showLineNumbers
+            customStyle={{
+              margin: 0,
+              padding: "0.75rem 0",
+              fontSize: "0.75rem",
+              background: "#18181b",
+              borderRadius: 0,
+            }}
+            lineNumberStyle={{
+              minWidth: "3rem",
+              paddingRight: "1rem",
+              color: "#52525b",
+              textAlign: "right",
+            }}
+          >
+            {displayContent || ""}
+          </SyntaxHighlighter>
+
+          {/* Show more button */}
+          {hasMoreLines && !showFullContent && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                setShowFullContent(true)
+              }}
+              className="w-full py-2 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors border-t border-zinc-800"
+            >
+              Show all ({lines.length - maxLines} more lines)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Running state */}
+      {expanded && isRunning && !content && (
+        <div className="border-t px-4 py-3 flex items-center gap-2">
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground italic">Reading file...</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
 // Bash Command Card - Clean terminal-style display
 // ============================================================================
 
 interface BashCardProps {
   command: string
+  description?: string
   output?: string
   exitCode?: number
   timestamp?: string
+  status?: "running" | "completed" | "error"
 }
 
 // Parse Bash output which may be JSON with stdout/stderr fields
@@ -1137,15 +1778,16 @@ function parseBashOutput(output: string): { stdout: string; stderr: string; exit
   return { stdout: output, stderr: "" }
 }
 
-function BashCard({ command, output, exitCode: providedExitCode, timestamp }: BashCardProps) {
+function BashCard({ command, description, output, exitCode: providedExitCode, timestamp, status = "completed" }: BashCardProps) {
   const [expanded, setExpanded] = useState(true)
   const [copied, setCopied] = useState(false)
-  
+
   // Parse the output
   const { stdout, stderr, exitCode: parsedExitCode } = parseBashOutput(output || "")
   const exitCode = providedExitCode ?? parsedExitCode
   const hasOutput = stdout || stderr
   const isError = (exitCode !== undefined && exitCode !== 0) || !!stderr
+  const isRunning = status === "running"
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation()
@@ -1154,47 +1796,55 @@ function BashCard({ command, output, exitCode: providedExitCode, timestamp }: Ba
     setTimeout(() => setCopied(false), 2000)
   }
 
+  // Truncate command for header display
+  const truncatedCommand = command.length > 60 ? command.slice(0, 60) + "..." : command
+
   return (
     <div className="rounded-lg border border-zinc-800 overflow-hidden bg-zinc-900">
       {/* Header */}
-      <div 
+      <div
         className="flex items-center gap-2 px-3 py-2 bg-zinc-800/50 cursor-pointer hover:bg-zinc-800 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <Terminal className="h-4 w-4 text-purple-400 shrink-0" />
         <span className="font-medium text-sm text-zinc-100">Terminal</span>
-        {isError && (
+        {isRunning && (
+          <Badge variant="secondary" className="text-[10px] h-5">
+            <Play className="h-2.5 w-2.5 mr-1 animate-pulse" />
+            Running
+          </Badge>
+        )}
+        {isError && !isRunning && (
           <Badge variant="destructive" className="text-[10px] h-5">
             {stderr ? "Error" : `Exit ${exitCode}`}
           </Badge>
         )}
-        <code className="flex-1 text-xs text-zinc-400 font-mono truncate">
-          {command.length > 50 ? command.slice(0, 50) + "..." : command}
-        </code>
-        
+        {/* Show description if available, otherwise truncated command */}
+        <span className="flex-1 text-xs text-zinc-400 truncate">
+          {description || truncatedCommand}
+        </span>
+
         {hasOutput && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
+          <Button
+            variant="ghost"
+            size="sm"
             className="h-6 w-6 p-0 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700"
             onClick={handleCopy}
           >
             {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
           </Button>
         )}
-        
+
         {timestamp && (
           <span className="text-[10px] text-zinc-500">{timestamp}</span>
         )}
-        {hasOutput && (
-          expanded ? (
-            <ChevronDown className="h-4 w-4 text-zinc-500 shrink-0" />
-          ) : (
-            <ChevronRight className="h-4 w-4 text-zinc-500 shrink-0" />
-          )
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 text-zinc-500 shrink-0" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-zinc-500 shrink-0" />
         )}
       </div>
-      
+
       {/* Terminal content */}
       {expanded && (
         <div className="border-t border-zinc-800">
@@ -1205,7 +1855,7 @@ function BashCard({ command, output, exitCode: providedExitCode, timestamp }: Ba
               {command}
             </code>
           </div>
-          
+
           {/* Output */}
           {stdout && (
             <div className="px-4 pb-3">
@@ -1214,7 +1864,7 @@ function BashCard({ command, output, exitCode: providedExitCode, timestamp }: Ba
               </pre>
             </div>
           )}
-          
+
           {/* Stderr */}
           {stderr && (
             <div className="px-4 pb-3">
@@ -1223,11 +1873,19 @@ function BashCard({ command, output, exitCode: providedExitCode, timestamp }: Ba
               </pre>
             </div>
           )}
-          
-          {/* No output message */}
-          {!stdout && !stderr && (
+
+          {/* No output message - only show for completed commands */}
+          {!stdout && !stderr && !isRunning && (
             <div className="px-4 pb-3">
               <span className="text-xs text-zinc-500 italic">Command completed with no output</span>
+            </div>
+          )}
+
+          {/* Running indicator */}
+          {isRunning && !stdout && !stderr && (
+            <div className="px-4 pb-3 flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin text-zinc-500" />
+              <span className="text-xs text-zinc-500 italic">Running...</span>
             </div>
           )}
         </div>
@@ -1293,6 +1951,12 @@ export function EventRenderer({ event, className }: EventRendererProps) {
   if (event_type === "agent.message" || event_type === "agent.assistant_message") {
     const content = getString(data, "content")
     if (!content) return null
+
+    // Skip messages that are actually subagent prompts (they're rendered by SubagentCard)
+    // These typically come through as agent.message but should be suppressed
+    const isSubagentContext = data.subagent_type || data.tool === "Task"
+    if (isSubagentContext) return null
+
     return <div className={className}><MessageCard content={content} timestamp={timestamp} /></div>
   }
 
@@ -1315,6 +1979,9 @@ export function EventRenderer({ event, className }: EventRendererProps) {
     const tool = getString(data, "tool")
     const toolInput = (data.tool_input || {}) as Record<string, unknown>
     const toolResponse = getString(data, "tool_response")
+
+    // Skip Task tool - this is handled by agent.subagent_invoked/completed events
+    if (tool === "Task") return null
 
     // Write tool - show full file content
     if (tool === "Write") {
@@ -1366,13 +2033,71 @@ export function EventRenderer({ event, className }: EventRendererProps) {
       )
     }
 
+    // Read tool - file content display
+    if (tool === "Read") {
+      const filePath = getString(toolInput, "filePath") || getString(toolInput, "file_path") || ""
+      // Parse toolResponse to extract file content
+      let fileContent = ""
+      let numLines: number | undefined
+
+      if (toolResponse) {
+        // Try to extract content from Python dict format: {'type': 'text', 'file': {'content': '...'}}
+        // Use regex to extract the content field directly
+        // Use [\s\S] instead of . to match across newlines (since 's' flag not available)
+        const contentMatch = toolResponse.match(/'content':\s*'((?:[^'\\]|\\[\s\S])*)'(?:,|\})/)
+        if (contentMatch) {
+          fileContent = contentMatch[1]
+            // Unescape common escape sequences
+            .replace(/\\n/g, "\n")
+            .replace(/\\t/g, "\t")
+            .replace(/\\r/g, "\r")
+            .replace(/\\\\/g, "\\")
+            .replace(/\\'/g, "'")
+            .replace(/\\"/g, '"')
+        } else {
+          // Try standard JSON parsing
+          try {
+            const parsed = JSON.parse(toolResponse)
+            if (parsed.file?.content) {
+              fileContent = parsed.file.content
+              numLines = parsed.file.numLines || parsed.file.totalLines
+            } else if (typeof parsed === "string") {
+              fileContent = parsed
+            }
+          } catch {
+            // Not JSON, use raw response
+            fileContent = toolResponse
+          }
+        }
+
+        // Try to extract numLines/totalLines
+        const numLinesMatch = toolResponse.match(/'(?:numLines|totalLines)':\s*(\d+)/)
+        if (numLinesMatch) {
+          numLines = parseInt(numLinesMatch[1], 10)
+        }
+      }
+
+      return (
+        <div className={className}>
+          <ReadCard
+            filePath={filePath}
+            content={fileContent}
+            numLines={numLines}
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
     // Bash tool
     if (tool === "Bash") {
       const command = getString(toolInput, "command")
+      const description = getString(toolInput, "description")
       return (
         <div className={className}>
           <BashCard
             command={command}
+            description={description}
             output={toolResponse}
             timestamp={timestamp}
           />
@@ -1418,6 +2143,36 @@ export function EventRenderer({ event, className }: EventRendererProps) {
       return <div className={className}><TodoCard todos={todos} timestamp={timestamp} /></div>
     }
 
+    // AskUserQuestion tool
+    if (tool === "AskUserQuestion" && toolInput.questions) {
+      const questions = toolInput.questions as Question[]
+      return (
+        <div className={className}>
+          <AskUserQuestionCard
+            questions={questions}
+            answer={toolResponse}
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
+    // MCP tool calls - detect by mcp__ prefix
+    const mcpParsed = parseMcpToolName(tool)
+    if (mcpParsed) {
+      return (
+        <div className={className}>
+          <McpToolCard
+            server={mcpParsed.server}
+            tool={mcpParsed.tool}
+            input={toolInput}
+            output={toolResponse}
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
     // Default tool card
     return (
       <div className={className}>
@@ -1430,6 +2185,39 @@ export function EventRenderer({ event, className }: EventRendererProps) {
   if (event_type === "agent.tool_use") {
     const tool = getString(data, "tool")
     const toolInput = (data.tool_input || data.input || {}) as Record<string, unknown>
+
+    // Skip Task tool - this is handled by agent.subagent_invoked/completed events
+    if (tool === "Task") return null
+
+    // Read tool - show running state
+    if (tool === "Read") {
+      const filePath = getString(toolInput, "filePath") || getString(toolInput, "file_path") || ""
+      return (
+        <div className={className}>
+          <ReadCard
+            filePath={filePath}
+            status="running"
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
+    // Bash tool - show running state with BashCard
+    if (tool === "Bash") {
+      const command = getString(toolInput, "command")
+      const description = getString(toolInput, "description")
+      return (
+        <div className={className}>
+          <BashCard
+            command={command}
+            description={description}
+            status="running"
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
 
     // Glob tool - show running state with GlobCard
     if (tool === "Glob") {
@@ -1456,6 +2244,36 @@ export function EventRenderer({ event, className }: EventRendererProps) {
             pattern={pattern}
             path={path}
             outputMode={outputMode}
+            status="running"
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
+    // AskUserQuestion tool - show waiting state
+    if (tool === "AskUserQuestion" && toolInput.questions) {
+      const questions = toolInput.questions as Question[]
+      return (
+        <div className={className}>
+          <AskUserQuestionCard
+            questions={questions}
+            status="running"
+            timestamp={timestamp}
+          />
+        </div>
+      )
+    }
+
+    // MCP tool calls - show running state
+    const mcpParsed = parseMcpToolName(tool)
+    if (mcpParsed) {
+      return (
+        <div className={className}>
+          <McpToolCard
+            server={mcpParsed.server}
+            tool={mcpParsed.tool}
+            input={toolInput}
             status="running"
             timestamp={timestamp}
           />
@@ -1542,6 +2360,70 @@ export function EventRenderer({ event, className }: EventRendererProps) {
           <Clock className="h-3.5 w-3.5 animate-pulse" />
           <span>Waiting for input...</span>
         </div>
+      </div>
+    )
+  }
+
+  // Skill invoked events
+  if (event_type === "agent.skill_invoked") {
+    const input = (data.input || {}) as Record<string, unknown>
+    const skillName = getString(input, "skill") || getString(data, "skill_name") || "unknown"
+    return (
+      <div className={className}>
+        <SkillInvokedCard
+          skillName={skillName}
+          input={input}
+          timestamp={timestamp}
+        />
+      </div>
+    )
+  }
+
+  // Subagent invoked events
+  if (event_type === "agent.subagent_invoked") {
+    const toolInput = (data.tool_input || {}) as Record<string, unknown>
+    const subagentType = getString(data, "subagent_type") || getString(toolInput, "subagent_type") || "unknown"
+    const description = getString(data, "description") || getString(data, "subagent_description") || getString(toolInput, "description") || ""
+    const prompt = getString(data, "subagent_prompt") || getString(toolInput, "prompt") || ""
+    return (
+      <div className={className}>
+        <SubagentCard
+          subagentType={subagentType}
+          description={description}
+          prompt={prompt}
+          status="running"
+          timestamp={timestamp}
+        />
+      </div>
+    )
+  }
+
+  // Subagent completed events
+  if (event_type === "agent.subagent_completed") {
+    const toolInput = (data.tool_input || {}) as Record<string, unknown>
+    const subagentType = getString(data, "subagent_type") || getString(toolInput, "subagent_type") || "unknown"
+    const description = getString(data, "description") || getString(data, "subagent_description") || getString(toolInput, "description") || ""
+    const prompt = getString(data, "subagent_prompt") || getString(toolInput, "prompt") || ""
+
+    // Extract result data from completed subagent
+    const result = getString(data, "subagent_result") || undefined
+    const usage = data.subagent_usage as { input_tokens?: number; output_tokens?: number } | undefined
+    const costUsd = typeof data.subagent_cost_usd === "number" ? data.subagent_cost_usd : undefined
+    const durationMs = typeof data.subagent_duration_ms === "number" ? data.subagent_duration_ms : undefined
+
+    return (
+      <div className={className}>
+        <SubagentCard
+          subagentType={subagentType}
+          description={description}
+          prompt={prompt}
+          status="completed"
+          timestamp={timestamp}
+          result={result}
+          usage={usage}
+          costUsd={costUsd}
+          durationMs={durationMs}
+        />
       </div>
     )
   }

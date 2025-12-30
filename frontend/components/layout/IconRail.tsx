@@ -18,6 +18,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { OmoiOSMark } from "@/components/ui/omoios-logo"
 
 export type NavSection = "command" | "projects" | "phases" | "sandboxes" | "analytics" | "organizations" | "settings"
 
@@ -81,9 +82,9 @@ export function IconRail({ activeSection, onSectionChange, className }: IconRail
         {/* Logo */}
         <Link
           href="/command"
-          className="mb-6 flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-lg"
+          className="mb-6 flex h-10 w-10 items-center justify-center"
         >
-          O
+          <OmoiOSMark className="h-8 w-8" />
         </Link>
 
         {/* Main Navigation */}
