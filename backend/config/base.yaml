@@ -103,7 +103,7 @@ daytona:
   sandbox_disk_gb: 8  # Disk space in GiB (max: 10)
 
 integrations:
-  mcp_server_url: http://localhost:18000/mcp
+  mcp_server_url: https://api.omoios.dev/mcp
   enable_mcp_tools: true
   github_token: null
 
