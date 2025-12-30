@@ -173,7 +173,7 @@ async def test():
         
         options = ClaudeAgentOptions(
             allowed_tools=["Read", "Write", "Edit", "Bash", "LS"],
-            permission_mode="acceptEdits",
+            permission_mode="bypassPermissions",
             system_prompt="You are a helpful assistant. Always write code to files before running them. Use relative paths.",
             cwd=workspace,
             max_turns=10,

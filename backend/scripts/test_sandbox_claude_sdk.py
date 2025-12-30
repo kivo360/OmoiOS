@@ -181,7 +181,7 @@ try:
     # Test creating options object with GLM model
     options = ClaudeAgentOptions(
         allowed_tools=["Read", "Write", "Bash"],
-        permission_mode="acceptEdits",
+        permission_mode="bypassPermissions",
         system_prompt="Test system prompt",
         cwd=Path("/tmp"),
         max_turns=10,
@@ -228,7 +228,7 @@ async def test_api():
         
         options = ClaudeAgentOptions(
             allowed_tools=["Bash"],
-            permission_mode="acceptEdits",
+            permission_mode="bypassPermissions",
             system_prompt="You are a helpful assistant. Be concise.",
             cwd=Path("/tmp"),
             max_turns=5,

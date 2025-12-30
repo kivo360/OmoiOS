@@ -838,7 +838,7 @@ class WorkerConfig:
         # SDK settings
         self.max_turns = int(os.environ.get("MAX_TURNS", "50"))
         self.max_budget_usd = float(os.environ.get("MAX_BUDGET_USD", "10.0"))
-        self.permission_mode = os.environ.get("PERMISSION_MODE", "acceptEdits")
+        self.permission_mode = os.environ.get("PERMISSION_MODE", "bypassPermissions")
         self.cwd = os.environ.get("CWD", "/workspace")
 
         # System prompt - use append pattern to extend rather than replace
