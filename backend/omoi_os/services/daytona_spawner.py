@@ -578,7 +578,11 @@ class DaytonaSpawnerService:
                 info.extra_data["daytona_sandbox_id"] = sandbox.id
 
             # Set environment variables and start the worker
-            await self._start_worker_in_sandbox(sandbox, env_vars, runtime, execution_mode)
+            # Pass effective_continuous_mode from spawn_for_task to control worker logging
+            await self._start_worker_in_sandbox(
+                sandbox, env_vars, runtime, execution_mode,
+                continuous_mode=effective_continuous_mode or False
+            )
 
             logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
 
@@ -596,6 +600,7 @@ class DaytonaSpawnerService:
         env_vars: Dict[str, str],
         runtime: str = "openhands",
         execution_mode: str = "implementation",
+        continuous_mode: bool = False,
     ) -> None:
         """Start the sandbox worker inside the Daytona sandbox.
 
@@ -604,6 +609,7 @@ class DaytonaSpawnerService:
             env_vars: Environment variables for the worker
             runtime: Agent runtime - "openhands" or "claude"
             execution_mode: Skill loading mode - determines which skills are loaded
+            continuous_mode: Whether continuous iteration mode is enabled
         """
         # Extract git clone parameters (don't pass token to env vars for security)
         github_repo = env_vars.pop("GITHUB_REPO", None)
@@ -787,7 +793,7 @@ class DaytonaSpawnerService:
         # Note: Claude worker has continuous mode built-in, controlled by CONTINUOUS_MODE env var
         if runtime == "claude":
             worker_script = self._get_claude_worker_script()
-            if effective_continuous_mode:
+            if continuous_mode:
                 logger.info("Using Claude worker with continuous mode enabled via environment")
         else:
             worker_script = self._get_worker_script()
