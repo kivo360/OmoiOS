@@ -1949,7 +1949,7 @@ Systematically investigate issues:
             "Task",  # Subagent dispatch
             "Skill",  # Skill invocation
         ],
-        permission_mode="acceptEdits",
+        permission_mode="bypassPermissions",
         system_prompt=f"""You are an AI coding agent. Your workspace is /workspace. Be thorough and test your changes.
 
 You have access to specialized subagents:

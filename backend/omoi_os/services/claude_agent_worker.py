@@ -239,7 +239,7 @@ async def run_claude_agent(task_description: str, workspace_dir: str = "/workspa
     # Configure the agent
     options = ClaudeAgentOptions(
         allowed_tools=tool_names + ["Read", "Write", "Bash", "Edit", "Glob", "Grep"],
-        permission_mode="acceptEdits",  # Auto-accept file edits in sandbox
+        permission_mode="bypassPermissions",  # Auto-approve all in sandbox
         system_prompt=f"""You are an AI coding agent working on a software development task.
         
 Your workspace is at {workspace_dir}. You have access to tools for reading/writing files,

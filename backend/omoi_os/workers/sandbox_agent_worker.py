@@ -88,7 +88,7 @@ class WorkerConfig:
         self.poll_interval = float(os.environ.get("POLL_INTERVAL", "0.5"))
         self.heartbeat_interval = int(os.environ.get("HEARTBEAT_INTERVAL", "30"))
         self.max_turns = int(os.environ.get("MAX_TURNS", "50"))
-        self.permission_mode = os.environ.get("PERMISSION_MODE", "acceptEdits")
+        self.permission_mode = os.environ.get("PERMISSION_MODE", "bypassPermissions")
         self.system_prompt = os.environ.get(
             "SYSTEM_PROMPT",
             "You are a helpful coding assistant working in a sandboxed environment. "
