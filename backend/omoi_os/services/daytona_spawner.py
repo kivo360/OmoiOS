@@ -611,31 +611,15 @@ class DaytonaSpawnerService:
         github_owner = env_vars.pop("GITHUB_REPO_OWNER", None)
         github_repo_name = env_vars.pop("GITHUB_REPO_NAME", None)
 
-        # Build environment export string (without sensitive token)
-        # Properly escape values to handle quotes and special characters
+        # Helper function to escape environment variable values for shell export
         def escape_env_value(v: str) -> str:
             """Escape environment variable value for shell export."""
             # Use shlex.quote to properly escape shell values
             return shlex.quote(str(v))
 
-        env_exports = " ".join(
-            [f"export {k}={escape_env_value(v)}" for k, v in env_vars.items()]
-        )
-
-        # Also write env vars to a file for persistence and debugging
-        # For the file, we can use simpler escaping since it's not in a shell command
-        env_file_content = "\n".join(
-            [
-                f'{k}="{v.replace(chr(34), chr(92) + chr(34))}"'
-                for k, v in env_vars.items()
-            ]
-        )
-        sandbox.process.exec(
-            f"cat > /tmp/.sandbox_env << 'ENVEOF'\n{env_file_content}\nENVEOF"
-        )
-        # Export to current shell profile for all future commands
-        # Use proper heredoc delimiter
-        sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVEOF")
+        # NOTE: We delay writing env file and bashrc until AFTER all env vars are set
+        # (including GITHUB_TOKEN which gets added after git clone).
+        # See the "Persist final environment" section below.
 
         # Install required packages based on runtime
         # Use uv for faster installation if available, fallback to pip
@@ -797,13 +781,9 @@ class DaytonaSpawnerService:
 
                 logger.info("Git configured for push access with GitHub token")
 
-                # Update env file with workspace path
-                sandbox.process.exec(
-                    f'echo "WORKSPACE_PATH="{workspace_path}"" >> /tmp/.sandbox_env'
-                )
-                sandbox.process.exec(
-                    f'echo "export WORKSPACE_PATH="{workspace_path}"" >> /root/.bashrc'
-                )
+                # NOTE: WORKSPACE_PATH, GITHUB_TOKEN, GH_TOKEN are now in env_vars
+                # and will be persisted to /tmp/.sandbox_env and ~/.bashrc in the
+                # "Persist final environment" section below.
 
             except Exception as e:
                 logger.warning(f"Failed to clone repository via SDK: {e}")
@@ -825,11 +805,40 @@ class DaytonaSpawnerService:
             worker_script = self._get_worker_script()
         sandbox.fs.upload_file(worker_script.encode("utf-8"), "/tmp/sandbox_worker.py")
 
-        # Rebuild env_exports with any new variables (like WORKSPACE_PATH)
+        # Rebuild env_exports with any new variables (like WORKSPACE_PATH, GITHUB_TOKEN)
         # Use the same escape function defined above
         env_exports = " ".join(
             [f"export {k}={escape_env_value(v)}" for k, v in env_vars.items()]
         )
+
+        # =========================================================================
+        # Persist final environment (AFTER all env vars including GITHUB_TOKEN are set)
+        # This ensures the token is available for:
+        # - Subprocesses spawned by the worker
+        # - Continuous mode iterations that may source bashrc
+        # - gh CLI commands that read GH_TOKEN from environment
+        # =========================================================================
+
+        # Write env vars to a file for persistence and debugging
+        # For the file, we can use simpler escaping since it's not in a shell command
+        env_file_content = "\n".join(
+            [
+                f'{k}="{v.replace(chr(34), chr(92) + chr(34))}"'
+                for k, v in env_vars.items()
+            ]
+        )
+        sandbox.process.exec(
+            f"cat > /tmp/.sandbox_env << 'ENVEOF'\n{env_file_content}\nENVEOF"
+        )
+
+        # Export to current shell profile for all future commands
+        # This ensures env vars persist across shell sessions and subprocesses
+        sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVEOF")
+
+        # Also source the env file in bashrc for belt-and-suspenders persistence
+        sandbox.process.exec('echo "source /tmp/.sandbox_env 2>/dev/null || true" >> /root/.bashrc')
+
+        logger.info(f"Persisted {len(env_vars)} environment variables (including GitHub tokens)")
 
         # Create workspace directory (even if no repo cloned)
         sandbox.process.exec("mkdir -p /workspace")
