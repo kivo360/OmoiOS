@@ -135,6 +135,7 @@ class DaytonaSpawnerService:
         labels: Optional[Dict[str, str]] = None,
         runtime: str = "openhands",  # "openhands" or "claude"
         execution_mode: str = "implementation",  # "exploration", "implementation", "validation"
+        continuous_mode: bool = False,  # Enable continuous iteration until task complete
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -150,6 +151,9 @@ class DaytonaSpawnerService:
                 - "exploration": For feature definition (creates specs/tickets/tasks)
                 - "implementation": For task execution (writes code, default)
                 - "validation": For verifying implementation
+            continuous_mode: If True, runs iterative loop until task is complete
+                (code pushed, PR created) or limits are reached. Only works with
+                runtime="claude".
 
         Returns:
             Sandbox ID
@@ -186,6 +190,15 @@ class DaytonaSpawnerService:
             "PHASE_ID": phase_id,
             "SANDBOX_ID": sandbox_id,
         }
+
+        # Add continuous mode settings if enabled
+        if continuous_mode and runtime == "claude":
+            env_vars["CONTINUOUS_MODE"] = "true"
+            # Default limits for continuous mode (can be overridden via extra_env)
+            env_vars.setdefault("CONTINUOUS_MAX_RUNS", "10")
+            env_vars.setdefault("CONTINUOUS_MAX_COST_USD", "20.0")
+            env_vars.setdefault("CONTINUOUS_MAX_DURATION", "3600")  # 1 hour
+            logger.info("Continuous mode enabled for sandbox")
 
         # Add agent type if specified
         if agent_type:
@@ -787,7 +800,11 @@ class DaytonaSpawnerService:
 
         # Upload the appropriate worker script
         if runtime == "claude":
-            worker_script = self._get_claude_worker_script()
+            if continuous_mode:
+                worker_script = self._get_continuous_worker_script()
+                logger.info("Using continuous worker script for iterative execution")
+            else:
+                worker_script = self._get_claude_worker_script()
         else:
             worker_script = self._get_worker_script()
         sandbox.fs.upload_file(worker_script.encode("utf-8"), "/tmp/sandbox_worker.py")
@@ -2270,6 +2287,36 @@ if __name__ == "__main__":
         except Exception as e:
             logger.error(f"Failed to terminate sandbox {sandbox_id} via direct API: {e}")
             return False
+
+    def _get_continuous_worker_script(self) -> str:
+        """Get the Continuous Sandbox Worker script content.
+
+        Reads from backend/omoi_os/workers/continuous_sandbox_worker.py
+        This worker runs Claude Code in an iterative loop until:
+        - Task is complete (code pushed, PR created)
+        - Limits are reached (max runs, cost, duration)
+        - Consecutive errors occur
+
+        Features (extends base Claude worker):
+        - Iterative execution with completion signal detection
+        - Git validation (clean status, pushed, PR exists)
+        - Cross-iteration context via notes file
+        - Automatic retry on validation failure
+        - Per-iteration event reporting
+        """
+        # Try to read from file first (development mode)
+        worker_file = (
+            Path(__file__).parent.parent / "workers" / "continuous_sandbox_worker.py"
+        )
+        if worker_file.exists():
+            logger.info(f"Loading continuous worker script from {worker_file}")
+            return worker_file.read_text()
+
+        # Fallback to standard Claude worker if continuous worker not found
+        logger.warning(
+            "Continuous worker file not found, falling back to standard Claude worker"
+        )
+        return self._get_claude_worker_script()
 
     def mark_completed(self, sandbox_id: str, result: Optional[Dict] = None) -> None:
         """Mark a sandbox as completed (called when task finishes)."""
