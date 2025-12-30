@@ -658,6 +658,41 @@ class DaytonaSpawnerService:
                 # Create skills directory
                 sandbox.process.exec("mkdir -p /root/.claude/skills")
 
+                # Create settings.local.json with allowed commands
+                # This allows common development commands without requiring approval
+                settings_content = """{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(pnpm run *)",
+      "Bash(yarn run *)",
+      "Bash(npx *)",
+      "Bash(pytest*)",
+      "Bash(uv run *)",
+      "Bash(python *)",
+      "Bash(node *)",
+      "Bash(git *)",
+      "Bash(gh *)",
+      "Bash(cd *)",
+      "Bash(ls *)",
+      "Bash(cat *)",
+      "Bash(mkdir *)",
+      "Bash(rm *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(grep *)",
+      "Bash(find *)",
+      "Bash(cargo *)",
+      "Bash(go *)",
+      "Bash(make *)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}"""
+                sandbox.fs.upload_file(settings_content.encode("utf-8"), "/root/.claude/settings.local.json")
+                logger.info("Uploaded Claude settings.local.json with allowed commands")
+
                 # Get skills based on execution mode
                 # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
                 # - implementation: git-workflow, code-review, etc. (for executing tasks)
