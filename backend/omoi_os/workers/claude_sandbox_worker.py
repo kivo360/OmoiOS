@@ -1211,9 +1211,16 @@ Systematically investigate issues:
         }
 
     def to_sdk_options(
-        self, pre_tool_hook=None, post_tool_hook=None
+        self, pre_tool_hook=None, post_tool_hook=None, stderr_callback=None
     ) -> "ClaudeAgentOptions":
-        """Create ClaudeAgentOptions from config."""
+        """Create ClaudeAgentOptions from config.
+
+        Args:
+            pre_tool_hook: Hook to run before tool execution
+            post_tool_hook: Hook to run after tool execution
+            stderr_callback: Callback to receive stderr output from CLI subprocess.
+                             If not provided, stderr is logged at DEBUG level.
+        """
         # Build environment variables for the CLI subprocess
         env = {"ANTHROPIC_API_KEY": self.api_key}
         if self.api_base_url:
@@ -1223,6 +1230,13 @@ Systematically investigate issues:
         # Convert cwd to Path if it's a string (SDK expects Path)
         cwd_path = Path(self.cwd) if isinstance(self.cwd, str) else self.cwd
 
+        # Create stderr handler to capture CLI errors
+        # This is critical for debugging initialization failures
+        def default_stderr_handler(line: str):
+            logger.debug("CLI stderr: %s", line.strip())
+
+        stderr_handler = stderr_callback or default_stderr_handler
+
         options_kwargs = {
             "system_prompt": self.system_prompt,
             "permission_mode": self.permission_mode,
@@ -1230,6 +1244,7 @@ Systematically investigate issues:
             "max_budget_usd": self.max_budget_usd,
             "cwd": cwd_path,
             "env": env,
+            "stderr": stderr_handler,  # Capture CLI stderr for debugging
         }
 
         # Only set allowed_tools if explicitly configured
@@ -2367,6 +2382,21 @@ This is a continuation of your previous work. Please review the notes below and 
         async with EventReporter(self.config) as reporter:
             self.reporter = reporter
 
+            # Collect stderr lines for error reporting
+            cli_stderr_lines = []
+
+            def stderr_collector(line: str):
+                """Collect CLI stderr output for debugging.
+
+                This captures stderr from the Claude CLI subprocess.
+                Critical for diagnosing initialization failures.
+                """
+                stripped = line.strip()
+                if stripped:
+                    cli_stderr_lines.append(stripped)
+                    # Log immediately at WARNING level so we see it
+                    logger.warning("CLI stderr: %s", stripped)
+
             async with MessagePoller(self.config) as poller:
                 # Create hooks and options
                 pre_tool_hook = await self._create_pre_tool_hook()
@@ -2374,6 +2404,7 @@ This is a continuation of your previous work. Please review the notes below and 
                 sdk_options = self.config.to_sdk_options(
                     pre_tool_hook=pre_tool_hook,
                     post_tool_hook=post_tool_hook,
+                    stderr_callback=stderr_collector,
                 )
 
                 # Report startup

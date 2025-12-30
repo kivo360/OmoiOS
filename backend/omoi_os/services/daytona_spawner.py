@@ -757,32 +757,32 @@ class DaytonaSpawnerService:
 
                 # Create settings.local.json with FULL permissions
                 # This is a sandbox environment - allow everything without prompts
-                # Explicitly listing ALL Claude Code tools to ensure nothing is missed
+                # Format: "ToolName" for built-in tools, "mcp__server__*" for MCP tools
+                # NOTE: Do NOT use "Bash(*)" - that's invalid syntax. Use "Bash" instead.
                 settings_content = """{
   "permissions": {
     "allow": [
-      "Bash(*)",
-      "Read(*)",
-      "Write(*)",
-      "Edit(*)",
-      "MultiEdit(*)",
-      "Glob(*)",
-      "Grep(*)",
-      "LS(*)",
-      "WebFetch(*)",
-      "WebSearch(*)",
-      "TodoWrite(*)",
-      "Task(*)",
-      "TaskOutput(*)",
-      "Skill(*)",
-      "LSP(*)",
-      "NotebookEdit(*)",
-      "AskUserQuestion(*)",
-      "KillShell(*)",
-      "EnterPlanMode(*)",
-      "ExitPlanMode(*)",
-      "mcp__*(*)",
-      "*"
+      "Bash",
+      "Read",
+      "Write",
+      "Edit",
+      "MultiEdit",
+      "Glob",
+      "Grep",
+      "LS",
+      "WebFetch",
+      "WebSearch",
+      "TodoWrite",
+      "Task",
+      "TaskOutput",
+      "Skill",
+      "LSP",
+      "NotebookEdit",
+      "AskUserQuestion",
+      "KillShell",
+      "EnterPlanMode",
+      "ExitPlanMode",
+      "mcp__*"
     ],
     "deny": []
   }
