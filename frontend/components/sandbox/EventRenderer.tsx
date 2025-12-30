@@ -2432,23 +2432,25 @@ export function EventRenderer({ event, className }: EventRendererProps) {
   if (event_type.includes("heartbeat")) return null
 
   // ============================================================================
-  // Iteration & Continuous Mode Events - Subtle inline display
+  // Iteration & Continuous Mode Events - Visible progress indicators
   // ============================================================================
 
-  // Iteration started - very subtle, just a small indicator
+  // Iteration started - clear indicator with iteration number
   if (event_type === "iteration.started") {
     const iterNum = getNumber(data, "iteration_num")
     return (
-      <div className={cn(className, "opacity-50 hover:opacity-100 transition-opacity")}>
-        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
-          <Play className="h-3 w-3" />
-          <span>Iteration {iterNum} started</span>
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-blue-500/10 border border-blue-500/20 rounded-md">
+          <Play className="h-4 w-4 text-blue-500" />
+          <span className="font-medium text-blue-600 dark:text-blue-400">
+            Iteration {iterNum} started
+          </span>
         </div>
       </div>
     )
   }
 
-  // Iteration completed - show cost and brief summary
+  // Iteration completed - show cost and completion status
   if (event_type === "iteration.completed") {
     const iterNum = getNumber(data, "iteration_num")
     const costUsd = getNumber(data, "cost_usd")
@@ -2461,18 +2463,20 @@ export function EventRenderer({ event, className }: EventRendererProps) {
     }
 
     return (
-      <div className={cn(className, "opacity-50 hover:opacity-100 transition-opacity")}>
-        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
-          <CheckCircle className="h-3 w-3 text-green-500/70" />
-          <span>Iteration {iterNum}</span>
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-green-500/10 border border-green-500/20 rounded-md">
+          <CheckCircle className="h-4 w-4 text-green-500" />
+          <span className="font-medium text-green-600 dark:text-green-400">
+            Iteration {iterNum} completed
+          </span>
           {costUsd > 0 && (
-            <span className="text-muted-foreground/70">
+            <span className="text-green-600/70 dark:text-green-400/70">
               ${costUsd.toFixed(4)}
             </span>
           )}
           {completionCount > 0 && (
-            <Badge variant="outline" className="h-4 px-1 text-[9px] bg-green-500/10 text-green-600 border-green-500/20">
-              complete
+            <Badge variant="outline" className="h-5 px-2 text-[10px] bg-green-500/20 text-green-600 border-green-500/30 font-medium">
+              COMPLETE
             </Badge>
           )}
         </div>
@@ -2480,63 +2484,71 @@ export function EventRenderer({ event, className }: EventRendererProps) {
     )
   }
 
-  // Iteration validation - show pass/fail status subtly
+  // Iteration validation - show pass/fail status clearly
   if (event_type === "iteration.validation") {
     const passed = data.passed === true
     const errors = Array.isArray(data.errors) ? data.errors : []
     const feedback = getString(data, "feedback")
 
-    // If validation passed, be very subtle
+    // If validation passed - show success
     if (passed) {
       return (
-        <div className={cn(className, "opacity-40 hover:opacity-100 transition-opacity")}>
-          <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
-            <CheckCircle className="h-3 w-3 text-green-500/70" />
-            <span>Validation passed</span>
+        <div className={cn(className)}>
+          <div className="flex items-center gap-2 px-3 py-2 text-xs bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+            <CheckCircle className="h-4 w-4 text-emerald-500" />
+            <span className="font-medium text-emerald-600 dark:text-emerald-400">
+              Validation passed
+            </span>
           </div>
         </div>
       )
     }
 
-    // If validation failed, show a bit more info but still subtle
+    // If validation failed, show prominently with details
     return (
-      <div className={cn(className, "opacity-60 hover:opacity-100 transition-opacity")}>
-        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-amber-600/80">
-          <AlertCircle className="h-3 w-3" />
-          <span>Validation: {feedback || errors.join(", ") || "checking..."}</span>
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-amber-500/10 border border-amber-500/20 rounded-md">
+          <AlertCircle className="h-4 w-4 text-amber-500" />
+          <span className="font-medium text-amber-600 dark:text-amber-400">
+            Validation: {feedback || errors.join(", ") || "checking..."}
+          </span>
         </div>
       </div>
     )
   }
 
-  // Completion signal - very subtle, just shows detection
+  // Completion signal - shows progress toward task completion
   if (event_type === "iteration.completion_signal") {
     const signalCount = getNumber(data, "signal_count")
     const threshold = getNumber(data, "threshold")
 
     return (
-      <div className={cn(className, "opacity-40 hover:opacity-100 transition-opacity")}>
-        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
-          <Sparkles className="h-3 w-3 text-green-500/70" />
-          <span>TASK_COMPLETE detected ({signalCount}/{threshold})</span>
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-purple-500/10 border border-purple-500/20 rounded-md">
+          <Sparkles className="h-4 w-4 text-purple-500" />
+          <span className="font-medium text-purple-600 dark:text-purple-400">
+            TASK_COMPLETE signal ({signalCount}/{threshold})
+          </span>
         </div>
       </div>
     )
   }
 
-  // Continuous mode started - subtle indicator
+  // Continuous mode started - clear indicator
   if (event_type === "continuous.started") {
     return (
-      <div className={cn(className, "opacity-50 hover:opacity-100 transition-opacity")}>
-        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Continuous mode started</span>
+      <div className={cn(className)}>
+        <div className="flex items-center gap-2 px-3 py-2 text-xs bg-indigo-500/10 border border-indigo-500/20 rounded-md">
+          <Loader2 className="h-4 w-4 text-indigo-500 animate-spin" />
+          <span className="font-medium text-indigo-600 dark:text-indigo-400">
+            Continuous mode started
+          </span>
         </div>
       </div>
     )
   }
 
-  // Continuous mode completed - show summary
+  // Continuous mode completed - show summary with stats
   if (event_type === "continuous.completed") {
     const stopReason = getString(data, "stop_reason")
     const totalIterations = getNumber(data, "iteration_num")
@@ -2544,27 +2556,32 @@ export function EventRenderer({ event, className }: EventRendererProps) {
     const elapsedSecs = getNumber(data, "elapsed_seconds")
 
     const reasonLabel = stopReason === "task_complete" ? "Task completed" :
-                        stopReason === "max_iterations_reached" ? "Max iterations" :
+                        stopReason === "max_iterations_reached" ? "Max iterations reached" :
                         stopReason === "validation_passed" ? "Validation passed" :
                         stopReason || "Completed"
 
+    const isSuccess = stopReason === "task_complete" || stopReason === "validation_passed"
+    const bgColor = isSuccess ? "bg-green-500/10 border-green-500/20" : "bg-amber-500/10 border-amber-500/20"
+    const textColor = isSuccess ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"
+    const iconColor = isSuccess ? "text-green-500" : "text-amber-500"
+
     return (
-      <div className={cn(className, "opacity-60 hover:opacity-100 transition-opacity")}>
-        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
-          <CheckCircle className="h-3 w-3 text-green-500/70" />
-          <span>{reasonLabel}</span>
-          <span className="text-muted-foreground/60">•</span>
-          <span>{totalIterations} iterations</span>
+      <div className={cn(className)}>
+        <div className={cn("flex items-center gap-3 px-3 py-2 text-xs border rounded-md", bgColor)}>
+          <CheckCircle className={cn("h-4 w-4", iconColor)} />
+          <span className={cn("font-medium", textColor)}>{reasonLabel}</span>
+          <span className="text-muted-foreground">•</span>
+          <span className="text-muted-foreground">{totalIterations} iterations</span>
           {totalCost > 0 && (
             <>
-              <span className="text-muted-foreground/60">•</span>
-              <span>${totalCost.toFixed(2)}</span>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">${totalCost.toFixed(2)}</span>
             </>
           )}
           {elapsedSecs > 0 && (
             <>
-              <span className="text-muted-foreground/60">•</span>
-              <span>{Math.round(elapsedSecs)}s</span>
+              <span className="text-muted-foreground">•</span>
+              <span className="text-muted-foreground">{Math.round(elapsedSecs)}s</span>
             </>
           )}
         </div>
