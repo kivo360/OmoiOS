@@ -181,7 +181,7 @@ async def run_agent(task: str):
     
     options = ClaudeAgentOptions(
         allowed_tools=["Read", "Write", "Edit", "Bash", "Glob", "Grep", "LS"],
-        permission_mode="acceptEdits",  # Auto-accept file edits
+        permission_mode="bypassPermissions",  # Auto-approve all
         system_prompt=f"""You are a helpful coding assistant working in {work_dir}.
 
 IMPORTANT RULES:
