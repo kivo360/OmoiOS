@@ -1,47 +1,52 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Search, Pencil, ListChecks, Code2, CheckCircle2 } from "lucide-react"
+import { Pencil, ListChecks, Moon, CheckCircle2 } from "lucide-react"
 import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { TicketJourney } from "@/components/landing/TicketJourney"
 import { cn } from "@/lib/utils"
 
 const phases = [
   {
-    id: "requirements",
+    id: "spec",
     number: "01",
-    title: "You Describe It",
+    title: "You Write a Spec",
     description:
-      "Write what you want in plain English. \"Add user authentication with Google login.\" That's all you need.",
-    icon: Search,
-    color: "bg-blue-500",
-  },
-  {
-    id: "design",
-    number: "02",
-    title: "You Approve the Plan",
-    description:
-      "We show you exactly what will be built. You say yes, no, or make changes. Nothing happens without your OK.",
+      "Describe the feature in plain English. Add constraints like tech stack, architecture rules, or coding standards. The spec becomes the agent's guardrails.",
     icon: Pencil,
     color: "bg-purple-500",
+    highlight: "Spec-driven constraints",
   },
   {
-    id: "tasks",
-    number: "03",
-    title: "We Handle the Details",
+    id: "plan",
+    number: "02",
+    title: "We Plan the Work",
     description:
-      "The boring part—breaking it into tasks, figuring out dependencies, tracking progress—all handled for you.",
+      "Your spec becomes tickets and tasks with clear dependencies. You see exactly what will be built and in what order. Approve or adjust before any code is written.",
     icon: ListChecks,
-    color: "bg-amber-500",
+    color: "bg-blue-500",
+    highlight: "Tickets & dependencies",
   },
   {
     id: "execution",
-    number: "04",
-    title: "You Review the Result",
+    number: "03",
+    title: "Agents Work Overnight",
     description:
-      "A pull request appears with working, tested code. Review it, merge it, done. Ship faster without the busywork.",
-    icon: Code2,
+      "Go to sleep. Agents work through tickets in isolated sandboxes—writing code, running tests, fixing issues. They don't stop until every task is complete.",
+    icon: Moon,
+    color: "bg-amber-500",
+    highlight: "Runs until completion",
+  },
+  {
+    id: "review",
+    number: "04",
+    title: "Wake Up to a PR",
+    description:
+      "Morning: a pull request with working, tested code. Every change traced back to your spec. Review it, merge it, ship it.",
+    icon: CheckCircle2,
     color: "bg-green-500",
+    highlight: "Ready when you are",
   },
 ]
 
@@ -61,10 +66,10 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
           className="mx-auto mb-16 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            Here&apos;s How Simple It Is
+            You Sleep. Agents Ship.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Four steps. You do two of them. We do the rest.
+            Write a spec, approve the plan, go to bed. Wake up to a pull request.
           </p>
         </motion.div>
 
@@ -99,7 +104,15 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
                   <h3 className="mb-2 text-lg font-semibold text-landing-text">
                     {phase.title}
                   </h3>
-                  <p className="text-sm text-landing-text-muted">{phase.description}</p>
+                  <p className="mb-3 text-sm text-landing-text-muted">{phase.description}</p>
+
+                  {/* Highlight Badge */}
+                  <Badge
+                    variant="secondary"
+                    className="bg-landing-bg-muted text-xs text-landing-text-muted"
+                  >
+                    {phase.highlight}
+                  </Badge>
 
                   {/* Connector Arrow (hidden on last item) */}
                   {i < phases.length - 1 && (

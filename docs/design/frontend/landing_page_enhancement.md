@@ -1233,8 +1233,247 @@ export const typewriter = {
 
 ---
 
+## 13. ShadCN/UI Component Mappings
+
+This section maps design document components to the shadcn/ui primitives available in the codebase (`components/ui/`).
+
+### 13.1 Available ShadCN Components
+
+The following shadcn/ui components are installed and available:
+
+| Component | Path | Common Usage |
+|-----------|------|--------------|
+| `Button` | `components/ui/button.tsx` | CTAs, form actions, navigation |
+| `Card` | `components/ui/card.tsx` | Feature cards, pricing cards, content containers |
+| `Badge` | `components/ui/badge.tsx` | Status indicators, tags, labels, plan names |
+| `Dialog` | `components/ui/dialog.tsx` | Modals (video modal, signup forms) |
+| `Tabs` | `components/ui/tabs.tsx` | Tab navigation, plan comparisons |
+| `Tooltip` | `components/ui/tooltip.tsx` | Hover information, feature explanations |
+| `Progress` | `components/ui/progress.tsx` | Progress bars, loading states |
+| `Skeleton` | `components/ui/skeleton.tsx` | Loading placeholders |
+| `Separator` | `components/ui/separator.tsx` | Visual dividers |
+| `Switch` | `components/ui/switch.tsx` | Toggle options (monthly/yearly pricing) |
+| `Accordion` | `components/ui/accordion.tsx` | FAQ sections, expandable content |
+| `Alert` | `components/ui/alert.tsx` | Announcements, notices |
+| `BentoGrid` | `components/ui/bento-grid.tsx` | Feature showcase grids (Aceternity UI) |
+| `FlipWords` | `components/ui/flip-words.tsx` | Animated text transitions (Aceternity UI) |
+| `TextGenerateEffect` | `components/ui/text-generate-effect.tsx` | Typewriter text (Aceternity UI) |
+| `Sparkles` | `components/ui/sparkles.tsx` | Particle effects (Aceternity UI) |
+| `FloatingNavbar` | `components/ui/floating-navbar.tsx` | Sticky navigation |
+| `Announcement` | `components/ui/announcement.tsx` | Banner announcements |
+
+### 13.2 Component → ShadCN Mapping for Landing Page
+
+#### Hero Section Components
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| `AgentTerminal` | Custom + `Skeleton` | Terminal effect is custom; use Skeleton for loading states |
+| Hero Headlines | `FlipWords`, `TextGenerateEffect` | Animated text from Aceternity UI |
+| CTA Buttons | `Button` (variants: default, outline) | Primary = default, Secondary = outline |
+| "Watch it build" modal | `Dialog` | For video playback modal |
+
+#### Ticket Journey Section
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| `TicketJourney` | `Card`, `Badge`, `Progress` | Card for ticket, Badge for phase labels, Progress for completion |
+| `PhaseInstructionsPanel` | `Card`, custom styling | Content container |
+| `FeedbackLoopArrow` | Custom SVG | No direct shadcn equivalent |
+| Done Criteria Checklist | Custom with `Checkbox` | Use checkbox for tick items |
+
+#### Features Section
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| `BentoGrid` | `BentoGrid`, `BentoGridItem` | Already using Aceternity UI bento components |
+| `FeatureCard` | `Card`, `Badge` | Card for container, Badge for labels |
+
+#### Pricing Section (NEW)
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| `PricingSection` | `Card`, `Button`, `Badge`, `Switch` | |
+| Pricing Cards | `Card` with `CardHeader`, `CardContent`, `CardFooter` | One card per tier |
+| Plan Badge | `Badge` (variant: secondary, default) | "Popular", "Best Value" labels |
+| Monthly/Yearly Toggle | `Switch` + labels | For billing cycle selection |
+| Feature List | Custom list with check icons | Use Lucide `Check` icon |
+| CTA Button | `Button` (variant based on tier) | Primary for featured plan |
+
+#### Stats Section
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| Stats Cards | `Card` or custom divs | Large number display |
+| Animated Numbers | Custom animation | Use Framer Motion |
+
+#### CTA Section
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| Final CTA | `Button`, `Card` | Button for action, Card for container |
+| Email Input | `Input` + `Button` | Waitlist signup |
+
+#### Footer Section
+
+| Design Component | ShadCN Components | Notes |
+|------------------|-------------------|-------|
+| Footer Links | `NavigationMenu` or custom | Navigation links |
+| Social Icons | `Button` (variant: ghost, icon size) | Icon-only buttons |
+
+### 13.3 Pricing Section Specification
+
+**New Component: `PricingSection`**
+
+Location: `components/marketing/sections/PricingSection.tsx`
+
+**Pricing Tiers** (Updated):
+
+| Tier | Price | Features |
+|------|-------|----------|
+| **Free** | $0/month | 5 workflows/month, 1 project, Community support |
+| **Pro** | $50/month | 100 workflows/month, 5 projects, Priority support, Advanced features |
+| **Team** | $150/month | 500 workflows/month, Unlimited projects, Dedicated support, Team collaboration |
+
+**Component Structure**:
+
+```tsx
+// components/marketing/sections/PricingSection.tsx
+import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
+import { Check } from "lucide-react"
+
+interface PricingTier {
+  name: string
+  price: number | string
+  description: string
+  features: string[]
+  cta: string
+  popular?: boolean
+}
+
+const pricingTiers: PricingTier[] = [
+  {
+    name: "Free",
+    price: 0,
+    description: "Get started with autonomous engineering",
+    features: [
+      "5 workflows per month",
+      "1 project",
+      "Community support",
+      "Basic analytics",
+    ],
+    cta: "Start Free",
+  },
+  {
+    name: "Pro",
+    price: 50,
+    description: "For individual developers and small teams",
+    features: [
+      "100 workflows per month",
+      "5 projects",
+      "Priority support",
+      "Advanced analytics",
+      "BYO API keys",
+      "Custom integrations",
+    ],
+    cta: "Get Pro",
+    popular: true,
+  },
+  {
+    name: "Team",
+    price: 150,
+    description: "For growing teams that ship fast",
+    features: [
+      "500 workflows per month",
+      "Unlimited projects",
+      "Dedicated support",
+      "Team collaboration",
+      "Role-based access",
+      "Audit logs",
+      "SSO (coming soon)",
+    ],
+    cta: "Get Team",
+  },
+]
+```
+
+**Visual Design**:
+- Use `Card` with elevated styling for the "Popular" tier
+- `Badge` with "Most Popular" text for Pro tier
+- `Button` variants: outline for Free, default for Pro (featured), outline for Team
+- Check icons (`Check` from Lucide) for feature lists
+- Landing page color scheme (landing-bg, landing-text, landing-accent)
+
+### 13.4 Animation Patterns with ShadCN + Framer Motion
+
+All landing page animations use Framer Motion. Common patterns:
+
+```tsx
+// Fade in on scroll
+<motion.div
+  initial={{ opacity: 0, y: 20 }}
+  whileInView={{ opacity: 1, y: 0 }}
+  viewport={{ once: true }}
+  transition={{ duration: 0.5 }}
+>
+  <Card>...</Card>
+</motion.div>
+
+// Staggered children
+<motion.div
+  initial="hidden"
+  whileInView="visible"
+  viewport={{ once: true }}
+  variants={{
+    visible: { transition: { staggerChildren: 0.1 } }
+  }}
+>
+  {items.map((item, i) => (
+    <motion.div
+      key={i}
+      variants={{
+        hidden: { opacity: 0, y: 20 },
+        visible: { opacity: 1, y: 0 }
+      }}
+    >
+      <Card>...</Card>
+    </motion.div>
+  ))}
+</motion.div>
+```
+
+### 13.5 Color Tokens for Landing Page
+
+Landing page uses custom CSS variables defined in `globals.css`:
+
+```css
+/* Landing page specific colors */
+--landing-bg: 45 20% 96%;           /* Warm off-white */
+--landing-bg-warm: 45 30% 94%;      /* Warmer sections */
+--landing-bg-muted: 45 15% 92%;     /* Muted backgrounds */
+--landing-text: 30 10% 15%;         /* Dark warm text */
+--landing-text-muted: 30 5% 45%;    /* Muted text */
+--landing-accent: 35 100% 50%;      /* Golden amber */
+--landing-border: 30 10% 85%;       /* Subtle borders */
+```
+
+Usage with Tailwind:
+```tsx
+<div className="bg-landing-bg text-landing-text">
+  <h2 className="text-landing-accent">...</h2>
+  <p className="text-landing-text-muted">...</p>
+</div>
+```
+
+---
+
 ## Related Documents
 
 - [Project Management Dashboard](./project_management_dashboard.md) - Internal dashboard design
 - [Frontend Architecture](./frontend_architecture_shadcn_nextjs.md) - Technical stack reference
 - [Component Scaffold Guide](./component_scaffold_guide.md) - How to create new components
+- [Pricing Strategy](../billing/pricing_strategy.md) - Billing tiers and pricing model
+- [Design System](../../../design_system.md) - Color tokens and typography

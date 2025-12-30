@@ -2,11 +2,26 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { ArrowRight, CheckCircle2, Sparkles } from "lucide-react"
+import { ArrowRight, CheckCircle2, Sparkles, Star, Zap, Clock } from "lucide-react"
 import { SparklesCore } from "@/components/ui/sparkles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+
+const foundingBenefits = [
+  {
+    icon: Star,
+    text: "Lifetime access—pay once, use forever",
+  },
+  {
+    icon: Zap,
+    text: "50 workflows/month included",
+  },
+  {
+    icon: Clock,
+    text: "Early access before public launch",
+  },
+]
 
 interface WaitlistCTASectionProps {
   className?: string
@@ -62,7 +77,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
           >
             <span className="inline-flex items-center gap-2 rounded-full bg-landing-accent/20 px-4 py-1.5 text-sm font-medium uppercase tracking-wider text-landing-accent">
               <Sparkles className="h-4 w-4" />
-              Limited Early Access
+              Founding Member Access
             </span>
           </motion.div>
 
@@ -74,7 +89,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.1 }}
             className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl"
           >
-            Ready to Stop Managing and Start Shipping?
+            Reserve Your Spot as a Founding Member
           </motion.h2>
 
           {/* Subheadline */}
@@ -85,8 +100,27 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.2 }}
             className="mt-4 text-lg text-gray-400"
           >
-            Get early access. Describe your first feature tonight, review the PR tomorrow.
+            First 100 members get lifetime access at a one-time price. Lock in your spot before we switch to monthly pricing.
           </motion.p>
+
+          {/* Founding Member Benefits */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ delay: 0.25 }}
+            className="mx-auto mt-8 flex max-w-lg flex-col gap-3 sm:flex-row sm:justify-center"
+          >
+            {foundingBenefits.map((benefit, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm text-gray-300"
+              >
+                <benefit.icon className="h-4 w-4 text-landing-accent" />
+                <span>{benefit.text}</span>
+              </div>
+            ))}
+          </motion.div>
 
           {/* Form */}
           <motion.div
@@ -101,7 +135,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
                 <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-3">
                   <Input
                     type="email"
-                    placeholder="Enter your work email"
+                    placeholder="Enter your email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-12 flex-1 border-gray-700 bg-gray-900 text-white placeholder:text-gray-500"
@@ -117,17 +151,16 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                     ) : (
                       <>
-                        Join Waitlist
+                        Reserve Early Access
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
                   </Button>
                 </form>
 
-                {/* Counter */}
+                {/* Scarcity */}
                 <p className="mt-4 text-sm text-gray-400">
-                  <span className="font-semibold text-landing-accent">847</span> engineers
-                  already on the waitlist
+                  <span className="font-semibold text-landing-accent">73 spots</span> remaining at founding member pricing
                 </p>
               </>
             ) : (
@@ -137,7 +170,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
                 className="inline-flex items-center gap-2 rounded-lg bg-green-900/50 px-6 py-3 text-green-400"
               >
                 <CheckCircle2 className="h-5 w-5" />
-                <span className="font-medium">You&apos;re on the list! Check your email.</span>
+                <span className="font-medium">You&apos;re in! Check your email for next steps.</span>
               </motion.div>
             )}
           </motion.div>
@@ -152,15 +185,15 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
           >
             <span className="flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-green-500" />
-              No credit card required
+              30-day money-back guarantee
+            </span>
+            <span className="flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3 text-green-500" />
+              No credit card to reserve
             </span>
             <span className="flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-green-500" />
               Cancel anytime
-            </span>
-            <span className="flex items-center gap-1">
-              <CheckCircle2 className="h-3 w-3 text-green-500" />
-              SOC 2 compliant
             </span>
           </motion.div>
         </div>

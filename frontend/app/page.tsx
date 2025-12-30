@@ -11,6 +11,8 @@ import {
   WorkflowSection,
   NightShiftSection,
   StatsSection,
+  PricingSection,
+  FAQSection,
   WaitlistCTASection,
   FooterSection,
 } from "@/components/marketing"
@@ -54,6 +56,12 @@ function LandingPage() {
 
       {/* Stats Section */}
       <StatsSection />
+
+      {/* Pricing Section */}
+      <PricingSection id="pricing" />
+
+      {/* FAQ Section */}
+      <FAQSection id="faq" />
 
       {/* Waitlist CTA Section */}
       <WaitlistCTASection />
