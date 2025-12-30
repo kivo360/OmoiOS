@@ -46,10 +46,10 @@ class PydanticAIService:
         """
         Get Fireworks model name from settings.
 
-        Defaults to minimax-m2 if not specified.
+        Defaults to minimax-m2p1 if not specified.
 
         Returns:
-            Fireworks model string (e.g., "accounts/fireworks/models/minimax-m2")
+            Fireworks model string (e.g., "accounts/fireworks/models/minimax-m2p1")
         """
         # If model is already a Fireworks model, use it
         if (
@@ -58,8 +58,8 @@ class PydanticAIService:
         ):
             return self.settings.model
 
-        # Default to GPT-OSS-120B (cost-effective alternative to kimi-k2)
-        return "accounts/fireworks/models/gpt-oss-120b"
+        # Default to minimax-m2p1 (upgraded from m2, cost-effective)
+        return "accounts/fireworks/models/minimax-m2p1"
 
     def create_agent(
         self,
