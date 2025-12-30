@@ -21,25 +21,27 @@ The core value exchange: **Users get powerful AI-driven engineering execution; O
 
 ## Pricing Tiers
 
-### Tier 1: Lifetime Access (Early Adopter)
+### Tier 1: Lifetime Access (Founding Member)
 
-**Target Audience**: First 100-500 users who want permanent access at a one-time cost.
+**Target Audience**: First 100 users who want permanent access at a one-time cost.
 
 | Attribute | Details |
 |-----------|---------|
-| **Price** | $299-$499 one-time (TBD based on market testing) |
+| **Price** | $299 one-time |
+| **Concurrent Agents** | 5 agents running in parallel |
 | **Workflows/Month** | 50 workflows included |
-| **Overage** | Must add own API keys (MiniMax, Z.ai, etc.) |
-| **Limits** | 5 concurrent agents, 100GB storage, 1 organization |
-| **Support** | Community + Email |
+| **BYO API Keys** | Early access (before public Pro/Team release) |
+| **Limits** | 5 projects, 50GB storage |
+| **Support** | Priority email |
 | **Data Rights** | OmoiOS retains trajectory/agent data for training |
 
 **Value Proposition**:
 - "Pay once, use forever" - appeals to cost-conscious early adopters
+- **Early access to BYO keys** - founding members get this before anyone else
 - Users who exceed limits bring their own API keys (no cost to OmoiOS)
 - OmoiOS gets valuable training data from power users
 
-**Marketing Hook**: *"Founding Member: Lifetime access for early believers"*
+**Marketing Hook**: *"Founding Member: Lifetime access + first dibs on BYO keys"*
 
 ---
 
@@ -57,12 +59,18 @@ The core value exchange: **Users get powerful AI-driven engineering execution; O
 
 #### Standard Subscription Tiers
 
-| Tier | Price/Month | Workflows | Agents | Storage | Best For |
-|------|-------------|-----------|--------|---------|----------|
-| **Starter** | $29/month | 20 | 2 concurrent | 10GB | Solo developers |
-| **Pro** | $79/month | 100 | 5 concurrent | 50GB | Small teams (2-5) |
-| **Team** | $199/month | 500 | 15 concurrent | 200GB | Mid-size teams (5-15) |
-| **Enterprise** | Custom | Unlimited | Unlimited | Unlimited | Large orgs (15+) |
+| Tier | Price/Month | Concurrent Agents | Workflows/Month | BYO Keys | Best For |
+|------|-------------|-------------------|-----------------|----------|----------|
+| **Free** | $0/month | 1 | 5 | No | Trying it out |
+| **Pro** | $50/month | 5 | 100 | Yes | Individual developers |
+| **Team** | $150/month | 10 | 500 | Yes | Growing teams |
+| **Enterprise** | Custom | Unlimited | Unlimited | Yes | Large orgs (15+) |
+
+**Key Concepts:**
+- **Concurrent Agents**: Primary differentiator. How many agents can run in parallel per project.
+- **Task Queuing**: When users hit their concurrent limit, tasks queue up and run when a slot opens (no lost work).
+- **BYO API Keys**: Pro+ users can bring their own LLM keys to bypass workflow limits. They pay the LLM provider directly.
+- **Workflows/Month**: Secondary limit. De-emphasized in marketing but still enforced for free tier cost protection.
 
 **Usage Overages** (applies to all subscription tiers):
 - Additional workflows: $5-15 per workflow (based on complexity)
@@ -84,8 +92,11 @@ The core value exchange: **Users get powerful AI-driven engineering execution; O
 
 **Free Tier** (Always Available):
 - 5 workflows/month
+- 1 project
+- 1 concurrent agent
 - 2GB storage
 - Community support
+- Basic analytics
 - Resets on the 1st of each month
 
 ---
@@ -200,12 +211,14 @@ user_credentials    - BYO API key storage (anthropic, openai, z_ai, github)
 Products:
 ├── omoios_lifetime
 │   └── Price: $299-499 one-time
-├── omoios_starter
-│   └── Price: $29/month recurring
+├── omoios_free
+│   └── Price: $0/month (free tier tracking)
 ├── omoios_pro
-│   └── Price: $79/month recurring
+│   └── Price: $50/month recurring
 ├── omoios_team
-│   └── Price: $199/month recurring
+│   └── Price: $150/month recurring
+├── omoios_enterprise
+│   └── Price: Custom pricing
 ├── omoios_byo_platform
 │   └── Price: $19/month recurring
 ├── omoios_workflow_pack_10
