@@ -2431,6 +2431,164 @@ export function EventRenderer({ event, className }: EventRendererProps) {
   // Skip noise
   if (event_type.includes("heartbeat")) return null
 
+  // ============================================================================
+  // Iteration & Continuous Mode Events - Subtle inline display
+  // ============================================================================
+
+  // Iteration started - very subtle, just a small indicator
+  if (event_type === "iteration.started") {
+    const iterNum = getNumber(data, "iteration_num")
+    return (
+      <div className={cn(className, "opacity-50 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+          <Play className="h-3 w-3" />
+          <span>Iteration {iterNum} started</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Iteration completed - show cost and brief summary
+  if (event_type === "iteration.completed") {
+    const iterNum = getNumber(data, "iteration_num")
+    const costUsd = getNumber(data, "cost_usd")
+    const outputPreview = getString(data, "output_preview")
+    const completionCount = getNumber(data, "completion_signal_count")
+
+    // If there's a meaningful output preview, show it more prominently
+    if (outputPreview && outputPreview.length > 20) {
+      return null // Skip - the actual content will be shown by other events
+    }
+
+    return (
+      <div className={cn(className, "opacity-50 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+          <CheckCircle className="h-3 w-3 text-green-500/70" />
+          <span>Iteration {iterNum}</span>
+          {costUsd > 0 && (
+            <span className="text-muted-foreground/70">
+              ${costUsd.toFixed(4)}
+            </span>
+          )}
+          {completionCount > 0 && (
+            <Badge variant="outline" className="h-4 px-1 text-[9px] bg-green-500/10 text-green-600 border-green-500/20">
+              complete
+            </Badge>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // Iteration validation - show pass/fail status subtly
+  if (event_type === "iteration.validation") {
+    const passed = data.passed === true
+    const errors = Array.isArray(data.errors) ? data.errors : []
+    const feedback = getString(data, "feedback")
+
+    // If validation passed, be very subtle
+    if (passed) {
+      return (
+        <div className={cn(className, "opacity-40 hover:opacity-100 transition-opacity")}>
+          <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+            <CheckCircle className="h-3 w-3 text-green-500/70" />
+            <span>Validation passed</span>
+          </div>
+        </div>
+      )
+    }
+
+    // If validation failed, show a bit more info but still subtle
+    return (
+      <div className={cn(className, "opacity-60 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-amber-600/80">
+          <AlertCircle className="h-3 w-3" />
+          <span>Validation: {feedback || errors.join(", ") || "checking..."}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Completion signal - very subtle, just shows detection
+  if (event_type === "iteration.completion_signal") {
+    const signalCount = getNumber(data, "signal_count")
+    const threshold = getNumber(data, "threshold")
+
+    return (
+      <div className={cn(className, "opacity-40 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+          <Sparkles className="h-3 w-3 text-green-500/70" />
+          <span>TASK_COMPLETE detected ({signalCount}/{threshold})</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Continuous mode started - subtle indicator
+  if (event_type === "continuous.started") {
+    return (
+      <div className={cn(className, "opacity-50 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          <span>Continuous mode started</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Continuous mode completed - show summary
+  if (event_type === "continuous.completed") {
+    const stopReason = getString(data, "stop_reason")
+    const totalIterations = getNumber(data, "iteration_num")
+    const totalCost = getNumber(data, "total_cost_usd")
+    const elapsedSecs = getNumber(data, "elapsed_seconds")
+
+    const reasonLabel = stopReason === "task_complete" ? "Task completed" :
+                        stopReason === "max_iterations_reached" ? "Max iterations" :
+                        stopReason === "validation_passed" ? "Validation passed" :
+                        stopReason || "Completed"
+
+    return (
+      <div className={cn(className, "opacity-60 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+          <CheckCircle className="h-3 w-3 text-green-500/70" />
+          <span>{reasonLabel}</span>
+          <span className="text-muted-foreground/60">•</span>
+          <span>{totalIterations} iterations</span>
+          {totalCost > 0 && (
+            <>
+              <span className="text-muted-foreground/60">•</span>
+              <span>${totalCost.toFixed(2)}</span>
+            </>
+          )}
+          {elapsedSecs > 0 && (
+            <>
+              <span className="text-muted-foreground/60">•</span>
+              <span>{Math.round(elapsedSecs)}s</span>
+            </>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // SANDBOX_SPAWNED and VALIDATION_SANDBOX_SPAWNED - subtle system events
+  if (event_type === "SANDBOX_SPAWNED" || event_type === "VALIDATION_SANDBOX_SPAWNED") {
+    const sandboxId = getString(data, "sandbox_id")
+    const shortId = sandboxId ? sandboxId.slice(-8) : ""
+    const isValidation = event_type.includes("VALIDATION")
+
+    return (
+      <div className={cn(className, "opacity-40 hover:opacity-100 transition-opacity")}>
+        <div className="flex items-center gap-2 px-2 py-1 text-[10px] text-muted-foreground">
+          <Terminal className="h-3 w-3" />
+          <span>{isValidation ? "Validation sandbox" : "Sandbox"} spawned</span>
+          {shortId && <code className="text-[9px] bg-muted px-1 rounded">{shortId}</code>}
+        </div>
+      </div>
+    )
+  }
+
   // Unknown events - show collapsed
   const hasContent = Object.keys(data).length > 0
   if (!hasContent) return null
