@@ -88,8 +88,8 @@ daytona:
   sandbox_disk_gb: 8  # Disk space in GiB (max: 10)
 
 integrations:
-  # MCP server URL - this will be the Railway public URL
-  mcp_server_url: ${MCP_SERVER_URL:-https://${RAILWAY_PUBLIC_DOMAIN}/mcp}
+  # MCP server URL - permanent production domain
+  mcp_server_url: https://api.omoios.dev/mcp
   enable_mcp_tools: true
   github_token: ${GITHUB_TOKEN}
 
