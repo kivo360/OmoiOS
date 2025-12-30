@@ -437,6 +437,51 @@ async def get_ticket(
         return TicketResponse.model_validate(ticket)
 
 
+class TicketUpdateRequest(BaseModel):
+    """Request model for updating a ticket."""
+
+    title: Optional[str] = None
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.patch("/{ticket_id}", response_model=TicketResponse)
+async def update_ticket(
+    ticket_id: UUID,
+    update: TicketUpdateRequest,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Update a ticket by ID (async).
+
+    Args:
+        ticket_id: Ticket ID
+        update: Fields to update
+        db: Database service
+
+    Returns:
+        Updated ticket instance
+    """
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Ticket).filter(Ticket.id == str(ticket_id))
+        )
+        ticket = result.scalar_one_or_none()
+        if not ticket:
+            raise HTTPException(status_code=404, detail="Ticket not found")
+
+        # Update only provided fields
+        update_data = update.model_dump(exclude_unset=True)
+        for field, value in update_data.items():
+            if value is not None:
+                setattr(ticket, field, value)
+
+        await session.commit()
+        await session.refresh(ticket)
+        return TicketResponse.model_validate(ticket)
+
+
 @router.get("/{ticket_id}/context")
 async def get_ticket_context(
     ticket_id: UUID,

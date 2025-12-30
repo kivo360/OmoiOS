@@ -54,6 +54,50 @@ stats = {
 }
 
 
+# Task type categories for execution mode determination
+EXPLORATION_TASK_TYPES = frozenset([
+    "explore_codebase",
+    "create_spec",
+    "create_requirements",
+    "create_design",
+    "create_tickets",
+    "create_tasks",
+    "analyze_dependencies",
+    "define_feature",
+])
+
+VALIDATION_TASK_TYPES = frozenset([
+    "validate",
+    "validate_implementation",
+    "review_code",
+    "run_tests",
+])
+
+
+def get_execution_mode(task_type: str) -> Literal["exploration", "implementation", "validation"]:
+    """Determine execution mode based on task type.
+
+    This controls which skills are loaded into the sandbox:
+    - exploration: spec-driven-dev skill for creating specs/tickets/tasks
+    - implementation: git-workflow, code-review, etc. for executing tasks
+    - validation: code-review, test-writer for validating implementation
+
+    Args:
+        task_type: The task type string (e.g., "implement_feature", "create_spec")
+
+    Returns:
+        Execution mode string: "exploration", "implementation", or "validation"
+    """
+    if task_type in EXPLORATION_TASK_TYPES:
+        return "exploration"
+    elif task_type in VALIDATION_TASK_TYPES:
+        return "validation"
+    else:
+        # Default to implementation for all other task types
+        # This includes: implement_feature, fix_bug, write_tests, refactor, etc.
+        return "implementation"
+
+
 async def heartbeat_task():
     """Log heartbeat every 30 seconds to confirm worker is alive."""
     heartbeat_num = 0
@@ -73,9 +117,13 @@ async def heartbeat_task():
 
 
 def handle_task_event(event_data: dict) -> None:
-    """Handle TASK_CREATED events to wake up orchestrator immediately.
+    """Handle task-related events to wake up orchestrator immediately.
 
-    This is called by the Redis event bus subscriber when a new task is created.
+    This is called by the Redis event bus subscriber when:
+    - A new task is created (TASK_CREATED)
+    - A new ticket is created (TICKET_CREATED)
+    - A task completes (SANDBOX_agent.completed) - frees up a slot
+
     Sets the task_ready_event to interrupt the polling sleep.
     """
     stats["events_received"] += 1
@@ -89,6 +137,87 @@ def handle_task_event(event_data: dict) -> None:
     )
     # Wake up the orchestrator loop immediately
     task_ready_event.set()
+
+
+def handle_validation_failed(event_data: dict) -> None:
+    """Handle TASK_VALIDATION_FAILED event to reset task for re-implementation.
+
+    When a validator agent fails the validation:
+    1. Task is already marked as 'needs_revision' (by task_validator service)
+    2. This handler resets the task to 'pending' so it can be picked up again
+    3. The implementer will receive the validation feedback in the task result
+
+    The implementer gets the revision feedback from task.result which contains:
+    - revision_feedback: Human-readable description of what failed
+    - revision_recommendations: List of specific fixes needed
+    """
+    global db
+
+    if not db:
+        logger.error("database_not_initialized_for_validation_handling")
+        return
+
+    event_type = event_data.get("event_type", "TASK_VALIDATION_FAILED")
+    task_id = event_data.get("entity_id")
+    payload = event_data.get("payload", {})
+    iteration = payload.get("iteration", 0)
+    feedback = payload.get("feedback", "No feedback provided")
+
+    logger.info(
+        "validation_failed_handling",
+        task_id=task_id,
+        iteration=iteration,
+        feedback_preview=feedback[:100] if feedback else None,
+    )
+
+    if not task_id:
+        logger.warning("validation_failed_no_task_id", event_data=event_data)
+        return
+
+    try:
+        from omoi_os.models.task import Task
+        from sqlalchemy import select
+
+        with db.get_session() as session:
+            task = session.query(Task).filter(Task.id == task_id).first()
+
+            if not task:
+                logger.warning("validation_failed_task_not_found", task_id=task_id)
+                return
+
+            # Only reset if task is in needs_revision status
+            if task.status != "needs_revision":
+                logger.info(
+                    "validation_failed_task_not_needs_revision",
+                    task_id=task_id,
+                    current_status=task.status,
+                )
+                return
+
+            # Reset task for re-implementation
+            # Keep the revision feedback in task.result so implementer can see it
+            task.status = "pending"
+            task.sandbox_id = None  # Clear sandbox so it gets a fresh one
+            task.assigned_agent_id = None  # Clear agent assignment
+
+            session.commit()
+
+            logger.info(
+                "task_reset_for_revision",
+                task_id=task_id,
+                iteration=iteration,
+                new_status="pending",
+            )
+
+        # Wake up the orchestrator to pick up the reset task
+        task_ready_event.set()
+
+    except Exception as e:
+        logger.error(
+            "validation_failed_handling_error",
+            task_id=task_id,
+            error=str(e),
+        )
 
 
 async def orchestrator_loop():
@@ -119,11 +248,32 @@ async def orchestrator_loop():
     logger.info("orchestrator_loop_started")
 
     # Subscribe to task events for instant wakeup (hybrid approach)
-    # This allows the orchestrator to respond immediately when tasks are created
+    # This allows the orchestrator to respond immediately when:
+    # 1. New tasks are created (so we can spawn sandboxes)
+    # 2. Tasks complete (so we can spawn more now that a slot is free)
+    # 3. Validation fails (so we can reset task for re-implementation)
     try:
         event_bus.subscribe("TASK_CREATED", handle_task_event)
         event_bus.subscribe("TICKET_CREATED", handle_task_event)  # Tickets also trigger tasks
-        logger.info("event_subscriptions_registered", events=["TASK_CREATED", "TICKET_CREATED"])
+        # Subscribe to completion events to spawn more tasks when slots open
+        event_bus.subscribe("SANDBOX_agent.completed", handle_task_event)
+        event_bus.subscribe("SANDBOX_agent.failed", handle_task_event)
+        event_bus.subscribe("SANDBOX_agent.error", handle_task_event)
+        # Subscribe to validation events for the revision workflow
+        event_bus.subscribe("TASK_VALIDATION_FAILED", handle_validation_failed)
+        event_bus.subscribe("TASK_VALIDATION_PASSED", handle_task_event)  # Just for wakeup/metrics
+        logger.info(
+            "event_subscriptions_registered",
+            events=[
+                "TASK_CREATED",
+                "TICKET_CREATED",
+                "SANDBOX_agent.completed",
+                "SANDBOX_agent.failed",
+                "SANDBOX_agent.error",
+                "TASK_VALIDATION_FAILED",
+                "TASK_VALIDATION_PASSED",
+            ],
+        )
     except Exception as e:
         logger.warning("event_subscription_failed", error=str(e), fallback="polling_only")
 
@@ -133,6 +283,13 @@ async def orchestrator_loop():
     settings = get_app_settings()
     sandbox_execution = settings.daytona.sandbox_execution
     mode = "sandbox" if sandbox_execution else "legacy"
+
+    # Get concurrency limit from environment (default: 5 concurrent tasks per project)
+    max_concurrent_per_project = int(os.getenv("MAX_CONCURRENT_TASKS_PER_PROJECT", "5"))
+    logger.info(
+        "concurrency_config",
+        max_concurrent_per_project=max_concurrent_per_project,
+    )
 
     # Initialize Daytona spawner if sandbox mode enabled
     daytona_spawner = None
@@ -168,8 +325,13 @@ async def orchestrator_loop():
 
             with db.get_session() as session:
                 if sandbox_execution:
-                    # Sandbox mode: just get next pending task
-                    task = queue.get_next_task(phase_id=None)
+                    # Sandbox mode: get next pending task with concurrency limits
+                    # This ensures we don't spawn more than max_concurrent_per_project
+                    # sandboxes for any single project at a time
+                    task = queue.get_next_task_with_concurrency_limit(
+                        max_concurrent_per_project=max_concurrent_per_project,
+                        phase_id=None,
+                    )
                 else:
                     # Legacy mode: check for available agent first
                     available_agent = (
@@ -274,6 +436,16 @@ async def orchestrator_loop():
                                     "ticket_priority": ticket.priority,
                                     "ticket_context": ticket.context or {},
                                 }
+
+                                # Include revision feedback if task previously failed validation
+                                # This allows the implementer to see what went wrong and fix it
+                                if task.result:
+                                    if task.result.get("revision_feedback"):
+                                        task_data["revision_feedback"] = task.result["revision_feedback"]
+                                    if task.result.get("revision_recommendations"):
+                                        task_data["revision_recommendations"] = task.result["revision_recommendations"]
+                                    if task.result.get("validation_iteration"):
+                                        task_data["validation_iteration"] = task.result["validation_iteration"]
                                 # Base64 encode to avoid shell escaping issues
                                 task_json = json.dumps(task_data)
                                 extra_env["TASK_DATA_BASE64"] = base64.b64encode(
@@ -372,6 +544,18 @@ async def orchestrator_loop():
                             ticket_type=extra_env.get("TICKET_TYPE"),
                         )
 
+                        # Determine execution mode based on task type
+                        # This controls which skills are loaded into the sandbox:
+                        # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
+                        # - implementation: git-workflow, code-review, etc. (default)
+                        # - validation: code-review, test-writer
+                        execution_mode = get_execution_mode(task.task_type)
+                        log.info(
+                            "execution_mode_determined",
+                            task_type=task.task_type,
+                            execution_mode=execution_mode,
+                        )
+
                         # Spawn sandbox with user/repo context
                         sandbox_id = await daytona_spawner.spawn_for_task(
                             task_id=task_id,
@@ -380,6 +564,7 @@ async def orchestrator_loop():
                             agent_type=agent_type,
                             extra_env=extra_env if extra_env else None,
                             runtime=sandbox_runtime,
+                            execution_mode=execution_mode,
                         )
 
                         log.info(

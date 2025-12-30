@@ -92,37 +92,65 @@ def get_skill_files(skill_name: str) -> dict[str, str]:
     return result
 
 
+def get_skill_set(mode: str) -> list[str]:
+    """Get skills for a specific execution mode.
+
+    Args:
+        mode: Execution mode - "exploration", "implementation", "validation".
+
+    Returns:
+        List of skill names for the specified mode.
+    """
+    manifest = get_skill_manifest()
+    settings = manifest.get("settings", {})
+    skill_sets = settings.get("skill_sets", {})
+    return skill_sets.get(mode, [])
+
+
 def get_skills_for_upload(
     skill_names: Optional[list[str]] = None,
     install_path: str = "/root/.claude/skills",
     include_all_files: bool = True,
+    mode: Optional[str] = None,
 ) -> dict[str, str]:
     """Get skills ready for upload to a sandbox.
 
     Args:
-        skill_names: Specific skills to include. If None, includes all always_include skills.
+        skill_names: Specific skills to include. Added to mode-based skills if provided.
         install_path: Path in sandbox where skills will be installed.
         include_all_files: If True, include all files (scripts, references, etc.).
                           If False, only include SKILL.md files.
+        mode: Execution mode - "exploration", "implementation", "validation".
+              If None, falls back to always_include only.
 
     Returns:
         Dict mapping sandbox file paths to file content.
         Example: {"/root/.claude/skills/code-review/SKILL.md": "...content..."}
+
+    Modes:
+        - exploration: For feature definition - creates specs, tickets, tasks
+        - implementation: For task execution - writes code, runs tests
+        - validation: For verifying implementation meets requirements
     """
     manifest = get_skill_manifest()
     settings = manifest.get("settings", {})
 
-    # Determine which skills to include
-    if skill_names is None:
-        skill_names = settings.get("always_include", [])
+    # Start with always_include (truly universal skills)
+    skills_to_load = set(settings.get("always_include", []))
 
-    # Add any always_include skills not already in the list
-    always_include = set(settings.get("always_include", []))
-    skill_names = list(set(skill_names) | always_include)
+    # Add mode-specific skills if mode is provided
+    if mode:
+        skill_sets = settings.get("skill_sets", {})
+        mode_skills = skill_sets.get(mode, [])
+        skills_to_load |= set(mode_skills)
+
+    # Add any explicitly requested skills
+    if skill_names:
+        skills_to_load |= set(skill_names)
 
     result = {}
 
-    for skill_name in skill_names:
+    for skill_name in skills_to_load:
         if include_all_files:
             # Get all files for the skill
             skill_files = get_skill_files(skill_name)

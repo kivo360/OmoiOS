@@ -311,10 +311,24 @@ This document summarizes the comprehensive updates made to user journey, user fl
 
 ---
 
-## Navigation Structure
+## Navigation Structure (Updated for Sandbox-Based UI)
+
+The main navigation uses an IconRail (vertical icon bar) with the following sections:
+
+| Icon | Section | Route | Description |
+|------|---------|-------|-------------|
+| Terminal | Command | `/command` | Primary landing - launch new tasks |
+| FolderGit2 | Projects | `/projects` | Project management |
+| Workflow | Phases | `/phases` | Phase management |
+| Box | Sandboxes | `/sandboxes` | View all sandboxes |
+| BarChart3 | Analytics | `/analytics` | Usage analytics |
+| Building2 | Organizations | `/organizations` | Organization settings |
+| Settings | Settings | `/settings` | User settings |
+
+### Full Route Structure
 
 ```
-/ (Landing)
+/ (Landing - unauthenticated)
 ├── /register
 ├── /login
 ├── /login/oauth
@@ -322,12 +336,18 @@ This document summarizes the comprehensive updates made to user journey, user fl
 ├── /forgot-password
 ├── /reset-password
 ├── /onboarding
-└── /dashboard
-    ├── /organizations
-    │   ├── /organizations/new
-    │   └── /organizations/:id
-    │       ├── /organizations/:id/settings
-    │       └── /organizations/:id/members
+│
+└── / (Authenticated - redirects to /command)
+    │
+    ├── /command (PRIMARY - Command Center)
+    │   └── User types prompt → Creates ticket → Spawns sandbox → Redirects
+    │
+    ├── /sandbox/:sandboxId (Sandbox Detail View)
+    │   ├── Events tab (real-time agent activity stream)
+    │   └── Details tab (task metadata, event summary)
+    │
+    ├── /sandboxes (Sandbox list)
+    │
     ├── /projects
     │   ├── /projects/new
     │   ├── /projects/:id
@@ -342,20 +362,33 @@ This document summarizes the comprehensive updates made to user journey, user fl
     │   ├── /projects/:id/phase-gates
     │   └── /projects/:id/settings
     │       └── /projects/:id/settings/github
-    ├── /board/:projectId
+    │
+    ├── /phases (Phase management)
+    │
+    ├── /board/:projectId (Kanban board)
+    │   └── /board/:projectId/:ticketId
+    │
+    ├── /graph/:projectId (Dependency graph)
+    │   └── /graph/:projectId/:ticketId
+    │
     ├── /diagnostic/:entityType/:entityId
     │   ├── /diagnostic/ticket/:ticketId
     │   ├── /diagnostic/task/:taskId
-    │   └── /diagnostic/agent/:agentId
-    │   └── /board/:projectId/:ticketId
-    ├── /graph/:projectId
-    │   └── /graph/:projectId/:ticketId
-    ├── /agents
-    │   ├── /agents/spawn
-    │   ├── /agents/:agentId
-    │   └── /agents/:agentId/workspace
-    ├── /workspaces
-    ├── /commits/:commitSha
+    │   └── /diagnostic/sandbox/:sandboxId
+    │
+    ├── /analytics (Usage analytics)
+    │
+    ├── /health (System health dashboard)
+    │   ├── /health/trajectories
+    │   ├── /health/interventions
+    │   └── /health/settings
+    │
+    ├── /organizations
+    │   ├── /organizations/new
+    │   └── /organizations/:id
+    │       ├── /organizations/:id/settings
+    │       └── /organizations/:id/members
+    │
     └── /settings
         ├── /settings/profile
         ├── /settings/api-keys
@@ -363,15 +396,40 @@ This document summarizes the comprehensive updates made to user journey, user fl
         └── /settings/preferences
 ```
 
+### Contextual Sidebar (ContextualPanel)
+
+The sidebar content changes based on the current route:
+
+| Route | Panel | Content |
+|-------|-------|---------|
+| `/command` | TasksPanel | Running/Pending/Completed/Failed tasks |
+| `/sandbox/*` | TasksPanel | Same tasks, selected sandbox highlighted |
+| `/projects` | ProjectsPanel | Project list with favorites |
+| `/phases` | PhasesPanel | Phase configuration |
+| `/board/*` | ProjectsPanel | Project context |
+| `/health` | HealthPanel | System health metrics |
+| `/graph/*` | GraphFiltersPanel | Graph filter options |
+| `/analytics` | AnalyticsPanel | Analytics filters |
+| `/settings` | SettingsPanel | Settings navigation |
+| `/organizations` | OrganizationsPanel | Organization list |
+
 ---
 
 ## User Flows
 
+### Primary Sandbox Flow (Main User Journey)
+1. **Command Center** (`/command`) → User describes what they want to build
+2. **Submit** → Creates ticket via API, orchestrator spawns sandbox
+3. **Auto-redirect** → User is redirected to `/sandbox/:sandboxId`
+4. **Monitor** → Real-time event stream shows agent activity (thinking, tool use, file edits)
+5. **Interact** → User can send messages to the agent while it works
+6. **Complete** → Task completes, user can review results
+
 ### Registration Flow
-1. Landing → Register/Login → Email Verification → Onboarding → Dashboard
+1. Landing → Register/Login → Email Verification → Onboarding → Dashboard (redirects to /command)
 
 ### Organization Setup Flow
-1. Onboarding → Create Organization → Configure Limits → Dashboard
+1. Onboarding → Create Organization → Configure Limits → /command
 
 ### Kanban Board Flow
 1. Project → Board → View Tickets → Click Ticket → Ticket Detail → (Details/Tasks/Commits/Graph/Comments/Audit)

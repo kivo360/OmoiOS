@@ -54,9 +54,25 @@ settings:
   # Whether to also copy to project .claude/skills
   copy_to_project: false
 
-  # Skills to always include (even if not explicitly requested)
+  # Skills loaded for ALL modes (truly universal)
   always_include:
-    - spec-driven-dev
-    - git-workflow
-    - error-diagnosis
-    - code-review
+    - error-diagnosis      # Always need error debugging
+
+  # Mode-specific skill sets
+  # Mode is determined by task type and passed to get_skills_for_upload()
+  skill_sets:
+    # Feature definition mode - explore codebase, create specs/tickets/tasks
+    exploration:
+      - spec-driven-dev
+
+    # Task execution mode - implement features, fix bugs, write code
+    implementation:
+      - git-workflow
+      - code-review
+      - test-writer
+      - pr-creator
+
+    # Validation mode - verify implementation meets requirements
+    validation:
+      - code-review
+      - test-writer

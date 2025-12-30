@@ -23,6 +23,9 @@ Environment Variables (optional - task context):
     TICKET_ID           - Ticket identifier
     TICKET_TITLE        - Ticket title for context
     TICKET_DESCRIPTION  - Full ticket description
+    TASK_DATA_BASE64    - Base64-encoded JSON with full task context (from orchestrator)
+                          Contains: task_id, task_description, ticket_id, ticket_title, etc.
+                          The task_description is the FULL spec markdown from .omoi_os/ files
 
 Environment Variables (optional - skills & subagents):
     ENABLE_SKILLS       - Set to "true" to enable Claude skills
@@ -644,6 +647,32 @@ class WorkerConfig:
         self.ticket_title = os.environ.get("TICKET_TITLE", "")
         self.ticket_description = os.environ.get("TICKET_DESCRIPTION", "")
 
+        # Phase 6: Decode TASK_DATA_BASE64 if present (from orchestrator)
+        # This contains full task context including the complete task description
+        self.task_data: dict = {}
+        self.task_description = ""  # Full task description from spec files
+        task_data_b64 = os.environ.get("TASK_DATA_BASE64")
+        if task_data_b64:
+            try:
+                import base64
+                import json
+                task_json = base64.b64decode(task_data_b64).decode()
+                self.task_data = json.loads(task_json)
+                # Extract task description (this is the FULL spec markdown)
+                self.task_description = self.task_data.get("task_description", "")
+                # Also populate ticket fields from task_data if not already set
+                if not self.ticket_id and self.task_data.get("ticket_id"):
+                    self.ticket_id = self.task_data["ticket_id"]
+                if not self.ticket_title and self.task_data.get("ticket_title"):
+                    self.ticket_title = self.task_data["ticket_title"]
+                if not self.ticket_description and self.task_data.get("ticket_description"):
+                    self.ticket_description = self.task_data["ticket_description"]
+                if not self.task_id and self.task_data.get("task_id"):
+                    self.task_id = self.task_data["task_id"]
+                logger.info(f"Loaded task data from TASK_DATA_BASE64: task_description={len(self.task_description)} chars")
+            except Exception as e:
+                logger.warning(f"Failed to decode TASK_DATA_BASE64: {e}")
+
         # Server connection
         self.callback_url = os.environ.get("CALLBACK_URL", "http://localhost:8000")
         self.api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get(
@@ -655,6 +684,7 @@ class WorkerConfig:
         self.api_base_url = os.environ.get("ANTHROPIC_BASE_URL")
 
         # Task and prompts
+        # INITIAL_PROMPT can be overridden, but we prefer task_description from TASK_DATA_BASE64
         self.initial_prompt = os.environ.get("INITIAL_PROMPT", "")
         self.poll_interval = float(os.environ.get("POLL_INTERVAL", "0.5"))
         self.heartbeat_interval = int(os.environ.get("HEARTBEAT_INTERVAL", "30"))
@@ -708,15 +738,76 @@ class WorkerConfig:
             os.environ.get("ENABLE_SUBAGENTS", "true").lower() == "true"
         )
 
-        # MCP spec workflow tools
+        # Execution mode - controls prompts and tool availability
+        # - exploration: For feature definition (create specs, tickets, tasks)
+        # - implementation: For task execution (write code, run tests)
+        # - validation: For verifying implementation
+        self.execution_mode = os.environ.get("EXECUTION_MODE", "implementation")
+
+        # MCP spec workflow tools - only enable for exploration mode
+        # Implementation agents should NOT be creating new specs/tickets
         self.enable_spec_tools = (
-            os.environ.get("ENABLE_SPEC_TOOLS", "true").lower() == "true"
+            os.environ.get("ENABLE_SPEC_TOOLS", "").lower() == "true"
+            or self.execution_mode == "exploration"
         )
+
+        # Add execution mode-specific instructions to system prompt
+        if self.execution_mode == "exploration":
+            append_parts.append("""
+## Execution Mode: EXPLORATION
+
+You are in **exploration mode**. Your purpose is to:
+1. Explore and understand the codebase structure
+2. Create specifications (requirements, designs) for new features
+3. Break down features into tickets and tasks
+4. Analyze dependencies between components
+5. Upload specs/tickets/tasks to the server using MCP tools
+
+**DO NOT write implementation code in this mode.** Focus on planning and documentation.
+
+Use the spec workflow MCP tools to create and upload:
+- Specifications with requirements and designs
+- Tickets for trackable work items
+- Tasks with clear acceptance criteria
+- Dependencies between tasks""")
+        elif self.execution_mode == "validation":
+            append_parts.append("""
+## Execution Mode: VALIDATION
+
+You are in **validation mode**. Your purpose is to:
+1. Review the implementation for correctness
+2. Run tests and verify they pass
+3. Check code quality and adherence to requirements
+4. Verify the implementation matches the task specification
+5. Report validation results (pass/fail with feedback)
+
+**DO NOT write new features or make major changes.** Focus on verification.
+
+If you find issues:
+- Document specific problems found
+- Provide actionable feedback for fixes
+- Do NOT fix the issues yourself (implementation agent will handle)""")
+        else:  # implementation mode (default)
+            append_parts.append("""
+## Execution Mode: IMPLEMENTATION
+
+You are in **implementation mode**. Your purpose is to:
+1. Execute the assigned task
+2. Write code to implement features or fix bugs
+3. Run tests to verify your implementation
+4. Create commits and pull requests when done
+
+**DO NOT create new specs, tickets, or tasks.** Focus on executing this specific task.
+
+Before coding:
+1. Read the task specification carefully
+2. Check for existing patterns in the codebase
+3. Understand the requirements and acceptance criteria""")
 
         # Note: MCP tools are automatically available when we register MCP servers
         # No need to explicitly add them to allowed_tools - the SDK handles this
         if self.enable_spec_tools and MCP_AVAILABLE:
-            # Add spec tools documentation to system prompt append
+            # Add spec tools documentation to system prompt append (exploration mode only)
             append_parts.append("""
 ## Spec Workflow MCP Tools (mcp__spec_workflow__*)
 You have access to spec workflow tools for managing specifications, requirements, and tickets:
@@ -728,9 +819,31 @@ You have access to spec workflow tools for managing specifications, requirements
 - update_design: Update architecture and design artifacts
 - add_spec_task: Add tasks to a specification
 - create_ticket: Create tickets for the workflow system
-- get_ticket: Get ticket details
+- get_ticket: Get ticket details (use UUID, not title)
+- get_task: Get task details including full description and acceptance criteria
 - approve_requirements: Approve requirements and move to Design phase
 - approve_design: Approve design and move to Implementation phase""")
+
+        # Add mandatory task context instruction for implementation/validation modes
+        # Exploration mode creates tasks, it doesn't execute them
+        if self.task_id and self.execution_mode in ("implementation", "validation"):
+            append_parts.append(f"""
+## CRITICAL: Task Context (MUST READ FIRST)
+
+You are assigned to work on task ID: `{self.task_id}`
+
+**BEFORE doing ANY other work, you MUST:**
+1. Call `mcp__spec_workflow__get_task` with task_id="{self.task_id}" to get the full task details
+2. Read the task's description, acceptance criteria, and implementation notes carefully
+3. If the task references a parent ticket, call `mcp__spec_workflow__get_ticket` with the ticket's UUID to get additional context
+
+The task description contains the complete specification including:
+- Detailed description of what to implement
+- Acceptance criteria (checklist of requirements)
+- Implementation notes and constraints
+- Dependencies on other tasks
+
+DO NOT start {"coding" if self.execution_mode == "implementation" else "validation"} until you have read and understood the full task specification.""")
 
         # Check for custom SYSTEM_PROMPT env var or additional append content
         custom_system_prompt = os.environ.get("SYSTEM_PROMPT")
@@ -1342,7 +1455,38 @@ class SandboxWorker:
             if tool_name == "Task":
                 event_data["subagent_type"] = tool_input.get("subagent_type")
                 event_data["description"] = tool_input.get("description")
-                event_data["prompt"] = tool_input.get("prompt")
+                event_data["subagent_prompt"] = tool_input.get("prompt")
+
+                # Extract the actual subagent result from tool_response
+                # Task tool returns: {"result": "...", "usage": {...}, "total_cost_usd": ..., "duration_ms": ...}
+                subagent_result = None
+                subagent_usage = None
+                subagent_cost = None
+                subagent_duration = None
+
+                if serialized_response:
+                    try:
+                        import json
+                        # Try to parse the response as JSON
+                        if isinstance(serialized_response, str):
+                            result_data = json.loads(serialized_response)
+                        else:
+                            result_data = serialized_response
+
+                        if isinstance(result_data, dict):
+                            subagent_result = result_data.get("result")
+                            subagent_usage = result_data.get("usage")
+                            subagent_cost = result_data.get("total_cost_usd")
+                            subagent_duration = result_data.get("duration_ms")
+                    except (json.JSONDecodeError, TypeError):
+                        # If parsing fails, use the raw response as result
+                        subagent_result = serialized_response
+
+                event_data["subagent_result"] = subagent_result
+                event_data["subagent_usage"] = subagent_usage
+                event_data["subagent_cost_usd"] = subagent_cost
+                event_data["subagent_duration_ms"] = subagent_duration
+
                 await reporter.report("agent.subagent_completed", event_data)
             # Special tracking for skills
             elif tool_name == "Skill":
@@ -1622,6 +1766,8 @@ class SandboxWorker:
                             "final_output": "\n".join(final_output)
                             if final_output
                             else None,  # Include final output for task result
+                            # Include branch name for validation workflow
+                            "branch_name": self.config.branch_name if self.config.branch_name else None,
                         }
 
                         # Try to report completion with retries (critical for task finalization)
@@ -1733,8 +1879,10 @@ class SandboxWorker:
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                         "sdk": "claude_agent_sdk",
                         "model": self.config.model or "default",
-                        "task": self.config.initial_prompt
+                        "task": self.config.task_description
+                        or self.config.initial_prompt
                         or self.config.ticket_description,
+                        "task_description_length": len(self.config.task_description),
                         "ticket_title": self.config.ticket_title,
                         "resumed_session_id": self.config.resume_session_id,
                         "is_resuming": bool(self.config.resume_session_id),
@@ -1755,8 +1903,10 @@ class SandboxWorker:
 
                     async with ClaudeSDKClient(options=sdk_options) as client:
                         # Process initial prompt
+                        # Priority: task_description (from TASK_DATA_BASE64) > initial_prompt > ticket_description > ticket_title
                         initial_task = (
-                            self.config.initial_prompt
+                            self.config.task_description  # Full task spec from orchestrator
+                            or self.config.initial_prompt
                             or self.config.ticket_description
                             or f"Analyze ticket: {self.config.ticket_title}"
                         )

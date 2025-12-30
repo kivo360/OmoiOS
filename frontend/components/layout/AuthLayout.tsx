@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { OmoiOSLogo } from "@/components/ui/omoios-logo"
 
 interface AuthLayoutProps {
   children: React.ReactNode
@@ -23,11 +24,8 @@ export function AuthLayout({
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
       {/* Logo */}
-      <Link href="/" className="mb-8 flex items-center gap-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-          <span className="text-lg font-bold text-primary-foreground">O</span>
-        </div>
-        <span className="text-2xl font-bold">OmoiOS</span>
+      <Link href="/" className="mb-8">
+        <OmoiOSLogo size="xl" />
       </Link>
 
       {/* Auth Card */}

@@ -395,6 +395,55 @@ async def get_ticket(args: dict[str, Any]) -> dict[str, Any]:
         return _format_error(str(e))
 
 
+@tool(
+    "get_task",
+    "Get full details of a task including description, acceptance criteria, and parent ticket info. "
+    "IMPORTANT: Always use the task UUID, not the task title.",
+    {"task_id": "Task UUID (required - use the full UUID, not the title)"},
+)
+async def get_task(args: dict[str, Any]) -> dict[str, Any]:
+    """Get task details including full description."""
+    try:
+        async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
+            response = await client.get(
+                f"{API_BASE}/api/v1/tasks/{args['task_id']}"
+            )
+            response.raise_for_status()
+            task = response.json()
+
+            output = f"# Task: {task['title']}\n\n"
+            output += f"**ID:** {task['id']}\n"
+            output += f"**Status:** {task['status']}\n"
+            output += f"**Priority:** {task.get('priority', 'MEDIUM')}\n"
+            output += f"**Phase:** {task.get('phase_id', 'N/A')}\n"
+            output += f"**Ticket ID:** {task.get('ticket_id', 'N/A')}\n\n"
+
+            if task.get("description"):
+                output += f"## Full Description\n\n{task['description']}\n\n"
+
+            # Also fetch parent ticket for additional context
+            if task.get("ticket_id"):
+                try:
+                    ticket_response = await client.get(
+                        f"{API_BASE}/api/v1/tickets/{task['ticket_id']}"
+                    )
+                    if ticket_response.status_code == 200:
+                        ticket = ticket_response.json()
+                        output += f"## Parent Ticket Context\n\n"
+                        output += f"**Ticket Title:** {ticket['title']}\n"
+                        output += f"**Ticket Status:** {ticket['status']}\n\n"
+                        if ticket.get("description"):
+                            output += f"**Ticket Description:**\n{ticket['description']}\n"
+                except Exception:
+                    pass  # Parent ticket fetch is optional
+
+            return _format_response(output)
+    except httpx.HTTPStatusError as e:
+        return _format_error(f"HTTP {e.response.status_code}: {e.response.text}")
+    except Exception as e:
+        return _format_error(str(e))
+
+
 # =============================================================================
 # Approval Tools
 # =============================================================================
@@ -461,6 +510,7 @@ ALL_TOOLS = [
     add_spec_task,
     create_ticket,
     get_ticket,
+    get_task,  # Added for task context retrieval
     approve_requirements,
     approve_design,
 ]
