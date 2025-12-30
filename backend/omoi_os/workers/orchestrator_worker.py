@@ -16,7 +16,7 @@ import os
 import signal
 import sys
 import time
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Optional
 
 # Configure logging before any other imports that might log
 from omoi_os.logging import configure_logging, get_logger
@@ -29,8 +29,12 @@ if TYPE_CHECKING:
     from omoi_os.services.task_queue import TaskQueueService
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
+    from omoi_os.services.task_requirements_analyzer import TaskRequirements
 
 logger = get_logger("orchestrator")
+
+# Task requirements analyzer (initialized in init_services)
+task_analyzer: Optional["TaskRequirementsAnalyzer"] = None
 
 # Services (initialized in init_services)
 db: DatabaseService | None = None
@@ -55,15 +59,25 @@ stats = {
 
 
 # Task type categories for execution mode determination
+# These task types are research/analysis focused and do NOT produce code changes.
+# They get execution_mode="exploration" which disables git validation requirements.
 EXPLORATION_TASK_TYPES = frozenset([
+    # Codebase exploration and analysis
     "explore_codebase",
+    "analyze_codebase",
+    "analyze_requirements",  # Research task - doesn't write code
+    "analyze_dependencies",
+    # Spec and requirements creation (produces docs, not code)
     "create_spec",
     "create_requirements",
     "create_design",
     "create_tickets",
     "create_tasks",
-    "analyze_dependencies",
     "define_feature",
+    # Research and discovery
+    "research",
+    "discover",
+    "investigate",
 ])
 
 VALIDATION_TASK_TYPES = frozenset([
@@ -75,7 +89,10 @@ VALIDATION_TASK_TYPES = frozenset([
 
 
 def get_execution_mode(task_type: str) -> Literal["exploration", "implementation", "validation"]:
-    """Determine execution mode based on task type.
+    """Determine execution mode based on task type (fallback method).
+
+    This is the fallback for when LLM-based analysis is unavailable.
+    Prefer using analyze_task_requirements() for intelligent analysis.
 
     This controls which skills are loaded into the sandbox:
     - exploration: spec-driven-dev skill for creating specs/tickets/tasks
@@ -96,6 +113,46 @@ def get_execution_mode(task_type: str) -> Literal["exploration", "implementation
         # Default to implementation for all other task types
         # This includes: implement_feature, fix_bug, write_tests, refactor, etc.
         return "implementation"
+
+
+async def analyze_task_requirements(
+    task_description: str,
+    task_type: Optional[str] = None,
+    ticket_title: Optional[str] = None,
+    ticket_description: Optional[str] = None,
+) -> "TaskRequirements":
+    """Analyze a task using LLM to determine its requirements.
+
+    Uses the TaskRequirementsAnalyzer to intelligently determine:
+    - Execution mode (exploration, implementation, validation)
+    - Output type (analysis, documentation, code, tests, etc.)
+    - Git workflow requirements (commit, push, PR)
+    - Whether tests are required
+
+    Falls back to hardcoded task type mappings if LLM analysis fails.
+
+    Args:
+        task_description: The full task description/prompt
+        task_type: Optional task type hint (e.g., "analyze_requirements")
+        ticket_title: Optional parent ticket title for context
+        ticket_description: Optional parent ticket description
+
+    Returns:
+        TaskRequirements with all validation and execution settings
+    """
+    global task_analyzer
+
+    if task_analyzer is None:
+        # Lazy initialization if not already done in init_services
+        from omoi_os.services.task_requirements_analyzer import get_task_requirements_analyzer
+        task_analyzer = get_task_requirements_analyzer()
+
+    return await task_analyzer.analyze(
+        task_description=task_description,
+        task_type=task_type,
+        ticket_title=ticket_title,
+        ticket_description=ticket_description,
+    )
 
 
 async def heartbeat_task():
@@ -544,19 +601,27 @@ async def orchestrator_loop():
                             ticket_type=extra_env.get("TICKET_TYPE"),
                         )
 
-                        # Determine execution mode based on task type
-                        # This controls which skills are loaded into the sandbox:
-                        # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
-                        # - implementation: git-workflow, code-review, etc. (default)
-                        # - validation: code-review, test-writer
-                        execution_mode = get_execution_mode(task.task_type)
+                        # Analyze task requirements using LLM for intelligent determination
+                        # This replaces hardcoded task type mappings with dynamic analysis
+                        # Falls back to get_execution_mode() if analysis fails
+                        task_requirements = await analyze_task_requirements(
+                            task_description=task.description or "",
+                            task_type=task.task_type,
+                            ticket_title=extra_env.get("TICKET_TITLE"),
+                            ticket_description=extra_env.get("TICKET_DESCRIPTION"),
+                        )
+                        execution_mode = task_requirements.execution_mode.value
                         log.info(
-                            "execution_mode_determined",
+                            "task_requirements_analyzed",
                             task_type=task.task_type,
                             execution_mode=execution_mode,
+                            output_type=task_requirements.output_type.value,
+                            requires_code=task_requirements.requires_code_changes,
+                            requires_pr=task_requirements.requires_pull_request,
+                            reasoning=task_requirements.reasoning[:100],
                         )
 
-                        # Spawn sandbox with user/repo context
+                        # Spawn sandbox with user/repo context and analyzed requirements
                         sandbox_id = await daytona_spawner.spawn_for_task(
                             task_id=task_id,
                             agent_id=agent_id,
@@ -565,6 +630,7 @@ async def orchestrator_loop():
                             extra_env=extra_env if extra_env else None,
                             runtime=sandbox_runtime,
                             execution_mode=execution_mode,
+                            task_requirements=task_requirements,
                         )
 
                         log.info(
@@ -1018,7 +1084,7 @@ async def idle_sandbox_check_loop():
 
 async def init_services():
     """Initialize required services."""
-    global db, queue, event_bus, registry_service
+    global db, queue, event_bus, registry_service, task_analyzer
 
     logger.info("initializing_services")
 
@@ -1027,6 +1093,7 @@ async def init_services():
     from omoi_os.services.task_queue import TaskQueueService
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
+    from omoi_os.services.task_requirements_analyzer import get_task_requirements_analyzer
 
     app_settings = get_app_settings()
 
@@ -1045,6 +1112,10 @@ async def init_services():
     # Agent Registry
     registry_service = AgentRegistryService(db)
     logger.info("service_initialized", service="agent_registry")
+
+    # Task Requirements Analyzer (LLM-based task analysis)
+    task_analyzer = get_task_requirements_analyzer()
+    logger.info("service_initialized", service="task_requirements_analyzer")
 
     logger.info("all_services_initialized")
 

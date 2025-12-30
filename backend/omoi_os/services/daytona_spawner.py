@@ -25,6 +25,11 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
+# TYPE_CHECKING import for TaskRequirements to avoid circular imports
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from omoi_os.services.task_requirements_analyzer import TaskRequirements
+
 logger = get_logger(__name__)
 
 
@@ -136,6 +141,7 @@ class DaytonaSpawnerService:
         runtime: str = "openhands",  # "openhands" or "claude"
         execution_mode: str = "implementation",  # "exploration", "implementation", "validation"
         continuous_mode: Optional[bool] = None,  # None = auto-enable for implementation/validation
+        task_requirements: Optional["TaskRequirements"] = None,  # LLM-analyzed requirements
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -157,6 +163,9 @@ class DaytonaSpawnerService:
                 - None (default): Auto-enable for implementation/validation modes
                 - True: Force enable
                 - False: Force disable
+            task_requirements: Optional LLM-analyzed TaskRequirements object.
+                When provided, these settings override execution_mode-based defaults
+                for git validation requirements (commit, push, PR).
 
         Returns:
             Sandbox ID
@@ -216,6 +225,57 @@ class DaytonaSpawnerService:
             env_vars.setdefault("MAX_TOTAL_COST_USD", "20.0")
             env_vars.setdefault("MAX_DURATION_SECONDS", "3600")  # 1 hour
             logger.info("Continuous mode enabled for sandbox")
+
+        # Set validation requirements based on task_requirements (LLM-analyzed) or execution_mode
+        # task_requirements takes precedence when provided, as it's based on intelligent analysis
+        if runtime == "claude":
+            if task_requirements is not None:
+                # Use LLM-analyzed requirements for fine-grained control
+                env_vars.setdefault(
+                    "REQUIRE_CLEAN_GIT",
+                    "true" if task_requirements.requires_git_commit else "false"
+                )
+                env_vars.setdefault(
+                    "REQUIRE_CODE_PUSHED",
+                    "true" if task_requirements.requires_git_push else "false"
+                )
+                env_vars.setdefault(
+                    "REQUIRE_PR_CREATED",
+                    "true" if task_requirements.requires_pull_request else "false"
+                )
+                env_vars.setdefault(
+                    "REQUIRE_TESTS",
+                    "true" if task_requirements.requires_tests else "false"
+                )
+                # Also pass output type for context
+                env_vars.setdefault("TASK_OUTPUT_TYPE", task_requirements.output_type.value)
+                logger.info(
+                    "Using LLM-analyzed task requirements",
+                    extra={
+                        "execution_mode": task_requirements.execution_mode.value,
+                        "output_type": task_requirements.output_type.value,
+                        "requires_code": task_requirements.requires_code_changes,
+                        "requires_commit": task_requirements.requires_git_commit,
+                        "requires_push": task_requirements.requires_git_push,
+                        "requires_pr": task_requirements.requires_pull_request,
+                        "requires_tests": task_requirements.requires_tests,
+                        "reasoning": task_requirements.reasoning[:100],
+                    }
+                )
+            elif execution_mode == "exploration":
+                # Fallback: Research/analysis tasks don't need git validation
+                env_vars.setdefault("REQUIRE_CLEAN_GIT", "false")
+                env_vars.setdefault("REQUIRE_CODE_PUSHED", "false")
+                env_vars.setdefault("REQUIRE_PR_CREATED", "false")
+                logger.info(
+                    "Exploration mode: Git validation requirements disabled "
+                    "(research/analysis task)"
+                )
+            else:
+                # Fallback: Implementation and validation modes require full git workflow
+                env_vars.setdefault("REQUIRE_CLEAN_GIT", "true")
+                env_vars.setdefault("REQUIRE_CODE_PUSHED", "true")
+                env_vars.setdefault("REQUIRE_PR_CREATED", "true")
 
         # Add agent type if specified
         if agent_type:

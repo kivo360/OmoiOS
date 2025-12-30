@@ -1,6 +1,9 @@
 """Core services for OmoiOS."""
 
-from omoi_os.services.agent_executor import AgentExecutor
+# NOTE: AgentExecutor removed from top-level imports due to openhands.sdk compatibility issues.
+# Import directly from omoi_os.services.agent_executor if needed (legacy code only).
+# The new Claude sandbox workers don't use AgentExecutor.
+
 from omoi_os.services.agent_health import AgentHealthService
 from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.agent_status_manager import AgentStatusManager
@@ -37,7 +40,7 @@ __all__ = [
     "Executor",
     "Reflector",
     "Curator",
-    "AgentExecutor",
+    # "AgentExecutor",  # Removed - import directly if needed (legacy)
     "AgentHealthService",
     "AgentRegistryService",
     "AgentStatusManager",
