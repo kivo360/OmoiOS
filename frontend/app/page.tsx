@@ -9,6 +9,7 @@ import {
   LogoCloudSection,
   FeaturesSection,
   WorkflowSection,
+  ProductShowcaseSection,
   NightShiftSection,
   StatsSection,
   PricingSection,
@@ -47,6 +48,9 @@ function LandingPage() {
 
       {/* How It Works - Workflow Section */}
       <WorkflowSection />
+
+      {/* Product Screenshots Showcase */}
+      <ProductShowcaseSection id="product" />
 
       {/* Features Bento Grid */}
       <FeaturesSection id="features" />
