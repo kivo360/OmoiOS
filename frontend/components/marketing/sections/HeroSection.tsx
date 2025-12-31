@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
 import { ArrowRight, Play, Loader2 } from "lucide-react"
@@ -189,7 +190,7 @@ export function HeroSection({ className }: HeroSectionProps) {
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.5 }}
-          className="relative mx-auto mt-16 max-w-4xl"
+          className="relative mx-auto mt-16 max-w-5xl"
         >
           <div className="landing-shadow-lg overflow-hidden rounded-xl border border-landing-border bg-white">
             {/* Browser Chrome */}
@@ -204,34 +205,15 @@ export function HeroSection({ className }: HeroSectionProps) {
               </div>
             </div>
 
-            {/* Dashboard Content Placeholder */}
-            <div className="aspect-[16/9] bg-gradient-to-br from-landing-bg-muted to-white p-6">
-              <div className="grid h-full grid-cols-5 gap-4">
-                {/* Kanban Columns */}
-                {["Backlog", "Analyzing", "Building", "Testing", "Done"].map((col, i) => (
-                  <div
-                    key={col}
-                    className="flex flex-col gap-3 rounded-lg bg-white/80 p-3"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-landing-text">{col}</span>
-                      <span className="rounded bg-landing-bg-muted px-1.5 py-0.5 text-[10px] text-landing-text-muted">
-                        {i === 2 ? 3 : i === 4 ? 5 : i + 1}
-                      </span>
-                    </div>
-                    {/* Task Cards */}
-                    {[...Array(i === 2 ? 3 : i === 4 ? 2 : 1)].map((_, j) => (
-                      <div
-                        key={j}
-                        className="rounded-md border border-landing-border bg-white p-2 shadow-sm"
-                      >
-                        <div className="mb-1 h-2 w-3/4 rounded bg-landing-bg-muted" />
-                        <div className="h-1.5 w-1/2 rounded bg-landing-bg-muted" />
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
+            {/* Real Kanban Board Screenshot */}
+            <div className="relative aspect-[16/9] bg-landing-bg-muted">
+              <Image
+                src="/screenshots/agent-task-view.png"
+                alt="OmoiOS Kanban Board showing tasks in Backlog, Analyzing, Building, Testing, and Done columns"
+                fill
+                className="object-cover object-top"
+                priority
+              />
             </div>
           </div>
 
