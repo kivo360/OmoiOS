@@ -2,6 +2,25 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Production Domains
+
+- **Frontend**: `https://omoios.dev`
+- **Backend API**: `https://api.omoios.dev`
+
+### Stripe Webhook Configuration
+The Stripe webhook endpoint is:
+```
+https://api.omoios.dev/api/v1/billing/webhooks/stripe
+```
+
+Required webhook events:
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
+- `invoice.paid`
+- `invoice.payment_failed`
+
 ## Development Commands
 
 ### Package Management (UV)
