@@ -1096,12 +1096,10 @@ export interface PaymentMethodRequest {
 
 export type SubscriptionTier =
   | "free"
-  | "starter"
   | "pro"
   | "team"
   | "enterprise"
   | "lifetime"
-  | "byo"
 
 export type SubscriptionStatus =
   | "active"
@@ -1177,28 +1175,11 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
     ],
     ctaLabel: "Current Plan",
   },
-  starter: {
-    name: "starter",
-    displayName: "Starter",
-    price: 29,
-    priceLabel: "$29/month",
-    workflows: 20,
-    workflowsLabel: "20 workflows/month",
-    agents: 2,
-    storageGb: 10,
-    features: [
-      "20 workflows per month",
-      "2 concurrent agents",
-      "10GB storage",
-      "Email support",
-    ],
-    ctaLabel: "Upgrade to Starter",
-  },
   pro: {
     name: "pro",
     displayName: "Pro",
-    price: 79,
-    priceLabel: "$79/month",
+    price: 50,
+    priceLabel: "$50/month",
     workflows: 100,
     workflowsLabel: "100 workflows/month",
     agents: 5,
@@ -1207,8 +1188,8 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
       "100 workflows per month",
       "5 concurrent agents",
       "50GB storage",
+      "BYO API keys",
       "Priority support",
-      "Advanced analytics",
     ],
     highlighted: true,
     ctaLabel: "Upgrade to Pro",
@@ -1216,19 +1197,19 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
   team: {
     name: "team",
     displayName: "Team",
-    price: 199,
-    priceLabel: "$199/month",
+    price: 150,
+    priceLabel: "$150/month",
     workflows: 500,
     workflowsLabel: "500 workflows/month",
-    agents: 15,
+    agents: 10,
     storageGb: 200,
     features: [
       "500 workflows per month",
-      "15 concurrent agents",
+      "10 concurrent agents",
       "200GB storage",
-      "Dedicated support",
-      "Team management",
-      "SSO integration",
+      "BYO API keys",
+      "Team collaboration",
+      "Priority support",
     ],
     ctaLabel: "Upgrade to Team",
   },
@@ -1255,39 +1236,21 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
   lifetime: {
     name: "lifetime",
     displayName: "Lifetime",
-    price: 499,
-    priceLabel: "$499 one-time",
+    price: 299,
+    priceLabel: "$299 one-time",
     workflows: 50,
     workflowsLabel: "50 workflows/month",
     agents: 5,
-    storageGb: 100,
+    storageGb: 50,
     features: [
       "50 workflows per month",
       "5 concurrent agents",
-      "100GB storage",
-      "Founding member badge",
+      "50GB storage",
+      "BYO API keys",
       "No recurring charges",
-      "Lifetime updates",
+      "Founding member badge",
     ],
     ctaLabel: "Claim Lifetime Access",
-  },
-  byo: {
-    name: "byo",
-    displayName: "BYO Keys",
-    price: 19,
-    priceLabel: "$19/month",
-    workflows: -1,
-    workflowsLabel: "Unlimited*",
-    agents: 10,
-    storageGb: 50,
-    features: [
-      "Unlimited workflows*",
-      "10 concurrent agents",
-      "50GB storage",
-      "Use your own API keys",
-      "Pay LLM providers directly",
-    ],
-    ctaLabel: "Setup BYO Keys",
   },
 }
 

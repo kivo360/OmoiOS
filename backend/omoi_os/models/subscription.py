@@ -24,13 +24,11 @@ if TYPE_CHECKING:
 class SubscriptionTier(str, Enum):
     """Available subscription tiers."""
 
-    FREE = "free"  # Default free tier (5 workflows/month)
-    STARTER = "starter"  # $29/month - 20 workflows, 2 agents
-    PRO = "pro"  # $79/month - 100 workflows, 5 agents
-    TEAM = "team"  # $199/month - 500 workflows, 15 agents
+    FREE = "free"  # Default free tier (5 workflows/month, 1 agent)
+    PRO = "pro"  # $50/month - 100 workflows, 5 agents, BYO keys
+    TEAM = "team"  # $150/month - 500 workflows, 10 agents, BYO keys
     ENTERPRISE = "enterprise"  # Custom - Unlimited
-    LIFETIME = "lifetime"  # $299-499 one-time - 50 workflows/month
-    BYO = "byo"  # $19/month platform fee - Unlimited with own keys
+    LIFETIME = "lifetime"  # $299 one-time - 50 workflows/month, 5 agents, early BYO access
 
 
 class SubscriptionStatus(str, Enum):
@@ -45,48 +43,43 @@ class SubscriptionStatus(str, Enum):
 
 
 # Tier configuration - defines limits for each tier
+# Matches landing page pricing: Free $0, Pro $50, Team $150, Lifetime $299
 TIER_LIMITS = {
     SubscriptionTier.FREE: {
         "workflows_limit": 5,
         "agents_limit": 1,
         "storage_limit_gb": 2,
         "price_monthly": 0,
-    },
-    SubscriptionTier.STARTER: {
-        "workflows_limit": 20,
-        "agents_limit": 2,
-        "storage_limit_gb": 10,
-        "price_monthly": 29,
+        "byo_keys": False,
     },
     SubscriptionTier.PRO: {
         "workflows_limit": 100,
         "agents_limit": 5,
         "storage_limit_gb": 50,
-        "price_monthly": 79,
+        "price_monthly": 50,
+        "byo_keys": True,
     },
     SubscriptionTier.TEAM: {
         "workflows_limit": 500,
-        "agents_limit": 15,
+        "agents_limit": 10,
         "storage_limit_gb": 200,
-        "price_monthly": 199,
+        "price_monthly": 150,
+        "byo_keys": True,
     },
     SubscriptionTier.ENTERPRISE: {
         "workflows_limit": -1,  # Unlimited
         "agents_limit": -1,  # Unlimited
         "storage_limit_gb": -1,  # Unlimited
         "price_monthly": 0,  # Custom pricing
+        "byo_keys": True,
     },
     SubscriptionTier.LIFETIME: {
         "workflows_limit": 50,
         "agents_limit": 5,
-        "storage_limit_gb": 100,
-        "price_monthly": 0,  # One-time payment
-    },
-    SubscriptionTier.BYO: {
-        "workflows_limit": -1,  # Unlimited (user pays LLM directly)
-        "agents_limit": 10,
         "storage_limit_gb": 50,
-        "price_monthly": 19,
+        "price_monthly": 0,  # One-time $299 payment
+        "price_one_time": 299,
+        "byo_keys": True,  # Early access to BYO keys
     },
 }
 

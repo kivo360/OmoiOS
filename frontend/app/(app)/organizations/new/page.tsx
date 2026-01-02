@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Loader2, Building2 } from "lucide-react"
 import { useCreateOrganization } from "@/hooks/useOrganizations"
+import { createSubscriptionCheckout } from "@/lib/api/billing"
 
 export default function NewOrganizationPage() {
   const router = useRouter()
@@ -46,6 +47,26 @@ export default function NewOrganizationPage() {
         description: formData.description || undefined,
       })
       toast.success("Organization created successfully!")
+
+      // Check for pending plan from pricing page signup flow
+      const pendingPlan = localStorage.getItem("pending_plan")
+      if (pendingPlan && (pendingPlan === "pro" || pendingPlan === "team")) {
+        localStorage.removeItem("pending_plan")
+        try {
+          // Create checkout session and redirect to Stripe
+          const checkout = await createSubscriptionCheckout(result.id, {
+            tier: pendingPlan,
+            success_url: `${window.location.origin}/organizations/${result.id}/billing?checkout=success`,
+            cancel_url: `${window.location.origin}/organizations/${result.id}/billing?checkout=cancelled`,
+          })
+          window.location.href = checkout.checkout_url
+          return
+        } catch (checkoutError) {
+          console.error("Failed to create checkout session:", checkoutError)
+          toast.error("Failed to start checkout. You can upgrade from the billing page.")
+        }
+      }
+
       router.push(`/organizations/${result.id}`)
     } catch (error) {
       toast.error("Failed to create organization")

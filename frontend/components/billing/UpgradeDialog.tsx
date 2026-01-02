@@ -38,26 +38,22 @@ interface UpgradeDialogProps {
 
 const tierIcons: Record<SubscriptionTier, React.ReactNode> = {
   free: <Zap className="h-5 w-5" />,
-  starter: <Zap className="h-5 w-5" />,
   pro: <Crown className="h-5 w-5" />,
   team: <Users className="h-5 w-5" />,
   enterprise: <Crown className="h-5 w-5" />,
   lifetime: <Infinity className="h-5 w-5" />,
-  byo: <Key className="h-5 w-5" />,
 }
 
 const tierColors: Record<SubscriptionTier, string> = {
   free: "bg-slate-500/10 text-slate-500",
-  starter: "bg-blue-500/10 text-blue-500",
   pro: "bg-purple-500/10 text-purple-500",
   team: "bg-indigo-500/10 text-indigo-500",
   enterprise: "bg-amber-500/10 text-amber-500",
   lifetime: "bg-emerald-500/10 text-emerald-500",
-  byo: "bg-cyan-500/10 text-cyan-500",
 }
 
-const monthlyTiers: SubscriptionTier[] = ["starter", "pro", "team"]
-const specialTiers: SubscriptionTier[] = ["lifetime", "byo"]
+const monthlyTiers: SubscriptionTier[] = ["pro", "team"]
+const specialTiers: SubscriptionTier[] = ["lifetime"]
 
 function TierOption({
   tier,
@@ -304,13 +300,13 @@ export function UpgradeDialog({
               <ul className="space-y-1">
                 <li className="flex items-start gap-2">
                   <Infinity className="h-4 w-4 mt-0.5 text-emerald-500" />
-                  <span><strong>Lifetime:</strong> One-time payment, no recurring charges. Great for solo developers.</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <Key className="h-4 w-4 mt-0.5 text-cyan-500" />
-                  <span><strong>BYO Keys:</strong> Use your own API keys. You pay providers directly, we charge a small platform fee.</span>
+                  <span><strong>Lifetime:</strong> One-time payment of $299, no recurring charges. 50 workflows/month, 5 agents, and BYO API keys.</span>
                 </li>
               </ul>
+              <p className="mt-3 text-xs">
+                <Key className="inline h-3 w-3 mr-1" />
+                <strong>BYO API Keys</strong> is included with Pro, Team, and Lifetime plans.
+              </p>
             </div>
           </TabsContent>
         </Tabs>
