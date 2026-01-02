@@ -45,6 +45,7 @@ import {
   useCancelSubscription,
   useReactivateSubscription,
   useCreateLifetimeCheckout,
+  useCreateSubscriptionCheckout,
 } from "@/hooks/useBilling"
 import { SubscriptionCard } from "@/components/billing/SubscriptionCard"
 import { UpgradeDialog } from "@/components/billing/UpgradeDialog"
@@ -77,6 +78,7 @@ export default function BillingPage({ params }: BillingPageProps) {
   const cancelSubscription = useCancelSubscription()
   const reactivateSubscription = useReactivateSubscription()
   const createLifetimeCheckout = useCreateLifetimeCheckout()
+  const createSubscriptionCheckout = useCreateSubscriptionCheckout()
 
   const handleBuyCredits = async () => {
     const amount = parseFloat(creditAmount)
@@ -155,16 +157,24 @@ export default function BillingPage({ params }: BillingPageProps) {
         return
       }
 
-      // For regular subscription tiers, redirect to Stripe checkout
-      // This would need a createSubscriptionCheckout endpoint
-      // For now, we'll open the portal where users can manage subscriptions
+      // For pro and team tiers, create a subscription checkout session
+      if (tier === "pro" || tier === "team") {
+        const result = await createSubscriptionCheckout.mutateAsync({
+          orgId,
+          data: {
+            tier,
+            success_url: `${window.location.origin}/organizations/${orgId}/billing?checkout=success`,
+            cancel_url: `${window.location.origin}/organizations/${orgId}/billing?checkout=cancelled`,
+          },
+        })
+        window.location.href = result.checkout_url
+        return
+      }
+
+      // Fallback: open the portal for other tiers
       const result = await createPortal.mutateAsync(orgId)
       window.open(result.portal_url, "_blank")
       setUpgradeDialogOpen(false)
-      toast({
-        title: "Opening Billing Portal",
-        description: "You can upgrade your subscription in the Stripe portal.",
-      })
     } catch (error) {
       setUpgradeError(
         error instanceof Error ? error.message : "Failed to process upgrade. Please try again."
@@ -661,7 +671,7 @@ export default function BillingPage({ params }: BillingPageProps) {
         onOpenChange={setUpgradeDialogOpen}
         currentTier={subscription?.tier || "free"}
         onSelectTier={handleSelectTier}
-        isLoading={createLifetimeCheckout.isPending || createPortal.isPending}
+        isLoading={createLifetimeCheckout.isPending || createPortal.isPending || createSubscriptionCheckout.isPending}
         error={upgradeError}
       />
     </div>

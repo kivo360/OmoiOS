@@ -521,10 +521,110 @@ async def reactivate_subscription(
     return {"status": "success", "message": "Subscription reactivated"}
 
 
+# ========== Subscription Checkout ==========
+
+class SubscriptionCheckoutRequest(BaseModel):
+    """Request to create subscription checkout session."""
+    tier: str = Field(..., description="Subscription tier: 'pro' or 'team'")
+    success_url: Optional[str] = Field(None, description="Custom success redirect URL")
+    cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
+
+
+# Tier pricing configuration - matches landing page
+TIER_PRICES = {
+    "pro": {
+        "price_usd": 50,
+        "name": "OmoiOS Pro",
+        "description": "5 concurrent agents, 100 workflows/month, BYO API keys",
+    },
+    "team": {
+        "price_usd": 150,
+        "name": "OmoiOS Team",
+        "description": "10 concurrent agents, 500 workflows/month, BYO API keys, team collaboration",
+    },
+}
+
+
+@router.post("/account/{organization_id}/subscription/checkout", response_model=CheckoutResponse)
+async def create_subscription_checkout(
+    organization_id: UUID,
+    request: SubscriptionCheckoutRequest,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+    subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
+    stripe: StripeService = Depends(get_stripe_service),
+):
+    """
+    Create a Stripe Checkout session for a subscription tier (Pro or Team).
+
+    This creates a recurring subscription, not a one-time payment.
+    """
+    tier = request.tier.lower()
+
+    if tier not in TIER_PRICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tier. Must be one of: {', '.join(TIER_PRICES.keys())}"
+        )
+
+    tier_config = TIER_PRICES[tier]
+
+    # Check for existing paid subscription
+    existing = subscription_service.get_subscription(organization_id)
+    if existing and existing.is_lifetime:
+        raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
+    if existing and existing.tier in ["pro", "team"] and existing.status == "active":
+        raise HTTPException(
+            status_code=400,
+            detail="Organization already has an active paid subscription. Use the customer portal to change plans."
+        )
+
+    # Get or create billing account
+    account = billing_service.get_or_create_billing_account(organization_id)
+
+    # Create Stripe checkout session for subscription
+    try:
+        success_url = request.success_url or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
+        cancel_url = request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
+
+        session = stripe.stripe.checkout.Session.create(
+            mode="subscription",  # Recurring subscription
+            customer=account.stripe_customer_id,
+            line_items=[
+                {
+                    "price_data": {
+                        "currency": "usd",
+                        "unit_amount": int(tier_config["price_usd"] * 100),  # In cents
+                        "recurring": {
+                            "interval": "month",
+                        },
+                        "product_data": {
+                            "name": tier_config["name"],
+                            "description": tier_config["description"],
+                        },
+                    },
+                    "quantity": 1,
+                }
+            ],
+            metadata={
+                "subscription_checkout": "true",
+                "tier": tier,
+                "organization_id": str(organization_id),
+                "billing_account_id": str(account.id),
+            },
+            success_url=success_url,
+            cancel_url=cancel_url,
+        )
+
+        return CheckoutResponse(checkout_url=session.url, session_id=session.id)
+    except Exception as e:
+        logger.error(f"Failed to create subscription checkout: {e}")
+        raise HTTPException(status_code=500, detail="Failed to create checkout session")
+
+
 # ========== Lifetime Purchase ==========
 
 # Lifetime pricing configuration (should match pricing_strategy.md)
-LIFETIME_PRICE_USD = 499.0
+LIFETIME_PRICE_USD = 299.0
 LIFETIME_STRIPE_PRICE_ID = "price_lifetime_omoios"  # Configure in Stripe dashboard
 
 
@@ -831,6 +931,48 @@ async def handle_stripe_webhook(
 async def _handle_checkout_completed(event_data: dict, billing_service: BillingService):
     """Handle checkout.session.completed event."""
     metadata = event_data.get("metadata", {})
+
+    # Check if this is a subscription checkout (Pro/Team)
+    if metadata.get("subscription_checkout") == "true":
+        organization_id = metadata.get("organization_id")
+        billing_account_id = metadata.get("billing_account_id")
+        tier = metadata.get("tier", "pro")
+        stripe_subscription_id = event_data.get("subscription")  # Stripe subscription ID
+
+        if organization_id and billing_account_id:
+            subscription_service = get_subscription_service(billing_service.db)
+
+            # Cancel any existing free subscription first
+            existing = subscription_service.get_subscription(UUID(organization_id))
+            if existing and existing.tier == "free":
+                subscription_service.cancel_subscription(existing.id, at_period_end=False)
+
+            # Create the new paid subscription
+            from omoi_os.models.subscription import SubscriptionTier
+            tier_enum = SubscriptionTier.PRO if tier == "pro" else SubscriptionTier.TEAM
+
+            subscription = subscription_service.create_subscription(
+                organization_id=UUID(organization_id),
+                billing_account_id=UUID(billing_account_id),
+                tier=tier_enum,
+            )
+
+            # Link to Stripe subscription
+            if stripe_subscription_id:
+                with billing_service.db.get_session() as sess:
+                    from sqlalchemy import select
+                    from omoi_os.models.subscription import Subscription
+
+                    result = sess.execute(
+                        select(Subscription).where(Subscription.id == subscription.id)
+                    )
+                    sub = result.scalar_one_or_none()
+                    if sub:
+                        sub.stripe_subscription_id = stripe_subscription_id
+                        sess.commit()
+
+            logger.info(f"Created {tier} subscription for org {organization_id}")
+        return
 
     # Check if this is a lifetime purchase
     if metadata.get("lifetime_purchase") == "true":

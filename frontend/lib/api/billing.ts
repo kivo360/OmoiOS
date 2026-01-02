@@ -215,3 +215,22 @@ export async function createLifetimeCheckout(
     request
   )
 }
+
+/**
+ * Create a checkout session for subscription (Pro or Team)
+ */
+export interface SubscriptionCheckoutRequest {
+  tier: "pro" | "team"
+  success_url?: string
+  cancel_url?: string
+}
+
+export async function createSubscriptionCheckout(
+  organizationId: string,
+  request: SubscriptionCheckoutRequest
+): Promise<CheckoutResponse> {
+  return api.post<CheckoutResponse>(
+    `/api/v1/billing/account/${organizationId}/subscription/checkout`,
+    request
+  )
+}

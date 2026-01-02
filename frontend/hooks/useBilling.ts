@@ -20,6 +20,8 @@ import {
   cancelSubscription,
   reactivateSubscription,
   createLifetimeCheckout,
+  createSubscriptionCheckout,
+  type SubscriptionCheckoutRequest,
 } from "@/lib/api/billing"
 import type {
   BillingAccount,
@@ -310,5 +312,14 @@ export function useReactivateSubscription() {
 export function useCreateLifetimeCheckout() {
   return useMutation<CheckoutResponse, Error, { orgId: string; request?: LifetimePurchaseRequest }>({
     mutationFn: ({ orgId, request }) => createLifetimeCheckout(orgId, request),
+  })
+}
+
+/**
+ * Hook to create a subscription checkout session (Pro or Team plans)
+ */
+export function useCreateSubscriptionCheckout() {
+  return useMutation<CheckoutResponse, Error, { orgId: string; data: SubscriptionCheckoutRequest }>({
+    mutationFn: ({ orgId, data }) => createSubscriptionCheckout(orgId, data),
   })
 }

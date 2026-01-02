@@ -14,7 +14,6 @@ import {
   Infinity,
   AlertTriangle,
   ArrowUpRight,
-  Key,
   RefreshCw,
 } from "lucide-react"
 import type { Subscription, SubscriptionTier, SubscriptionStatus } from "@/lib/api/types"
@@ -42,22 +41,18 @@ const statusConfig: Record<SubscriptionStatus, { label: string; variant: "defaul
 
 const tierIcons: Record<SubscriptionTier, React.ReactNode> = {
   free: <Zap className="h-5 w-5" />,
-  starter: <Zap className="h-5 w-5" />,
   pro: <Crown className="h-5 w-5" />,
   team: <Users className="h-5 w-5" />,
   enterprise: <Crown className="h-5 w-5" />,
   lifetime: <Infinity className="h-5 w-5" />,
-  byo: <Key className="h-5 w-5" />,
 }
 
 const tierColors: Record<SubscriptionTier, string> = {
   free: "bg-slate-500/10 text-slate-500",
-  starter: "bg-blue-500/10 text-blue-500",
   pro: "bg-purple-500/10 text-purple-500",
   team: "bg-indigo-500/10 text-indigo-500",
   enterprise: "bg-amber-500/10 text-amber-500",
   lifetime: "bg-emerald-500/10 text-emerald-500",
-  byo: "bg-cyan-500/10 text-cyan-500",
 }
 
 function UsageMeter({
@@ -164,8 +159,8 @@ export function SubscriptionCard({
   const storageLimit = subscription?.storage_limit_gb || tierConfig.storageGb
 
   const isLifetime = subscription?.is_lifetime || tier === "lifetime"
-  const isBYO = subscription?.is_byo || tier === "byo"
-  const isUnlimited = tier === "enterprise" || (isBYO && workflowsLimit === -1)
+  const isBYO = subscription?.is_byo
+  const isUnlimited = tier === "enterprise" || workflowsLimit === -1
   const isCanceled = status === "canceled"
   const cancelAtPeriodEnd = subscription?.cancel_at_period_end
 
@@ -191,8 +186,6 @@ export function SubscriptionCard({
         tier === "team" && "bg-indigo-500",
         tier === "enterprise" && "bg-amber-500",
         tier === "lifetime" && "bg-emerald-500",
-        tier === "starter" && "bg-blue-500",
-        tier === "byo" && "bg-cyan-500",
         tier === "free" && "bg-slate-500",
       )} />
 
