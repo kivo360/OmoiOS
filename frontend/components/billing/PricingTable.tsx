@@ -9,7 +9,6 @@ import {
   Zap,
   Users,
   Infinity,
-  Key,
   ArrowRight,
   Sparkles,
 } from "lucide-react"
@@ -22,7 +21,6 @@ interface PricingTableProps {
   onSelectTier: (tier: SubscriptionTier) => void
   isLoading?: boolean
   showLifetime?: boolean
-  showBYO?: boolean
   showEnterprise?: boolean
   compact?: boolean
   className?: string
@@ -30,16 +28,14 @@ interface PricingTableProps {
 
 const tierIcons: Record<SubscriptionTier, React.ReactNode> = {
   free: <Zap className="h-5 w-5" />,
-  starter: <Zap className="h-5 w-5" />,
   pro: <Crown className="h-5 w-5" />,
   team: <Users className="h-5 w-5" />,
   enterprise: <Crown className="h-5 w-5" />,
   lifetime: <Infinity className="h-5 w-5" />,
-  byo: <Key className="h-5 w-5" />,
 }
 
-const tierOrder: SubscriptionTier[] = ["free", "starter", "pro", "team"]
-const specialTiers: SubscriptionTier[] = ["lifetime", "byo", "enterprise"]
+const tierOrder: SubscriptionTier[] = ["free", "pro", "team"]
+const specialTiers: SubscriptionTier[] = ["lifetime", "enterprise"]
 
 function PricingCard({
   tier,
@@ -64,7 +60,6 @@ function PricingCard({
     if (isCurrent) return "Current Plan"
     if (tier === "enterprise") return "Contact Sales"
     if (tier === "lifetime") return "Claim Lifetime Access"
-    if (tier === "byo") return "Setup BYO Keys"
     if (isDowngrade) return "Downgrade"
     return config.ctaLabel
   }
@@ -109,8 +104,6 @@ function PricingCard({
             tier === "team" && "bg-indigo-500/10 text-indigo-500",
             tier === "enterprise" && "bg-amber-500/10 text-amber-500",
             tier === "lifetime" && "bg-emerald-500/10 text-emerald-500",
-            tier === "starter" && "bg-blue-500/10 text-blue-500",
-            tier === "byo" && "bg-cyan-500/10 text-cyan-500",
             tier === "free" && "bg-slate-500/10 text-slate-500",
           )}>
             {tierIcons[tier]}
@@ -169,7 +162,7 @@ function SpecialOfferCard({
   onSelect,
   isLoading,
 }: {
-  tier: "lifetime" | "byo"
+  tier: "lifetime"
   currentTier?: SubscriptionTier
   onSelect: (tier: SubscriptionTier) => void
   isLoading?: boolean
@@ -179,19 +172,13 @@ function SpecialOfferCard({
 
   return (
     <Card className={cn(
-      "relative",
-      tier === "lifetime" && "border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent",
-      tier === "byo" && "border-cyan-500/30 bg-gradient-to-br from-cyan-500/5 to-transparent",
+      "relative border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-transparent",
       isCurrent && "ring-2 ring-green-500/50"
     )}>
       <CardHeader>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-lg",
-              tier === "lifetime" && "bg-emerald-500/10 text-emerald-500",
-              tier === "byo" && "bg-cyan-500/10 text-cyan-500",
-            )}>
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
               {tierIcons[tier]}
             </div>
             <div>
@@ -208,14 +195,10 @@ function SpecialOfferCard({
       </CardHeader>
       <CardContent>
         <p className="text-sm text-muted-foreground mb-4">
-          {tier === "lifetime" ? (
-            "Pay once, use forever. Perfect for indie developers and small teams who want predictable costs."
-          ) : (
-            "Bring your own API keys for unlimited usage. You pay LLM providers directly - we just charge for infrastructure."
-          )}
+          Pay once, use forever. Perfect for indie developers and small teams who want predictable costs.
         </p>
         <div className="flex flex-wrap gap-2 mb-4">
-          {config.features.slice(0, 4).map((feature, index) => (
+          {config.features.slice(0, 4).map((feature: string, index: number) => (
             <Badge key={index} variant="secondary" className="font-normal">
               {feature}
             </Badge>
@@ -239,7 +222,6 @@ export function PricingTable({
   onSelectTier,
   isLoading,
   showLifetime = true,
-  showBYO = true,
   showEnterprise = true,
   compact = false,
   className,
@@ -255,7 +237,7 @@ export function PricingTable({
       {/* Main pricing grid */}
       <div className={cn(
         "grid gap-4",
-        compact ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+        compact ? "grid-cols-2 lg:grid-cols-3" : "grid-cols-1 md:grid-cols-3"
       )}>
         {mainTiers.map((tier) => (
           <PricingCard
@@ -270,7 +252,7 @@ export function PricingTable({
       </div>
 
       {/* Special offers section */}
-      {(showLifetime || showBYO) && (
+      {showLifetime && (
         <div className="space-y-4">
           <div className="text-center">
             <h3 className="text-lg font-semibold">Special Options</h3>
@@ -278,26 +260,13 @@ export function PricingTable({
               Alternative plans for unique needs
             </p>
           </div>
-          <div className={cn(
-            "grid gap-4",
-            showLifetime && showBYO ? "md:grid-cols-2" : "max-w-lg mx-auto"
-          )}>
-            {showLifetime && (
-              <SpecialOfferCard
-                tier="lifetime"
-                currentTier={currentTier}
-                onSelect={onSelectTier}
-                isLoading={isLoading}
-              />
-            )}
-            {showBYO && (
-              <SpecialOfferCard
-                tier="byo"
-                currentTier={currentTier}
-                onSelect={onSelectTier}
-                isLoading={isLoading}
-              />
-            )}
+          <div className="max-w-lg mx-auto">
+            <SpecialOfferCard
+              tier="lifetime"
+              currentTier={currentTier}
+              onSelect={onSelectTier}
+              isLoading={isLoading}
+            />
           </div>
         </div>
       )}

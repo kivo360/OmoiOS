@@ -29,6 +29,9 @@ function RegisterForm() {
   const isWaitlist = searchParams.get("source") === "waitlist"
   const prefillEmail = searchParams.get("email") || ""
 
+  // Check for plan selection from pricing page
+  const selectedPlan = searchParams.get("plan") as "pro" | "team" | null
+
   const [formData, setFormData] = useState({
     full_name: "",
     email: prefillEmail,
@@ -91,6 +94,12 @@ function RegisterForm() {
           password: formData.password,
           full_name: formData.full_name || undefined,
         })
+
+        // Store selected plan for after org creation (if selected from pricing page)
+        if (selectedPlan && (selectedPlan === "pro" || selectedPlan === "team")) {
+          localStorage.setItem("pending_plan", selectedPlan)
+        }
+
         router.push("/verify-email?email=" + encodeURIComponent(formData.email))
       }
     } catch (err) {
@@ -153,6 +162,14 @@ function RegisterForm() {
             <CardTitle className="text-2xl">Complete your registration</CardTitle>
             <CardDescription>
               One more step to join the waitlist for <strong>{prefillEmail}</strong>
+            </CardDescription>
+          </>
+        ) : selectedPlan ? (
+          <>
+            <CardTitle className="text-2xl">Create your account</CardTitle>
+            <CardDescription>
+              You selected the <strong className="text-primary">{selectedPlan === "pro" ? "Pro" : "Team"}</strong> plan.
+              Create your account to continue to checkout.
             </CardDescription>
           </>
         ) : (
