@@ -635,3 +635,50 @@ async def delete_role(
 
     return {"message": "Role deleted successfully"}
 
+
+# =============================================================================
+# Debug/Admin Endpoints (disable before production launch)
+# =============================================================================
+
+@router.get("/{org_id}/debug/owner-info")
+async def get_organization_owner_info(
+    org_id: UUID,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Debug endpoint to get organization owner info.
+
+    WARNING: Disable this endpoint before production launch.
+    """
+    from sqlalchemy.orm import selectinload
+
+    result = await db.execute(
+        select(Organization)
+        .options(selectinload(Organization.owner))
+        .where(Organization.id == org_id)
+    )
+    org = result.scalar_one_or_none()
+
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization not found"
+        )
+
+    owner = org.owner
+
+    return {
+        "organization": {
+            "id": str(org.id),
+            "name": org.name,
+            "slug": org.slug,
+            "billing_email": org.billing_email,
+        },
+        "owner": {
+            "id": str(owner.id) if owner else None,
+            "email": owner.email if owner else None,
+            "name": owner.name if owner else None,
+        } if owner else None,
+        "effective_billing_email": org.billing_email or (owner.email if owner else None),
+    }
+
