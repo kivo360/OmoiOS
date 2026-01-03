@@ -301,6 +301,80 @@ class StripeService:
             metadata=metadata,
         )
 
+    def create_subscription_checkout_session(
+        self,
+        customer_id: str,
+        price_id: Optional[str] = None,
+        price_data: Optional[dict] = None,
+        success_url: Optional[str] = None,
+        cancel_url: Optional[str] = None,
+        metadata: Optional[dict] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> stripe.checkout.Session:
+        """Create a Stripe Checkout Session for subscription.
+
+        Args:
+            customer_id: Stripe customer ID
+            price_id: Existing Stripe price ID (preferred)
+            price_data: Dynamic price data if no price_id (name, description, unit_amount, interval)
+            success_url: URL to redirect on success
+            cancel_url: URL to redirect on cancel
+            metadata: Additional metadata
+            idempotency_key: Optional key to prevent duplicate sessions
+
+        Returns:
+            Checkout session with URL to redirect user to
+        """
+        try:
+            line_item = {}
+            if price_id:
+                line_item = {"price": price_id, "quantity": 1}
+            elif price_data:
+                line_item = {
+                    "price_data": {
+                        "currency": self.settings.currency,
+                        "unit_amount": price_data["unit_amount"],
+                        "recurring": {"interval": price_data.get("interval", "month")},
+                        "product_data": {
+                            "name": price_data["name"],
+                            "description": price_data.get("description", ""),
+                        },
+                    },
+                    "quantity": 1,
+                }
+            else:
+                raise ValueError("Either price_id or price_data must be provided")
+
+            # Build create params
+            create_params = {
+                "customer": customer_id,
+                "line_items": [line_item],
+                "mode": "subscription",
+                "success_url": success_url or self.settings.success_url,
+                "cancel_url": cancel_url or self.settings.cancel_url,
+                "metadata": metadata or {},
+                # Allow customers to reuse saved payment methods instead of always adding new cards
+                "payment_method_collection": "if_required",
+                "saved_payment_method_options": {
+                    "payment_method_save": "enabled",
+                },
+            }
+
+            # Use idempotency key if provided to prevent duplicate sessions
+            if idempotency_key:
+                session = stripe.checkout.Session.create(
+                    **create_params,
+                    idempotency_key=idempotency_key,
+                )
+            else:
+                session = stripe.checkout.Session.create(**create_params)
+
+            logger.info(f"Created subscription checkout session: {session.id}")
+            return session
+        except StripeError as e:
+            logger.error(f"Failed to create subscription checkout session: {e.user_message}")
+            raise
+
     # ========== Payment Intents (Custom UI Flow) ==========
 
     def create_payment_intent(
@@ -555,6 +629,37 @@ class StripeService:
             return stripe.Invoice.retrieve(invoice_id)
         except StripeError as e:
             logger.error(f"Failed to retrieve invoice: {e.user_message}")
+            raise
+
+    def list_customer_invoices(
+        self,
+        customer_id: str,
+        limit: int = 50,
+        status: Optional[str] = None,
+    ) -> list[stripe.Invoice]:
+        """List invoices for a customer from Stripe.
+
+        Args:
+            customer_id: Stripe customer ID
+            limit: Maximum number of invoices to return
+            status: Optional filter by status (draft, open, paid, uncollectible, void)
+
+        Returns:
+            List of Stripe invoice objects
+        """
+        try:
+            params = {
+                "customer": customer_id,
+                "limit": limit,
+            }
+            if status:
+                params["status"] = status
+
+            invoices = stripe.Invoice.list(**params)
+            logger.info(f"Listed {len(invoices.data)} invoices for customer {customer_id}")
+            return list(invoices.data)
+        except StripeError as e:
+            logger.error(f"Failed to list invoices for customer {customer_id}: {e.user_message}")
             raise
 
 

@@ -35,7 +35,7 @@ import { useOrganization } from "@/hooks/useOrganizations"
 import {
   useBillingAccount,
   usePaymentMethods,
-  useInvoices,
+  useStripeInvoices,
   useUsage,
   useCreateCreditCheckout,
   useCreateCustomerPortal,
@@ -67,7 +67,7 @@ export default function BillingPage({ params }: BillingPageProps) {
   const { data: account, isLoading: accountLoading } = useBillingAccount(orgId)
   const { data: subscription, isLoading: subscriptionLoading } = useSubscription(orgId)
   const { data: paymentMethods, isLoading: pmLoading } = usePaymentMethods(orgId)
-  const { data: invoices, isLoading: invoicesLoading } = useInvoices(orgId, { limit: 10 })
+  const { data: stripeInvoices, isLoading: invoicesLoading } = useStripeInvoices(orgId, { limit: 10 })
   const { data: usage, isLoading: usageLoading } = useUsage(orgId, { billed: false })
   const { data: stripeConfig } = useStripeConfig()
 
@@ -176,9 +176,27 @@ export default function BillingPage({ params }: BillingPageProps) {
       window.open(result.portal_url, "_blank")
       setUpgradeDialogOpen(false)
     } catch (error) {
-      setUpgradeError(
-        error instanceof Error ? error.message : "Failed to process upgrade. Please try again."
-      )
+      const errorMessage = error instanceof Error ? error.message : "Failed to process upgrade. Please try again."
+
+      // If user already has a paid subscription, redirect to customer portal for plan changes
+      if (errorMessage.toLowerCase().includes("already has an active paid subscription") ||
+          errorMessage.toLowerCase().includes("use the customer portal")) {
+        try {
+          const result = await createPortal.mutateAsync(orgId)
+          window.open(result.portal_url, "_blank")
+          setUpgradeDialogOpen(false)
+          toast({
+            title: "Opening Billing Portal",
+            description: "Use the Stripe portal to manage your subscription and change plans.",
+          })
+          return
+        } catch (portalError) {
+          setUpgradeError("Failed to open billing portal. Please try the 'Billing Portal' button.")
+          return
+        }
+      }
+
+      setUpgradeError(errorMessage)
     }
   }
 
@@ -315,8 +333,25 @@ export default function BillingPage({ params }: BillingPageProps) {
                 <Zap className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{account.free_workflows_remaining}</p>
-                <p className="text-sm text-muted-foreground">Free Workflows Left</p>
+                {/* Show subscription workflows if subscribed, otherwise free tier */}
+                {subscription && subscription.tier !== "free" ? (
+                  <>
+                    <p className="text-2xl font-bold">
+                      {subscription.workflows_remaining === -1
+                        ? "∞"
+                        : subscription.workflows_remaining}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      Workflows Left
+                      {subscription.workflows_limit !== -1 && ` / ${subscription.workflows_limit}`}
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold">{account.free_workflows_remaining}</p>
+                    <p className="text-sm text-muted-foreground">Free Workflows Left</p>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
@@ -328,8 +363,18 @@ export default function BillingPage({ params }: BillingPageProps) {
                 <Receipt className="h-5 w-5 text-purple-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{account.total_workflows_completed}</p>
-                <p className="text-sm text-muted-foreground">Workflows Completed</p>
+                {/* Show subscription usage if subscribed, otherwise total */}
+                {subscription && subscription.tier !== "free" ? (
+                  <>
+                    <p className="text-2xl font-bold">{subscription.workflows_used}</p>
+                    <p className="text-sm text-muted-foreground">Workflows Used This Period</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold">{account.total_workflows_completed}</p>
+                    <p className="text-sm text-muted-foreground">Workflows Completed</p>
+                  </>
+                )}
               </div>
             </div>
           </CardContent>
@@ -552,7 +597,7 @@ export default function BillingPage({ params }: BillingPageProps) {
                     <Skeleton key={i} className="h-12 w-full" />
                   ))}
                 </div>
-              ) : invoices && invoices.length > 0 ? (
+              ) : stripeInvoices && stripeInvoices.length > 0 ? (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -564,15 +609,15 @@ export default function BillingPage({ params }: BillingPageProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {invoices.map((invoice) => (
+                    {stripeInvoices.map((invoice) => (
                       <TableRow key={invoice.id}>
-                        <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
+                        <TableCell className="font-mono">{invoice.number || invoice.id}</TableCell>
                         <TableCell>
-                          {invoice.created_at
-                            ? new Date(invoice.created_at).toLocaleDateString()
+                          {invoice.created
+                            ? new Date(invoice.created).toLocaleDateString()
                             : "N/A"}
                         </TableCell>
-                        <TableCell>${invoice.total.toFixed(2)}</TableCell>
+                        <TableCell>${(invoice.total / 100).toFixed(2)}</TableCell>
                         <TableCell>
                           <Badge
                             variant={
@@ -587,11 +632,19 @@ export default function BillingPage({ params }: BillingPageProps) {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button variant="ghost" size="sm" asChild>
-                            <Link href={`/organizations/${orgId}/billing/invoices/${invoice.id}`}>
-                              View
-                            </Link>
-                          </Button>
+                          {invoice.hosted_invoice_url ? (
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={invoice.hosted_invoice_url} target="_blank" rel="noopener noreferrer">
+                                View
+                              </a>
+                            </Button>
+                          ) : invoice.invoice_pdf ? (
+                            <Button variant="ghost" size="sm" asChild>
+                              <a href={invoice.invoice_pdf} target="_blank" rel="noopener noreferrer">
+                                PDF
+                              </a>
+                            </Button>
+                          ) : null}
                         </TableCell>
                       </TableRow>
                     ))}

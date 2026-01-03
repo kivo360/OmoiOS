@@ -8,8 +8,10 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from omoi_os.api.dependencies import get_database_service
+from omoi_os.api.dependencies import get_database_service, get_db_session
 from omoi_os.services.billing_service import BillingService, get_billing_service
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.stripe_service import get_stripe_service, StripeService
@@ -68,6 +70,31 @@ class InvoiceResponse(BaseModel):
     finalized_at: Optional[datetime]
     paid_at: Optional[datetime]
     created_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StripeInvoiceResponse(BaseModel):
+    """Response model for Stripe invoice (fetched directly from Stripe)."""
+    id: str  # Stripe invoice ID
+    number: Optional[str]  # Invoice number (e.g., "0001-0001")
+    status: str  # draft, open, paid, uncollectible, void
+    amount_due: int  # Amount in cents
+    amount_paid: int  # Amount in cents
+    amount_remaining: int  # Amount in cents
+    subtotal: int  # Amount in cents
+    total: int  # Amount in cents
+    currency: str
+    description: Optional[str]
+    customer_email: Optional[str]
+    hosted_invoice_url: Optional[str]  # Link to view invoice
+    invoice_pdf: Optional[str]  # Link to download PDF
+    period_start: Optional[datetime]
+    period_end: Optional[datetime]
+    due_date: Optional[datetime]
+    created: datetime
+    paid_at: Optional[datetime]
+    lines: list[dict]  # Line items
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -282,8 +309,13 @@ async def get_billing_account(
 
     Creates a new billing account if one doesn't exist.
     """
-    account = billing_service.get_or_create_billing_account(organization_id)
-    return BillingAccountResponse(**account.to_dict())
+    # Use session context to ensure object is not detached when accessing attributes
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        sess.commit()
+        # Convert to dict while still in session to avoid DetachedInstanceError
+        account_dict = account.to_dict()
+    return BillingAccountResponse(**account_dict)
 
 
 @router.post("/account/{organization_id}/payment-method", response_model=PaymentMethodResponse)
@@ -298,47 +330,43 @@ async def attach_payment_method(
 
     The payment_method_id should be obtained from Stripe.js on the frontend.
     """
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
+    from omoi_os.models.billing import BillingAccount, BillingAccountStatus
 
-    if not account.stripe_customer_id:
-        raise HTTPException(status_code=400, detail="Billing account has no Stripe customer")
+    # Use single session context for all operations to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
 
-    try:
-        payment_method = stripe.attach_payment_method(
-            customer_id=account.stripe_customer_id,
-            payment_method_id=request.payment_method_id,
-            set_as_default=request.set_as_default,
-        )
+        if not account.stripe_customer_id:
+            raise HTTPException(status_code=400, detail="Billing account has no Stripe customer")
 
-        # Update billing account with payment method ID
-        with billing_service.db.get_session() as sess:
-            from sqlalchemy import select
-            from omoi_os.models.billing import BillingAccount, BillingAccountStatus
-
-            result = sess.execute(
-                select(BillingAccount).where(BillingAccount.id == account.id)
+        try:
+            payment_method = stripe.attach_payment_method(
+                customer_id=account.stripe_customer_id,
+                payment_method_id=request.payment_method_id,
+                set_as_default=request.set_as_default,
             )
-            db_account = result.scalar_one()
-            db_account.stripe_payment_method_id = payment_method.id
+
+            # Update billing account with payment method ID
+            account.stripe_payment_method_id = payment_method.id
 
             # Activate account if it was pending
-            if db_account.status == BillingAccountStatus.PENDING.value:
-                db_account.status = BillingAccountStatus.ACTIVE.value
+            if account.status == BillingAccountStatus.PENDING.value:
+                account.status = BillingAccountStatus.ACTIVE.value
 
             sess.commit()
 
-        return PaymentMethodResponse(
-            id=payment_method.id,
-            type=payment_method.type,
-            card_brand=payment_method.card.brand if payment_method.card else None,
-            card_last4=payment_method.card.last4 if payment_method.card else None,
-            is_default=request.set_as_default,
-        )
-    except Exception as e:
-        logger.error(f"Failed to attach payment method: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+            return PaymentMethodResponse(
+                id=payment_method.id,
+                type=payment_method.type,
+                card_brand=payment_method.card.brand if payment_method.card else None,
+                card_last4=payment_method.card.last4 if payment_method.card else None,
+                is_default=request.set_as_default,
+            )
+        except Exception as e:
+            logger.error(f"Failed to attach payment method: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/account/{organization_id}/payment-methods", response_model=list[PaymentMethodResponse])
@@ -350,22 +378,28 @@ async def list_payment_methods(
     """
     List all payment methods for the billing account.
     """
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
+    # Get account info within session context to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
 
-    if not account.stripe_customer_id:
+        # Extract values while still in session
+        stripe_customer_id = account.stripe_customer_id
+        stripe_payment_method_id = account.stripe_payment_method_id
+
+    if not stripe_customer_id:
         return []
 
     try:
-        payment_methods = stripe.list_payment_methods(account.stripe_customer_id)
+        payment_methods = stripe.list_payment_methods(stripe_customer_id)
         return [
             PaymentMethodResponse(
                 id=pm.id,
                 type=pm.type,
                 card_brand=pm.card.brand if pm.card else None,
                 card_last4=pm.card.last4 if pm.card else None,
-                is_default=pm.id == account.stripe_payment_method_id,
+                is_default=pm.id == stripe_payment_method_id,
             )
             for pm in payment_methods
         ]
@@ -384,30 +418,24 @@ async def remove_payment_method(
     """
     Remove a payment method from the billing account.
     """
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
+    # Use single session context to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
 
-    try:
-        stripe.detach_payment_method(payment_method_id)
+        try:
+            stripe.detach_payment_method(payment_method_id)
 
-        # Clear default if this was the default
-        if account.stripe_payment_method_id == payment_method_id:
-            with billing_service.db.get_session() as sess:
-                from sqlalchemy import select
-                from omoi_os.models.billing import BillingAccount
-
-                result = sess.execute(
-                    select(BillingAccount).where(BillingAccount.id == account.id)
-                )
-                db_account = result.scalar_one()
-                db_account.stripe_payment_method_id = None
+            # Clear default if this was the default
+            if account.stripe_payment_method_id == payment_method_id:
+                account.stripe_payment_method_id = None
                 sess.commit()
 
-        return {"status": "success", "message": "Payment method removed"}
-    except Exception as e:
-        logger.error(f"Failed to remove payment method: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+            return {"status": "success", "message": "Payment method removed"}
+        except Exception as e:
+            logger.error(f"Failed to remove payment method: {e}")
+            raise HTTPException(status_code=400, detail=str(e))
 
 
 # ========== Credit Purchase ==========
@@ -450,36 +478,37 @@ async def get_subscription(
 
     Returns null if no active subscription exists.
     """
-    subscription = subscription_service.get_subscription(organization_id)
-    if not subscription:
-        return None
+    with subscription_service.db.get_session() as sess:
+        subscription = subscription_service.get_subscription(organization_id, session=sess)
+        if not subscription:
+            return None
 
-    return SubscriptionResponse(
-        id=str(subscription.id),
-        organization_id=str(subscription.organization_id),
-        billing_account_id=str(subscription.billing_account_id),
-        tier=subscription.tier,
-        status=subscription.status,
-        current_period_start=subscription.current_period_start,
-        current_period_end=subscription.current_period_end,
-        cancel_at_period_end=subscription.cancel_at_period_end,
-        canceled_at=subscription.canceled_at,
-        trial_start=subscription.trial_start,
-        trial_end=subscription.trial_end,
-        workflows_limit=subscription.workflows_limit,
-        workflows_used=subscription.workflows_used,
-        workflows_remaining=subscription.workflows_remaining,
-        agents_limit=subscription.agents_limit,
-        storage_limit_gb=subscription.storage_limit_gb,
-        storage_used_gb=subscription.storage_used_gb,
-        is_lifetime=subscription.is_lifetime,
-        lifetime_purchase_date=subscription.lifetime_purchase_date,
-        lifetime_purchase_amount=subscription.lifetime_purchase_amount,
-        is_byo=subscription.is_byo,
-        byo_providers_configured=subscription.byo_providers_configured,
-        created_at=subscription.created_at,
-        updated_at=subscription.updated_at,
-    )
+        return SubscriptionResponse(
+            id=str(subscription.id),
+            organization_id=str(subscription.organization_id),
+            billing_account_id=str(subscription.billing_account_id),
+            tier=subscription.tier,
+            status=subscription.status,
+            current_period_start=subscription.current_period_start,
+            current_period_end=subscription.current_period_end,
+            cancel_at_period_end=subscription.cancel_at_period_end,
+            canceled_at=subscription.canceled_at,
+            trial_start=subscription.trial_start,
+            trial_end=subscription.trial_end,
+            workflows_limit=subscription.workflows_limit,
+            workflows_used=subscription.workflows_used,
+            workflows_remaining=subscription.workflows_remaining,
+            agents_limit=subscription.agents_limit,
+            storage_limit_gb=subscription.storage_limit_gb,
+            storage_used_gb=subscription.storage_used_gb,
+            is_lifetime=subscription.is_lifetime,
+            lifetime_purchase_date=subscription.lifetime_purchase_date,
+            lifetime_purchase_amount=subscription.lifetime_purchase_amount,
+            is_byo=subscription.is_byo,
+            byo_providers_configured=subscription.byo_providers_configured,
+            created_at=subscription.created_at,
+            updated_at=subscription.updated_at,
+        )
 
 
 @router.post("/account/{organization_id}/subscription/cancel")
@@ -530,17 +559,24 @@ class SubscriptionCheckoutRequest(BaseModel):
     cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
 
 
+import os
+import hashlib
+import time
+
 # Tier pricing configuration - matches landing page
+# Use Stripe price IDs from env if available, otherwise use dynamic pricing
 TIER_PRICES = {
     "pro": {
+        "price_id": os.getenv("STRIPE_PRO_PRICE_ID"),
         "price_usd": 50,
         "name": "OmoiOS Pro",
-        "description": "5 concurrent agents, 100 workflows/month, BYO API keys",
+        "description": "5 concurrent agents, 500 workflows/month, BYO API keys",
     },
     "team": {
+        "price_id": os.getenv("STRIPE_TEAM_PRICE_ID"),
         "price_usd": 150,
         "name": "OmoiOS Team",
-        "description": "10 concurrent agents, 500 workflows/month, BYO API keys, team collaboration",
+        "description": "10 concurrent agents, 2000 workflows/month, BYO API keys, team collaboration",
     },
 }
 
@@ -568,52 +604,67 @@ async def create_subscription_checkout(
 
     tier_config = TIER_PRICES[tier]
 
-    # Check for existing paid subscription
-    existing = subscription_service.get_subscription(organization_id)
-    if existing and existing.is_lifetime:
-        raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
-    if existing and existing.tier in ["pro", "team"] and existing.status == "active":
-        raise HTTPException(
-            status_code=400,
-            detail="Organization already has an active paid subscription. Use the customer portal to change plans."
-        )
+    # Get or create billing account and check for existing subscription
+    # Use single session context to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        # Check for existing paid subscription
+        existing = subscription_service.get_subscription(organization_id, session=sess)
+        if existing and existing.is_lifetime:
+            raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
+        if existing and existing.tier in ["pro", "team"] and existing.status == "active":
+            raise HTTPException(
+                status_code=400,
+                detail="Organization already has an active paid subscription. Use the customer portal to change plans."
+            )
 
-    # Get or create billing account
-    account = billing_service.get_or_create_billing_account(organization_id)
+        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        sess.commit()
+        # Extract values while still in session
+        account_id = str(account.id)
+        stripe_customer_id = account.stripe_customer_id
 
     # Create Stripe checkout session for subscription
     try:
         success_url = request.success_url or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
         cancel_url = request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
 
-        session = stripe.stripe.checkout.Session.create(
-            mode="subscription",  # Recurring subscription
-            customer=account.stripe_customer_id,
-            line_items=[
-                {
-                    "price_data": {
-                        "currency": "usd",
-                        "unit_amount": int(tier_config["price_usd"] * 100),  # In cents
-                        "recurring": {
-                            "interval": "month",
-                        },
-                        "product_data": {
-                            "name": tier_config["name"],
-                            "description": tier_config["description"],
-                        },
-                    },
-                    "quantity": 1,
-                }
-            ],
-            metadata={
-                "subscription_checkout": "true",
-                "tier": tier,
-                "organization_id": str(organization_id),
-                "billing_account_id": str(account.id),
-            },
-            success_url=success_url,
-            cancel_url=cancel_url,
-        )
+        metadata = {
+            "subscription_checkout": "true",
+            "tier": tier,
+            "organization_id": str(organization_id),
+            "billing_account_id": account_id,
+        }
+
+        # Generate idempotency key based on org, tier, and 30-minute time window
+        # This prevents duplicate checkout sessions if user clicks multiple times
+        time_window = int(time.time() // 1800)  # 30-minute windows
+        idempotency_base = f"{organization_id}:{tier}:{time_window}"
+        idempotency_key = f"sub_checkout_{hashlib.sha256(idempotency_base.encode()).hexdigest()[:32]}"
+
+        # Use price_id if available, otherwise use dynamic pricing
+        if tier_config.get("price_id"):
+            session = stripe.create_subscription_checkout_session(
+                customer_id=stripe_customer_id,
+                price_id=tier_config["price_id"],
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata=metadata,
+                idempotency_key=idempotency_key,
+            )
+        else:
+            session = stripe.create_subscription_checkout_session(
+                customer_id=stripe_customer_id,
+                price_data={
+                    "name": tier_config["name"],
+                    "description": tier_config["description"],
+                    "unit_amount": int(tier_config["price_usd"] * 100),
+                    "interval": "month",
+                },
+                success_url=success_url,
+                cancel_url=cancel_url,
+                metadata=metadata,
+                idempotency_key=idempotency_key,
+            )
 
         return CheckoutResponse(checkout_url=session.url, session_id=session.id)
     except Exception as e:
@@ -645,13 +696,19 @@ async def create_lifetime_checkout(
     - All Pro features permanently
     - One-time $499 payment (no recurring charges)
     """
-    # Check for existing lifetime subscription
-    existing = subscription_service.get_subscription(organization_id)
-    if existing and existing.is_lifetime:
-        raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
+    # Get or create billing account and check for existing subscription
+    # Use single session context to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        # Check for existing lifetime subscription
+        existing = subscription_service.get_subscription(organization_id, session=sess)
+        if existing and existing.is_lifetime:
+            raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
 
-    # Get or create billing account
-    account = billing_service.get_or_create_billing_account(organization_id)
+        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        sess.commit()
+        # Extract values while still in session
+        account_id = str(account.id)
+        stripe_customer_id = account.stripe_customer_id
 
     # Create Stripe checkout session for one-time payment
     try:
@@ -660,7 +717,7 @@ async def create_lifetime_checkout(
 
         session = stripe.stripe.checkout.Session.create(
             mode="payment",  # One-time payment, not subscription
-            customer=account.stripe_customer_id,
+            customer=stripe_customer_id,
             line_items=[
                 {
                     "price_data": {
@@ -677,7 +734,7 @@ async def create_lifetime_checkout(
             metadata={
                 "lifetime_purchase": "true",
                 "organization_id": str(organization_id),
-                "billing_account_id": str(account.id),
+                "billing_account_id": account_id,
                 "purchase_amount": str(LIFETIME_PRICE_USD),
             },
             success_url=success_url,
@@ -727,10 +784,6 @@ async def list_invoices(
 
     Optionally filter by status: draft, open, paid, past_due, void.
     """
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
-
     from omoi_os.models.billing import InvoiceStatus
 
     invoice_status = None
@@ -740,13 +793,106 @@ async def list_invoices(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
-    invoices = billing_service.list_invoices(
-        billing_account_id=account.id,
-        status=invoice_status,
-        limit=limit,
-    )
+    # Use session context to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
 
-    return [InvoiceResponse(**inv.to_dict()) for inv in invoices]
+        invoices = billing_service.list_invoices(
+            billing_account_id=account.id,
+            status=invoice_status,
+            limit=limit,
+            session=sess,
+        )
+
+        # Convert to dicts while still in session
+        invoice_dicts = [inv.to_dict() for inv in invoices]
+
+    return [InvoiceResponse(**inv_dict) for inv_dict in invoice_dicts]
+
+
+@router.get("/account/{organization_id}/stripe-invoices", response_model=list[StripeInvoiceResponse])
+async def list_stripe_invoices(
+    organization_id: UUID,
+    status: Optional[str] = None,
+    limit: int = 50,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+):
+    """
+    List invoices directly from Stripe for an organization.
+
+    This includes all Stripe invoices (subscriptions, one-time payments, etc.).
+    Optionally filter by status: draft, open, paid, uncollectible, void.
+    """
+    # Get billing account to find Stripe customer ID
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
+        stripe_customer_id = account.stripe_customer_id
+
+    if not stripe_customer_id:
+        # No Stripe customer, return empty list
+        return []
+
+    try:
+        stripe_service = get_stripe_service()
+        stripe_invoices = stripe_service.list_customer_invoices(
+            customer_id=stripe_customer_id,
+            limit=limit,
+            status=status,
+        )
+
+        # Convert Stripe invoices to response format
+        responses = []
+        for inv in stripe_invoices:
+            # Convert timestamps
+            period_start = datetime.fromtimestamp(inv.period_start) if inv.period_start else None
+            period_end = datetime.fromtimestamp(inv.period_end) if inv.period_end else None
+            due_date = datetime.fromtimestamp(inv.due_date) if inv.due_date else None
+            created = datetime.fromtimestamp(inv.created)
+            paid_at = datetime.fromtimestamp(inv.status_transitions.paid_at) if inv.status_transitions and inv.status_transitions.paid_at else None
+
+            # Extract line items
+            lines = []
+            if inv.lines and inv.lines.data:
+                for line in inv.lines.data:
+                    lines.append({
+                        "id": line.id,
+                        "description": line.description,
+                        "amount": line.amount,
+                        "currency": line.currency,
+                        "quantity": line.quantity,
+                    })
+
+            responses.append(StripeInvoiceResponse(
+                id=inv.id,
+                number=inv.number,
+                status=inv.status,
+                amount_due=inv.amount_due,
+                amount_paid=inv.amount_paid,
+                amount_remaining=inv.amount_remaining,
+                subtotal=inv.subtotal,
+                total=inv.total,
+                currency=inv.currency,
+                description=inv.description,
+                customer_email=inv.customer_email,
+                hosted_invoice_url=inv.hosted_invoice_url,
+                invoice_pdf=inv.invoice_pdf,
+                period_start=period_start,
+                period_end=period_end,
+                due_date=due_date,
+                created=created,
+                paid_at=paid_at,
+                lines=lines,
+            ))
+
+        return responses
+
+    except Exception as e:
+        logger.error(f"Failed to fetch Stripe invoices: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch invoices from Stripe")
 
 
 @router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
@@ -798,16 +944,21 @@ async def generate_invoice(
 
     Returns the created invoice or null if no billable usage.
     """
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
+    # Use single session context to avoid DetachedInstanceError
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
 
-    invoice = billing_service.generate_invoice(account.id)
+        invoice = billing_service.generate_invoice(account.id, session=sess)
+        sess.commit()
 
-    if not invoice:
-        return None
+        if not invoice:
+            return None
 
-    return InvoiceResponse(**invoice.to_dict())
+        invoice_dict = invoice.to_dict()
+
+    return InvoiceResponse(**invoice_dict)
 
 
 # ========== Usage ==========
@@ -823,14 +974,15 @@ async def get_usage(
 
     Optionally filter by billed status.
     """
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
-
     from sqlalchemy import select
     from omoi_os.models.billing import UsageRecord
 
+    # Use single session context for all operations to avoid DetachedInstanceError
     with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
+
         query = select(UsageRecord).where(
             UsageRecord.billing_account_id == account.id
         )
@@ -843,7 +995,62 @@ async def get_usage(
         result = sess.execute(query)
         records = list(result.scalars().all())
 
-        return [UsageRecordResponse(**r.to_dict()) for r in records]
+        # Convert to dicts while still in session
+        record_dicts = [r.to_dict() for r in records]
+
+    return [UsageRecordResponse(**r_dict) for r_dict in record_dicts]
+
+
+class UsageSummaryResponse(BaseModel):
+    """Response model for usage summary."""
+    subscription_tier: Optional[str]
+    workflows_used: int
+    workflows_limit: int
+    free_workflows_remaining: int
+    credit_balance: float
+    can_execute: bool
+    reason: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+@router.get("/account/{organization_id}/usage-summary", response_model=UsageSummaryResponse)
+async def get_usage_summary(
+    organization_id: UUID,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+):
+    """
+    Get a summary of usage and limits for an organization.
+
+    Returns:
+    - subscription_tier: Current subscription tier (or "pay_as_you_go")
+    - workflows_used: Workflows used this billing period
+    - workflows_limit: Maximum workflows allowed in current tier
+    - free_workflows_remaining: Free tier workflows remaining
+    - credit_balance: Prepaid credits balance
+    - can_execute: Whether the org can execute a workflow right now
+    - reason: Explanation of the current billing state
+    """
+    summary = billing_service.get_usage_summary(organization_id)
+    return UsageSummaryResponse(**summary)
+
+
+@router.post("/account/{organization_id}/check-execution")
+async def check_workflow_execution(
+    organization_id: UUID,
+    billing_service: BillingService = Depends(get_billing_service_dep),
+):
+    """
+    Check if an organization can execute a workflow.
+
+    Returns whether execution is allowed and the reason.
+    Does NOT reserve quota - use this for UI display only.
+    """
+    can_execute, reason = billing_service.can_execute_workflow(organization_id)
+    return {
+        "can_execute": can_execute,
+        "reason": reason,
+    }
 
 
 # ========== Stripe Webhooks ==========
@@ -942,34 +1149,42 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
         if organization_id and billing_account_id:
             subscription_service = get_subscription_service(billing_service.db)
 
-            # Cancel any existing free subscription first
-            existing = subscription_service.get_subscription(UUID(organization_id))
-            if existing and existing.tier == "free":
-                subscription_service.cancel_subscription(existing.id, at_period_end=False)
+            with billing_service.db.get_session() as sess:
+                from omoi_os.models.subscription import Subscription, SubscriptionTier, TIER_LIMITS
+                from sqlalchemy import select
 
-            # Create the new paid subscription
-            from omoi_os.models.subscription import SubscriptionTier
-            tier_enum = SubscriptionTier.PRO if tier == "pro" else SubscriptionTier.TEAM
+                # Check if subscription was already created by customer.subscription.created webhook
+                existing = subscription_service.get_subscription(UUID(organization_id), session=sess)
 
-            subscription = subscription_service.create_subscription(
-                organization_id=UUID(organization_id),
-                billing_account_id=UUID(billing_account_id),
-                tier=tier_enum,
-            )
-
-            # Link to Stripe subscription
-            if stripe_subscription_id:
-                with billing_service.db.get_session() as sess:
-                    from sqlalchemy import select
-                    from omoi_os.models.subscription import Subscription
-
-                    result = sess.execute(
-                        select(Subscription).where(Subscription.id == subscription.id)
-                    )
-                    sub = result.scalar_one_or_none()
-                    if sub:
-                        sub.stripe_subscription_id = stripe_subscription_id
+                if existing and existing.tier in ["pro", "team"]:
+                    # Subscription already created by customer.subscription.created with correct tier
+                    # Just ensure it's linked to Stripe subscription ID
+                    if stripe_subscription_id and not existing.stripe_subscription_id:
+                        existing.stripe_subscription_id = stripe_subscription_id
                         sess.commit()
+                    logger.info(f"Subscription already exists for org {organization_id} (tier: {existing.tier})")
+                    return
+
+                # Cancel any existing free subscription
+                if existing and existing.tier == "free":
+                    existing_id = existing.id
+                    subscription_service.cancel_subscription(existing_id, at_period_end=False, session=sess)
+
+                # Create the new paid subscription
+                tier_enum = SubscriptionTier.PRO if tier == "pro" else SubscriptionTier.TEAM
+
+                subscription = subscription_service.create_subscription(
+                    organization_id=UUID(organization_id),
+                    billing_account_id=UUID(billing_account_id),
+                    tier=tier_enum,
+                    session=sess,
+                )
+
+                # Link to Stripe subscription
+                if stripe_subscription_id:
+                    subscription.stripe_subscription_id = stripe_subscription_id
+
+                sess.commit()
 
             logger.info(f"Created {tier} subscription for org {organization_id}")
         return
@@ -983,17 +1198,21 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
         if organization_id and billing_account_id:
             subscription_service = get_subscription_service(billing_service.db)
 
-            # Cancel any existing subscription first
-            existing = subscription_service.get_subscription(UUID(organization_id))
-            if existing and not existing.is_lifetime:
-                subscription_service.cancel_subscription(existing.id, at_period_end=False)
+            with billing_service.db.get_session() as sess:
+                # Cancel any existing subscription first
+                existing = subscription_service.get_subscription(UUID(organization_id), session=sess)
+                if existing and not existing.is_lifetime:
+                    existing_id = existing.id
+                    subscription_service.cancel_subscription(existing_id, at_period_end=False, session=sess)
 
-            # Create lifetime subscription
-            subscription_service.create_lifetime_subscription(
-                organization_id=UUID(organization_id),
-                billing_account_id=UUID(billing_account_id),
-                purchase_amount=purchase_amount,
-            )
+                # Create lifetime subscription
+                subscription_service.create_lifetime_subscription(
+                    organization_id=UUID(organization_id),
+                    billing_account_id=UUID(billing_account_id),
+                    purchase_amount=purchase_amount,
+                    session=sess,
+                )
+                sess.commit()
             logger.info(f"Created lifetime subscription for org {organization_id} (${purchase_amount:.2f})")
         return
 
@@ -1083,9 +1302,11 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
     """Handle customer.subscription.created event.
 
     Creates or updates local subscription record when subscription is created in Stripe.
+    Includes deduplication checks to prevent creating duplicate subscriptions.
     """
     from datetime import datetime
     from sqlalchemy import select
+    from sqlalchemy.exc import IntegrityError
     from omoi_os.models.billing import BillingAccount
     from omoi_os.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier, TIER_LIMITS
     from uuid import uuid4
@@ -1107,25 +1328,66 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
             logger.warning(f"No billing account found for Stripe customer: {stripe_customer_id}")
             return
 
-        # Determine tier from metadata or product
-        tier_value = metadata.get("tier", "starter")
-        try:
-            tier = SubscriptionTier(tier_value)
-        except ValueError:
-            tier = SubscriptionTier.STARTER
-
-        limits = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
-
-        # Check for existing subscription
-        existing = sess.execute(
+        # Check for existing subscription by Stripe subscription ID (primary dedup check)
+        existing_by_stripe_id = sess.execute(
             select(Subscription).where(
                 Subscription.stripe_subscription_id == stripe_subscription_id
             )
         ).scalar_one_or_none()
 
-        if existing:
+        if existing_by_stripe_id:
             logger.info(f"Subscription already exists for Stripe ID: {stripe_subscription_id}")
             return
+
+        # Also check for existing active subscription for this organization (secondary dedup)
+        existing_active = sess.execute(
+            select(Subscription).where(
+                Subscription.organization_id == account.organization_id,
+                Subscription.status.in_([
+                    SubscriptionStatus.ACTIVE.value,
+                    SubscriptionStatus.TRIALING.value,
+                ])
+            ).order_by(Subscription.created_at.desc()).limit(1)
+        ).scalar_one_or_none()
+
+        # Determine tier from price ID, metadata, or default to free
+        tier_value = metadata.get("tier")
+        if not tier_value and stripe_price_id:
+            # Map price ID to tier
+            pro_price_id = os.getenv("STRIPE_PRO_PRICE_ID")
+            team_price_id = os.getenv("STRIPE_TEAM_PRICE_ID")
+            if stripe_price_id == pro_price_id:
+                tier_value = "pro"
+            elif stripe_price_id == team_price_id:
+                tier_value = "team"
+            else:
+                tier_value = "free"
+        elif not tier_value:
+            tier_value = "free"
+
+        try:
+            tier = SubscriptionTier(tier_value)
+        except ValueError:
+            tier = SubscriptionTier.FREE
+
+        # If org already has an active paid subscription, update it instead of creating new
+        if existing_active and existing_active.tier in ["pro", "team"]:
+            # Update existing subscription with new Stripe ID if needed
+            if not existing_active.stripe_subscription_id:
+                existing_active.stripe_subscription_id = stripe_subscription_id
+                existing_active.stripe_price_id = stripe_price_id
+                existing_active.stripe_product_id = stripe_product_id
+                sess.commit()
+                logger.info(f"Linked existing subscription {existing_active.id} to Stripe ID: {stripe_subscription_id}")
+            else:
+                logger.warning(
+                    f"Org {account.organization_id} already has active subscription {existing_active.id} "
+                    f"with Stripe ID {existing_active.stripe_subscription_id}. "
+                    f"Ignoring new Stripe subscription {stripe_subscription_id}"
+                )
+            return
+
+        limits = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
 
         # Create new subscription
         subscription = Subscription(
@@ -1151,10 +1413,14 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
         if event_data.get("trial_end"):
             subscription.trial_end = datetime.fromtimestamp(event_data["trial_end"])
 
-        sess.add(subscription)
-        sess.commit()
-
-        logger.info(f"Created subscription {subscription.id} for org {account.organization_id} (tier: {tier.value})")
+        try:
+            sess.add(subscription)
+            sess.commit()
+            logger.info(f"Created subscription {subscription.id} for org {account.organization_id} (tier: {tier.value})")
+        except IntegrityError as e:
+            # Handle race condition - another webhook may have created the subscription
+            sess.rollback()
+            logger.warning(f"IntegrityError creating subscription (likely duplicate): {e}")
 
 
 async def _handle_subscription_updated(event_data: dict, billing_service: BillingService):
@@ -1344,15 +1610,18 @@ async def get_billing_account_cost_summary(
     cost_service: CostTrackingService = Depends(get_cost_tracking_service_dep),
 ) -> CostSummaryResponse:
     """Get cost summary for a billing account."""
-    # Get billing account for organization
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
+    # Get billing account for organization within session context
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
+        # Extract account ID while still in session
+        account_id = str(account.id)
 
-    # Get cost summary
+    # Get cost summary (uses its own session)
     summary = cost_service.get_cost_summary(
         scope_type="billing_account",
-        scope_id=str(account.id),
+        scope_id=account_id,
     )
 
     # Transform breakdown to response model
@@ -1389,13 +1658,16 @@ async def get_billing_account_costs(
     cost_service: CostTrackingService = Depends(get_cost_tracking_service_dep),
 ) -> list[CostRecordResponse]:
     """Get cost records for a billing account."""
-    # Get billing account for organization
-    account = billing_service.get_billing_account(organization_id)
-    if not account:
-        raise HTTPException(status_code=404, detail="Billing account not found")
+    # Get billing account for organization within session context
+    with billing_service.db.get_session() as sess:
+        account = billing_service.get_billing_account(organization_id, session=sess)
+        if not account:
+            raise HTTPException(status_code=404, detail="Billing account not found")
+        # Extract account ID while still in session
+        account_id = str(account.id)
 
-    # Get cost records
-    records = cost_service.get_billing_account_costs(str(account.id))
+    # Get cost records (uses its own session)
+    records = cost_service.get_billing_account_costs(account_id)
 
     return [
         CostRecordResponse(

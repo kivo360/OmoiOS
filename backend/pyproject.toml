@@ -48,6 +48,9 @@ dependencies = [
     "claude-agent-sdk>=0.1.17",
     "claude-code-sdk>=0.0.25",
     "stripe>=7.0.0",
+    "resend>=2.19.0",
+    "taskiq-redis>=0.5.0",
+    "taskiq",
 ]
 
 [build-system]
@@ -58,6 +61,9 @@ build-backend = "uv_build"
 # Configure module discovery: omoi_os package is in the project root
 module-name = "omoi_os"
 module-root = ""
+
+[tool.uv.sources]
+taskiq = { git = "https://github.com/taskiq-python/taskiq" }
 
 [dependency-groups]
 dev = [

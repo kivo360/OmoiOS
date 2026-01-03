@@ -1022,6 +1022,37 @@ export interface Invoice {
   created_at: string | null
 }
 
+/**
+ * Stripe invoice (fetched directly from Stripe API)
+ */
+export interface StripeInvoice {
+  id: string  // Stripe invoice ID (e.g., "in_...")
+  number: string | null  // Invoice number (e.g., "0001-0001")
+  status: string  // draft, open, paid, uncollectible, void
+  amount_due: number  // Amount in cents
+  amount_paid: number  // Amount in cents
+  amount_remaining: number  // Amount in cents
+  subtotal: number  // Amount in cents
+  total: number  // Amount in cents
+  currency: string
+  description: string | null
+  customer_email: string | null
+  hosted_invoice_url: string | null  // Link to view invoice on Stripe
+  invoice_pdf: string | null  // Link to download PDF
+  period_start: string | null
+  period_end: string | null
+  due_date: string | null
+  created: string  // ISO date string
+  paid_at: string | null
+  lines: {
+    id: string
+    description: string | null
+    amount: number
+    currency: string
+    quantity: number | null
+  }[]
+}
+
 export interface Payment {
   id: string
   billing_account_id: string
