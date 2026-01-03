@@ -24,9 +24,14 @@ from omoi_os.logging import configure_logging, get_logger
 configure_logging()
 logger = get_logger(__name__)
 
-# Also configure taskiq's internal logger to use our logging
+# Configure taskiq's internal loggers
+# Set main taskiq logger to INFO to reduce noise (scheduler logs every second at DEBUG)
 taskiq_logger = stdlib_logging.getLogger("taskiq")
-taskiq_logger.setLevel(stdlib_logging.DEBUG)
+taskiq_logger.setLevel(stdlib_logging.INFO)
+
+# Specifically silence the noisy scheduler run module
+scheduler_run_logger = stdlib_logging.getLogger("taskiq.cli.scheduler.run")
+scheduler_run_logger.setLevel(stdlib_logging.WARNING)
 
 
 def _get_redis_url() -> str:
