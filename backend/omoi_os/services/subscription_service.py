@@ -154,7 +154,10 @@ class SubscriptionService:
         organization_id: UUID,
         session: Optional[Session] = None,
     ) -> Optional[Subscription]:
-        """Get active subscription for an organization."""
+        """Get active subscription for an organization.
+
+        Returns the most recently created active subscription if multiple exist.
+        """
         def _get(sess: Session) -> Optional[Subscription]:
             result = sess.execute(
                 select(Subscription).where(
@@ -165,7 +168,7 @@ class SubscriptionService:
                         SubscriptionStatus.PAST_DUE.value,
                         SubscriptionStatus.PAUSED.value,
                     ])
-                ).order_by(Subscription.created_at.desc())
+                ).order_by(Subscription.created_at.desc()).limit(1)
             )
             return result.scalar_one_or_none()
 

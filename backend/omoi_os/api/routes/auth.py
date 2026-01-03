@@ -8,6 +8,7 @@ from typing import List
 
 from omoi_os.api.dependencies import get_db_session, get_current_user, get_auth_service
 from omoi_os.logging import get_logger
+from omoi_os.services.email_service import get_email_service
 
 logger = get_logger(__name__)
 from omoi_os.models.user import User
@@ -60,10 +61,53 @@ async def register(
             waitlist_metadata=waitlist_metadata,
         )
 
+        # Send verification email
+        email_service = get_email_service()
+        if email_service.enabled:
+            verification_token = auth_service.create_verification_token(user.id)
+            await email_service.send_verification_email(
+                to_email=user.email,
+                token=verification_token,
+                user_name=user.full_name,
+            )
+
         return UserResponse.model_validate(user)
 
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request: ForgotPasswordRequest,  # Reuse - just needs email
+    db: AsyncSession = Depends(get_db_session),
+    auth_service: AuthService = Depends(get_auth_service),
+):
+    """Resend verification email."""
+    # Find user by email
+    result = await db.execute(
+        select(User).where(User.email == request.email, User.deleted_at.is_(None))
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        # Don't reveal if email exists
+        return {"message": "If an account exists, a verification email has been sent."}
+
+    if user.is_verified:
+        return {"message": "Email is already verified."}
+
+    # Send verification email
+    email_service = get_email_service()
+    if email_service.enabled:
+        verification_token = auth_service.create_verification_token(user.id)
+        await email_service.send_verification_email(
+            to_email=user.email,
+            token=verification_token,
+            user_name=user.full_name,
+        )
+
+    return {"message": "If an account exists, a verification email has been sent."}
 
 
 @router.post("/login", response_model=TokenResponse)

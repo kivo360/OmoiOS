@@ -668,6 +668,258 @@ class BillingService:
             portal = self.stripe.create_portal_session(account.stripe_customer_id)
             return portal.url
 
+    # ========== Usage Enforcement ==========
+
+    def can_execute_workflow(
+        self,
+        organization_id: UUID,
+        session: Optional[Session] = None,
+    ) -> tuple[bool, str]:
+        """Check if an organization can execute a workflow.
+
+        Checks in order:
+        1. Active subscription with available workflow quota
+        2. Free tier workflows remaining
+        3. Prepaid credits available
+        4. Account not suspended
+
+        Args:
+            organization_id: Organization to check
+
+        Returns:
+            Tuple of (can_execute, reason)
+        """
+        from omoi_os.models.subscription import (
+            Subscription,
+            SubscriptionStatus,
+            SubscriptionTier,
+            TIER_LIMITS,
+        )
+
+        def _check(sess: Session) -> tuple[bool, str]:
+            # Get billing account
+            account = self.get_billing_account(organization_id, sess)
+            if not account:
+                # No billing account yet - allow with free tier
+                return True, "new_account"
+
+            # Check if account is suspended
+            if account.status == BillingAccountStatus.SUSPENDED.value:
+                return False, "Account suspended due to payment issues. Please update your payment method."
+
+            # Check for active subscription
+            sub_result = sess.execute(
+                select(Subscription).where(
+                    Subscription.organization_id == organization_id,
+                    Subscription.status.in_([
+                        SubscriptionStatus.ACTIVE.value,
+                        SubscriptionStatus.TRIALING.value,
+                    ]),
+                )
+            )
+            subscription = sub_result.scalar_one_or_none()
+
+            if subscription:
+                # Get tier limits
+                try:
+                    tier = SubscriptionTier(subscription.tier)
+                except ValueError:
+                    tier = SubscriptionTier.FREE
+                limits = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+                workflow_limit = limits.get("workflows_limit", 0)
+
+                # Unlimited workflows for enterprise
+                if workflow_limit == -1:
+                    return True, "enterprise_unlimited"
+
+                # Check monthly usage against limit
+                if subscription.workflows_used < workflow_limit:
+                    return True, "subscription_quota"
+
+                # Subscription quota exhausted - check for overage credits
+                if account.credit_balance >= self.settings.workflow_price_usd:
+                    return True, "overage_credits"
+
+                return False, f"Monthly workflow limit ({workflow_limit}) reached. Add credits or upgrade your plan."
+
+            # No subscription - check free tier
+            self._check_free_tier_reset(account, sess)
+            if account.can_use_free_workflow():
+                return True, "free_tier"
+
+            # Check prepaid credits
+            if account.credit_balance >= self.settings.workflow_price_usd:
+                return True, "prepaid_credits"
+
+            return False, "No free workflows remaining. Please add credits or subscribe to a plan."
+
+        if session:
+            return _check(session)
+        else:
+            with self.db.get_session() as sess:
+                return _check(sess)
+
+    def check_and_reserve_workflow(
+        self,
+        organization_id: UUID,
+        ticket_id: UUID,
+        session: Optional[Session] = None,
+    ) -> tuple[bool, str]:
+        """Check if workflow can be executed and reserve quota.
+
+        This is the main entry point for workflow execution enforcement.
+        Called before starting a workflow to ensure billing is in order.
+
+        Args:
+            organization_id: Organization executing the workflow
+            ticket_id: Ticket/workflow being executed
+
+        Returns:
+            Tuple of (can_execute, reason)
+        """
+        from omoi_os.models.subscription import (
+            Subscription,
+            SubscriptionStatus,
+        )
+
+        def _check_and_reserve(sess: Session) -> tuple[bool, str]:
+            # First check if execution is allowed
+            can_execute, reason = self.can_execute_workflow(organization_id, sess)
+
+            if not can_execute:
+                logger.warning(
+                    f"Workflow execution blocked for org {organization_id}: {reason}"
+                )
+                # Publish blocked event for monitoring
+                if self.event_bus:
+                    self.event_bus.publish(
+                        SystemEvent(
+                            event_type="billing.workflow_blocked",
+                            entity_type="organization",
+                            entity_id=str(organization_id),
+                            payload={
+                                "ticket_id": str(ticket_id),
+                                "reason": reason,
+                            },
+                        )
+                    )
+                return False, reason
+
+            # If using subscription, increment the usage counter
+            if reason == "subscription_quota":
+                sub_result = sess.execute(
+                    select(Subscription).where(
+                        Subscription.organization_id == organization_id,
+                        Subscription.status.in_([
+                            SubscriptionStatus.ACTIVE.value,
+                            SubscriptionStatus.TRIALING.value,
+                        ]),
+                    )
+                )
+                subscription = sub_result.scalar_one_or_none()
+                if subscription:
+                    subscription.workflows_used += 1
+                    sess.flush()
+
+            logger.info(
+                f"Workflow execution allowed for org {organization_id} "
+                f"(ticket: {ticket_id}, billing_type: {reason})"
+            )
+            return True, reason
+
+        if session:
+            return _check_and_reserve(session)
+        else:
+            with self.db.get_session() as sess:
+                result = _check_and_reserve(sess)
+                sess.commit()
+                return result
+
+    def get_usage_summary(
+        self,
+        organization_id: UUID,
+        session: Optional[Session] = None,
+    ) -> dict:
+        """Get a summary of usage and limits for an organization.
+
+        Returns:
+            Dict with usage summary including:
+            - subscription_tier
+            - workflows_used
+            - workflows_limit
+            - free_workflows_remaining
+            - credit_balance
+            - can_execute
+        """
+        from omoi_os.models.subscription import (
+            Subscription,
+            SubscriptionStatus,
+            SubscriptionTier,
+            TIER_LIMITS,
+        )
+
+        def _get_summary(sess: Session) -> dict:
+            account = self.get_billing_account(organization_id, sess)
+
+            summary = {
+                "subscription_tier": None,
+                "workflows_used": 0,
+                "workflows_limit": 0,
+                "free_workflows_remaining": 0,
+                "credit_balance": 0.0,
+                "can_execute": False,
+                "reason": "",
+            }
+
+            if not account:
+                # No account yet - use free tier defaults
+                summary["subscription_tier"] = "free"
+                summary["free_workflows_remaining"] = self.settings.free_workflows_per_month
+                summary["can_execute"] = True
+                summary["reason"] = "new_account"
+                return summary
+
+            summary["free_workflows_remaining"] = account.free_workflows_remaining
+            summary["credit_balance"] = account.credit_balance
+
+            # Check for subscription
+            sub_result = sess.execute(
+                select(Subscription).where(
+                    Subscription.organization_id == organization_id,
+                    Subscription.status.in_([
+                        SubscriptionStatus.ACTIVE.value,
+                        SubscriptionStatus.TRIALING.value,
+                    ]),
+                )
+            )
+            subscription = sub_result.scalar_one_or_none()
+
+            if subscription:
+                summary["subscription_tier"] = subscription.tier
+                summary["workflows_used"] = subscription.workflows_used
+
+                try:
+                    tier = SubscriptionTier(subscription.tier)
+                except ValueError:
+                    tier = SubscriptionTier.FREE
+                limits = TIER_LIMITS.get(tier, TIER_LIMITS[SubscriptionTier.FREE])
+                summary["workflows_limit"] = limits.get("workflows_limit", 0)
+            else:
+                summary["subscription_tier"] = "pay_as_you_go"
+                summary["workflows_limit"] = self.settings.free_workflows_per_month
+
+            can_execute, reason = self.can_execute_workflow(organization_id, sess)
+            summary["can_execute"] = can_execute
+            summary["reason"] = reason
+
+            return summary
+
+        if session:
+            return _get_summary(session)
+        else:
+            with self.db.get_session() as sess:
+                return _get_summary(sess)
+
     # ========== Helper Methods ==========
 
     def _check_free_tier_reset(self, account: BillingAccount, session: Session) -> None:

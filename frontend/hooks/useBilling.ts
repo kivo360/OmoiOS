@@ -12,6 +12,7 @@ import {
   createCreditCheckout,
   createCustomerPortal,
   listInvoices,
+  listStripeInvoices,
   getInvoice,
   payInvoice,
   generateInvoice,
@@ -26,6 +27,7 @@ import {
 import type {
   BillingAccount,
   Invoice,
+  StripeInvoice,
   UsageRecord,
   PaymentMethod,
   StripeConfig,
@@ -53,6 +55,7 @@ export const billingKeys = {
   subscription: (orgId: string) => [...billingKeys.account(orgId), "subscription"] as const,
   paymentMethods: (orgId: string) => [...billingKeys.account(orgId), "payment-methods"] as const,
   invoices: (orgId: string) => [...billingKeys.account(orgId), "invoices"] as const,
+  stripeInvoices: (orgId: string) => [...billingKeys.account(orgId), "stripe-invoices"] as const,
   invoice: (invoiceId: string) => [...billingKeys.all, "invoice", invoiceId] as const,
   usage: (orgId: string) => [...billingKeys.account(orgId), "usage"] as const,
 }
@@ -175,7 +178,7 @@ export function useCreateCustomerPortal() {
 // ============================================================================
 
 /**
- * Hook to list invoices
+ * Hook to list invoices (from local database)
  */
 export function useInvoices(
   orgId: string | undefined,
@@ -184,6 +187,20 @@ export function useInvoices(
   return useQuery<Invoice[]>({
     queryKey: [...billingKeys.invoices(orgId!), options],
     queryFn: () => listInvoices(orgId!, options),
+    enabled: isValidUUID(orgId),
+  })
+}
+
+/**
+ * Hook to list invoices directly from Stripe (includes subscription invoices)
+ */
+export function useStripeInvoices(
+  orgId: string | undefined,
+  options?: { status?: string; limit?: number }
+) {
+  return useQuery<StripeInvoice[]>({
+    queryKey: [...billingKeys.stripeInvoices(orgId!), options],
+    queryFn: () => listStripeInvoices(orgId!, options),
     enabled: isValidUUID(orgId),
   })
 }
@@ -251,6 +268,49 @@ export function useUsage(
     queryKey: [...billingKeys.usage(orgId!), options],
     queryFn: () => getUsage(orgId!, options),
     enabled: isValidUUID(orgId),
+  })
+}
+
+/**
+ * Usage summary type
+ */
+export interface UsageSummary {
+  subscription_tier: string | null
+  workflows_used: number
+  workflows_limit: number
+  free_workflows_remaining: number
+  credit_balance: number
+  can_execute: boolean
+  reason: string
+}
+
+/**
+ * Hook to get usage summary with limits and execution availability
+ */
+export function useUsageSummary(orgId: string | undefined) {
+  return useQuery<UsageSummary>({
+    queryKey: [...billingKeys.usage(orgId!), "summary"],
+    queryFn: async () => {
+      const { getUsageSummary } = await import("@/lib/api/billing")
+      return getUsageSummary(orgId!)
+    },
+    enabled: isValidUUID(orgId),
+    staleTime: 30 * 1000, // 30 seconds - usage can change frequently
+  })
+}
+
+/**
+ * Hook to check if an organization can execute a workflow
+ */
+export function useCanExecuteWorkflow(orgId: string | undefined) {
+  return useQuery<{ can_execute: boolean; reason: string }>({
+    queryKey: [...billingKeys.account(orgId!), "can-execute"],
+    queryFn: async () => {
+      const { checkWorkflowExecution } = await import("@/lib/api/billing")
+      return checkWorkflowExecution(orgId!)
+    },
+    enabled: isValidUUID(orgId),
+    staleTime: 30 * 1000, // 30 seconds
   })
 }
 
