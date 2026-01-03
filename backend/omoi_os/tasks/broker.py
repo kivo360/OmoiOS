@@ -10,6 +10,7 @@ Usage:
 """
 
 import logging as stdlib_logging
+import os
 from typing import Any
 
 from taskiq import TaskiqScheduler, TaskiqEvents, TaskiqState, TaskiqMessage
@@ -21,7 +22,9 @@ from omoi_os.config import load_redis_settings
 from omoi_os.logging import configure_logging, get_logger
 
 # Initialize structured logging for the worker
-configure_logging()
+# Use OMOIOS_ENV to control output format (production = JSON)
+_env = os.environ.get("OMOIOS_ENV", "development")
+configure_logging(env=_env)  # type: ignore[arg-type]
 logger = get_logger(__name__)
 
 # Configure taskiq's internal loggers
