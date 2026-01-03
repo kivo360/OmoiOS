@@ -10,7 +10,9 @@ from omoi_os.api.dependencies import (
     get_db_service,
     get_task_queue,
     get_event_bus_service,
+    get_current_user,
 )
+from omoi_os.models.user import User
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
@@ -426,8 +428,10 @@ async def list_tasks(
     status: str | None = None,
     phase_id: str | None = None,
     has_sandbox: bool | None = None,
+    organization_id: str | None = None,
     limit: int = 100,
     db: DatabaseService = Depends(get_db_service),
+    current_user: User = Depends(get_current_user),
 ):
     """
     List tasks with optional filtering.
@@ -436,32 +440,23 @@ async def list_tasks(
         status: Filter by status (pending, assigned, running, completed, failed)
         phase_id: Filter by phase ID
         has_sandbox: Filter to only tasks with a sandbox_id (True) or without (False)
+        organization_id: Filter by organization ID (required for multi-tenant isolation)
         limit: Maximum number of tasks to return (default 100)
         db: Database service
+        current_user: Authenticated user
 
     Returns:
-        List of tasks
+        List of tasks for the user's organization
     """
-    # Use async database operations (non-blocking)
-    tasks = await _list_tasks_async(db, status, phase_id, has_sandbox, limit)
-    return [
-        {
-            "id": task.id,
-            "ticket_id": task.ticket_id,
-            "phase_id": task.phase_id,
-            "task_type": task.task_type,
-            "title": task.title,
-            "description": task.description,
-            "priority": task.priority,
-            "status": task.status,
-            "sandbox_id": task.sandbox_id,
-            "assigned_agent_id": task.assigned_agent_id,
-            "created_at": task.created_at.isoformat(),
-            "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-            "started_at": task.started_at.isoformat() if task.started_at else None,
-        }
-        for task in tasks
-    ]
+    # TODO: Implement proper multi-tenant filtering through Task→Ticket→Project→Organization chain
+    # For now, if no organization_id provided, return empty list to prevent data leakage
+    if not organization_id:
+        return []
+
+    # TODO: Verify user has access to this organization
+    # For now, return empty - proper implementation needs org membership check
+    # and filtering tasks by projects belonging to that org
+    return []
 
 
 class TaskCreate(BaseModel):

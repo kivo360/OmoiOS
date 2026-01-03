@@ -6,6 +6,7 @@ import { api } from "./client"
 import type {
   BillingAccount,
   Invoice,
+  StripeInvoice,
   UsageRecord,
   PaymentMethod,
   StripeConfig,
@@ -150,6 +151,21 @@ export async function generateInvoice(organizationId: string): Promise<Invoice |
   return api.post<Invoice | null>(`/api/v1/billing/account/${organizationId}/invoices/generate`)
 }
 
+/**
+ * List invoices directly from Stripe (includes subscription invoices)
+ */
+export async function listStripeInvoices(
+  organizationId: string,
+  options?: { status?: string; limit?: number }
+): Promise<StripeInvoice[]> {
+  let endpoint = `/api/v1/billing/account/${organizationId}/stripe-invoices`
+  const params = new URLSearchParams()
+  if (options?.status) params.append("status", options.status)
+  if (options?.limit) params.append("limit", options.limit.toString())
+  if (params.toString()) endpoint += `?${params.toString()}`
+  return api.get<StripeInvoice[]>(endpoint)
+}
+
 // ============================================================================
 // Usage Records
 // ============================================================================
@@ -166,6 +182,39 @@ export async function getUsage(
     endpoint += `?billed=${options.billed}`
   }
   return api.get<UsageRecord[]>(endpoint)
+}
+
+/**
+ * Usage summary for workflow execution limits
+ */
+export interface UsageSummary {
+  subscription_tier: string | null
+  workflows_used: number
+  workflows_limit: number
+  free_workflows_remaining: number
+  credit_balance: number
+  can_execute: boolean
+  reason: string
+}
+
+/**
+ * Get usage summary for an organization
+ * Includes subscription tier, workflow limits, and execution availability
+ */
+export async function getUsageSummary(organizationId: string): Promise<UsageSummary> {
+  return api.get<UsageSummary>(`/api/v1/billing/account/${organizationId}/usage-summary`)
+}
+
+/**
+ * Check if an organization can execute a workflow
+ * Returns whether execution is allowed and the reason
+ */
+export async function checkWorkflowExecution(
+  organizationId: string
+): Promise<{ can_execute: boolean; reason: string }> {
+  return api.post<{ can_execute: boolean; reason: string }>(
+    `/api/v1/billing/account/${organizationId}/check-execution`
+  )
 }
 
 // ============================================================================

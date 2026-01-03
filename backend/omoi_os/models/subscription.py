@@ -301,7 +301,8 @@ class Subscription(Base):
 
         # Set special flags
         self.is_lifetime = (tier == SubscriptionTier.LIFETIME)
-        self.is_byo = (tier == SubscriptionTier.BYO)
+        # BYO is now a feature available on Pro/Team/Enterprise/Lifetime, not a separate tier
+        self.is_byo = tier in (SubscriptionTier.PRO, SubscriptionTier.TEAM, SubscriptionTier.ENTERPRISE, SubscriptionTier.LIFETIME)
 
     def upgrade_to_tier(self, new_tier: SubscriptionTier) -> None:
         """Upgrade subscription to a new tier."""
