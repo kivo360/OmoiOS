@@ -1,0 +1,20 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "backend/Dockerfile.scheduler",
+    "watchPatterns": [
+      "backend/omoi_os/tasks/**",
+      "backend/omoi_os/services/**",
+      "backend/omoi_os/models/**",
+      "backend/omoi_os/config/**",
+      "backend/pyproject.toml",
+      "backend/uv.lock"
+    ]
+  },
+  "deploy": {
+    "startCommand": "taskiq scheduler omoi_os.tasks.broker:scheduler",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}
