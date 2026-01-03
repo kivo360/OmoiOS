@@ -1764,3 +1764,53 @@ async def send_test_billing_email(
         "email_type": request.email_type,
         "to_email": request.to_email,
     }
+
+
+@router.get("/debug/queue-status")
+async def get_queue_status():
+    """
+    Get taskiq queue status from Redis.
+
+    WARNING: Disable this endpoint before production launch.
+    """
+    import redis.asyncio as redis
+    from omoi_os.config import load_redis_settings
+
+    redis_settings = load_redis_settings()
+
+    try:
+        r = redis.from_url(redis_settings.url)
+
+        # Get queue length
+        queue_length = await r.llen("omoios_tasks")
+
+        # Get some pending tasks (peek at queue without removing)
+        pending_tasks = await r.lrange("omoios_tasks", 0, 9)  # First 10
+
+        # Parse task info
+        tasks_info = []
+        for task_data in pending_tasks:
+            try:
+                import json
+                task = json.loads(task_data)
+                tasks_info.append({
+                    "task_id": task.get("task_id"),
+                    "task_name": task.get("task_name"),
+                    "labels": task.get("labels", {}),
+                })
+            except Exception:
+                tasks_info.append({"raw": str(task_data)[:100]})
+
+        await r.close()
+
+        return {
+            "queue_name": "omoios_tasks",
+            "queue_length": queue_length,
+            "pending_tasks": tasks_info,
+            "redis_connected": True,
+        }
+    except Exception as e:
+        return {
+            "redis_connected": False,
+            "error": str(e),
+        }
