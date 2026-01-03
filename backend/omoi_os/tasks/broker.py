@@ -81,7 +81,7 @@ class LoggingMiddleware(TaskiqMiddleware):
         """Log before task execution."""
         logger.info(
             "Task received and starting execution",
-            event="task_start",
+            log_event="task_start",
             task_id=message.task_id,
             task_name=message.task_name,
             labels=message.labels,
@@ -97,7 +97,7 @@ class LoggingMiddleware(TaskiqMiddleware):
         if result.is_err:
             logger.error(
                 "Task execution failed",
-                event="task_error",
+                log_event="task_error",
                 task_id=message.task_id,
                 task_name=message.task_name,
                 error=str(result.error),
@@ -108,7 +108,7 @@ class LoggingMiddleware(TaskiqMiddleware):
         else:
             logger.info(
                 "Task execution completed successfully",
-                event="task_complete",
+                log_event="task_complete",
                 task_id=message.task_id,
                 task_name=message.task_name,
                 execution_time=result.execution_time,
@@ -124,7 +124,7 @@ class LoggingMiddleware(TaskiqMiddleware):
         """Log unhandled exceptions during task execution."""
         logger.exception(
             "Unhandled exception in task",
-            event="task_exception",
+            log_event="task_exception",
             task_id=message.task_id,
             task_name=message.task_name,
             exception_type=type(exception).__name__,
@@ -145,7 +145,7 @@ async def on_worker_startup(state: TaskiqState) -> None:
     """Log when worker starts up."""
     logger.info(
         "Taskiq worker started and ready to process tasks",
-        event="worker_startup",
+        log_event="worker_startup",
         queue="omoios_tasks",
     )
 
@@ -155,7 +155,7 @@ async def on_worker_shutdown(state: TaskiqState) -> None:
     """Log when worker shuts down."""
     logger.info(
         "Taskiq worker shutting down gracefully",
-        event="worker_shutdown",
+        log_event="worker_shutdown",
     )
 
 
@@ -164,7 +164,7 @@ async def on_client_startup(state: TaskiqState) -> None:
     """Log when client (task sender) starts up."""
     logger.info(
         "Taskiq client started - can now enqueue tasks",
-        event="client_startup",
+        log_event="client_startup",
     )
 
 
@@ -173,7 +173,7 @@ async def on_client_shutdown(state: TaskiqState) -> None:
     """Log when client shuts down."""
     logger.info(
         "Taskiq client shutting down",
-        event="client_shutdown",
+        log_event="client_shutdown",
     )
 
 
