@@ -10,7 +10,6 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies into .venv (without installing project itself)
-# Note: Railway cache mounts require hardcoded service IDs, so we skip caching for portability
 RUN uv sync --locked --no-install-project --no-editable
 
 # Copy project source code
@@ -34,6 +33,5 @@ WORKDIR /app
 # Copy application code
 COPY --from=builder /app /app
 
-# Run taskiq worker
-CMD ["taskiq", "worker", "omoi_os.tasks.broker:broker"]
-
+# Run taskiq scheduler
+CMD ["taskiq", "scheduler", "omoi_os.tasks.broker:scheduler"]
