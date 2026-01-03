@@ -1,12 +1,19 @@
 "use client"
 
-import { createContext, useContext, useEffect, useCallback, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useCallback, useRef, type ReactNode } from "react"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { useRouter, usePathname } from "next/navigation"
 import type { User } from "@/lib/api/types"
 import { getCurrentUser, logout as apiLogout } from "@/lib/api/auth"
-import { getAccessToken, clearTokens } from "@/lib/api/client"
+import {
+  getAccessToken,
+  clearTokens,
+  isAccessTokenValid,
+  needsRevalidation,
+  shouldRefreshToken,
+  setLastValidated,
+} from "@/lib/api/client"
 
 // ============================================================================
 // Auth Store (Zustand)
@@ -17,11 +24,13 @@ interface AuthState {
   isLoading: boolean
   isAuthenticated: boolean
   error: string | null
-  
+  lastValidatedAt: number | null
+
   // Actions
   setUser: (user: User | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
+  setLastValidatedAt: (timestamp: number | null) => void
   reset: () => void
 }
 
@@ -32,6 +41,7 @@ const useAuthStore = create<AuthState>()(
       isLoading: true,
       isAuthenticated: false,
       error: null,
+      lastValidatedAt: null,
 
       setUser: (user) =>
         set({
@@ -44,18 +54,25 @@ const useAuthStore = create<AuthState>()(
 
       setError: (error) => set({ error, isLoading: false }),
 
+      setLastValidatedAt: (lastValidatedAt) => set({ lastValidatedAt }),
+
       reset: () =>
         set({
           user: null,
           isLoading: false,
           isAuthenticated: false,
           error: null,
+          lastValidatedAt: null,
         }),
     }),
     {
       name: "omoios-auth",
-      // Only persist user data, not loading states
-      partialize: (state) => ({ user: state.user, isAuthenticated: state.isAuthenticated }),
+      // Persist user data and validation timestamp
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        lastValidatedAt: state.lastValidatedAt,
+      }),
     }
   )
 )
@@ -100,18 +117,52 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter()
   const pathname = usePathname()
-  
-  const { user, isLoading, isAuthenticated, error, setUser, setLoading, setError, reset } =
-    useAuthStore()
+  const isValidatingRef = useRef(false)
+  const hasRedirectedRef = useRef(false)
+
+  const {
+    user,
+    isLoading,
+    isAuthenticated,
+    error,
+    setUser,
+    setLoading,
+    setError,
+    setLastValidatedAt,
+    reset,
+  } = useAuthStore()
 
   // Check if current route is public
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route))
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname?.startsWith(route))
 
-  // Refresh user data from API
+  // Background validation - doesn't block UI
+  const validateInBackground = useCallback(async () => {
+    if (isValidatingRef.current) return
+    isValidatingRef.current = true
+
+    try {
+      const userData = await getCurrentUser()
+      setUser(userData)
+      setLastValidatedAt(Date.now())
+      setLastValidated() // Also update localStorage
+    } catch (err) {
+      console.error("Background validation failed:", err)
+      // Token is invalid - clear everything and redirect
+      reset()
+      clearTokens()
+      if (!isPublicRoute && pathname !== "/") {
+        router.push("/login")
+      }
+    } finally {
+      isValidatingRef.current = false
+    }
+  }, [setUser, setLastValidatedAt, reset, isPublicRoute, pathname, router])
+
+  // Refresh user data from API (blocking)
   const refreshUser = useCallback(async () => {
     const token = getAccessToken()
-    
+
     if (!token) {
       reset()
       return
@@ -121,6 +172,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true)
       const userData = await getCurrentUser()
       setUser(userData)
+      setLastValidatedAt(Date.now())
+      setLastValidated()
     } catch (err) {
       console.error("Failed to refresh user:", err)
       reset()
@@ -128,14 +181,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
     } finally {
       setLoading(false)
     }
-  }, [setUser, setLoading, reset])
+  }, [setUser, setLoading, setLastValidatedAt, reset])
 
   // Login handler - called after successful login API call
   const login = useCallback(
     (userData: User) => {
       setUser(userData)
+      setLastValidatedAt(Date.now())
     },
-    [setUser]
+    [setUser, setLastValidatedAt]
   )
 
   // Logout handler
@@ -150,33 +204,88 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }, [reset, router])
 
-  // Initial auth check on mount
+  // Initial auth check on mount - OPTIMIZED for instant redirects
   useEffect(() => {
     const token = getAccessToken()
-    
-    if (token && !user) {
-      refreshUser()
-    } else if (!token) {
+    const hasPersistedAuth = isAuthenticated && user
+
+    // Case 1: No token at all - not authenticated
+    if (!token) {
       setLoading(false)
+      return
     }
+
+    // Case 2: Have token AND persisted auth state AND token is still valid
+    // -> Trust the cache, skip blocking API call, validate in background
+    if (hasPersistedAuth && isAccessTokenValid()) {
+      setLoading(false) // Immediately ready
+
+      // Only validate in background if enough time has passed
+      if (needsRevalidation()) {
+        validateInBackground()
+      }
+      return
+    }
+
+    // Case 3: Have token but no persisted state, or token expired
+    // -> Need to validate (blocking)
+    if (token && !hasPersistedAuth) {
+      refreshUser()
+      return
+    }
+
+    // Case 4: Have persisted state but token is expired
+    // -> Try to refresh token, if fails then logout
+    if (hasPersistedAuth && !isAccessTokenValid()) {
+      // Token expired but we have refresh token - attempt silent refresh
+      refreshUser()
+      return
+    }
+
+    setLoading(false)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle route protection
+  // Handle route protection - FALLBACK for cases middleware misses
+  // Primary redirects happen in middleware.ts at the edge (faster)
+  // This is a safety net for edge cases (e.g., cookie/localStorage mismatch)
   useEffect(() => {
+    // Wait for loading to complete before making redirect decisions
     if (isLoading) return
+
+    // Reset redirect flag when pathname changes
+    hasRedirectedRef.current = false
 
     // If not authenticated and trying to access protected route
     if (!isAuthenticated && !isPublicRoute && pathname !== "/") {
-      router.push("/login")
+      router.replace("/login")
       return
     }
 
     // If authenticated and trying to access auth routes (login/register)
-    if (isAuthenticated && isAuthRoute) {
-      router.push("/command")
+    // Note: Middleware should catch this first, but this is a fallback
+    if (isAuthenticated && isAuthRoute && !hasRedirectedRef.current) {
+      hasRedirectedRef.current = true
+      router.replace("/command")
       return
     }
   }, [isLoading, isAuthenticated, isPublicRoute, isAuthRoute, pathname, router])
+
+  // Background token refresh before expiry
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const checkTokenRefresh = () => {
+      if (shouldRefreshToken()) {
+        validateInBackground()
+      }
+    }
+
+    // Check immediately and then every minute
+    checkTokenRefresh()
+    const interval = setInterval(checkTokenRefresh, 60 * 1000)
+
+    return () => clearInterval(interval)
+  }, [isAuthenticated, validateInBackground])
 
   const value: AuthContextValue = {
     user,

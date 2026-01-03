@@ -81,3 +81,4 @@ examples/workspaces/
 # Media files (videos, large assets)
 media/
 
+backend/omoios.db
