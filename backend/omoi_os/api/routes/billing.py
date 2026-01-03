@@ -1688,3 +1688,79 @@ async def get_billing_account_costs(
         )
         for record in records
     ]
+
+
+# =============================================================================
+# Debug/Admin Endpoints (disable before production launch)
+# =============================================================================
+
+class TestEmailRequest(BaseModel):
+    """Request to send a test billing email."""
+    email_type: str = Field(..., description="Type: payment_failed, payment_success, subscription_canceled, invoice_generated, credits_low")
+    to_email: str = Field(..., description="Email address to send to")
+
+
+@router.post("/debug/test-email")
+async def send_test_billing_email(
+    request: TestEmailRequest,
+):
+    """
+    Send a test billing email via taskiq worker.
+
+    WARNING: Disable this endpoint before production launch.
+    """
+    from omoi_os.tasks.billing_tasks import send_test_billing_email as test_email_task
+
+    # Default test data for each email type
+    test_data = {
+        "payment_failed": {
+            "user_name": "Test User",
+            "amount_cents": 1500,
+            "currency": "usd",
+            "attempt_number": 1,
+            "next_retry_date": datetime.now(),
+        },
+        "payment_success": {
+            "user_name": "Test User",
+            "amount_cents": 1500,
+            "currency": "usd",
+            "invoice_url": "https://example.com/invoice/123",
+        },
+        "subscription_canceled": {
+            "user_name": "Test User",
+            "end_date": datetime.now(),
+            "reason": "User requested cancellation",
+        },
+        "invoice_generated": {
+            "user_name": "Test User",
+            "amount_cents": 2500,
+            "currency": "usd",
+            "due_date": datetime.now(),
+            "invoice_url": "https://example.com/invoice/456",
+        },
+        "credits_low": {
+            "user_name": "Test User",
+            "remaining_credits": 5,
+            "threshold": 10,
+        },
+    }
+
+    if request.email_type not in test_data:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid email_type. Valid types: {list(test_data.keys())}"
+        )
+
+    # Queue the task
+    task = await test_email_task.kiq(
+        email_type=request.email_type,
+        to_email=request.to_email,
+        **test_data[request.email_type]
+    )
+
+    return {
+        "status": "queued",
+        "task_id": task.task_id,
+        "email_type": request.email_type,
+        "to_email": request.to_email,
+    }
