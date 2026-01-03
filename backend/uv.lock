@@ -2865,7 +2865,7 @@ requires-dist = [
     { name = "stripe", specifier = ">=7.0.0" },
     { name = "structlog", specifier = ">=24.0.0" },
     { name = "supabase", specifier = ">=2.0.0,<3" },
-    { name = "taskiq", git = "https://github.com/taskiq-python/taskiq" },
+    { name = "taskiq", specifier = ">=0.12.0" },
     { name = "taskiq-redis", specifier = ">=0.5.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.24.0" },
     { name = "whenever", specifier = ">=0.9.3" },
@@ -7472,8 +7472,8 @@ wheels = [
 
 [[package]]
 name = "taskiq"
-version = "0.0.0"
-source = { git = "https://github.com/taskiq-python/taskiq#18b6a6c767125de6e14bfbdef0c29b1a4214db4c" }
+version = "0.12.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
     { name = "anyio" },
@@ -7482,6 +7482,10 @@ dependencies = [
     { name = "pycron" },
     { name = "pydantic" },
     { name = "taskiq-dependencies" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/92/cf/c4a47be05d85754f3e0ecc7b72131249adc067ea37517054459e94268fb1/taskiq-0.12.1.tar.gz", hash = "sha256:338dcf58eaca327e511a9380b2185bfa6a415dd79a5cf144546a2dbb95459298", size = 60536, upload-time = "2025-12-07T16:07:43.561Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4c/e4/a2fda3bcbb8b61108dc8e9db1a2d19a23578953db73e981f66b9d44f1207/taskiq-0.12.1-py3-none-any.whl", hash = "sha256:a8ade45e2e23edbadb972a88dec44e68c7daef83383d01fa3af48594a24a712a", size = 90668, upload-time = "2025-12-07T16:07:42.296Z" },
 ]
 
 [[package]]
