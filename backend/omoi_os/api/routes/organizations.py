@@ -677,7 +677,7 @@ async def get_organization_owner_info(
         "owner": {
             "id": str(owner.id) if owner else None,
             "email": owner.email if owner else None,
-            "name": owner.name if owner else None,
+            "full_name": owner.full_name if owner else None,
         } if owner else None,
         "effective_billing_email": org.billing_email or (owner.email if owner else None),
     }
