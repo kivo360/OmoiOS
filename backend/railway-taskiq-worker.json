@@ -13,7 +13,7 @@
     ]
   },
   "deploy": {
-    "startCommand": "taskiq worker omoi_os.tasks.broker:broker",
+    "startCommand": "taskiq worker omoi_os.tasks.broker:broker --workers 6",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
