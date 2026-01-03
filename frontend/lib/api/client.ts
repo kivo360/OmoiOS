@@ -18,7 +18,38 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
 const TOKEN_KEYS = {
   ACCESS: "omoios_access_token",
   REFRESH: "omoios_refresh_token",
+  ACCESS_EXPIRES_AT: "omoios_access_expires_at",
+  LAST_VALIDATED: "omoios_last_validated",
 } as const
+
+// Cookie name for middleware auth detection (must match middleware.ts)
+const AUTH_COOKIE_NAME = "omoios_auth_state"
+
+// How long to trust cached auth state before revalidating (in ms)
+// Set to 23 hours - just under typical session length for smooth UX
+const VALIDATION_CACHE_DURATION = 23 * 60 * 60 * 1000
+
+// How much buffer before token expiry to trigger refresh (in ms)
+// Refresh 2 minutes before expiry to avoid race conditions
+const TOKEN_REFRESH_BUFFER = 2 * 60 * 1000
+
+// Cookie expiry - 30 days (matches session duration)
+const AUTH_COOKIE_MAX_AGE = 30 * 24 * 60 * 60
+
+/**
+ * Set auth state cookie for middleware detection
+ * This enables instant redirects at the edge before React hydrates
+ */
+function setAuthCookie(authenticated: boolean): void {
+  if (typeof document === "undefined") return
+
+  if (authenticated) {
+    document.cookie = `${AUTH_COOKIE_NAME}=true; path=/; max-age=${AUTH_COOKIE_MAX_AGE}; SameSite=Lax`
+  } else {
+    // Clear cookie by setting expired date
+    document.cookie = `${AUTH_COOKIE_NAME}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`
+  }
+}
 
 export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null
@@ -30,16 +61,114 @@ export function getRefreshToken(): string | null {
   return localStorage.getItem(TOKEN_KEYS.REFRESH)
 }
 
+export function getAccessTokenExpiresAt(): number | null {
+  if (typeof window === "undefined") return null
+  const expiry = localStorage.getItem(TOKEN_KEYS.ACCESS_EXPIRES_AT)
+  return expiry ? parseInt(expiry, 10) : null
+}
+
+export function getLastValidated(): number | null {
+  if (typeof window === "undefined") return null
+  const timestamp = localStorage.getItem(TOKEN_KEYS.LAST_VALIDATED)
+  return timestamp ? parseInt(timestamp, 10) : null
+}
+
+export function setLastValidated(): void {
+  if (typeof window === "undefined") return
+  localStorage.setItem(TOKEN_KEYS.LAST_VALIDATED, Date.now().toString())
+}
+
+/**
+ * Decode JWT to extract expiration time
+ * Returns expiry timestamp in milliseconds, or null if invalid
+ */
+function decodeJwtExpiry(token: string): number | null {
+  try {
+    const parts = token.split(".")
+    if (parts.length !== 3) return null
+
+    const payload = JSON.parse(atob(parts[1]))
+    if (payload.exp) {
+      // JWT exp is in seconds, convert to milliseconds
+      return payload.exp * 1000
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 export function setTokens(accessToken: string, refreshToken: string): void {
   if (typeof window === "undefined") return
   localStorage.setItem(TOKEN_KEYS.ACCESS, accessToken)
   localStorage.setItem(TOKEN_KEYS.REFRESH, refreshToken)
+
+  // Extract and store expiry from JWT
+  const expiresAt = decodeJwtExpiry(accessToken)
+  if (expiresAt) {
+    localStorage.setItem(TOKEN_KEYS.ACCESS_EXPIRES_AT, expiresAt.toString())
+  }
+
+  // Mark as just validated
+  setLastValidated()
+
+  // Set auth cookie for middleware edge redirects
+  setAuthCookie(true)
 }
 
 export function clearTokens(): void {
   if (typeof window === "undefined") return
   localStorage.removeItem(TOKEN_KEYS.ACCESS)
   localStorage.removeItem(TOKEN_KEYS.REFRESH)
+  localStorage.removeItem(TOKEN_KEYS.ACCESS_EXPIRES_AT)
+  localStorage.removeItem(TOKEN_KEYS.LAST_VALIDATED)
+
+  // Clear auth cookie
+  setAuthCookie(false)
+}
+
+/**
+ * Check if the access token is still valid (not expired)
+ * Returns true if token exists and hasn't expired yet
+ */
+export function isAccessTokenValid(): boolean {
+  const token = getAccessToken()
+  if (!token) return false
+
+  const expiresAt = getAccessTokenExpiresAt()
+  if (!expiresAt) return true // If no expiry stored, assume valid (server will reject if not)
+
+  // Valid if not expired yet (with buffer for network latency)
+  return Date.now() < expiresAt - TOKEN_REFRESH_BUFFER
+}
+
+/**
+ * Check if we need to revalidate with the server
+ * Returns false if recently validated and token is still valid
+ */
+export function needsRevalidation(): boolean {
+  const lastValidated = getLastValidated()
+  if (!lastValidated) return true
+
+  // If validated within cache duration and token is still valid, no need to revalidate
+  const timeSinceValidation = Date.now() - lastValidated
+  return timeSinceValidation > VALIDATION_CACHE_DURATION || !isAccessTokenValid()
+}
+
+/**
+ * Check if we should attempt a background token refresh
+ * Returns true if token is approaching expiry but refresh token might still be valid
+ */
+export function shouldRefreshToken(): boolean {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return false
+
+  const expiresAt = getAccessTokenExpiresAt()
+  if (!expiresAt) return false
+
+  // Refresh if within buffer window of expiry
+  const timeUntilExpiry = expiresAt - Date.now()
+  return timeUntilExpiry > 0 && timeUntilExpiry < TOKEN_REFRESH_BUFFER
 }
 
 // ============================================================================
