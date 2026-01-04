@@ -212,6 +212,10 @@ class TicketWorkflowOrchestrator:
             if ticket.is_blocked or TicketStatus.is_terminal(ticket.status):
                 return None
 
+            # Collect artifacts from completed tasks before checking gate
+            # This converts task.result["artifacts"] into PhaseGateArtifact records
+            self.phase_gate.collect_artifacts(ticket_id, ticket.phase_id)
+
             # Check if phase gate criteria are met
             gate_result = self.phase_gate.check_gate_requirements(
                 ticket_id, ticket.phase_id
