@@ -163,6 +163,12 @@ class IterationState:
     code_pushed: bool = False
     pr_created: bool = False
 
+    # Additional PR/CI info for artifact generation
+    pr_url: Optional[str] = None
+    pr_number: Optional[int] = None
+    files_changed: int = 0
+    ci_status: Optional[list] = None
+
     def to_event_data(self) -> dict:
         """Convert state to event payload for EventReporter."""
         elapsed = time.time() - self.start_time if self.start_time else 0
@@ -180,6 +186,10 @@ class IterationState:
             "code_committed": self.code_committed,
             "code_pushed": self.code_pushed,
             "pr_created": self.pr_created,
+            "pr_url": self.pr_url,
+            "pr_number": self.pr_number,
+            "files_changed": self.files_changed,
+            "ci_status": self.ci_status,
         }
 
 
@@ -198,6 +208,11 @@ def check_git_status(cwd: str) -> dict[str, Any]:
     - branch_name: Current branch
     - status_output: Raw git status output
     - errors: List of validation errors
+    - ci_status: CI check results (if PR exists)
+    - tests_passed: Whether all CI checks passed
+    - pr_url: URL of the PR (if exists)
+    - pr_number: PR number (if exists)
+    - files_changed: Number of files changed in PR
     """
     result = {
         "is_clean": False,
@@ -206,6 +221,11 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         "branch_name": None,
         "status_output": "",
         "errors": [],
+        "ci_status": None,
+        "tests_passed": False,
+        "pr_url": None,
+        "pr_number": None,
+        "files_changed": 0,
     }
 
     try:
@@ -257,7 +277,7 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         # Check for PR using gh CLI
         try:
             pr_result = subprocess.run(
-                ["gh", "pr", "view", "--json", "number,title,state"],
+                ["gh", "pr", "view", "--json", "number,title,state,url,changedFiles"],
                 cwd=cwd,
                 capture_output=True,
                 text=True,
@@ -265,6 +285,53 @@ def check_git_status(cwd: str) -> dict[str, Any]:
             )
             if pr_result.returncode == 0 and pr_result.stdout.strip():
                 result["has_pr"] = True
+                # Parse PR info
+                try:
+                    import json
+                    pr_data = json.loads(pr_result.stdout)
+                    result["pr_number"] = pr_data.get("number")
+                    result["pr_url"] = pr_data.get("url")
+                    result["files_changed"] = pr_data.get("changedFiles", 0)
+                except json.JSONDecodeError:
+                    pass
+
+                # Check CI status if PR exists
+                ci_result = subprocess.run(
+                    ["gh", "pr", "checks", "--json", "name,state,conclusion"],
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if ci_result.returncode == 0 and ci_result.stdout.strip():
+                    try:
+                        ci_checks = json.loads(ci_result.stdout)
+                        result["ci_status"] = ci_checks
+
+                        # Determine if all checks passed
+                        if ci_checks:
+                            all_passed = all(
+                                check.get("conclusion") == "success"
+                                or check.get("state") == "pending"  # Allow pending
+                                for check in ci_checks
+                            )
+                            # But require at least one completed success
+                            has_success = any(
+                                check.get("conclusion") == "success"
+                                for check in ci_checks
+                            )
+                            result["tests_passed"] = all_passed and has_success
+                        else:
+                            # No CI checks configured - assume tests pass
+                            # (project may not have CI)
+                            result["tests_passed"] = True
+                    except json.JSONDecodeError:
+                        # Can't parse CI status, assume no CI configured
+                        result["tests_passed"] = True
+                else:
+                    # gh pr checks failed - might be no checks configured
+                    # This is okay, not all repos have CI
+                    result["tests_passed"] = True
             else:
                 result["has_pr"] = False
                 result["errors"].append("No PR found for current branch")
@@ -646,9 +713,21 @@ class ContinuousSandboxWorker(SandboxWorker):
         state.code_committed = git_status["is_clean"]
         state.code_pushed = git_status["is_pushed"]
         state.pr_created = git_status["has_pr"]
+        state.tests_passed = git_status["tests_passed"]
+
+        # Store additional PR info for artifact generation
+        state.pr_url = git_status.get("pr_url")
+        state.pr_number = git_status.get("pr_number")
+        state.files_changed = git_status.get("files_changed", 0)
+        state.ci_status = git_status.get("ci_status")
 
         # CRITICAL: Detect research/analysis tasks that don't produce code changes
         # These tasks should pass validation without requiring a PR
+        # A task is "research only" if:
+        # 1. Working directory is clean (no uncommitted changes)
+        # 2. Not ahead of remote (nothing to push)
+        # 3. On main/master branch (no feature branch was created)
+        # This applies to ALL modes - if no files were created, no git workflow needed
         is_research_task = (
             # Clean working directory (no uncommitted changes)
             git_status["is_clean"] and
@@ -658,9 +737,9 @@ class ContinuousSandboxWorker(SandboxWorker):
             git_status.get("branch_name") in ("main", "master", None)
         )
 
-        # Also treat exploration mode as research (no code changes expected)
-        if hasattr(config, "execution_mode") and config.execution_mode == "exploration":
-            is_research_task = True
+        # NOTE: exploration mode NO LONGER auto-passes validation
+        # If exploration creates files (specs, PRDs, docs), it must push them
+        # Only pure analysis with no file output passes without git workflow
 
         if is_research_task:
             logger.info(
