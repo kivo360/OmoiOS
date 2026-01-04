@@ -167,6 +167,12 @@ class IterationState:
     code_pushed: bool = False
     pr_created: bool = False
 
+    # Additional PR/CI info for artifact generation
+    pr_url: Optional[str] = None
+    pr_number: Optional[int] = None
+    files_changed: int = 0
+    ci_status: Optional[list] = None
+
     def to_event_data(self) -> dict:
         """Convert state to event payload."""
         import time
@@ -184,6 +190,10 @@ class IterationState:
             "code_committed": self.code_committed,
             "code_pushed": self.code_pushed,
             "pr_created": self.pr_created,
+            "pr_url": self.pr_url,
+            "pr_number": self.pr_number,
+            "files_changed": self.files_changed,
+            "ci_status": self.ci_status,
         }
 
 
@@ -201,6 +211,11 @@ def check_git_status(cwd: str) -> dict[str, Any]:
     - has_pr: PR exists for current branch
     - branch_name: Current branch
     - errors: List of validation errors
+    - ci_status: CI check results (if PR exists)
+    - tests_passed: Whether all CI checks passed
+    - pr_url: URL of the PR (if exists)
+    - pr_number: PR number (if exists)
+    - files_changed: Number of files changed in PR
     """
     result = {
         "is_clean": False,
@@ -209,6 +224,11 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         "branch_name": None,
         "status_output": "",
         "errors": [],
+        "ci_status": None,
+        "tests_passed": False,
+        "pr_url": None,
+        "pr_number": None,
+        "files_changed": 0,
     }
 
     try:
@@ -259,7 +279,7 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         # Check for PR using gh CLI
         try:
             pr_result = subprocess.run(
-                ["gh", "pr", "view", "--json", "number,title,state"],
+                ["gh", "pr", "view", "--json", "number,title,state,url,changedFiles"],
                 cwd=cwd,
                 capture_output=True,
                 text=True,
@@ -267,6 +287,50 @@ def check_git_status(cwd: str) -> dict[str, Any]:
             )
             if pr_result.returncode == 0 and pr_result.stdout.strip():
                 result["has_pr"] = True
+                # Parse PR info
+                try:
+                    import json
+                    pr_data = json.loads(pr_result.stdout)
+                    result["pr_number"] = pr_data.get("number")
+                    result["pr_url"] = pr_data.get("url")
+                    result["files_changed"] = pr_data.get("changedFiles", 0)
+                except json.JSONDecodeError:
+                    pass
+
+                # Check CI status if PR exists
+                ci_result = subprocess.run(
+                    ["gh", "pr", "checks", "--json", "name,state,conclusion"],
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                if ci_result.returncode == 0 and ci_result.stdout.strip():
+                    try:
+                        ci_checks = json.loads(ci_result.stdout)
+                        result["ci_status"] = ci_checks
+
+                        # Determine if all checks passed
+                        if ci_checks:
+                            all_passed = all(
+                                check.get("conclusion") == "success"
+                                or check.get("state") == "pending"  # Allow pending
+                                for check in ci_checks
+                            )
+                            # But require at least one completed success
+                            has_success = any(
+                                check.get("conclusion") == "success"
+                                for check in ci_checks
+                            )
+                            result["tests_passed"] = all_passed and has_success
+                        else:
+                            # No CI checks configured - assume tests pass
+                            result["tests_passed"] = True
+                    except json.JSONDecodeError:
+                        result["tests_passed"] = True
+                else:
+                    # No CI checks configured
+                    result["tests_passed"] = True
             else:
                 result["has_pr"] = False
                 result["errors"].append("No PR found for current branch")
@@ -304,25 +368,25 @@ class FileChangeTracker:
 
         # Handle new file vs modified file
         if not old_content:
-            # New file
-            new_lines = new_content.splitlines(keepends=True)
+            # New file - split without keepends for clean output
+            new_lines = new_content.splitlines()
             lines_added = len(new_lines)
             lines_removed = 0
-            diff = ["--- /dev/null\n", f"+++ b/{path}\n"]
+            diff = [f"--- /dev/null", f"+++ b/{path}"]
             for line in new_lines:
                 diff.append(f"+{line}")
             change_type = "created"
         else:
-            # Modified file
-            old_lines = old_content.splitlines(keepends=True)
-            new_lines = new_content.splitlines(keepends=True)
+            # Modified file - split without keepends for clean diff
+            old_lines = old_content.splitlines()
+            new_lines = new_content.splitlines()
             diff = list(
                 difflib.unified_diff(
                     old_lines,
                     new_lines,
                     fromfile=f"a/{path}",
                     tofile=f"b/{path}",
-                    lineterm="",
+                    lineterm="",  # Don't add line terminators, we join with \n later
                 )
             )
             lines_added = sum(
@@ -337,7 +401,8 @@ class FileChangeTracker:
             )
             change_type = "modified"
 
-        diff_text = "".join(diff)
+        # Join with newlines - each line is now clean (no embedded newlines)
+        diff_text = "\n".join(diff)
         diff_preview = "\n".join(diff[:100])
         if len(diff) > 100:
             diff_preview += f"\n... ({len(diff) - 100} more lines)"
@@ -904,18 +969,29 @@ class WorkerConfig:
 
 You are in **exploration mode**. Your purpose is to:
 1. Explore and understand the codebase structure
-2. Create specifications (requirements, designs) for new features
+2. Create specifications (requirements, designs, PRDs) for new features
 3. Break down features into tickets and tasks
 4. Analyze dependencies between components
-5. Upload specs/tickets/tasks to the server using MCP tools
+5. Save all documentation to the `.omoi_os/` directory
 
 **DO NOT write implementation code in this mode.** Focus on planning and documentation.
 
-Use the spec workflow MCP tools to create and upload:
-- Specifications with requirements and designs
-- Tickets for trackable work items
-- Tasks with clear acceptance criteria
-- Dependencies between tasks""")
+### Documentation Output
+All specs, PRDs, and design docs should be saved to `.omoi_os/`:
+- `.omoi_os/specs/` - Feature specifications and requirements
+- `.omoi_os/docs/` - PRDs, design documents, architecture docs
+- `.omoi_os/tickets/` - Ticket definitions
+- `.omoi_os/tasks/` - Task breakdowns
+
+### Git Workflow (REQUIRED if you create any files)
+If you create or modify ANY files, you MUST:
+1. **Stage and commit**: `git add -A && git commit -m "docs(scope): description"`
+2. **Push to remote**: `git push` (or `git push -u origin <branch>` for first push)
+3. **Create a Pull Request**: Use `gh pr create --title "..." --body "..."`
+
+Your work is NOT complete until documentation is committed and pushed.
+
+You may also use spec workflow MCP tools to upload specs/tickets/tasks to the API.""")
         elif self.execution_mode == "validation":
             append_parts.append("""
 ## Execution Mode: VALIDATION
@@ -1067,9 +1143,12 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         # or limits are reached. This ensures tasks don't stop due to
         # context length issues.
 
-        # Enable continuous mode by default for implementation and validation
-        # These modes need to ensure work is ACTUALLY completed
-        continuous_default = self.execution_mode in ("implementation", "validation")
+        # Enable continuous mode by default for all execution modes
+        # All modes need iteration to ensure work is ACTUALLY completed:
+        # - implementation: code pushed, PR created
+        # - validation: tests run, results reported
+        # - exploration: docs/specs pushed if files created
+        continuous_default = self.execution_mode in ("implementation", "validation", "exploration")
         continuous_env = os.environ.get("CONTINUOUS_MODE", "")
         self.continuous_mode = (
             continuous_env.lower() == "true" if continuous_env else continuous_default
@@ -2017,6 +2096,32 @@ class SandboxWorker:
                                     usage, "cache_creation_input_tokens", None
                                 )
 
+                        # ALWAYS capture git/CI state before completion event
+                        # This ensures artifacts are generated regardless of how agent completed
+                        # (continuous mode, single-run mode, natural completion, etc.)
+                        try:
+                            git_status = check_git_status(self.config.cwd)
+                            state = self.iteration_state
+                            state.code_committed = git_status["is_clean"]
+                            state.code_pushed = git_status["is_pushed"]
+                            state.pr_created = git_status["has_pr"]
+                            state.tests_passed = git_status["tests_passed"]
+                            state.pr_url = git_status.get("pr_url")
+                            state.pr_number = git_status.get("pr_number")
+                            state.files_changed = git_status.get("files_changed", 0)
+                            state.ci_status = git_status.get("ci_status")
+                            logger.info(
+                                "Pre-completion git validation",
+                                extra={
+                                    "code_pushed": state.code_pushed,
+                                    "pr_created": state.pr_created,
+                                    "tests_passed": state.tests_passed,
+                                    "pr_url": state.pr_url,
+                                }
+                            )
+                        except Exception as e:
+                            logger.warning("Failed to capture git status before completion", extra={"error": str(e)})
+
                         # Build completion event with final output
                         completion_event: dict[str, Any] = {
                             "success": True,
@@ -2035,6 +2140,21 @@ class SandboxWorker:
                             # Include branch name for validation workflow
                             "branch_name": self.config.branch_name if self.config.branch_name else None,
                         }
+
+                        # Include validation/iteration state for artifact generation
+                        if self.iteration_state:
+                            state = self.iteration_state
+                            completion_event.update({
+                                "validation_passed": state.validation_passed,
+                                "tests_passed": state.tests_passed,
+                                "code_committed": state.code_committed,
+                                "code_pushed": state.code_pushed,
+                                "pr_created": state.pr_created,
+                                "pr_url": state.pr_url,
+                                "pr_number": state.pr_number,
+                                "files_changed": state.files_changed,
+                                "ci_status": state.ci_status,
+                            })
 
                         # Try to report completion with retries (critical for task finalization)
                         max_retries = 3
@@ -2189,9 +2309,21 @@ class SandboxWorker:
         state.code_committed = git_status["is_clean"]
         state.code_pushed = git_status["is_pushed"]
         state.pr_created = git_status["has_pr"]
+        state.tests_passed = git_status["tests_passed"]
+
+        # Store additional PR info for artifact generation
+        state.pr_url = git_status.get("pr_url")
+        state.pr_number = git_status.get("pr_number")
+        state.files_changed = git_status.get("files_changed", 0)
+        state.ci_status = git_status.get("ci_status")
 
         # CRITICAL: Detect research/analysis tasks that don't produce code changes
         # These tasks should pass validation without requiring a PR
+        # A task is "research only" if:
+        # 1. Working directory is clean (no uncommitted changes)
+        # 2. Not ahead of remote (nothing to push)
+        # 3. On main/master branch (no feature branch was created)
+        # This applies to ALL modes - if no files were created, no git workflow needed
         is_research_task = (
             # Clean working directory (no uncommitted changes)
             git_status["is_clean"] and
@@ -2201,9 +2333,9 @@ class SandboxWorker:
             git_status.get("branch_name") in ("main", "master", None)
         )
 
-        # Also treat exploration mode as research (no code changes expected)
-        if config.execution_mode == "exploration":
-            is_research_task = True
+        # NOTE: exploration mode NO LONGER auto-passes validation
+        # If exploration creates files (specs, PRDs, docs), it must push them
+        # Only pure analysis with no file output passes without git workflow
 
         if is_research_task:
             logger.info(

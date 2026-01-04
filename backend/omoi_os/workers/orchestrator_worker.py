@@ -74,6 +74,7 @@ EXPLORATION_TASK_TYPES = frozenset([
     "create_tickets",
     "create_tasks",
     "define_feature",
+    "generate_prd",  # Dynamic PRD generation (produces docs, not code)
     # Research and discovery
     "research",
     "discover",
@@ -398,7 +399,7 @@ async def orchestrator_loop():
                     )
                     if not available_agent:
                         log.debug("no_idle_agents")
-                        await asyncio.sleep(5)
+                        await asyncio.sleep(1)
                         continue
 
                     available_agent_id = str(available_agent.id)
@@ -899,9 +900,9 @@ async def orchestrator_loop():
 
             # Hybrid wait: event-driven with polling fallback
             # - If TASK_CREATED event fires, wake up immediately
-            # - Otherwise, poll every 5 seconds as fallback
+            # - Otherwise, poll every 1 second as fallback
             try:
-                await asyncio.wait_for(task_ready_event.wait(), timeout=5.0)
+                await asyncio.wait_for(task_ready_event.wait(), timeout=1.0)
                 task_ready_event.clear()  # Reset for next event
                 log.debug("woke_up_from_event")
             except asyncio.TimeoutError:
@@ -1094,6 +1095,9 @@ async def init_services():
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
     from omoi_os.services.task_requirements_analyzer import get_task_requirements_analyzer
+    from omoi_os.services.phase_gate import PhaseGateService
+    from omoi_os.services.phase_progression_service import get_phase_progression_service
+    from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
 
     app_settings = get_app_settings()
 
@@ -1116,6 +1120,37 @@ async def init_services():
     # Task Requirements Analyzer (LLM-based task analysis)
     task_analyzer = get_task_requirements_analyzer()
     logger.info("service_initialized", service="task_requirements_analyzer")
+
+    # Phase Gate Service
+    phase_gate = PhaseGateService(db)
+    logger.info("service_initialized", service="phase_gate")
+
+    # Ticket Workflow Orchestrator
+    workflow_orchestrator = TicketWorkflowOrchestrator(
+        db=db,
+        task_queue=queue,
+        phase_gate=phase_gate,
+        event_bus=event_bus,
+    )
+    logger.info("service_initialized", service="ticket_workflow_orchestrator")
+
+    # Phase Progression Service (Hook 1 + Hook 2)
+    # This service:
+    # - Hook 1: Auto-advances tickets when all phase tasks complete
+    # - Hook 2: Auto-spawns tasks when tickets enter new phases
+    phase_progression = get_phase_progression_service(
+        db=db,
+        task_queue=queue,
+        phase_gate=phase_gate,
+        event_bus=event_bus,
+    )
+    phase_progression.set_workflow_orchestrator(workflow_orchestrator)
+    phase_progression.subscribe_to_events()
+    logger.info(
+        "service_initialized",
+        service="phase_progression",
+        hooks=["Hook1:TaskCompletion->PhaseAdvance", "Hook2:PhaseTransition->TaskSpawn"],
+    )
 
     logger.info("all_services_initialized")
 
