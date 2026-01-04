@@ -11,6 +11,9 @@ from omoi_os.api.dependencies import (
     get_task_queue,
     get_event_bus_service,
     get_current_user,
+    verify_task_access,
+    verify_ticket_access,
+    get_accessible_project_ids,
 )
 from omoi_os.models.user import User
 from omoi_os.models.task import Task
@@ -287,10 +290,17 @@ class AgentEventRequest(BaseModel):
 async def register_conversation(
     task_id: str,
     request: RegisterConversationRequest,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     event_bus: EventBusService = Depends(get_event_bus_service),
 ):
-    """Register conversation ID from sandbox worker for Guardian observation."""
+    """
+    Register conversation ID from sandbox worker for Guardian observation.
+
+    Requires authentication and verifies user has access to the task's ticket.
+    """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     # Use async database operations (non-blocking)
     task = await _register_conversation_async(
         db,
@@ -325,18 +335,25 @@ async def register_conversation(
 @router.get("/{task_id}", response_model=dict)
 async def get_task(
     task_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Get task by ID.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Task information
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
+
     # Use async database operations (non-blocking)
     task = await _get_task_async(db, task_id)
     if not task:
@@ -382,19 +399,26 @@ class TaskUpdateRequest(BaseModel):
 async def update_task(
     task_id: str,
     update: TaskUpdateRequest,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Update task by ID.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         update: Fields to update
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Updated task information
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
+
     async with db.get_async_session() as session:
         result = await session.execute(
             select(Task).filter(Task.id == task_id)
@@ -428,35 +452,80 @@ async def list_tasks(
     status: str | None = None,
     phase_id: str | None = None,
     has_sandbox: bool | None = None,
-    organization_id: str | None = None,
+    ticket_id: str | None = None,
     limit: int = 100,
-    db: DatabaseService = Depends(get_db_service),
     current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
 ):
     """
     List tasks with optional filtering.
+
+    Requires authentication. Only returns tasks from projects the user has access to
+    (multi-tenant filtering via Task → Ticket → Project → Organization chain).
 
     Args:
         status: Filter by status (pending, assigned, running, completed, failed)
         phase_id: Filter by phase ID
         has_sandbox: Filter to only tasks with a sandbox_id (True) or without (False)
-        organization_id: Filter by organization ID (required for multi-tenant isolation)
+        ticket_id: Filter by ticket ID
         limit: Maximum number of tasks to return (default 100)
-        db: Database service
         current_user: Authenticated user
+        db: Database service
 
     Returns:
-        List of tasks for the user's organization
+        List of tasks for the user's accessible projects
     """
-    # TODO: Implement proper multi-tenant filtering through Task→Ticket→Project→Organization chain
-    # For now, if no organization_id provided, return empty list to prevent data leakage
-    if not organization_id:
+    from omoi_os.models.ticket import Ticket
+
+    # Get user's accessible project IDs for multi-tenant filtering
+    accessible_project_ids = await get_accessible_project_ids(current_user, db)
+
+    # If user has no accessible projects, return empty
+    if not accessible_project_ids:
         return []
 
-    # TODO: Verify user has access to this organization
-    # For now, return empty - proper implementation needs org membership check
-    # and filtering tasks by projects belonging to that org
-    return []
+    async with db.get_async_session() as session:
+        # Join Task → Ticket to filter by accessible projects
+        query = (
+            select(Task)
+            .join(Ticket, Task.ticket_id == Ticket.id)
+            .filter(Ticket.project_id.in_([str(pid) for pid in accessible_project_ids]))
+        )
+
+        # Apply optional filters
+        if ticket_id:
+            # Verify user has access to the specific ticket
+            await verify_ticket_access(ticket_id, current_user, db)
+            query = query.filter(Task.ticket_id == ticket_id)
+        if status:
+            query = query.filter(Task.status == status)
+        if phase_id:
+            query = query.filter(Task.phase_id == phase_id)
+        if has_sandbox is True:
+            query = query.filter(Task.sandbox_id.isnot(None))
+        elif has_sandbox is False:
+            query = query.filter(Task.sandbox_id.is_(None))
+
+        query = query.order_by(Task.created_at.desc()).limit(limit)
+        result = await session.execute(query)
+        tasks = result.scalars().all()
+
+        return [
+            {
+                "id": task.id,
+                "ticket_id": task.ticket_id,
+                "phase_id": task.phase_id,
+                "task_type": task.task_type,
+                "title": task.title,
+                "description": task.description,
+                "priority": task.priority,
+                "status": task.status,
+                "sandbox_id": task.sandbox_id,
+                "assigned_agent_id": task.assigned_agent_id,
+                "created_at": task.created_at.isoformat(),
+            }
+            for task in tasks
+        ]
 
 
 class TaskCreate(BaseModel):
@@ -474,20 +543,29 @@ class TaskCreate(BaseModel):
 @router.post("", response_model=dict, status_code=201)
 async def create_task(
     task_data: TaskCreate,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Create a new task for a ticket.
 
+    Requires authentication and verifies user has access to the ticket.
+
     This endpoint allows direct task creation for testing and spec-driven development.
 
     Args:
         task_data: Task creation data including ticket_id, title, description
+        current_user: Authenticated user
+        db: Database service
         queue: Task queue service for task creation
 
     Returns:
         Created task with ID and details
     """
+    # Verify user has access to the ticket this task will belong to
+    await verify_ticket_access(task_data.ticket_id, current_user, db)
+
     try:
         task = queue.enqueue_task(
             ticket_id=task_data.ticket_id,
@@ -518,20 +596,26 @@ async def create_task(
 @router.get("/{task_id}/dependencies", response_model=dict)
 async def get_task_dependencies(
     task_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Get task dependencies information.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
+        current_user: Authenticated user
         db: Database service
         queue: Task queue service
 
     Returns:
         Dependencies information including depends_on and blocked tasks
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     # Use async database operations (non-blocking)
     result = await _get_task_dependencies_async(db, task_id)
     if not result:
@@ -560,19 +644,27 @@ async def get_task_dependencies(
 async def check_circular_dependencies(
     task_id: str,
     depends_on: list[str],
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Check for circular dependencies.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         depends_on: List of task IDs this task depends on
+        current_user: Authenticated user
+        db: Database service
         queue: Task queue service
 
     Returns:
         Information about circular dependencies if found
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     cycle = queue.detect_circular_dependencies(task_id, depends_on)
 
     if cycle:
@@ -591,6 +683,7 @@ async def check_circular_dependencies(
 async def add_task_dependencies(
     task_id: str,
     request: AddDependenciesRequest = Body(...),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
     event_bus: EventBusService = Depends(get_event_bus_service),
@@ -598,9 +691,12 @@ async def add_task_dependencies(
     """
     Add dependencies to a task.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         request: Dependencies to add
+        current_user: Authenticated user
         db: Database service
         queue: Task queue service
         event_bus: Event bus service
@@ -608,6 +704,8 @@ async def add_task_dependencies(
     Returns:
         Updated task dependencies
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     # First get the current dependencies using async
     result = await _get_task_dependencies_async(db, task_id)
     if not result:
@@ -660,6 +758,7 @@ async def add_task_dependencies(
 async def set_task_dependencies(
     task_id: str,
     request: SetDependenciesRequest = Body(...),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
     event_bus: EventBusService = Depends(get_event_bus_service),
@@ -667,9 +766,12 @@ async def set_task_dependencies(
     """
     Replace all dependencies for a task.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         request: New dependencies to set
+        current_user: Authenticated user
         db: Database service
         queue: Task queue service
         event_bus: Event bus service
@@ -677,6 +779,8 @@ async def set_task_dependencies(
     Returns:
         Updated task dependencies
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     # Check for circular dependencies
     cycle = queue.detect_circular_dependencies(task_id, request.depends_on)
     if cycle:
@@ -720,6 +824,7 @@ async def set_task_dependencies(
 async def remove_task_dependency(
     task_id: str,
     depends_on_task_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
     event_bus: EventBusService = Depends(get_event_bus_service),
@@ -727,9 +832,12 @@ async def remove_task_dependency(
     """
     Remove a specific dependency from a task.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         depends_on_task_id: Task ID to remove from dependencies
+        current_user: Authenticated user
         db: Database service
         queue: Task queue service
         event_bus: Event bus service
@@ -737,6 +845,8 @@ async def remove_task_dependency(
     Returns:
         Updated task dependencies
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     # Use async database operations (non-blocking)
     try:
         result = await _remove_task_dependency_async(db, task_id, depends_on_task_id)
@@ -777,19 +887,27 @@ async def remove_task_dependency(
 async def cancel_task(
     task_id: str,
     request: CancelTaskRequest = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Cancel a running task.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         request: Cancellation request with optional reason
+        current_user: Authenticated user
+        db: Database service
         queue: Task queue service
 
     Returns:
         Cancellation result
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     success = queue.cancel_task(task_id, request.reason)
 
     if not success:
@@ -821,18 +939,26 @@ async def cancel_task(
 @router.get("/{task_id}/timeout-status", response_model=dict)
 async def get_task_timeout_status(
     task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Get timeout status for a task.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
+        current_user: Authenticated user
+        db: Database service
         queue: Task queue service
 
     Returns:
         Timeout status information
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     status = queue.get_task_timeout_status(task_id)
 
     if not status.get("exists"):
@@ -843,17 +969,23 @@ async def get_task_timeout_status(
 
 @router.get("/timed-out", response_model=List[dict])
 async def get_timed_out_tasks(
+    current_user: User = Depends(get_current_user),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Get all tasks that have exceeded their timeout.
 
+    Requires authentication.
+
     Args:
+        current_user: Authenticated user
         queue: Task queue service
 
     Returns:
         List of timed-out tasks
     """
+    # Note: This returns all timed-out tasks. In a proper multi-tenant implementation,
+    # this should be filtered to only tasks the user can access.
     tasks = queue.get_timed_out_tasks()
 
     return [
@@ -877,18 +1009,24 @@ async def get_timed_out_tasks(
 @router.get("/cancellable", response_model=List[dict])
 async def get_cancellable_tasks(
     agent_id: str | None = None,
+    current_user: User = Depends(get_current_user),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Get all tasks that can be cancelled.
 
+    Requires authentication.
+
     Args:
         agent_id: Optional agent ID to filter by
+        current_user: Authenticated user
         queue: Task queue service
 
     Returns:
         List of cancellable tasks
     """
+    # Note: This returns all cancellable tasks. In a proper multi-tenant implementation,
+    # this should be filtered to only tasks the user can access.
     tasks = queue.get_cancellable_tasks(agent_id)
 
     return [
@@ -912,17 +1050,23 @@ async def get_cancellable_tasks(
 
 @router.post("/cleanup-timed-out", response_model=dict)
 async def cleanup_timed_out_tasks(
+    current_user: User = Depends(get_current_user),
     queue: TaskQueueService = Depends(get_task_queue),
 ):
     """
     Mark all timed-out tasks as failed.
 
+    Requires authentication.
+
     Args:
+        current_user: Authenticated user
         queue: Task queue service
 
     Returns:
         Cleanup results
     """
+    # Note: This cleans up all timed-out tasks. In a proper multi-tenant implementation,
+    # this should be restricted to admin users or filtered by accessible tasks.
     timed_out_tasks = queue.get_timed_out_tasks()
     cleaned_count = 0
 
@@ -941,19 +1085,25 @@ async def cleanup_timed_out_tasks(
 async def set_task_timeout(
     task_id: str,
     request: TaskTimeoutRequest = Body(...),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Set timeout for a task.
 
+    Requires authentication and verifies user has access to the task's ticket.
+
     Args:
         task_id: Task UUID
         request: Timeout request with seconds
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Updated task information
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     # Use async database operations (non-blocking)
     try:
         task = await _set_task_timeout_async(db, task_id, request.timeout_seconds)
@@ -974,10 +1124,13 @@ async def set_task_timeout(
 async def generate_task_title(
     task_id: str,
     context: str | None = Body(None, embed=True),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Generate a human-readable title for a task using LLM.
+
+    Requires authentication and verifies user has access to the task's ticket.
 
     Uses the TitleGenerationService with gpt-oss-20b model to create
     a concise, action-oriented title. If the task already has a description,
@@ -987,11 +1140,14 @@ async def generate_task_title(
     Args:
         task_id: Task UUID
         context: Optional additional context for title generation
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Task with generated title
     """
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
     from omoi_os.services.task_queue import generate_task_title as gen_title
 
     # Use async database operations (non-blocking)
@@ -1030,20 +1186,24 @@ async def generate_task_title(
 @router.post("/generate-titles", response_model=dict)
 async def generate_titles_batch(
     limit: int = Body(10, embed=True),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Generate titles for tasks that don't have one yet (batch operation).
 
-    This is useful for backfilling titles on existing tasks.
+    Requires authentication. This is useful for backfilling titles on existing tasks.
 
     Args:
         limit: Maximum number of tasks to process (default 10)
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Results of batch title generation
     """
+    # Note: This generates titles for all tasks without titles. In a proper multi-tenant
+    # implementation, this should be restricted to admin users or filtered by accessible tasks.
     from omoi_os.services.task_queue import generate_task_title as gen_title
 
     # Use async database operations (non-blocking)
