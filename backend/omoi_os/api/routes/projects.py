@@ -7,7 +7,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select, func
 
-from omoi_os.api.dependencies import get_db_service, get_event_bus_service
+from omoi_os.api.dependencies import (
+    get_db_service,
+    get_event_bus_service,
+    get_current_user,
+    get_user_organization_ids,
+    verify_project_access,
+    verify_organization_access,
+)
+from omoi_os.models.user import User
+from uuid import UUID
 from omoi_os.models.project import Project
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
@@ -24,6 +33,7 @@ router = APIRouter()
 
 async def _create_project_async(
     db: DatabaseService,
+    organization_id: UUID,
     name: str,
     description: Optional[str],
     default_phase_id: str,
@@ -31,17 +41,21 @@ async def _create_project_async(
     github_repo: Optional[str],
     settings: Optional[dict],
 ) -> Project:
-    """Create a new project (ASYNC - non-blocking)."""
+    """Create a new project within an organization (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
-        # Check if project with same name exists
+        # Check if project with same name exists within the organization
         result = await session.execute(
-            select(Project).filter(Project.name == name)
+            select(Project).filter(
+                Project.name == name,
+                Project.organization_id == organization_id,
+            )
         )
         existing = result.scalar_one_or_none()
         if existing:
-            raise ValueError("Project with this name already exists")
+            raise ValueError("Project with this name already exists in this organization")
 
         project = Project(
+            organization_id=organization_id,
             name=name,
             description=description,
             default_phase_id=default_phase_id,
@@ -60,22 +74,34 @@ async def _create_project_async(
 
 async def _list_projects_async(
     db: DatabaseService,
+    organization_ids: list,
     status: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> Tuple[List[Project], int]:
-    """List projects (ASYNC - non-blocking)."""
+    """List projects filtered by user's accessible organizations (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
+        # Base query - filter by accessible organizations
         query = select(Project)
+
+        # Filter to only projects in user's orgs (multi-tenant filtering)
+        if organization_ids:
+            query = query.filter(Project.organization_id.in_(organization_ids))
+        else:
+            # User has no orgs, return empty
+            return [], 0
+
         if status:
             query = query.filter(Project.status == status)
 
-        # Get total count
-        count_result = await session.execute(
-            select(func.count(Project.id)).filter(
-                Project.status == status if status else True
-            )
-        )
+        # Get total count with same filters
+        count_query = select(func.count(Project.id))
+        if organization_ids:
+            count_query = count_query.filter(Project.organization_id.in_(organization_ids))
+        if status:
+            count_query = count_query.filter(Project.status == status)
+
+        count_result = await session.execute(count_query)
         total = count_result.scalar() or 0
 
         # Get projects
@@ -195,6 +221,7 @@ async def _get_project_stats_async(
 class ProjectCreate(BaseModel):
     """Request model for creating a project."""
 
+    organization_id: UUID  # Required - projects must belong to an organization
     name: str
     description: Optional[str] = None
     default_phase_id: str = "PHASE_BACKLOG"
@@ -255,24 +282,32 @@ class ProjectStatsResponse(BaseModel):
 @router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     event_bus: EventBusService = Depends(get_event_bus_service),
 ):
     """
-    Create a new project.
+    Create a new project within an organization.
+
+    Requires authentication and verifies the user has access to the target organization.
 
     Args:
-        project_data: Project creation data
+        project_data: Project creation data (must include organization_id)
+        current_user: Authenticated user
         db: Database service
         event_bus: Event bus service
 
     Returns:
         Created project
     """
+    # Verify user has access to the target organization (multi-tenant check)
+    await verify_organization_access(project_data.organization_id, current_user, db)
+
     try:
         # Use async database operations (non-blocking)
         project = await _create_project_async(
             db,
+            organization_id=project_data.organization_id,
             name=project_data.name,
             description=project_data.description,
             default_phase_id=project_data.default_phase_id,
@@ -309,22 +344,30 @@ async def list_projects(
     ),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
-    List all projects.
+    List all projects the current user has access to.
+
+    Projects are filtered to only include those belonging to organizations
+    the user is a member of (multi-tenant filtering).
 
     Args:
         status: Optional status filter
         limit: Maximum number of projects to return
         offset: Number of projects to skip
+        current_user: Authenticated user
         db: Database service
 
     Returns:
-        List of projects
+        List of projects the user can access
     """
-    # Use async database operations (non-blocking)
-    projects, total = await _list_projects_async(db, status, limit, offset)
+    # Get user's accessible organization IDs for multi-tenant filtering
+    org_ids = await get_user_organization_ids(current_user, db)
+
+    # Use async database operations with org filtering (non-blocking)
+    projects, total = await _list_projects_async(db, org_ids, status, limit, offset)
 
     return ProjectListResponse(
         projects=[ProjectResponse.model_validate(p) for p in projects],
@@ -335,18 +378,25 @@ async def list_projects(
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
     project_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Get project by ID.
 
+    Requires authentication and verifies the user has access to the project's organization.
+
     Args:
         project_id: Project ID
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Project details
     """
+    # Verify user has access to this project (multi-tenant check)
+    await verify_project_access(project_id, current_user, db)
+
     # Use async database operations (non-blocking)
     project = await _get_project_async(db, project_id)
     if not project:
@@ -359,21 +409,28 @@ async def get_project(
 async def update_project(
     project_id: str,
     project_data: ProjectUpdate,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     event_bus: EventBusService = Depends(get_event_bus_service),
 ):
     """
     Update project.
 
+    Requires authentication and verifies the user has access to the project's organization.
+
     Args:
         project_id: Project ID
         project_data: Project update data
+        current_user: Authenticated user
         db: Database service
         event_bus: Event bus service
 
     Returns:
         Updated project
     """
+    # Verify user has access to this project (multi-tenant check)
+    await verify_project_access(project_id, current_user, db)
+
     # Use async database operations (non-blocking)
     project = await _update_project_async(
         db,
@@ -408,20 +465,27 @@ async def update_project(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     event_bus: EventBusService = Depends(get_event_bus_service),
 ):
     """
     Delete project (soft delete by setting status to archived).
 
+    Requires authentication and verifies the user has access to the project's organization.
+
     Args:
         project_id: Project ID
+        current_user: Authenticated user
         db: Database service
         event_bus: Event bus service
 
     Returns:
         Success message
     """
+    # Verify user has access to this project (multi-tenant check)
+    await verify_project_access(project_id, current_user, db)
+
     # Use async database operations (non-blocking)
     project = await _delete_project_async(db, project_id)
     if not project:
@@ -444,18 +508,25 @@ async def delete_project(
 @router.get("/{project_id}/stats", response_model=ProjectStatsResponse)
 async def get_project_stats(
     project_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Get project statistics.
 
+    Requires authentication and verifies the user has access to the project's organization.
+
     Args:
         project_id: Project ID
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Project statistics
     """
+    # Verify user has access to this project (multi-tenant check)
+    await verify_project_access(project_id, current_user, db)
+
     # Use async database operations (non-blocking)
     stats = await _get_project_stats_async(db, project_id)
     if not stats:
