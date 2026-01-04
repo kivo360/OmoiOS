@@ -423,6 +423,97 @@ async def connect_provider(
         raise HTTPException(status_code=400, detail=str(e))
 
 
+class CopyCredentialsRequest(BaseModel):
+    """Request to copy OAuth credentials from another user."""
+
+    source_email: str
+
+
+class CopyCredentialsResponse(BaseModel):
+    """Response for copying OAuth credentials."""
+
+    success: bool
+    message: str
+    provider: str
+    username: Optional[str] = None
+
+
+@router.post("/oauth/{provider}/copy-from", response_model=CopyCredentialsResponse)
+async def copy_oauth_credentials(
+    provider: str,
+    request: CopyCredentialsRequest,
+    current_user: User = Depends(get_approved_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Copy OAuth credentials from another user account to the current user.
+
+    This is useful for testing scenarios where you want multiple accounts
+    to share the same OAuth connection (e.g., same GitHub account).
+
+    Note: Both users will have access to the same OAuth token.
+    """
+    with db.get_session() as session:
+        # Find source user
+        source_user = session.execute(
+            select(User).where(User.email == request.source_email)
+        ).scalar_one_or_none()
+
+        if not source_user:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Source user '{request.source_email}' not found",
+            )
+
+        source_attrs = source_user.attributes or {}
+
+        # Check if source has the provider connected
+        provider_keys = [
+            f"{provider}_user_id",
+            f"{provider}_access_token",
+            f"{provider}_username",
+            f"{provider}_refresh_token",
+        ]
+
+        if not source_attrs.get(f"{provider}_access_token"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Source user does not have {provider} connected",
+            )
+
+        # Get current user in this session
+        target_user = session.execute(
+            select(User).where(User.id == current_user.id)
+        ).scalar_one()
+
+        target_attrs = target_user.attributes or {}
+
+        # Copy provider credentials
+        for key in provider_keys:
+            if key in source_attrs:
+                target_attrs[key] = source_attrs[key]
+
+        target_user.attributes = target_attrs
+        session.commit()
+
+        username = target_attrs.get(f"{provider}_username")
+
+        logger.info(
+            f"Copied {provider} credentials from {request.source_email} to {current_user.email}",
+            source_email=request.source_email,
+            target_email=current_user.email,
+            provider=provider,
+            username=username,
+        )
+
+        return CopyCredentialsResponse(
+            success=True,
+            message=f"{provider} credentials copied from {request.source_email}",
+            provider=provider,
+            username=username,
+        )
+
+
 @router.delete("/oauth/{provider}/disconnect", response_model=DisconnectResponse)
 async def disconnect_provider(
     provider: str,

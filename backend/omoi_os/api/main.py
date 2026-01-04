@@ -30,6 +30,7 @@ from omoi_os.api.routes import (
     collaboration,
     commits,
     costs,
+    debug,
     diagnostic,
     events,
     explore,
@@ -1022,6 +1023,7 @@ app.include_router(board.router, prefix="/api/v1", tags=["board"])
 app.include_router(quality.router, prefix="/api/v1", tags=["quality"])
 app.include_router(results.router, prefix="/api/v1", tags=["results"])
 app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagnostic"])
+app.include_router(debug.router, prefix="/api/v1/debug", tags=["debug"])
 app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
 app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])

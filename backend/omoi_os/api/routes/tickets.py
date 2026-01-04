@@ -15,7 +15,12 @@ from omoi_os.api.dependencies import (
     get_event_bus_service,
     get_approval_service,
     get_ticket_dedup_service,
+    get_current_user,
+    get_accessible_project_ids,
+    verify_project_access,
+    verify_ticket_access,
 )
+from omoi_os.models.user import User
 from omoi_os.services.ticket_dedup import TicketDeduplicationService
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.ticket_status import TicketStatus
@@ -51,15 +56,34 @@ async def list_tickets(
     status: Optional[str] = Query(None, description="Filter by status"),
     priority: Optional[str] = Query(None, description="Filter by priority"),
     phase_id: Optional[str] = Query(None, description="Filter by phase"),
+    project_id: Optional[str] = Query(None, description="Filter by project"),
     search: Optional[str] = Query(None, description="Search in title and description"),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
-    """List tickets with pagination and optional filters (async)."""
-    async with db.get_async_session() as session:
-        # Build base query
-        stmt = select(Ticket)
+    """
+    List tickets with pagination and optional filters (async).
 
-        # Apply filters
+    Requires authentication. Only returns tickets from projects the user has access to
+    (multi-tenant filtering via Project → Organization membership).
+    """
+    # Get user's accessible project IDs for multi-tenant filtering
+    accessible_project_ids = await get_accessible_project_ids(current_user, db)
+
+    # If user has no accessible projects, return empty
+    if not accessible_project_ids:
+        return TicketListResponse(tickets=[], total=0)
+
+    async with db.get_async_session() as session:
+        # Build base query - filter to accessible projects
+        stmt = select(Ticket).filter(Ticket.project_id.in_([str(pid) for pid in accessible_project_ids]))
+
+        # Apply optional filters
+        if project_id:
+            # Verify user has access to the specific project they're filtering by
+            if project_id not in [str(pid) for pid in accessible_project_ids]:
+                raise HTTPException(status_code=403, detail="You don't have access to this project")
+            stmt = stmt.filter(Ticket.project_id == project_id)
         if status:
             stmt = stmt.filter(Ticket.status == status)
         if priority:
@@ -193,6 +217,7 @@ async def create_ticket(
     ticket_data: TicketCreate,
     background_tasks: BackgroundTasks,
     requested_by_agent_id: str | None = None,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
     approval_service: ApprovalService = Depends(get_approval_service),
@@ -201,6 +226,9 @@ async def create_ticket(
 ):
     """
     Create a new ticket and enqueue initial tasks (with approval gate if enabled).
+
+    Requires authentication. If project_id is provided, verifies user has access
+    to that project (multi-tenant filtering).
 
     Uses async patterns per async_python_patterns.md:
     - Async database operations for non-blocking I/O
@@ -211,6 +239,7 @@ async def create_ticket(
         ticket_data: Ticket creation data
         background_tasks: FastAPI background tasks
         requested_by_agent_id: Optional agent ID that requested this ticket
+        current_user: Authenticated user
         db: Database service
         queue: Task queue service
         approval_service: Approval service for human-in-the-loop approval
@@ -219,6 +248,9 @@ async def create_ticket(
     Returns:
         Created ticket, or DuplicateCheckResponse if duplicates found
     """
+    # If project_id provided, verify user has access
+    if ticket_data.project_id:
+        await verify_project_access(ticket_data.project_id, current_user, db)
     # Check for duplicates if enabled
     embedding = None
     if ticket_data.check_duplicates and not ticket_data.force_create:
@@ -370,16 +402,19 @@ class DuplicateCheckRequest(BaseModel):
 @router.post("/check-duplicates", response_model=DuplicateCheckResponse)
 async def check_duplicates(
     request: DuplicateCheckRequest,
+    current_user: User = Depends(get_current_user),
     dedup_service: TicketDeduplicationService = Depends(get_ticket_dedup_service),
 ):
     """
     Check if a ticket with similar content already exists.
 
+    Requires authentication.
     Uses pgvector embedding similarity to find potential duplicates.
     This endpoint does not create a ticket, just checks for duplicates.
 
     Args:
         request: Duplicate check request with title and description
+        current_user: Authenticated user
         dedup_service: Ticket deduplication service
 
     Returns:
@@ -415,18 +450,25 @@ async def check_duplicates(
 @router.get("/{ticket_id}", response_model=TicketResponse)
 async def get_ticket(
     ticket_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Get a ticket by ID (async).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Ticket instance
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
+
     async with db.get_async_session() as session:
         result = await session.execute(
             select(Ticket).filter(Ticket.id == str(ticket_id))
@@ -450,19 +492,26 @@ class TicketUpdateRequest(BaseModel):
 async def update_ticket(
     ticket_id: UUID,
     update: TicketUpdateRequest,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Update a ticket by ID (async).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
         update: Fields to update
+        current_user: Authenticated user
         db: Database service
 
     Returns:
         Updated ticket instance
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
+
     async with db.get_async_session() as session:
         result = await session.execute(
             select(Ticket).filter(Ticket.id == str(ticket_id))
@@ -485,11 +534,16 @@ async def update_ticket(
 @router.get("/{ticket_id}/context")
 async def get_ticket_context(
     ticket_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Retrieve stored aggregated context and summary for a ticket (async).
+
+    Requires authentication and verifies user has access to the ticket's project.
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
     async with db.get_async_session() as session:
         result = await session.execute(
             select(Ticket).filter(Ticket.id == str(ticket_id))
@@ -513,11 +567,17 @@ async def get_ticket_context(
 async def update_ticket_context_endpoint(
     ticket_id: UUID,
     phase_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """
     Aggregate phase tasks and update ticket context fields.
+
+    Requires authentication and verifies user has access to the ticket's project.
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
+
     service = ContextService(db)
     service.update_ticket_context(str(ticket_id), phase_id)
     return {"status": "updated"}
@@ -535,6 +595,7 @@ class TransitionRequest(BaseModel):
 async def transition_ticket_status(
     ticket_id: UUID,
     request: TransitionRequest,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     task_queue: TaskQueueService = Depends(get_task_queue),
     phase_gate: PhaseGateService = Depends(get_phase_gate_service),
@@ -543,9 +604,12 @@ async def transition_ticket_status(
     """
     Transition ticket to new status with state machine validation (REQ-TKT-SM-002).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
         request: Transition request
+        current_user: Authenticated user
         db: Database service
         task_queue: Task queue service
         phase_gate: Phase gate service
@@ -554,6 +618,8 @@ async def transition_ticket_status(
     Returns:
         Updated ticket
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
 
     # Get old status for logging
@@ -601,6 +667,7 @@ async def block_ticket(
     ticket_id: UUID,
     blocker_type: str,
     suggested_remediation: str | None = None,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     task_queue: TaskQueueService = Depends(get_task_queue),
     phase_gate: PhaseGateService = Depends(get_phase_gate_service),
@@ -609,10 +676,13 @@ async def block_ticket(
     """
     Mark ticket as blocked (REQ-TKT-BL-001, REQ-TKT-BL-002).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
         blocker_type: Blocker classification
         suggested_remediation: Optional suggested remediation
+        current_user: Authenticated user
         db: Database service
         task_queue: Task queue service
         phase_gate: Phase gate service
@@ -621,6 +691,8 @@ async def block_ticket(
     Returns:
         Updated ticket
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
     ticket = orchestrator.mark_blocked(
         str(ticket_id),
@@ -650,6 +722,7 @@ async def block_ticket(
 @router.post("/{ticket_id}/unblock")
 async def unblock_ticket(
     ticket_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     task_queue: TaskQueueService = Depends(get_task_queue),
     phase_gate: PhaseGateService = Depends(get_phase_gate_service),
@@ -658,8 +731,11 @@ async def unblock_ticket(
     """
     Unblock ticket (REQ-TKT-BL-001).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
+        current_user: Authenticated user
         db: Database service
         task_queue: Task queue service
         phase_gate: Phase gate service
@@ -668,6 +744,8 @@ async def unblock_ticket(
     Returns:
         Updated ticket
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
     ticket = orchestrator.unblock_ticket(str(ticket_id), initiated_by="api")
 
@@ -695,6 +773,7 @@ async def regress_ticket(
     ticket_id: UUID,
     to_status: str,
     validation_feedback: str | None = None,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     task_queue: TaskQueueService = Depends(get_task_queue),
     phase_gate: PhaseGateService = Depends(get_phase_gate_service),
@@ -703,10 +782,13 @@ async def regress_ticket(
     """
     Regress ticket to previous actionable phase (REQ-TKT-SM-004).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
         to_status: Target status (typically BUILDING for testing regressions)
         validation_feedback: Optional validation feedback
+        current_user: Authenticated user
         db: Database service
         task_queue: Task queue service
         phase_gate: Phase gate service
@@ -715,6 +797,8 @@ async def regress_ticket(
     Returns:
         Updated ticket
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
     ticket = orchestrator.regress_ticket(
         str(ticket_id),
@@ -728,6 +812,7 @@ async def regress_ticket(
 @router.post("/{ticket_id}/progress")
 async def progress_ticket(
     ticket_id: UUID,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     task_queue: TaskQueueService = Depends(get_task_queue),
     phase_gate: PhaseGateService = Depends(get_phase_gate_service),
@@ -736,8 +821,11 @@ async def progress_ticket(
     """
     Automatically progress ticket to next phase if gate criteria met (REQ-TKT-SM-003).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
+        current_user: Authenticated user
         db: Database service
         task_queue: Task queue service
         phase_gate: Phase gate service
@@ -746,6 +834,8 @@ async def progress_ticket(
     Returns:
         Updated ticket if progressed, None if no progression
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(str(ticket_id), current_user, db)
     orchestrator = TicketWorkflowOrchestrator(db, task_queue, phase_gate, event_bus)
     ticket = orchestrator.check_and_progress_ticket(str(ticket_id))
     if ticket:
@@ -755,6 +845,7 @@ async def progress_ticket(
 
 @router.post("/detect-blocking")
 async def detect_blocking(
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     task_queue: TaskQueueService = Depends(get_task_queue),
     phase_gate: PhaseGateService = Depends(get_phase_gate_service),
@@ -763,7 +854,10 @@ async def detect_blocking(
     """
     Detect tickets that should be marked as blocked (REQ-TKT-BL-001).
 
+    Requires authentication.
+
     Args:
+        current_user: Authenticated user
         db: Database service
         task_queue: Task queue service
         phase_gate: Phase gate service
@@ -820,7 +914,7 @@ class RejectTicketResponse(BaseModel):
 @router.post("/approve", response_model=ApproveTicketResponse)
 async def approve_ticket(
     request: ApproveTicketRequest,
-    approver_id: str = "api_user",  # TODO: Get from auth context
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     queue: TaskQueueService = Depends(get_task_queue),
     approval_service: ApprovalService = Depends(get_approval_service),
@@ -828,9 +922,11 @@ async def approve_ticket(
     """
     Approve a pending ticket and create initial task (REQ-THA-*).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         request: Approve ticket request
-        approver_id: ID of the approver (human user)
+        current_user: Authenticated user (used as approver)
         db: Database service
         queue: Task queue service
         approval_service: Approval service
@@ -841,6 +937,11 @@ async def approve_ticket(
     Raises:
         HTTPException: 400 if ticket is not in pending_review state, 404 if not found
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(request.ticket_id, current_user, db)
+
+    # Use current user's ID as the approver
+    approver_id = str(current_user.id)
     try:
         ticket = approval_service.approve_ticket(request.ticket_id, approver_id)
 
@@ -872,15 +973,19 @@ async def approve_ticket(
 @router.post("/reject", response_model=RejectTicketResponse)
 async def reject_ticket(
     request: RejectTicketRequest,
-    rejector_id: str = "api_user",  # TODO: Get from auth context
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
     approval_service: ApprovalService = Depends(get_approval_service),
 ):
     """
     Reject a pending ticket (REQ-THA-*).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         request: Reject ticket request
-        rejector_id: ID of the rejector (human user)
+        current_user: Authenticated user (used as rejector)
+        db: Database service
         approval_service: Approval service
 
     Returns:
@@ -889,6 +994,11 @@ async def reject_ticket(
     Raises:
         HTTPException: 400 if ticket is not in pending_review state, 404 if not found
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(request.ticket_id, current_user, db)
+
+    # Use current user's ID as the rejector
+    rejector_id = str(current_user.id)
     try:
         ticket = approval_service.reject_ticket(
             request.ticket_id, request.rejection_reason, rejector_id
@@ -905,14 +1015,19 @@ async def reject_ticket(
 
 @router.get("/pending-review-count")
 async def get_pending_review_count(
+    current_user: User = Depends(get_current_user),
     approval_service: ApprovalService = Depends(get_approval_service),
 ):
     """
     Get count of tickets pending approval (REQ-THA-*).
 
+    Requires authentication.
+
     Returns:
         Count of pending tickets
     """
+    # Note: This returns global count. In a proper multi-tenant implementation,
+    # this should be filtered by user's accessible projects.
     count = approval_service.get_pending_count()
     return {"pending_count": count}
 
@@ -920,13 +1035,19 @@ async def get_pending_review_count(
 @router.get("/approval-status")
 async def get_approval_status(
     ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
     approval_service: ApprovalService = Depends(get_approval_service),
 ):
     """
     Get approval status for a ticket (REQ-THA-*).
 
+    Requires authentication and verifies user has access to the ticket's project.
+
     Args:
         ticket_id: Ticket ID
+        current_user: Authenticated user
+        db: Database service
         approval_service: Approval service
 
     Returns:
@@ -935,7 +1056,153 @@ async def get_approval_status(
     Raises:
         HTTPException: 404 if ticket not found
     """
+    # Verify user has access to this ticket
+    await verify_ticket_access(ticket_id, current_user, db)
+
     status = approval_service.get_approval_status(ticket_id)
     if status is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
     return status
+
+
+# =============================================================================
+# Phase Progression Endpoints (Hook 1 + Hook 2 manual triggers)
+# =============================================================================
+
+
+class PhaseCheckResponse(BaseModel):
+    """Response for phase completion check."""
+
+    ticket_id: str
+    current_phase: Optional[str] = None
+    current_status: Optional[str] = None
+    all_phase_tasks_complete: bool
+    advanced: bool
+    new_phase: Optional[str] = None
+    new_status: Optional[str] = None
+    error: Optional[str] = None
+
+
+class SpawnTasksResponse(BaseModel):
+    """Response for spawning phase tasks."""
+
+    ticket_id: str
+    phase: Optional[str] = None
+    tasks_spawned: int
+    error: Optional[str] = None
+
+
+@router.post("/{ticket_id}/check-phase-completion", response_model=PhaseCheckResponse)
+async def check_phase_completion(
+    ticket_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Manually check and attempt phase advancement for a ticket (Hook 1 trigger).
+
+    This endpoint checks if all tasks in the ticket's current phase are complete,
+    and if so, attempts to advance the ticket to the next phase.
+
+    Use cases:
+    - Testing the automatic phase advancement logic
+    - Recovery from missed events
+    - Manual verification of phase status
+
+    Args:
+        ticket_id: Ticket ID to check
+
+    Returns:
+        PhaseCheckResponse with current status and advancement result
+    """
+    # Verify user has access to this ticket
+    await verify_ticket_access(ticket_id, current_user, db)
+
+    from omoi_os.services.phase_progression_service import get_phase_progression_service
+    from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
+
+    try:
+        # Get or create the phase progression service
+        phase_progression = get_phase_progression_service(
+            db=db,
+            task_queue=task_queue,
+            phase_gate=phase_gate,
+            event_bus=event_bus,
+        )
+
+        # Ensure workflow orchestrator is set
+        if phase_progression._workflow_orchestrator is None:
+            workflow_orchestrator = TicketWorkflowOrchestrator(
+                db=db,
+                task_queue=task_queue,
+                phase_gate=phase_gate,
+                event_bus=event_bus,
+            )
+            phase_progression.set_workflow_orchestrator(workflow_orchestrator)
+
+        result = phase_progression.check_phase_completion(ticket_id)
+        return PhaseCheckResponse(**result)
+
+    except Exception as e:
+        return PhaseCheckResponse(
+            ticket_id=ticket_id,
+            all_phase_tasks_complete=False,
+            advanced=False,
+            error=str(e),
+        )
+
+
+@router.post("/{ticket_id}/spawn-phase-tasks", response_model=SpawnTasksResponse)
+async def spawn_phase_tasks(
+    ticket_id: str,
+    phase_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    task_queue: TaskQueueService = Depends(get_task_queue),
+    phase_gate: PhaseGateService = Depends(get_phase_gate_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Manually spawn tasks for a ticket's current or specified phase (Hook 2 trigger).
+
+    This endpoint spawns the initial tasks for a phase. If the ticket has a spec
+    with pre-defined tasks, those are used; otherwise, default phase tasks are spawned.
+
+    Use cases:
+    - Testing the automatic task spawning logic
+    - Recovery from missed phase transitions
+    - Manual task creation for a specific phase
+
+    Args:
+        ticket_id: Ticket ID to spawn tasks for
+        phase_id: Optional specific phase ID (defaults to ticket's current phase)
+
+    Returns:
+        SpawnTasksResponse with spawn result
+    """
+    # Verify user has access to this ticket
+    await verify_ticket_access(ticket_id, current_user, db)
+
+    from omoi_os.services.phase_progression_service import get_phase_progression_service
+
+    try:
+        # Get or create the phase progression service
+        phase_progression = get_phase_progression_service(
+            db=db,
+            task_queue=task_queue,
+            phase_gate=phase_gate,
+            event_bus=event_bus,
+        )
+
+        result = phase_progression.spawn_tasks_for_phase(ticket_id, phase_id)
+        return SpawnTasksResponse(**result)
+
+    except Exception as e:
+        return SpawnTasksResponse(
+            ticket_id=ticket_id,
+            tasks_spawned=0,
+            error=str(e),
+        )
