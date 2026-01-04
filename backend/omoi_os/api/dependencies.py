@@ -708,3 +708,275 @@ def get_ticket_dedup_service():
         embedding_service=embedding_service,
     )
     return _ticket_dedup_service_instance
+
+
+# =============================================================================
+# Multi-Tenant Access Control Helpers
+# =============================================================================
+
+
+async def get_user_organization_ids(
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> list[UUID]:
+    """
+    Get list of organization IDs the current user has access to.
+
+    This is the foundation for multi-tenant filtering. Use this to filter
+    queries to only return data from organizations the user is a member of.
+
+    Returns:
+        List of organization UUIDs the user can access
+    """
+    from sqlalchemy import select
+    from omoi_os.models.organization import OrganizationMembership, Organization
+
+    async with db.get_async_session() as session:
+        # Get orgs where user is a member
+        result = await session.execute(
+            select(OrganizationMembership.organization_id).where(
+                OrganizationMembership.user_id == current_user.id
+            )
+        )
+        member_org_ids = [row[0] for row in result.fetchall()]
+
+        # Also include orgs the user owns (they may not have a membership row)
+        owner_result = await session.execute(
+            select(Organization.id).where(Organization.owner_id == current_user.id)
+        )
+        owner_org_ids = [row[0] for row in owner_result.fetchall()]
+
+        # Combine and deduplicate
+        all_org_ids = list(set(member_org_ids + owner_org_ids))
+        return all_org_ids
+
+
+async def verify_organization_access(
+    organization_id: UUID,
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> UUID:
+    """
+    Verify the current user has access to the specified organization.
+
+    Use this as a dependency for routes that require access to a specific org.
+
+    Args:
+        organization_id: The organization ID to check access for
+
+    Returns:
+        The organization ID if access is granted
+
+    Raises:
+        HTTPException 403: If user doesn't have access to the organization
+        HTTPException 404: If organization doesn't exist
+    """
+    from sqlalchemy import select
+    from omoi_os.models.organization import Organization, OrganizationMembership
+
+    async with db.get_async_session() as session:
+        # Check if org exists
+        org_result = await session.execute(
+            select(Organization).where(Organization.id == organization_id)
+        )
+        org = org_result.scalar_one_or_none()
+        if not org:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found",
+            )
+
+        # Check if user is owner
+        if org.owner_id == current_user.id:
+            return organization_id
+
+        # Check if user is a member
+        membership_result = await session.execute(
+            select(OrganizationMembership).where(
+                OrganizationMembership.user_id == current_user.id,
+                OrganizationMembership.organization_id == organization_id,
+            )
+        )
+        membership = membership_result.scalar_one_or_none()
+
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this organization",
+            )
+
+        return organization_id
+
+
+async def get_accessible_project_ids(
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> list[UUID]:
+    """
+    Get list of project IDs the current user has access to.
+
+    Projects are accessible if they belong to an organization the user is a member of.
+
+    Returns:
+        List of project UUIDs the user can access
+    """
+    from sqlalchemy import select
+    from omoi_os.models.project import Project
+
+    # First get the user's organization IDs
+    org_ids = await get_user_organization_ids(current_user, db)
+
+    if not org_ids:
+        return []
+
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Project.id).where(Project.organization_id.in_(org_ids))
+        )
+        project_ids = [row[0] for row in result.fetchall()]
+        return project_ids
+
+
+async def verify_project_access(
+    project_id: str,
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> str:
+    """
+    Verify the current user has access to the specified project.
+
+    A project is accessible if it belongs to an organization the user is a member of.
+
+    Args:
+        project_id: The project ID to check access for
+
+    Returns:
+        The project ID if access is granted
+
+    Raises:
+        HTTPException 403: If user doesn't have access to the project
+        HTTPException 404: If project doesn't exist
+    """
+    from sqlalchemy import select
+    from omoi_os.models.project import Project
+
+    async with db.get_async_session() as session:
+        # Get the project
+        result = await session.execute(
+            select(Project).where(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Project not found",
+            )
+
+        # If project has no organization, check if user created it
+        if project.organization_id is None:
+            # Projects without org are legacy - allow access for now
+            # TODO: Migrate all projects to have an organization
+            logger.warning(
+                f"Project {project_id} has no organization_id - allowing access",
+                project_id=project_id,
+                user_id=str(current_user.id),
+            )
+            return project_id
+
+        # Check if user has access to the project's organization
+        org_ids = await get_user_organization_ids(current_user, db)
+
+        if project.organization_id not in org_ids:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this project",
+            )
+
+        return project_id
+
+
+async def verify_ticket_access(
+    ticket_id: str,
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> str:
+    """
+    Verify the current user has access to the specified ticket.
+
+    A ticket is accessible if it belongs to a project in an organization
+    the user is a member of.
+
+    Args:
+        ticket_id: The ticket ID to check access for
+
+    Returns:
+        The ticket ID if access is granted
+
+    Raises:
+        HTTPException 403: If user doesn't have access to the ticket
+        HTTPException 404: If ticket doesn't exist
+    """
+    from sqlalchemy import select
+    from omoi_os.models.ticket import Ticket
+
+    async with db.get_async_session() as session:
+        # Get the ticket
+        result = await session.execute(
+            select(Ticket).where(Ticket.id == ticket_id)
+        )
+        ticket = result.scalar_one_or_none()
+
+        if not ticket:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Ticket not found",
+            )
+
+        # Verify access to the ticket's project
+        await verify_project_access(ticket.project_id, current_user, db)
+
+        return ticket_id
+
+
+async def verify_task_access(
+    task_id: str,
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> str:
+    """
+    Verify the current user has access to the specified task.
+
+    A task is accessible if it belongs to a ticket in a project in an organization
+    the user is a member of.
+
+    Args:
+        task_id: The task ID to check access for
+
+    Returns:
+        The task ID if access is granted
+
+    Raises:
+        HTTPException 403: If user doesn't have access to the task
+        HTTPException 404: If task doesn't exist
+    """
+    from sqlalchemy import select
+    from omoi_os.models.task import Task
+
+    async with db.get_async_session() as session:
+        # Get the task
+        result = await session.execute(
+            select(Task).where(Task.id == task_id)
+        )
+        task = result.scalar_one_or_none()
+
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found",
+            )
+
+        # Verify access to the task's ticket
+        await verify_ticket_access(task.ticket_id, current_user, db)
+
+        return task_id
