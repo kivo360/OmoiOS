@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 from pydantic_ai import Agent
-from pydantic_ai.models.openai import OpenAIChatModel
+from pydantic_ai.models.openai import OpenAIChatModel, OpenAIChatModelSettings
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from omoi_os.config import (
@@ -82,10 +82,12 @@ class TitleGenerationService:
             base_url=self.settings.base_url,
         )
 
-        # Create the model
+        # Create the model with low temperature for consistent, deterministic output
+        self.model_settings = OpenAIChatModelSettings(temperature=0.1)
         self.model = OpenAIChatModel(
             self.model_name,
             provider=self.provider,
+            settings=self.model_settings,
         )
 
         logger.info(

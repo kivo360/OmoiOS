@@ -26,6 +26,8 @@ Usage:
 """
 
 from __future__ import annotations
+from structlog.tracebacks import ExceptionDictTransformer
+
 
 import logging
 import sys
@@ -33,7 +35,6 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import structlog
 from structlog.processors import CallsiteParameter, CallsiteParameterAdder
-from structlog.tracebacks import ExceptionDictTransformer
 
 if TYPE_CHECKING:
     from structlog.typing import EventDict, WrappedLogger
@@ -89,10 +90,10 @@ def configure_logging(
         }.get(env, logging.INFO)
 
     if json_logs is None:
-        json_logs = env == "production"
+        json_logs: bool = env == "production"
 
     # Exception transformer for structured exception data
-    exception_transformer = ExceptionDictTransformer(
+    exception_transformer: ExceptionDictTransformer = ExceptionDictTransformer(
         show_locals=show_locals,
         locals_max_length=locals_max_length,
         locals_max_string=locals_max_string,
@@ -224,7 +225,7 @@ def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
 
     Args:
         name: Logger name, typically __name__ for the current module.
-              If None, returns unnamed logger.
+            If None, returns unnamed logger.
 
     Returns:
         Configured bound logger with all processors applied.

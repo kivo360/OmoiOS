@@ -1595,6 +1595,117 @@ class TaskQueueService:
 
             return ticket.project_id
 
+    def get_running_count_by_organization(self, organization_id: str, session=None) -> int:
+        """
+        Get the count of currently running tasks for an organization.
+
+        Running tasks include those in 'claiming', 'assigned', 'running', or 'validating' status.
+        This is used to enforce organization-level agent limits from subscriptions.
+
+        Args:
+            organization_id: UUID of the organization
+            session: Optional existing session to use
+
+        Returns:
+            Count of running tasks for the organization
+        """
+        from omoi_os.models.ticket import Ticket
+        from omoi_os.models.project import Project
+
+        def _count(sess):
+            # Join tasks -> tickets -> projects to filter by organization
+            count = (
+                sess.query(Task)
+                .join(Ticket, Task.ticket_id == Ticket.id)
+                .join(Project, Ticket.project_id == Project.id)
+                .filter(
+                    Project.organization_id == organization_id,
+                    Task.status.in_(["claiming", "assigned", "running", "validating"]),
+                )
+                .count()
+            )
+            return count
+
+        if session:
+            return _count(session)
+        else:
+            with self.db.get_session() as sess:
+                return _count(sess)
+
+    def get_agent_limit_for_organization(self, organization_id: str, session=None) -> int:
+        """
+        Get the agent limit for an organization from their subscription.
+
+        Args:
+            organization_id: UUID of the organization
+            session: Optional existing session to use
+
+        Returns:
+            Agent limit (-1 for unlimited, defaults to 1 if no subscription)
+        """
+        from omoi_os.models.subscription import (
+            Subscription,
+            SubscriptionStatus,
+            SubscriptionTier,
+            TIER_LIMITS,
+        )
+
+        def _get_limit(sess):
+            # Get active subscription for organization
+            result = sess.execute(
+                select(Subscription).where(
+                    Subscription.organization_id == organization_id,
+                    Subscription.status.in_([
+                        SubscriptionStatus.ACTIVE.value,
+                        SubscriptionStatus.TRIALING.value,
+                    ]),
+                ).order_by(Subscription.created_at.desc()).limit(1)
+            )
+            subscription = result.scalar_one_or_none()
+
+            if subscription:
+                return subscription.agents_limit
+
+            # No subscription - use FREE tier default
+            return TIER_LIMITS[SubscriptionTier.FREE]["agents_limit"]
+
+        if session:
+            return _get_limit(session)
+        else:
+            with self.db.get_session() as sess:
+                return _get_limit(sess)
+
+    def can_spawn_agent_for_organization(self, organization_id: str, session=None) -> tuple[bool, str]:
+        """
+        Check if an organization can spawn another agent based on their subscription limits.
+
+        Args:
+            organization_id: UUID of the organization
+            session: Optional existing session to use
+
+        Returns:
+            Tuple of (can_spawn, reason)
+        """
+        def _check(sess):
+            agent_limit = self.get_agent_limit_for_organization(organization_id, sess)
+
+            # -1 means unlimited
+            if agent_limit == -1:
+                return True, "unlimited"
+
+            running_count = self.get_running_count_by_organization(organization_id, sess)
+
+            if running_count >= agent_limit:
+                return False, f"Organization at agent capacity ({running_count}/{agent_limit})"
+
+            return True, "allowed"
+
+        if session:
+            return _check(session)
+        else:
+            with self.db.get_session() as sess:
+                return _check(sess)
+
     def get_next_task_with_concurrency_limit(
         self,
         max_concurrent_per_project: int = 5,
@@ -1602,10 +1713,11 @@ class TaskQueueService:
         agent_capabilities: Optional[List[str]] = None,
     ) -> Task | None:
         """
-        Get highest-scored pending task that respects project concurrency limits.
+        Get highest-scored pending task that respects concurrency limits.
 
-        This method extends get_next_task() by also checking that the task's
-        project hasn't exceeded its concurrency limit before claiming.
+        This method extends get_next_task() by checking:
+        1. Project-level concurrency limits (max tasks per project)
+        2. Organization-level agent limits (from subscription tier)
 
         Args:
             max_concurrent_per_project: Maximum concurrent tasks per project (default: 5)
@@ -1616,6 +1728,7 @@ class TaskQueueService:
             Task object or None if no eligible tasks available
         """
         from omoi_os.models.ticket import Ticket
+        from omoi_os.models.project import Project
 
         with self.db.get_session() as session:
             # Get pending tasks without sandbox
@@ -1631,9 +1744,11 @@ class TaskQueueService:
                 return None
 
             # Filter out tasks with incomplete dependencies, capability mismatches,
-            # AND tasks whose projects have hit concurrency limits
+            # AND tasks whose projects/organizations have hit concurrency limits
             available_tasks = []
             project_running_counts: dict[str, int] = {}
+            org_running_counts: dict[str, int] = {}
+            org_agent_limits: dict[str, int] = {}
 
             for task in tasks:
                 if not self._check_dependencies_complete(session, task):
@@ -1644,7 +1759,7 @@ class TaskQueueService:
                 ):
                     continue
 
-                # Get project ID for this task
+                # Get project and organization for this task
                 ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
                 if not ticket or not ticket.project_id:
                     # Tasks without a project are allowed (no limit)
@@ -1653,6 +1768,34 @@ class TaskQueueService:
                     continue
 
                 project_id = ticket.project_id
+
+                # Get project to find organization
+                project = session.query(Project).filter(Project.id == project_id).first()
+                organization_id = str(project.organization_id) if project and project.organization_id else None
+
+                # Check organization-level agent limits first (if org exists)
+                if organization_id:
+                    # Cache org agent limit
+                    if organization_id not in org_agent_limits:
+                        org_agent_limits[organization_id] = self.get_agent_limit_for_organization(
+                            organization_id, session
+                        )
+
+                    # Cache org running count
+                    if organization_id not in org_running_counts:
+                        org_running_counts[organization_id] = self.get_running_count_by_organization(
+                            organization_id, session
+                        )
+
+                    # Check org limit (-1 means unlimited)
+                    org_limit = org_agent_limits[organization_id]
+                    if org_limit != -1 and org_running_counts[organization_id] >= org_limit:
+                        logger.debug(
+                            f"Organization {organization_id} at agent capacity "
+                            f"({org_running_counts[organization_id]}/{org_limit}), "
+                            f"skipping task {task.id}"
+                        )
+                        continue
 
                 # Check/cache running count for this project
                 if project_id not in project_running_counts:
@@ -1718,6 +1861,8 @@ class TaskQueueService:
         This method is used by the orchestrator to spawn validation sandboxes
         for tasks that have completed implementation and need review.
 
+        Respects both project-level and organization-level concurrency limits.
+
         Args:
             max_concurrent_per_project: Maximum concurrent tasks per project (default: 5)
 
@@ -1725,6 +1870,7 @@ class TaskQueueService:
             Task object or None if no tasks need validation
         """
         from omoi_os.models.ticket import Ticket
+        from omoi_os.models.project import Project
 
         with self.db.get_session() as session:
             # Get pending_validation tasks
@@ -1736,9 +1882,11 @@ class TaskQueueService:
             if not tasks:
                 return None
 
-            # Filter by project concurrency limits
+            # Filter by project and organization concurrency limits
             available_tasks = []
             project_running_counts: dict[str, int] = {}
+            org_running_counts: dict[str, int] = {}
+            org_agent_limits: dict[str, int] = {}
 
             for task in tasks:
                 # Get project ID for this task
@@ -1749,6 +1897,34 @@ class TaskQueueService:
                     continue
 
                 project_id = ticket.project_id
+
+                # Get project to find organization
+                project = session.query(Project).filter(Project.id == project_id).first()
+                organization_id = str(project.organization_id) if project and project.organization_id else None
+
+                # Check organization-level agent limits first (if org exists)
+                if organization_id:
+                    # Cache org agent limit
+                    if organization_id not in org_agent_limits:
+                        org_agent_limits[organization_id] = self.get_agent_limit_for_organization(
+                            organization_id, session
+                        )
+
+                    # Cache org running count
+                    if organization_id not in org_running_counts:
+                        org_running_counts[organization_id] = self.get_running_count_by_organization(
+                            organization_id, session
+                        )
+
+                    # Check org limit (-1 means unlimited)
+                    org_limit = org_agent_limits[organization_id]
+                    if org_limit != -1 and org_running_counts[organization_id] >= org_limit:
+                        logger.debug(
+                            f"Organization {organization_id} at agent capacity "
+                            f"({org_running_counts[organization_id]}/{org_limit}), "
+                            f"skipping validation task {task.id}"
+                        )
+                        continue
 
                 # Check/cache running count for this project
                 if project_id not in project_running_counts:
