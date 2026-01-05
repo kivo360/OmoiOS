@@ -9,6 +9,14 @@ from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from omoi_os.api.dependencies import get_database_service, get_db_session
+from omoi_os.analytics import (
+    track_checkout_completed,
+    track_subscription_created,
+    track_subscription_canceled,
+    track_subscription_updated,
+    track_payment_failed,
+    track_payment_succeeded,
+)
 from omoi_os.services.billing_service import BillingService, get_billing_service
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -1187,6 +1195,20 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
                 sess.commit()
 
             logger.info(f"Created {tier} subscription for org {organization_id}")
+
+            # Track checkout completed in PostHog
+            # Note: user_id should come from the session/customer if available
+            # For now we use organization_id as a fallback
+            customer_email = event_data.get("customer_email", "")
+            amount = event_data.get("amount_total", 0) / 100  # Convert from cents
+            track_checkout_completed(
+                user_id=customer_email or organization_id,
+                organization_id=organization_id,
+                checkout_type="subscription",
+                amount_usd=amount,
+                tier=tier,
+                stripe_session_id=event_data.get("id"),
+            )
         return
 
     # Check if this is a lifetime purchase
@@ -1214,6 +1236,26 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
                 )
                 sess.commit()
             logger.info(f"Created lifetime subscription for org {organization_id} (${purchase_amount:.2f})")
+
+            # Track lifetime checkout in PostHog
+            customer_email = event_data.get("customer_email", "")
+            track_checkout_completed(
+                user_id=customer_email or organization_id,
+                organization_id=organization_id,
+                checkout_type="lifetime",
+                amount_usd=purchase_amount,
+                tier="lifetime",
+                stripe_session_id=event_data.get("id"),
+            )
+
+            # Also track as subscription created
+            track_subscription_created(
+                user_id=customer_email or organization_id,
+                organization_id=organization_id,
+                tier="lifetime",
+                amount_usd=purchase_amount,
+                is_lifetime=True,
+            )
         return
 
     # Check if this is a credit purchase
@@ -1228,6 +1270,16 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
                 reason="stripe_checkout",
             )
             logger.info(f"Added ${credit_amount:.2f} credits from checkout for org {organization_id}")
+
+            # Track credits checkout in PostHog
+            customer_email = event_data.get("customer_email", "")
+            track_checkout_completed(
+                user_id=customer_email or organization_id,
+                organization_id=organization_id,
+                checkout_type="credits",
+                amount_usd=credit_amount,
+                stripe_session_id=event_data.get("id"),
+            )
 
 
 async def _handle_payment_succeeded(event_data: dict, billing_service: BillingService):
@@ -1248,9 +1300,26 @@ async def _handle_payment_succeeded(event_data: dict, billing_service: BillingSe
             invoice = result.scalar_one_or_none()
 
             if invoice and invoice.status != InvoiceStatus.PAID.value:
-                invoice.mark_paid(event_data.get("amount_received", 0) / 100)
+                amount_paid = event_data.get("amount_received", 0) / 100
+                invoice.mark_paid(amount_paid)
                 sess.commit()
                 logger.info(f"Marked invoice {invoice_id} as paid from webhook")
+
+                # Track payment succeeded in PostHog
+                # Get organization_id from billing account
+                from omoi_os.models.billing import BillingAccount
+                from sqlalchemy import select as select_query
+                account_result = sess.execute(
+                    select_query(BillingAccount).where(BillingAccount.id == invoice.billing_account_id)
+                )
+                account = account_result.scalar_one_or_none()
+                if account:
+                    track_payment_succeeded(
+                        user_id=str(account.organization_id),
+                        organization_id=str(account.organization_id),
+                        amount_usd=amount_paid,
+                        payment_type="invoice",
+                    )
 
 
 async def _handle_payment_failed(event_data: dict, billing_service: BillingService):
@@ -1261,7 +1330,7 @@ async def _handle_payment_failed(event_data: dict, billing_service: BillingServi
     if invoice_id:
         with billing_service.db.get_session() as sess:
             from sqlalchemy import select
-            from omoi_os.models.billing import Invoice, InvoiceStatus
+            from omoi_os.models.billing import Invoice, InvoiceStatus, BillingAccount
 
             result = sess.execute(
                 select(Invoice).where(Invoice.id == UUID(invoice_id))
@@ -1272,6 +1341,20 @@ async def _handle_payment_failed(event_data: dict, billing_service: BillingServi
                 invoice.status = InvoiceStatus.PAST_DUE.value
                 sess.commit()
                 logger.warning(f"Marked invoice {invoice_id} as past due from webhook")
+
+                # Track payment failed in PostHog
+                account_result = sess.execute(
+                    select(BillingAccount).where(BillingAccount.id == invoice.billing_account_id)
+                )
+                account = account_result.scalar_one_or_none()
+                if account:
+                    last_error = event_data.get("last_payment_error", {})
+                    track_payment_failed(
+                        user_id=str(account.organization_id),
+                        organization_id=str(account.organization_id),
+                        amount_usd=invoice.amount_due,
+                        failure_reason=last_error.get("message") if last_error else None,
+                    )
 
 
 async def _handle_refund(event_data: dict, billing_service: BillingService):
@@ -1417,6 +1500,18 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
             sess.add(subscription)
             sess.commit()
             logger.info(f"Created subscription {subscription.id} for org {account.organization_id} (tier: {tier.value})")
+
+            # Track subscription created in PostHog
+            # Get price from tier
+            tier_prices = {"pro": 50, "team": 150, "free": 0}
+            amount_usd = tier_prices.get(tier.value, 0)
+            track_subscription_created(
+                user_id=str(account.organization_id),
+                organization_id=str(account.organization_id),
+                tier=tier.value,
+                amount_usd=amount_usd,
+                stripe_subscription_id=stripe_subscription_id,
+            )
         except IntegrityError as e:
             # Handle race condition - another webhook may have created the subscription
             sess.rollback()
@@ -1471,6 +1566,7 @@ async def _handle_subscription_updated(event_data: dict, billing_service: Billin
             subscription.canceled_at = datetime.fromtimestamp(event_data["canceled_at"])
 
         # Update tier if changed
+        old_tier = subscription.tier
         new_tier_value = metadata.get("tier")
         if new_tier_value and new_tier_value != subscription.tier:
             try:
@@ -1481,6 +1577,17 @@ async def _handle_subscription_updated(event_data: dict, billing_service: Billin
                 subscription.agents_limit = limits["agents_limit"]
                 subscription.storage_limit_gb = limits["storage_limit_gb"]
                 logger.info(f"Updated subscription {subscription.id} tier to {new_tier.value}")
+
+                # Track subscription updated (tier change) in PostHog
+                tier_prices = {"pro": 50, "team": 150, "free": 0}
+                track_subscription_updated(
+                    user_id=str(subscription.organization_id),
+                    organization_id=str(subscription.organization_id),
+                    old_tier=old_tier,
+                    new_tier=new_tier.value,
+                    old_amount_usd=tier_prices.get(old_tier, 0),
+                    new_amount_usd=tier_prices.get(new_tier.value, 0),
+                )
             except ValueError:
                 pass
 
@@ -1511,11 +1618,20 @@ async def _handle_subscription_deleted(event_data: dict, billing_service: Billin
             logger.warning(f"Subscription not found for Stripe ID: {stripe_subscription_id}")
             return
 
+        old_tier = subscription.tier
         subscription.status = SubscriptionStatus.CANCELED.value
         subscription.canceled_at = utc_now()
 
         sess.commit()
         logger.info(f"Canceled subscription {subscription.id}")
+
+        # Track subscription canceled in PostHog
+        track_subscription_canceled(
+            user_id=str(subscription.organization_id),
+            organization_id=str(subscription.organization_id),
+            tier=old_tier,
+            at_period_end=subscription.cancel_at_period_end,
+        )
 
 
 async def _handle_subscription_invoice_paid(event_data: dict, billing_service: BillingService):

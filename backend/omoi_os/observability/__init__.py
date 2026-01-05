@@ -154,11 +154,52 @@ def instrument_redis():
         logfire.instrument_redis()
 
 
+from omoi_os.observability.sentry import (
+    init_sentry,
+    capture_exception,
+    capture_message,
+    set_user,
+    set_tag,
+    set_context,
+)
+
+from omoi_os.observability.tracing import (
+    traced_span,
+    trace_external_api,
+    trace_operation,
+    trace_db_operation,
+    set_transaction_name,
+    set_span_tag,
+    set_span_data,
+    add_breadcrumb,
+    get_trace_headers,
+    extract_trace_context,
+)
+
 __all__ = [
+    # Logfire/OpenTelemetry
     "LogfireTracer",
     "get_tracer",
     "instrument_fastapi",
     "instrument_httpx",
     "instrument_redis",
     "instrument_sqlalchemy",
+    # Sentry
+    "init_sentry",
+    "capture_exception",
+    "capture_message",
+    "set_user",
+    "set_tag",
+    "set_context",
+    # Tracing decorators
+    "traced_span",
+    "trace_external_api",
+    "trace_operation",
+    "trace_db_operation",
+    "set_transaction_name",
+    "set_span_tag",
+    "set_span_data",
+    "add_breadcrumb",
+    "get_trace_headers",
+    "extract_trace_context",
 ]
