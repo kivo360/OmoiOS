@@ -417,6 +417,7 @@ class TaskQueueService:
             persistence_dir: Optional OpenHands conversation persistence directory
         """
         from omoi_os.utils.datetime import utc_now
+        from omoi_os.observability.sentry import track_task_completed, track_task_failed
 
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
@@ -438,6 +439,27 @@ class TaskQueueService:
 
                 session.commit()
                 session.refresh(task)
+
+                # Track metrics for completed/failed tasks
+                if status == "completed":
+                    duration_ms = 0.0
+                    if task.started_at and task.completed_at:
+                        duration_ms = (task.completed_at - task.started_at).total_seconds() * 1000
+                    track_task_completed(str(task.id), task.phase_id or "unknown", duration_ms)
+                elif status == "failed":
+                    # Classify error type from message
+                    error_type = "unknown"
+                    if error_message:
+                        err_lower = error_message.lower()
+                        if "timeout" in err_lower:
+                            error_type = "timeout"
+                        elif "permission" in err_lower or "access" in err_lower:
+                            error_type = "permission"
+                        elif "connection" in err_lower or "network" in err_lower:
+                            error_type = "network"
+                        else:
+                            error_type = "error"
+                    track_task_failed(str(task.id), task.phase_id or "unknown", error_type)
 
                 # Publish status change event
                 event_type = {
@@ -661,6 +683,8 @@ class TaskQueueService:
         Returns:
             True if retry was scheduled, False if max retries exceeded
         """
+        from omoi_os.observability.sentry import track_task_retried
+
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
             if not task:
@@ -681,6 +705,10 @@ class TaskQueueService:
                 task.assigned_agent_id = None  # Clear legacy assignment
 
             session.commit()
+
+            # Track retry metric
+            track_task_retried(str(task.id), task.phase_id or "unknown", task.retry_count)
+
             return True
 
     def get_retryable_tasks(self, phase_id: str | None = None) -> list[Task]:
@@ -872,6 +900,7 @@ class TaskQueueService:
             True if task was marked as timed out, False if task not found
         """
         from omoi_os.utils.datetime import utc_now
+        from omoi_os.observability.sentry import track_task_failed
 
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
@@ -895,6 +924,10 @@ class TaskQueueService:
             task.completed_at = utc_now()
 
             session.commit()
+
+            # Track timeout as a failed task metric
+            track_task_failed(str(task.id), task.phase_id or "unknown", "timeout")
+
             return True
 
     def get_cancellable_tasks(

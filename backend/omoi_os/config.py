@@ -649,7 +649,8 @@ class SentrySettings(OmoiBaseSettings):
 
     # Sampling rates
     traces_sample_rate: float = 0.1  # 10% of transactions in production
-    profiles_sample_rate: float = 0.1  # Profile 10% of sampled transactions
+    profile_session_sample_rate: float = 0.1  # Profile 10% of sessions
+    profile_lifecycle: str = "trace"  # Run profiler when there's an active transaction
 
     # Performance monitoring
     enable_tracing: bool = True  # Enable performance monitoring
