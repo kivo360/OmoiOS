@@ -58,7 +58,10 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - Static assets (svg, png, jpg, etc.)
+     * - SEO/Crawler files (robots.txt, sitemap.xml, manifest)
+     * - OpenGraph/Twitter images (social media crawlers need access)
+     * - Apple touch icons and favicons
      */
-    "/((?!api|_next/static|_next/image|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+    "/((?!api|_next/static|_next/image|opengraph-image|twitter-image|robots\\.txt|sitemap\\.xml|site\\.webmanifest|manifest\\.json|apple-touch-icon|favicon|icon-|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|xml|json|txt)$).*)",
   ],
 }
