@@ -15,6 +15,7 @@ import {
   setLastValidated,
 } from "@/lib/api/client"
 import { setUserContext, clearUserContext, addNavigationBreadcrumb } from "@/lib/sentry/context"
+import { identifyUser, resetUser, clearOrganization, track, ANALYTICS_EVENTS } from "@/lib/analytics"
 
 // ============================================================================
 // Auth Store (Zustand)
@@ -153,6 +154,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(userData)
       setLastValidatedAt(Date.now())
       setLastValidated() // Also update localStorage
+
+      // Re-identify user in PostHog (in case session was restored)
+      identifyUser(userData)
     } catch (err) {
       console.error("Background validation failed:", err)
       // Token is invalid - clear everything and redirect
@@ -181,6 +185,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setUser(userData)
       setLastValidatedAt(Date.now())
       setLastValidated()
+
+      // Re-identify user in PostHog (in case session was restored)
+      identifyUser(userData)
     } catch (err) {
       console.error("Failed to refresh user:", err)
       reset()
@@ -195,6 +202,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     (userData: User) => {
       setUser(userData)
       setLastValidatedAt(Date.now())
+
+      // Identify user in PostHog for analytics
+      identifyUser(userData)
+      track(ANALYTICS_EVENTS.USER_LOGGED_IN, {
+        auth_method: 'email',
+      })
     },
     [setUser, setLastValidatedAt]
   )
@@ -202,10 +215,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   // Logout handler
   const logout = useCallback(async () => {
     try {
+      // Track logout event before resetting
+      track(ANALYTICS_EVENTS.USER_LOGGED_OUT, {})
       await apiLogout()
     } catch (err) {
       console.error("Logout error:", err)
     } finally {
+      // Reset PostHog user identity and organization context
+      clearOrganization()
+      resetUser()
       reset()
       router.push("/login")
     }
