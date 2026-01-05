@@ -13,9 +13,22 @@ export type OnboardingStep =
   | "plan"
   | "complete"
 
+// Extended checklist items for post-onboarding tasks
+export type ChecklistItemId =
+  | "welcome"
+  | "github"
+  | "repo"
+  | "first-spec"
+  | "plan"
+  | "watch-agent"
+  | "review-pr"
+  | "invite-team"
+
 export interface OnboardingState {
   currentStep: OnboardingStep
   completedSteps: OnboardingStep[]
+  completedChecklistItems: ChecklistItemId[]
+  isOnboardingComplete: boolean
   data: {
     role?: string
     githubConnected: boolean
@@ -30,6 +43,7 @@ export interface OnboardingState {
     organizationId?: string
     firstSpecId?: string
     firstSpecText?: string
+    firstSpecStatus?: "pending" | "running" | "completed" | "failed"
     selectedPlan?: string
   }
 }
@@ -64,6 +78,8 @@ export function useOnboarding() {
     return {
       currentStep: "welcome",
       completedSteps: [],
+      completedChecklistItems: [],
+      isOnboardingComplete: false,
       data: {
         githubConnected: false,
       },
@@ -89,8 +105,9 @@ export function useOnboarding() {
 
   const checkGitHubConnection = async () => {
     try {
+      // Use the correct backend endpoint for GitHub connection status
       const response = await api.get<{ connected: boolean; username?: string }>(
-        "/api/v1/users/github/status"
+        "/api/v1/github/connection-status"
       )
       if (response.connected) {
         updateData({
@@ -130,15 +147,47 @@ export function useOnboarding() {
         ? prev.completedSteps
         : [...prev.completedSteps, step]
 
+      // Also mark the corresponding checklist item as complete
+      const checklistItemId = step as ChecklistItemId
+      const newCompletedChecklistItems = prev.completedChecklistItems.includes(checklistItemId)
+        ? prev.completedChecklistItems
+        : [...prev.completedChecklistItems, checklistItemId]
+
       return {
         ...prev,
         completedSteps: newCompletedSteps,
+        completedChecklistItems: newCompletedChecklistItems,
       }
     })
 
     // Track analytics
     trackEvent("onboarding_step_completed", { step })
   }, [])
+
+  // Complete a checklist item (for post-onboarding tasks)
+  const completeChecklistItem = useCallback((itemId: ChecklistItemId) => {
+    setState(prev => {
+      if (prev.completedChecklistItems.includes(itemId)) {
+        return prev
+      }
+      return {
+        ...prev,
+        completedChecklistItems: [...prev.completedChecklistItems, itemId],
+      }
+    })
+    trackEvent("checklist_item_completed", { itemId })
+  }, [])
+
+  // Mark onboarding as fully complete (when first spec finishes running)
+  const markOnboardingComplete = useCallback(() => {
+    setState(prev => ({
+      ...prev,
+      isOnboardingComplete: true,
+    }))
+    trackEvent("onboarding_fully_completed", {
+      completedItems: state.completedChecklistItems,
+    })
+  }, [state.completedChecklistItems])
 
   const nextStep = useCallback(() => {
     const currentIndex = STEPS_ORDER.indexOf(state.currentStep)
@@ -192,7 +241,9 @@ export function useOnboarding() {
 
       // Redirect based on whether spec was submitted
       if (state.data.firstSpecId) {
-        router.push(`/sandbox/${state.data.firstSpecId}`)
+        // Redirect to board to watch agent progress in real-time
+        const projectId = state.data.projectId || "all"
+        router.push(`/board/${projectId}`)
       } else {
         router.push("/command")
       }
@@ -255,6 +306,7 @@ export function useOnboarding() {
       updateData({
         firstSpecId: sandboxResponse.sandbox_id || sandboxResponse.id,
         firstSpecText: specText,
+        firstSpecStatus: "running",
       })
 
       trackEvent("first_spec_submitted", {
@@ -277,10 +329,52 @@ export function useOnboarding() {
   const canGoBack = STEPS_ORDER.indexOf(state.currentStep) > 0
   const canSkip = state.currentStep === "plan" // Only plan step is skippable
 
+  // Poll for first spec completion status (placed after all function definitions)
+  useEffect(() => {
+    if (!state.data.firstSpecId || state.data.firstSpecStatus === "completed" || state.data.firstSpecStatus === "failed") {
+      return
+    }
+
+    const checkSpecStatus = async () => {
+      try {
+        const response = await api.get<{ status: string }>(`/api/v1/sandboxes/${state.data.firstSpecId}`)
+        const status = response.status?.toLowerCase()
+
+        if (status === "completed" || status === "success") {
+          setState(prev => ({
+            ...prev,
+            isOnboardingComplete: true,
+            completedChecklistItems: prev.completedChecklistItems.includes("watch-agent")
+              ? prev.completedChecklistItems
+              : [...prev.completedChecklistItems, "watch-agent"],
+            data: { ...prev.data, firstSpecStatus: "completed" },
+          }))
+          trackEvent("onboarding_fully_completed", { firstSpecId: state.data.firstSpecId })
+        } else if (status === "failed" || status === "error") {
+          setState(prev => ({
+            ...prev,
+            data: { ...prev.data, firstSpecStatus: "failed" },
+          }))
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }
+
+    // Poll every 10 seconds
+    const interval = setInterval(checkSpecStatus, 10000)
+    // Also check immediately
+    checkSpecStatus()
+
+    return () => clearInterval(interval)
+  }, [state.data.firstSpecId, state.data.firstSpecStatus])
+
   return {
     // State
     currentStep: state.currentStep,
     completedSteps: state.completedSteps,
+    completedChecklistItems: state.completedChecklistItems,
+    isOnboardingComplete: state.isOnboardingComplete,
     data: state.data,
     progress,
     isLoading: isLoading || authLoading,
@@ -294,6 +388,10 @@ export function useOnboarding() {
     completeStep,
     canGoBack,
     canSkip,
+
+    // Checklist
+    completeChecklistItem,
+    markOnboardingComplete,
 
     // Actions
     updateData,
