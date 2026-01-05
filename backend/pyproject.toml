@@ -51,6 +51,8 @@ dependencies = [
     "resend>=2.19.0",
     "taskiq-redis>=0.5.0",
     "taskiq>=0.12.0",
+    "sentry-sdk[fastapi,sqlalchemy]>=2.0.0",
+    "posthog>=3.0.0",
 ]
 
 [build-system]
