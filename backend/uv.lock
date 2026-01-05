@@ -2781,6 +2781,7 @@ dependencies = [
     { name = "orjson" },
     { name = "passlib", extra = ["bcrypt"] },
     { name = "pgvector" },
+    { name = "posthog" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pydantic" },
     { name = "pydantic-ai" },
@@ -2791,6 +2792,7 @@ dependencies = [
     { name = "redis" },
     { name = "resend" },
     { name = "rich" },
+    { name = "sentry-sdk", extra = ["fastapi", "sqlalchemy"] },
     { name = "sqlalchemy" },
     { name = "stripe" },
     { name = "structlog" },
@@ -2851,6 +2853,7 @@ requires-dist = [
     { name = "orjson", specifier = ">=3.11.4" },
     { name = "passlib", extras = ["bcrypt"], specifier = ">=1.7.4,<2" },
     { name = "pgvector", specifier = ">=0.3.3,<1" },
+    { name = "posthog", specifier = ">=3.0.0" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.0,<4" },
     { name = "pydantic", specifier = ">=2.7.0,<3" },
     { name = "pydantic-ai", specifier = ">=0.0.14" },
@@ -2861,6 +2864,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0.0,<6" },
     { name = "resend", specifier = ">=2.19.0" },
     { name = "rich", specifier = ">=13.0.0" },
+    { name = "sentry-sdk", extras = ["fastapi", "sqlalchemy"], specifier = ">=2.0.0" },
     { name = "sqlalchemy", specifier = ">=2.0.0,<3" },
     { name = "stripe", specifier = ">=7.0.0" },
     { name = "structlog", specifier = ">=24.0.0" },
@@ -7266,6 +7270,27 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/32/8a/ed6747b1cc723c81f526d4c12c1b1d43d07190e1e8258dbf934392fc850e/secretstorage-3.4.1.tar.gz", hash = "sha256:a799acf5be9fb93db609ebaa4ab6e8f1f3ed5ae640e0fa732bfea59e9c3b50e8", size = 19871, upload-time = "2025-11-11T11:30:23.798Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b0/6d/24ebb101484f1911a6be6695b76ce43219caa110ebbe07d8c3a5f3106cca/secretstorage-3.4.1-py3-none-any.whl", hash = "sha256:c55d57b4da3de568d8c3af89dad244ab24c35ca1da8625fc1b550edf005ebc41", size = 15301, upload-time = "2025-11-11T11:30:22.618Z" },
+]
+
+[[package]]
+name = "sentry-sdk"
+version = "2.48.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "certifi" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/40/f0/0e9dc590513d5e742d7799e2038df3a05167cba084c6ca4f3cdd75b55164/sentry_sdk-2.48.0.tar.gz", hash = "sha256:5213190977ff7fdff8a58b722fb807f8d5524a80488626ebeda1b5676c0c1473", size = 384828, upload-time = "2025-12-16T14:55:41.722Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/19/8d77f9992e5cbfcaa9133c3bf63b4fbbb051248802e1e803fed5c552fbb2/sentry_sdk-2.48.0-py2.py3-none-any.whl", hash = "sha256:6b12ac256769d41825d9b7518444e57fa35b5642df4c7c5e322af4d2c8721172", size = 414555, upload-time = "2025-12-16T14:55:40.152Z" },
+]
+
+[package.optional-dependencies]
+fastapi = [
+    { name = "fastapi" },
+]
+sqlalchemy = [
+    { name = "sqlalchemy" },
 ]
 
 [[package]]
