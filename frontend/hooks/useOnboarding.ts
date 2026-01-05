@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api/client"
+import { trackEvent } from "@/lib/analytics"
 
 export type OnboardingStep =
   | "welcome"
@@ -403,13 +404,5 @@ export function useOnboarding() {
   }
 }
 
-// Analytics helper
-function trackEvent(eventName: string, data?: Record<string, unknown>) {
-  // Placeholder for analytics - integrate with your analytics provider
-  console.log(`[Analytics] ${eventName}`, data)
-
-  // Example: PostHog, Mixpanel, etc.
-  // posthog?.capture(eventName, data)
-}
-
-export { trackEvent }
+// Re-export trackEvent from the analytics module for backwards compatibility
+export { trackEvent } from "@/lib/analytics"
