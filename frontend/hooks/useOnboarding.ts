@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api/client"
+import { track, trackEvent as analyticsTrackEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 
 export type OnboardingStep =
   | "welcome"
@@ -138,7 +139,7 @@ export function useOnboarding() {
     }))
 
     // Track analytics
-    trackEvent("onboarding_step_viewed", { step })
+    analyticsTrackEvent("onboarding_step_viewed", { step })
   }, [])
 
   const completeStep = useCallback((step: OnboardingStep) => {
@@ -161,7 +162,7 @@ export function useOnboarding() {
     })
 
     // Track analytics
-    trackEvent("onboarding_step_completed", { step })
+    analyticsTrackEvent("onboarding_step_completed", { step })
   }, [])
 
   // Complete a checklist item (for post-onboarding tasks)
@@ -175,7 +176,7 @@ export function useOnboarding() {
         completedChecklistItems: [...prev.completedChecklistItems, itemId],
       }
     })
-    trackEvent("checklist_item_completed", { itemId })
+    analyticsTrackEvent("checklist_item_completed", { itemId })
   }, [])
 
   // Mark onboarding as fully complete (when first spec finishes running)
@@ -184,7 +185,7 @@ export function useOnboarding() {
       ...prev,
       isOnboardingComplete: true,
     }))
-    trackEvent("onboarding_fully_completed", {
+    analyticsTrackEvent("onboarding_fully_completed", {
       completedItems: state.completedChecklistItems,
     })
   }, [state.completedChecklistItems])
@@ -234,7 +235,7 @@ export function useOnboarding() {
       localStorage.removeItem(STORAGE_KEY)
 
       // Track completion
-      trackEvent("onboarding_completed", {
+      analyticsTrackEvent("onboarding_completed", {
         selectedPlan: state.data.selectedPlan,
         hasFirstSpec: !!state.data.firstSpecId,
       })
@@ -309,7 +310,7 @@ export function useOnboarding() {
         firstSpecStatus: "running",
       })
 
-      trackEvent("first_spec_submitted", {
+      analyticsTrackEvent("first_spec_submitted", {
         specLength: specText.length,
         projectId,
       })
@@ -349,7 +350,7 @@ export function useOnboarding() {
               : [...prev.completedChecklistItems, "watch-agent"],
             data: { ...prev.data, firstSpecStatus: "completed" },
           }))
-          trackEvent("onboarding_fully_completed", { firstSpecId: state.data.firstSpecId })
+          analyticsTrackEvent("onboarding_fully_completed", { firstSpecId: state.data.firstSpecId })
         } else if (status === "failed" || status === "error") {
           setState(prev => ({
             ...prev,
@@ -403,13 +404,6 @@ export function useOnboarding() {
   }
 }
 
-// Analytics helper
-function trackEvent(eventName: string, data?: Record<string, unknown>) {
-  // Placeholder for analytics - integrate with your analytics provider
-  console.log(`[Analytics] ${eventName}`, data)
-
-  // Example: PostHog, Mixpanel, etc.
-  // posthog?.capture(eventName, data)
-}
-
-export { trackEvent }
+// Re-export trackEvent from analytics module for backwards compatibility
+// Prefer using track(ANALYTICS_EVENTS.XXX, {...}) directly for type safety
+export { analyticsTrackEvent as trackEvent }
