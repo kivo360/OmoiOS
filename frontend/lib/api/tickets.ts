@@ -168,3 +168,58 @@ export async function getTicketContext(ticketId: string): Promise<{
     summary: string | null
   }>(`/api/v1/tickets/${ticketId}/context`)
 }
+
+/**
+ * Spawn phase tasks response
+ */
+export interface SpawnPhaseTasksResponse {
+  ticket_id: string
+  phase_id: string
+  tasks_spawned: number
+  task_ids: string[]
+  error?: string
+}
+
+/**
+ * Spawn tasks for a ticket's current phase
+ * This kicks off the phase progression workflow
+ */
+export async function spawnPhaseTasks(
+  ticketId: string,
+  phaseId?: string
+): Promise<SpawnPhaseTasksResponse> {
+  const params = new URLSearchParams()
+  if (phaseId) params.set("phase_id", phaseId)
+
+  const query = params.toString()
+  const url = query
+    ? `/api/v1/tickets/${ticketId}/spawn-phase-tasks?${query}`
+    : `/api/v1/tickets/${ticketId}/spawn-phase-tasks`
+
+  return apiRequest<SpawnPhaseTasksResponse>(url, { method: "POST" })
+}
+
+/**
+ * Batch spawn phase tasks for multiple tickets
+ * Returns results for each ticket
+ */
+export async function batchSpawnPhaseTasks(
+  ticketIds: string[]
+): Promise<SpawnPhaseTasksResponse[]> {
+  const results = await Promise.allSettled(
+    ticketIds.map((id) => spawnPhaseTasks(id))
+  )
+
+  return results.map((result, index) => {
+    if (result.status === "fulfilled") {
+      return result.value
+    }
+    return {
+      ticket_id: ticketIds[index],
+      phase_id: "",
+      tasks_spawned: 0,
+      task_ids: [],
+      error: result.reason?.message || "Failed to spawn tasks",
+    }
+  })
+}

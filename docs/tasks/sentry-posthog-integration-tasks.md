@@ -6,9 +6,9 @@ These tasks are designed to be completed by Claude Code web. Each task includes 
 
 ## Phase 1: Frontend Analytics Foundation (PostHog)
 
-### Task 1.1: PostHog Frontend Setup & Configuration
+### Task 1.1: PostHog Frontend Setup with Session Recording
 
-**Objective**: Set up PostHog in the Next.js 15 frontend with proper App Router integration.
+**Objective**: Set up PostHog in the Next.js 15 frontend with session recording, autocapture, and proper App Router integration. This enables watching full user sessions to understand how users navigate to payment.
 
 **Research/Explore Phase**:
 1. Read the existing `trackEvent` function in `frontend/hooks/useOnboarding.ts` (lines 407-415) - it's a placeholder
@@ -16,34 +16,60 @@ These tasks are designed to be completed by Claude Code web. Each task includes 
 3. Look at `frontend/providers/` directory for existing provider patterns
 4. Review `frontend/app/layout.tsx` for how providers are wrapped
 5. Search for any existing analytics setup: `grep -r "posthog\|analytics" frontend/`
+6. List all pages in `frontend/app/` to understand the full application structure
 
 **Planning Phase**:
-1. Document which PostHog features we need:
-   - Event tracking (custom events)
-   - User identification
-   - Feature flags (optional, for A/B testing pricing)
-   - Session recording (optional)
+1. Document which PostHog features we need (ALL of these are required):
+   - **Session Recording** - Watch full user sessions, see exactly what users click
+   - **Autocapture** - Automatically track all clicks, form submissions, page views
+   - **Event tracking** - Custom events for business logic
+   - **User identification** - Link sessions to users
+   - **Feature flags** - For A/B testing pricing and features
+   - **Heatmaps** - See where users click most (requires session recording)
 2. Plan the provider architecture for Next.js App Router
 3. Identify all files that need modification
+4. Plan session recording privacy settings (mask sensitive inputs)
 
 **Implementation Phase**:
 1. Install PostHog: `pnpm add posthog-js`
-2. Create `frontend/lib/analytics/posthog.ts` - PostHog client initialization
-3. Create `frontend/providers/PostHogProvider.tsx` - React context provider
+2. Create `frontend/lib/analytics/posthog.ts` - PostHog client initialization with:
+   ```typescript
+   posthog.init(key, {
+     api_host: 'https://app.posthog.com',
+     autocapture: true,  // Capture all clicks automatically
+     capture_pageview: true,  // Track all page views
+     capture_pageleave: true,  // Track when users leave
+     session_recording: {
+       maskAllInputs: false,  // Show inputs (except passwords)
+       maskInputOptions: { password: true },
+     },
+     enable_heatmaps: true,
+   })
+   ```
+3. Create `frontend/providers/PostHogProvider.tsx` - React context provider with pageview tracking
 4. Create `frontend/lib/analytics/events.ts` - Typed event definitions
-5. Add environment variable to `.env.example`: `NEXT_PUBLIC_POSTHOG_KEY`
+5. Add environment variables to `.env.example`:
+   - `NEXT_PUBLIC_POSTHOG_KEY`
+   - `NEXT_PUBLIC_POSTHOG_HOST` (optional, defaults to PostHog cloud)
 6. Update `frontend/app/layout.tsx` to include PostHogProvider
+7. Add PostHog toolbar for development (opt-in feature flags testing)
 
 **Documentation Phase**:
 1. Create `frontend/docs/analytics-setup.md` documenting:
    - How to add new events
+   - Session recording configuration
+   - Privacy/masking settings
    - Environment variable requirements
-   - Testing analytics locally
+   - How to watch session recordings in PostHog
 
 **Acceptance Criteria**:
 - [ ] PostHog initializes on app load
+- [ ] Session recordings appear in PostHog dashboard
+- [ ] Autocapture tracks clicks on buttons, links, forms
+- [ ] Page views are automatically tracked
 - [ ] No errors in browser console
 - [ ] Provider wraps the entire app
+- [ ] Sensitive inputs (passwords) are masked in recordings
 - [ ] TypeScript types are properly defined
 
 ---

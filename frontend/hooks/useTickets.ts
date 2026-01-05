@@ -16,7 +16,10 @@ import {
   rejectTicket,
   getPendingReviewCount,
   getTicketContext,
+  spawnPhaseTasks,
+  batchSpawnPhaseTasks,
 } from "@/lib/api/tickets"
+import type { SpawnPhaseTasksResponse } from "@/lib/api/tickets"
 import type {
   Ticket,
   TicketCreate,
@@ -217,6 +220,44 @@ export function useRejectTicket() {
       queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
       queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
       queryClient.invalidateQueries({ queryKey: ticketKeys.pendingCount() })
+    },
+  })
+}
+
+/**
+ * Hook to spawn phase tasks for a ticket
+ * This triggers the phase progression workflow
+ */
+export function useSpawnPhaseTasks() {
+  const queryClient = useQueryClient()
+
+  return useMutation<
+    SpawnPhaseTasksResponse,
+    Error,
+    { ticketId: string; phaseId?: string }
+  >({
+    mutationFn: ({ ticketId, phaseId }) => spawnPhaseTasks(ticketId, phaseId),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.detail(result.ticket_id) })
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      // Also invalidate board since tasks were spawned
+      queryClient.invalidateQueries({ queryKey: ["board"] })
+    },
+  })
+}
+
+/**
+ * Hook to batch spawn phase tasks for multiple tickets
+ * Used for "Start Processing" button on board
+ */
+export function useBatchSpawnPhaseTasks() {
+  const queryClient = useQueryClient()
+
+  return useMutation<SpawnPhaseTasksResponse[], Error, string[]>({
+    mutationFn: (ticketIds) => batchSpawnPhaseTasks(ticketIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ticketKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: ["board"] })
     },
   })
 }
