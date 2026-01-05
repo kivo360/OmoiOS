@@ -8,6 +8,7 @@ import { WebSocketProvider } from "@/providers/WebSocketProvider"
 import { StoreProvider } from "@/providers/StoreProvider"
 import { ThemeProvider } from "@/providers/ThemeProvider"
 import { AuthProvider } from "@/providers/AuthProvider"
+import { PostHogProvider } from "@/providers/PostHogProvider"
 import { Toaster } from "@/components/ui/sonner"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
@@ -88,16 +89,18 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans`}>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <QueryProvider>
-            <AuthProvider>
-              <WebSocketProvider>
-                <StoreProvider>
-                  {children}
-                  <Toaster />
-                </StoreProvider>
-              </WebSocketProvider>
-            </AuthProvider>
-          </QueryProvider>
+          <PostHogProvider>
+            <QueryProvider>
+              <AuthProvider>
+                <WebSocketProvider>
+                  <StoreProvider>
+                    {children}
+                    <Toaster />
+                  </StoreProvider>
+                </WebSocketProvider>
+              </AuthProvider>
+            </QueryProvider>
+          </PostHogProvider>
         </ThemeProvider>
       </body>
     </html>
