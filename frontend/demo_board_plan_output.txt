@@ -1,0 +1,1250 @@
+
+ * ▐▛███▜▌ *   Claude Code v2.0.76
+* ▝▜█████▛▘ *  Opus 4.5 · Claude API
+ *  ▘▘ ▝▝  *   ~/Coding/Experiments/senior-sandbox/senior_sandbox/frontend
+══════════════════ Conversation compacted · ctrl+o for history ═════════════════
+  ⎿  Referenced file ../backend/omoi_os/services/ticket_workflow.py
+  ⎿  Referenced file ../backend/omoi_os/workers/continuous_sandbox_worker.py
+  ⎿  Referenced file ../backend/omoi_os/workers/claude_sandbox_worker.py
+  ⎿ Read ../../../../../../../tmp/claude/-Users-kevinhill-Coding-Experiments-sen
+    ior-sandbox-senior-sandbox-frontend/tasks/bab6158.output (66 lines)
+  ⎿  Read ../backend/scripts/test_artifact_generation.py (206 lines)
+
+⏺ I'll continue investigating the diff display issue. Let me read the relevant code sections to understand how diffs are generated and displayed.
+
+⏺ Read(~/Coding/Experiments/senior-sandbox/senior_sandbox/backend/omoi_os/worker
+      s/claude_sandbox_worker.py)
+  ⎿  Read 100 lines
+
+⏺ Read(components/sandbox/EventRenderer.tsx)
+  ⎿  Read 150 lines
+
+⏺ Now I see the issue more clearly. Let me also check how the diff data flows from the worker to the frontend - specifically how file edits trigger the diff generation and what event format is sent:
+
+⏺ Search(pattern: "cache_file_before_edit", path: "~/Coding/Experiments/senior-s
+        andbox/senior_sandbox/backend/omoi_os/workers", output_mode: "content")
+  ⎿  Found 13 lines (ctrl+o to expand)
+
+⏺ Search(pattern: "generate_diff", path: "~/Coding/Experiments/senior-sandbox/se
+        nior_sandbox/backend/omoi_os/workers", output_mode: "content")
+  ⎿  Found 20 lines (ctrl+o to expand)
+
+⏺ Let me see the full context around where the file is cached before edit and where generate_diff is called:
+
+⏺ Read(~/Coding/Experiments/senior-sandbox/senior_sandbox/backend/omoi_os/worker
+      s/claude_sandbox_worker.py)
+  ⎿  Read 50 lines
+
+⏺ Read(~/Coding/Experiments/senior-sandbox/senior_sandbox/backend/omoi_os/worker
+      s/claude_sandbox_worker.py)
+  ⎿  Read 80 lines
+
+⏺ Now I understand the flow better. Let me check how the frontend receives and renders this agent.file_edited event:
+
+⏺ Search(pattern: "agent\.file_edited|file_edited", path: "components/sandbox",
+        output_mode: "content")
+  ⎿  Found 15 lines (ctrl+o to expand)
+
+⏺ Now I see the issue! Let me look at the complete rendering of FileWriteCard to see what gets passed:
+
+⏺ Read(components/sandbox/EventRenderer.tsx)
+  ⎿  Read 30 lines
+
+⏺ Now I understand the complete flow. Let me look more closely at the parseDiff function and the issue. The problem is likely in how the unified diff is formatted. Let me trace through what happens:
+
+⏺ Looking at the code, I see the issue now. In generate_diff() (lines 383-391):
+
+  diff = list(
+      difflib.unified_diff(
+          old_lines,
+          new_lines,
+          fromfile=f"a/{path}",
+          tofile=f"b/{path}",
+          lineterm="",  # <-- THIS IS THE PROBLEM
+      )
+  )
+
+  The lineterm="" setting is conflicting with the fact that old_lines and new_lines are created with splitlines(keepends=True), which keeps line endings attached to each line.
+
+  Then at line 404-405:
+  diff_text = "".join(diff)
+  diff_preview = "\n".join(diff[:100])
+
+  The issue is that:
+  1. splitlines(keepends=True) keeps \n at the end of each line
+  2. lineterm="" tells unified_diff not to add its own line terminators
+  3. But unified_diff adds +, -, or   prefixes to lines that already have \n at the end
+  4. When we do "".join(diff), the result has embedded newlines in weird places
+  5. Then "\n".join(diff[:100]) adds MORE newlines between lines that already have them
+
+  Let me verify this by checking what a sample diff output would look like:
+
+⏺ Bash(cd
+      /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox/backend
+      && python3 -c "
+      import difflib…)
+  ⎿  old_lines: ['line1\n', 'line2\n', 'line3']                            
+     new_lines: ['line1\n', 'line2 modified\n', 'line3']
+     … +16 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ I found the problem. Look at the outputs:
+
+  1. diff_text (joined with empty string): The header lines don't have newlines, so they all run together: '--- a/test.py+++ b/test.py@@ -1,3 +1,3 @@'
+  2. diff_preview (joined with \n): The lines that already have \n from keepends=True get DOUBLE newlines: ' line1\n\n-line2\n\n'
+
+  Now look at how the frontend parseDiff() works:
+  const rawLines = diffText.split("\n")
+
+  The frontend splits on \n, but with the diff_preview format, lines end up like:
+  - " line1" followed by ""  (empty line from split)
+  - "-line2" followed by "" (empty line from split)
+
+  And when parsing:
+  } else if (line.startsWith(" ") || line === "") {
+    lines.push({
+      type: "context",
+      content: line.startsWith(" ") ? line.slice(1) : line,  // Empty string if line === ""
+
+  Empty lines get added as context with empty content! That's why the user sees "empty with a red line and green line" - the actual changes are interspersed with empty context lines.
+
+⏺ The fix is simple - we need to use splitlines() WITHOUT keepends=True, and then have the diff generation produce clean output. Let me fix the generate_diff() method:
+
+⏺ Update(~/Coding/Experiments/senior-sandbox/senior_sandbox/backend/omoi_os/work
+        ers/claude_sandbox_worker.py)
+  ⎿  Added 8 lines, removed 8 lines                                      
+      368                                                                
+      369          # Handle new file vs modified file                    
+      370          if not old_content:                                   
+      371 -            # New file                                        
+      372 -            new_lines = new_content.splitlines(keepends=True) 
+      371 +            # New file - split without keepends for clean     
+          +output                                                        
+      372 +            new_lines = new_content.splitlines()              
+      373              lines_added = len(new_lines)                      
+      374              lines_removed = 0                                 
+      375 -            diff = ["--- /dev/null\n", f"+++ b/{path}\n"]     
+      375 +            diff = [f"--- /dev/null", f"+++ b/{path}"]        
+      376              for line in new_lines:                            
+      377                  diff.append(f"+{line}")                       
+      378              change_type = "created"                           
+      379          else:                                                 
+      380 -            # Modified file                                   
+      381 -            old_lines = old_content.splitlines(keepends=True) 
+      382 -            new_lines = new_content.splitlines(keepends=True) 
+      380 +            # Modified file - split without keepends for      
+          +clean diff                                                    
+      381 +            old_lines = old_content.splitlines()              
+      382 +            new_lines = new_content.splitlines()              
+      383              diff = list(                                      
+      384                  difflib.unified_diff(                         
+      385                      old_lines,                                
+      386                      new_lines,                                
+      387                      fromfile=f"a/{path}",                     
+      388                      tofile=f"b/{path}",                       
+      389 -                    lineterm="",                              
+      389                  )                                             
+      390              )                                                 
+      391              lines_added = sum(                                
+     ...
+      401              )                                                 
+      402              change_type = "modified"                          
+      403                                                                
+      404 -        diff_text = "".join(diff)                             
+      404 +        # Join with newlines - each line is now clean (no     
+          +embedded newlines)                                            
+      405 +        diff_text = "\n".join(diff)                           
+      406          diff_preview = "\n".join(diff[:100])                  
+      407          if len(diff) > 100:                                   
+      408              diff_preview += f"\n... ({len(diff) - 100} more   
+           lines)"                                                       
+
+⏺ Let me verify the fix works correctly:
+
+⏺ Bash(cd
+      /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox/backend
+      && python3 -c "
+      import difflib…)
+  ⎿  old_lines: ['line1', 'line2', 'line3']                                
+     new_lines: ['line1', 'line2 modified', 'line3']
+     … +24 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Hmm, there's still an issue. The difflib.unified_diff() with default settings adds \n to the header lines (lines 0-2), so when we join with \n, we get double newlines there. Let me check what the default behavior really is:
+
+⏺ Bash(cd
+      /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox/backend
+      && python3 -c "
+      import difflib…)
+  ⎿  With lineterm="":                                                     
+       0: '--- a/test.py'
+       1: '+++ b/test.py'
+     … +18 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ That's the correct output. I need to add back lineterm='' to the unified_diff call. Let me fix that:
+
+⏺ Update(~/Coding/Experiments/senior-sandbox/senior_sandbox/backend/omoi_os/work
+        ers/claude_sandbox_worker.py)
+  ⎿  Added 1 line                                                        
+      386                      new_lines,                                
+      387                      fromfile=f"a/{path}",                     
+      388                      tofile=f"b/{path}",                       
+      389 +                    lineterm="",  # Don't add line            
+          +terminators, we join with \n later                            
+      390                  )                                             
+      391              )                                                 
+      392              lines_added = sum(                                
+
+⏺ Now let me also verify that the continuous_sandbox_worker.py has the same logic (if it has its own FileChangeTracker):
+
+⏺ Search(pattern: "class FileChangeTracker|generate_diff", path:
+        "~/Coding/Experiments/senior-sandbox/senior_sandbox/backend/omoi_os/work
+        ers/continuous_sandbox_worker.py", output_mode: "content")
+  ⎿  Found 0 lines 
+
+⏺ Good - the continuous_sandbox_worker.py doesn't have its own FileChangeTracker, so only the one in claude_sandbox_worker.py needed to be fixed.
+
+⏺ The fix is complete. Here's what was wrong and what I fixed:
+
+  Root Cause
+
+  The diff generation in FileChangeTracker.generate_diff() was producing malformed diff output due to conflicting line terminator handling:
+
+  1. Before: splitlines(keepends=True) kept \n at the end of each line
+  2. Before: lineterm="" told unified_diff not to add terminators
+  3. Before: "".join(diff) for diff_text smashed lines together without newlines
+  4. Before: "\n".join(diff[:100]) for diff_preview added extra newlines between lines that already had them
+
+  This resulted in the frontend's parseDiff() parsing empty strings between lines (from splitting on \n where there were double newlines), which showed up as empty context lines.
+
+  The Fix
+
+  Changed the diff generation in /backend/omoi_os/workers/claude_sandbox_worker.py:365-407:
+
+  1. Changed: splitlines() WITHOUT keepends=True - lines are now clean
+  2. Kept: lineterm="" so unified_diff doesn't add its own terminators
+  3. Changed: "\n".join(diff) for BOTH diff_text and diff_preview - consistent joining
+
+  Now the diff output is clean and properly formatted:
+  --- a/test.py
+  +++ b/test.py
+  @@ -1,3 +1,3 @@
+   line1
+  -line2
+  +line2 modified
+   line3
+
+  This matches what the frontend's parseDiff() expects and will now correctly display additions in green and deletions in red.
+
+> Damn I made a lot of changes without pushing anything up. We should 
+probably push up the entire codebase, but then push it in batches based on 
+the relevance of each thing? Like make a bunch of commits and just push at 
+the end? 
+
+⏺ Good idea! Let me first see what we have to work with:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox && git status)
+  ⎿  Error: Exit code 128
+     fatal: not a git repository (or any of the parent directories): .git
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git status)
+  ⎿  On branch main                                                        
+     Your branch is up to date with 'origin/main'.
+     … +33 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Let me look at the diffs to group them logically:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git diff --stat)
+  ⎿  backend/omoi_os/api/dependencies.py                | 272 +++++++++++++
+    +++++++
+     backend/omoi_os/api/main.py                        |   2 +
+    … +16 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Let me check what the major changes are in each file to group them properly:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git diff backend/omoi_os/services/ticket_workflow.py)
+  ⎿ diff --git a/backend/omoi_os/services/ticket_workflow.py b/backend/omoi
+    _os/services/ticket_workflow.py
+    index 6abdbc0..d5aeca6 100644
+    … +17 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git diff backend/omoi_os/api/dependencies.py | head -100)
+  ⎿ diff --git a/backend/omoi_os/api/dependencies.py b/backend/omoi_os/api/
+    dependencies.py
+    index 6c9d8d2..64c2fec 100644
+    … +110 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git diff backend/omoi_os/workers/claude_sandbox_worker.py | head -200)
+  ⎿ diff --git a/backend/omoi_os/workers/claude_sandbox_worker.py b/backend
+    /omoi_os/workers/claude_sandbox_worker.py
+    index b544bbb..ad86058 100644
+    … +218 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Now I have a good picture. Let me organize these into logical commits:
+
+  Commit 1: Multi-tenant access control - dependencies.py, projects.py changes
+  Commit 2: Phase progression and artifact collection - ticket_workflow.py, phase_progression_service.py, sandbox.py
+  Commit 3: Worker improvements - claude_sandbox_worker.py, continuous_sandbox_worker.py (exploration mode, validation, CI checks)
+  Commit 4: Diff generation fix - claude_sandbox_worker.py (FileChangeTracker fix - separate since it's a bugfix)
+  Commit 5: API route enhancements - tasks.py, tickets.py, oauth.py
+  Commit 6: Debug routes and test scripts - debug.py, test scripts
+  Commit 7: Documentation - security docs, testing docs
+
+  Let me start creating these commits:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add backend/omoi_os/api/dependencies.py
+      backend/omoi_os/api/routes/projects.py && gi…)
+  ⎿  backend/omoi_os/api/dependencies.py    | 272 +++++++++++++++++++++++++
+    ++++++++
+     backend/omoi_os/api/routes/projects.py | 107 ++++++++++---
+     2 files changed, 361 insertions(+), 18 deletions(-)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "feat(api): add multi-tenant access control helpers…)
+  ⎿  [main 8cb274e] feat(api): add multi-tenant access control helpers     
+      2 files changed, 361 insertions(+), 18 deletions(-)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add backend/omoi_os/services/ticket_workflow.py
+      backend/omoi_os/services/phase_progr…)
+  ⎿  backend/omoi_os/api/routes/sandbox.py              |  61 ++           
+     .../omoi_os/services/phase_progression_service.py  | 660 +++++++++++++
+    ++++++++
+    … +2 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "feat(workflow): add phase progression hooks and artifact
+      collection…)
+  ⎿ [main e5d8295] feat(workflow): add phase progression hooks and artifact
+     collection
+     3 files changed, 725 insertions(+)
+    … +2 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Now let me stage the worker changes. I need to be careful here - the diff fix is part of claude_sandbox_worker.py but should be a separate commit. Let me check the remaining changes:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git diff backend/omoi_os/workers/claude_sandbox_worker.py | grep -E
+      "^@@|splitlines|line…)
+  ⎿  @@ -167,6 +167,12 @@ class IterationState:                            
+     @@ -184,6 +190,10 @@ class IterationState:
+     @@ -201,6 +211,11 @@ def check_git_status(cwd: str) -> dict[str, Any]:
+     … +24 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ The changes are interleaved, so I'll commit them together and note both in the commit message. Let me stage all worker changes:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add backend/omoi_os/workers/claude_sandbox_worker.py
+      backend/omoi_os/workers/continu…)
+  ⎿  backend/omoi_os/workers/claude_sandbox_worker.py   | 176 +++++++++++++
+    +++++---
+     .../omoi_os/workers/continuous_sandbox_worker.py   |  87 +++++++++-
+    … +2 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "feat(workers): improve exploration mode, validation, and
+      diff generation…)
+  ⎿ [main fa7a231] feat(workers): improve exploration mode, validation, and
+     diff generation
+     3 files changed, 275 insertions(+), 29 deletions(-)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add backend/omoi_os/api/routes/tasks.py
+      backend/omoi_os/api/routes/tickets.py backen…)
+  ⎿   backend/omoi_os/api/main.py           |   2 +                        
+      backend/omoi_os/api/routes/oauth.py   |  91 +++++++++++
+      backend/omoi_os/api/routes/tasks.py   | 188 ++++++++++++++++++++--
+     … +3 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "feat(api): enhance tasks and tickets routes with
+      multi-tenant support…)
+  ⎿ [main 2b9bc18] feat(api): enhance tasks and tickets routes with multi-t
+    enant support
+     4 files changed, 543 insertions(+), 23 deletions(-)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add backend/omoi_os/logging.py backend/omoi_os/services/task_queue.py
+      backend/omoi_o…)
+  ⎿  backend/omoi_os/logging.py                         |   9 +-           
+     backend/omoi_os/services/task_queue.py             | 188 +++++++++++++
+    +++++++-
+    … +2 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "feat(services): enhance task queue and logging…)
+  ⎿  [main 7af9890] feat(services): enhance task queue and logging         
+      3 files changed, 191 insertions(+), 12 deletions(-)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add backend/omoi_os/api/routes/debug.py backend/scripts/ && git diff
+      --cached --stat)
+  ⎿  backend/omoi_os/api/routes/debug.py             | 444 ++++++++++++++++
+    +++++
+     backend/scripts/test_agent_limits.py            | 406 ++++++++++++++++
+    … +8 lines (ctrl+o to expand)
+
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "feat(debug): add debug routes and test scripts…)
+  ⎿  [main 3f9627e] feat(debug): add debug routes and test scripts         
+      7 files changed, 2384 insertions(+)
+      create mode 100644 backend/omoi_os/api/routes/debug.py
+     … +6 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git add docs/ && git diff --cached --stat)
+  ⎿  docs/security/debug_endpoints_audit.md         | 167 +++++++++++++++  
+     docs/testing/local_claude_code_testing.md      | 270 +++++++++++++++++
+    +++++++
+    … +3 lines (ctrl+o to expand)
+
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git commit -m "docs: add security audit and testing documentation…)
+  ⎿  [main 68d6f2e] docs: add security audit and testing documentation     
+      3 files changed, 716 insertions(+)
+      create mode 100644 docs/security/debug_endpoints_audit.md
+     … +2 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git status)
+  ⎿  On branch main                                                        
+     Your branch is ahead of 'origin/main' by 7 commits.
+       (use "git push" to publish your local commits)
+     … +2 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ All committed. Let me show you the commit log and then push:
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git log --oneline -10)
+  ⎿  68d6f2e docs: add security audit and testing documentation            
+     3f9627e feat(debug): add debug routes and test scripts
+     7af9890 feat(services): enhance task queue and logging
+     … +12 lines (ctrl+o to expand)
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Bash(cd /Users/kevinhill/Coding/Experiments/senior-sandbox/senior_sandbox &&
+      git push)
+  ⎿  To github.com:kivo360/OmoiOS.git                                      
+        23d5e14..68d6f2e  main -> main
+  ⎿ Shell cwd was reset to /Users/kevinhill/Coding/Experiments/senior-sandb
+    ox/senior_sandbox/frontend
+
+
+⏺ Done! Pushed 7 commits to main:
+
+  | Commit  | Description                                                                                                              |
+  |---------|--------------------------------------------------------------------------------------------------------------------------|
+  | 8cb274e | feat(api): add multi-tenant access control helpers - Access control utilities for orgs, projects, tickets, tasks         |
+  | e5d8295 | feat(workflow): add phase progression hooks and artifact collection - Event-driven hooks, artifact collection fix        |
+  | fa7a231 | feat(workers): improve exploration mode, validation, and diff generation - Exploration git workflow, CI checks, diff fix |
+  | 2b9bc18 | feat(api): enhance tasks and tickets routes with multi-tenant support - Route enhancements with filtering                |
+  | 7af9890 | feat(services): enhance task queue and logging - Priority queue, scheduling, structured logging                          |
+  | 3f9627e | feat(debug): add debug routes and test scripts - Debug endpoints and test scripts                                        |
+  | 68d6f2e | docs: add security audit and testing documentation - Security audit, testing guides                                      |
+
+> Well shit, I'm going to test it later again tomorrow. Hopefully something 
+demo worthy can come out of this soon. Like, I have a lot of things that 
+work, but nothing that allows somebody to see cards getting added to a board
+ live, or worked on, or clicking through to see the agent working through 
+tasks.
+
+
+It's not much stuff that I can show video wise. I'm hoping the work we did 
+today will help with that, lol. I'm laughing, but I'm fucking serious. 
+
+⏺ I hear you. You've built a lot of sophisticated backend machinery - phase gates, artifact collection, multi-tenant access, event-driven hooks - but the demo problem is real: none of that is visually impressive.
+
+  What sells is:
+  1. Cards appearing on a board as tasks get created
+  2. Status badges updating live (pending → in_progress → completed)
+  3. Clicking into a card and watching the agent's terminal output stream
+  4. Seeing a PR link appear when the agent finishes
+
+  The backend work we did today (phase progression, artifact collection, exploration pushing to git) should help the flow work end-to-end. But the visual layer that makes it demo-worthy... that's frontend work on the board/kanban view and real-time updates.
+
+  When you're ready to tackle demo mode, the pieces you'd need:
+  - WebSocket/SSE connection showing events as they happen
+  - A kanban board that subscribes to task state changes
+  - Click-through to the sandbox view with live streaming output
+  - Visual indicators when phases advance or PRs get created
+
+  The plumbing is there. The stage isn't built yet.
+
+  Get some rest. Tomorrow you can decide if you want to chase the demo or keep hardening the engine.
+
+> I definitely want to chase the demo. I want to chase watching an AI create
+ code from start to finish using the workflow system, automatically moving 
+things over and running code in parallel with multiple agents in a 
+dependency queue. That would be so beautiful to see.
+
+
+I just don't know how to do it. I'm decided, I'd like to know how to do 
+that, and actually accept people's money. 
+
+⏺ That's the vision - watching AI agents work through a dependency graph, cards moving across a board, multiple agents running in parallel, PRs popping up. It's compelling because it's visible work happening.
+
+  Let me think about what you actually need to make this demoable:
+
+  What you have:
+  - Task spawning from tickets/phases
+  - Sandbox workers that execute and report events
+  - Event streaming (SSE) from sandbox to frontend
+  - Phase gates and progression logic
+  - The orchestrator worker for coordination
+
+  What's missing for the demo:
+
+  1. A board view - Kanban-style showing tasks across columns (pending, in_progress, completed)
+  2. Real-time updates - The board subscribes to task state changes and moves cards live
+  3. Dependency visualization - Show which tasks are blocked, which are ready, which are running in parallel
+  4. Click-through to agent view - Click a card, see the live terminal/event stream
+  5. The "launch" trigger - One button that kicks off a ticket and lets you watch the whole thing unfold
+
+  You want me to plan this out? I can look at what frontend components exist, what the event flow looks like, and map out the minimal path to a working demo. Not over-engineered - just enough to show the magic.
+
+> I want to be able to click a start button on the board and start 
+processing each tasks/tickets back-to-back like we've done hardening for in 
+the backend. 
+
+
+Definitely plan this out. A lot of stuff already exists, we just need to 
+tweak a bunch and add only a small number of things to get to a demoable 
+state. Theoretically, I only need a demoable product and the ability to 
+accept money from people in a good onboarding workflow, so from here on I'll
+ be solidifying those.
+
+
+Again, definitely plan this out. 
+
+⏺ I'll plan this out. Let me first explore what already exists in the frontend so I know exactly what we're building on top of.
+
+⏺ Explore(Explore frontend for demo planning)
+  ⎿  Done (28 tool uses · 114.6k tokens · 7m 52s)                          
+
+⏺ Excellent. The frontend is way more ready than I expected. Now let me look at the backend side - specifically how to wire up the "start processing" flow:
+
+⏺ Explore(Explore backend task execution flow)
+  ⎿  Done (41 tool uses · 134.9k tokens · 20m 44s)                         
+
+⏺ Now I have the full picture. Let me write up a concrete plan.
+
+⏺ Write(~/Coding/Experiments/senior-sandbox/senior_sandbox/docs/plans/demo_board
+       _plan.md)
+  ⎿  Wrote 246 lines to ../docs/plans/demo_board_plan.md                   
+     # Demo Board Implementation Plan
+     ## Vision
+     A single page where you click "Start" and watch AI agents process
+     tickets through a workflow - cards moving across a kanban board,
+     agents working in parallel, PRs appearing when done.
+     ---
+     ## Current State (What Already Exists)
+     ### Frontend (95% Ready)
+     … +236 lines (ctrl+o to expand)
+
+⏺ Done. I wrote the plan to docs/plans/demo_board_plan.md.
+
+  The TL;DR:
+
+  You're actually 95% there. The board exists with full drag-drop. The sandbox viewer exists with 40+ event types. The WebSocket is connected. The backend spawns tasks, manages dependencies, and publishes events.
+
+  What's missing (maybe 3-4 hours total work):
+
+  1. Start Button (30 min) - Add button to board header that calls POST /tickets/{id}/spawn-phase-tasks for backlog tickets
+  2. Real-time card updates (45 min) - Subscribe board to WebSocket, update card badges when task.status_changed and ticket.phase_advanced events fire
+  3. Click card → See agent (1 hour) - Add a collapsible panel that shows the sandbox viewer for the selected task
+  4. Demo data (30 min) - Seed a project with columns, tickets, and tasks that have dependencies
+
+  The core infrastructure is done. This is UI wiring and a bit of event plumbing. When you're ready tomorrow, we can knock out Phase 1+2 in a morning session and have cards moving live by lunch.
+
+> Also, I want you to add to the to-do list the ability to use the 
+spec-driven dev Claude skill to be able to create a bunch of tickets and 
+tasks automatically. Just figure out how to utilize that in order to spawn 
+out a bunch of tickets and tasks and whatever according to whatever needs I 
+have or whatever thing I want to have built. Also, consider how the command 
+system works. I just want you to update the demo board plan with more 
+considerations because, like, we already have a lot of things. Update your 
+todos, and we're good to go. Also, don't we need to create tickets as well 
+and show the creation of tickets on the board? Like that needs to be there 
+as well, right? I'm just having you make sure this plan is looking solid so 
+when we start working on Monday, because tomorrow I can not do it on Sunday,
+ the 4th of January, I can just get quickly up and running, and then we're 
+good to go. 
+
+⏺ You're right - let me look at the spec-driven dev skill and the command system to understand how they fit in, then update the plan with those considerations.
+
+⏺ Search(pattern: "**/*spec-driven*/**/*.md")
+  ⎿  Found 0 files 
+
+⏺ Search(pattern: "**/command/**/*.tsx")
+  ⎿  Found 7 files (ctrl+o to expand)
+
+⏺ Search(pattern: "spec-driven|spec_driven", path:
+        "~/Coding/Experiments/senior-sandbox/senior_sandbox")
+  ⎿  Found 46 files (ctrl+o to expand)
+
+⏺ Read(~/Coding/Experiments/senior-sandbox/senior_sandbox/.claude/skills/spec-dr
+      iven-dev/SKILL.md)
+  ⎿  Read 1254 lines
+
+⏺ Read(app/(app)/command/page.tsx)
+  ⎿  Read 334 lines
+
+⏺ Now I have the full picture. Let me also check the workflow mode selector to see what spec-driven mode does:
+
+⏺ Read(components/command/WorkflowModeSelector.tsx)
+  ⎿  Read 97 lines
+
+⏺ Now I have everything. Let me update the plan with all the considerations:
+
+⏺ Write(~/Coding/Experiments/senior-sandbox/senior_sandbox/docs/plans/demo_board
+       _plan.md)
+  ⎿  Added 259 lines, removed 51 lines                                    
+       1  # Demo Board Implementation Plan                               
+       2                                                                 
+       3  ## Vision                                                      
+       4 -A single page where you click "Start" and watch AI agents      
+         -process tickets through a workflow - cards moving across a     
+         -kanban board, agents working in parallel, PRs appearing when   
+         -done.                                                          
+       4 +A single page where you:                                       
+       5 +1. **Create tickets** using spec-driven-dev skill OR the       
+         +command center                                                 
+       6 +2. Click **"Start Processing"** and watch AI agents work       
+         +through tickets                                                
+       7 +3. See **cards moving across a kanban board** in real-time     
+       8 +4. Watch **multiple agents working in parallel** on dependent  
+         +tasks                                                          
+       9 +5. Click into any card to see the **live agent terminal        
+         +output**                                                       
+      10 +6. Watch **PRs appear** when agents complete work              
+      11                                                                 
+      12  ---                                                            
+      13                                                                 
+     ...
+      12  |-----------|----------|--------|                              
+      13  | Kanban Board | `/app/(app)/board/[projectId]/page.tsx` | ✅   
+          Full drag-drop, WIP limits, filters |                          
+      14  | Sandbox Viewer | `/app/(app)/sandbox/[sandboxId]/page.tsx` | 
+           ✅ Live event stream, 40+ event types |                        
+      15 +| Command Center | `/app/(app)/command/page.tsx` | ✅ Creates   
+         +tickets, launches sandboxes |                                  
+      16  | WebSocket Provider | `/providers/WebSocketProvider.tsx` | ✅  
+           Auto-reconnect, auth-aware |                                  
+      17  | Task Cards | `/components/custom/TaskCard.tsx` | ✅ Status    
+          badges, animations |                                           
+      18  | Board API | `/lib/api/board.ts` | ✅ Move tickets, get stats  
+           |                                                             
+      19  | Real-time hooks | `/hooks/useSandbox.ts` | ✅ SSE event       
+          subscription |                                                 
+      20 +| Workflow Modes |                                             
+         +`/components/command/WorkflowModeSelector.tsx` | ✅ Quick vs    
+         +Spec-Driven modes |                                            
+      21                                                                 
+      22  ### Backend (100% Ready)                                       
+      23  | Component | Location | Status |                              
+     ...
+      26  | Dependency Graph | `dependency_graph.py` | ✅ Blocks until    
+          deps complete |                                                
+      27  | Phase Progression | `phase_progression_service.py` | ✅       
+          Auto-advances on completion |                                  
+      28  | Event Bus | `event_bus.py` | ✅ Redis pub/sub to WebSocket |  
+      29 +| Spec Workflow MCP | `mcp/spec_workflow.py` | ✅ Create        
+         +specs, tickets, tasks via MCP |                                
+      30                                                                 
+      31 +### Spec-Driven Dev Skill (Available)                          
+      32 +| Tool | Purpose |                                             
+      33 +|------|---------|                                             
+      34 +| `spec_cli.py` | CLI for viewing, validating, syncing specs | 
+      35 +| `mcp__spec_workflow__create_spec` | Create specification |   
+      36 +| `mcp__spec_workflow__create_ticket` | Create ticket from     
+         +spec |                                                         
+      37 +| `mcp__spec_workflow__add_spec_task` | Add task to spec |     
+      38 +| Local `.omoi_os/` files | Backup/reference for specs,        
+         +tickets, tasks |                                               
+      39 +                                                               
+      40  ---                                                            
+      41                                                                 
+      42  ## What's Missing (The 5% Gap)                                 
+      43                                                                 
+      44  ### 1. "Start Processing" Button on Board                      
+      45 -The board exists but has no button to kick off execution. Need:
+      45 +The board exists but has no button to kick off execution:      
+      46  - Button in board header: "Start Processing"                   
+      47  - Calls `POST /tickets/{id}/spawn-phase-tasks` for each ticket 
+           in backlog                                                    
+      48  - Or a batch endpoint to process all pending tickets           
+     ...
+      49  - Card click should open sandbox viewer in a panel/modal       
+      50  - Show live agent output alongside the board                   
+      51                                                                 
+      52 -### 4. Demo Data Seeding                                       
+      52 +### 4. Ticket Creation on Board                                
+      53 +Need to show tickets being created live:                       
+      54 +- When using command center or spec-driven skill               
+      55 +- New ticket card should animate onto the board                
+      56 +- Subscribe to `TICKET_CREATED` events                         
+      57 +                                                               
+      58 +### 5. Demo Data Seeding                                       
+      59  Need a project with:                                           
+      60  - 4-5 board columns mapped to phases                           
+      61  - 5-10 tickets spread across columns                           
+     ...
+       57                                                                
+       58  ---                                                           
+       59                                                                
+       60 +## Three Entry Points for Demo                                
+       61 +                                                              
+       62 +### Entry Point 1: Command Center (Already Works)             
+       63 +`/command` → Create ticket → Sandbox spawns → Redirect to     
+          +sandbox viewer                                                
+       64 +                                                              
+       65 +**What exists:**                                              
+       66 +- Quick mode: Creates ticket in PHASE_IMPLEMENTATION,         
+          +auto-spawns sandbox                                           
+       67 +- Spec-driven mode: Creates ticket in PHASE_REQUIREMENTS,     
+          +generates spec                                                
+       68 +                                                              
+       69 +**What's missing:**                                           
+       70 +- After sandbox spawns, should also show on board (real-time  
+          +update)                                                       
+       71 +- Spec-driven should show spec workspace for approval before  
+          +implementation                                                
+       72 +                                                              
+       73 +### Entry Point 2: Board Page (Needs Work)                    
+       74 +`/board/[projectId]` → See all tickets → Click "Start         
+          +Processing" → Watch cards move                                
+       75 +                                                              
+       76 +**What exists:**                                              
+       77 +- Kanban board with drag-drop                                 
+       78 +- Ticket cards with status badges                             
+       79 +                                                              
+       80 +**What's missing:**                                           
+       81 +- "Start Processing" button                                   
+       82 +- Real-time card updates from WebSocket                       
+       83 +- Click card → See agent panel                                
+       84 +                                                              
+       85 +### Entry Point 3: Spec-Driven Skill (Needs Integration)      
+       86 +Use Claude skill → Generate specs/tickets/tasks → Sync to API 
+          + → Process on board                                           
+       87 +                                                              
+       88 +**What exists:**                                              
+       89 +- Full spec-driven-dev skill with MCP tools                   
+       90 +- `spec_cli.py` for syncing to API                            
+       91 +- Dual-write to `.omoi_os/` for backup                        
+       92 +                                                              
+       93 +**What's missing:**                                           
+       94 +- UI for spec approval workflow                               
+       95 +- Integration between spec workspace and board                
+       96 +- Automatic ticket creation from approved specs               
+       97 +                                                              
+       98 +---                                                           
+       99 +                                                              
+      100  ## Implementation Plan                                        
+      101                                                                
+      102 +### Phase 0: Understand the Flow (Before Coding)              
+      103 +**Goal:** Map the complete user journey from idea to PR       
+      104 +                                                              
+      105 +```                                                           
+      106 +User Journey:                                                 
+      107 +1. User has an idea → Command Center OR Spec-Driven Skill     
+      108 +2. Ticket created → Appears on Board (Backlog column)         
+      109 +3. User clicks "Start Processing" → Tasks spawn for ticket    
+      110 +4. Orchestrator picks up tasks → Sandboxes spawn              
+      111 +5. Agent works → Events stream to board (status updates)      
+      112 +6. Task completes → Card updates, phase may advance           
+      113 +7. All tasks done → Ticket moves to next column               
+      114 +8. PR created → Link appears on card                          
+      115 +```                                                           
+      116 +                                                              
+      117  ### Phase 1: Start Button + Task Spawning (30 min)            
+      118  **Goal:** Click button, tasks get created and queued          
+      119                                                                
+      120  1. Add "Start Processing" button to board header              
+      121  2. On click:                                                  
+      122 -   - Get all tickets in "Backlog" column                      
+      122 +   - Get all tickets in "Backlog" column (or selected tickets)
+      123     - Call `POST /tickets/{id}/spawn-phase-tasks` for each     
+      124     - Show toast: "Spawned X tasks"                            
+      125                                                                
+     ...
+      78  1. Subscribe board to WebSocket events                         
+      79  2. Handle events:                                              
+      80     ```typescript                                               
+      81 +   TICKET_CREATED → Add new card to appropriate column         
+      82     TASK_CREATED → Add task count badge to ticket card          
+      83     TASK_STATUS_CHANGED → Update status icon                    
+          (pending→running→completed)                                    
+      84     TICKET_STATUS_CHANGED → Move card to appropriate column     
+      85 +   SANDBOX_SPAWNED → Show "Agent running" indicator            
+      86     ```                                                         
+      87  3. Use React Query cache invalidation or optimistic updates    
+      88                                                                 
+     ...
+       91  ### Phase 3: Split View - Board + Agent (1 hour)              
+       92  **Goal:** See board and agent output side-by-side             
+       93                                                                
+       94 -1. Create split layout: Board (left 60%) | Agent Viewer       
+          -(right 40%)                                                   
+       95 -2. Click task card → Load that sandbox in right panel         
+       96 -3. Show "Select a task to view agent" when nothing selected   
+       97 -                                                              
+       98 -**Files to create:**                                          
+       99 -- `/app/(app)/demo/[projectId]/page.tsx` - New demo page with 
+          - split view                                                   
+      100 -                                                              
+      101 -**Or simpler approach:**                                      
+       94 +**Option A: Collapsible Panel (Recommended)**                 
+       95  - Add collapsible right panel to existing board page          
+       96  - Click card → Panel slides in with sandbox viewer            
+       97 +- Shows "Select a task to view agent" when nothing selected   
+       98                                                                
+       99 -### Phase 4: Demo Data + Polish (30 min)                      
+       99 +**Option B: New Demo Page**                                   
+      100 +- Create `/app/(app)/demo/[projectId]/page.tsx`               
+      101 +- Fixed split layout: Board (60%) | Agent Viewer (40%)        
+      102 +- More impressive but more work                               
+      103 +                                                              
+      104 +**Files to create/modify:**                                   
+      105 +- `/components/board/AgentPanel.tsx` - Embedded sandbox       
+          +viewer                                                        
+      106 +- `/app/(app)/board/[projectId]/page.tsx` - Add panel toggle  
+      107 +                                                              
+      108 +### Phase 4: Ticket Creation Flow (30 min)                    
+      109 +**Goal:** See tickets appear on board as they're created      
+      110 +                                                              
+      111 +1. From Command Center:                                       
+      112 +   - After ticket created, board should show it (already have 
+          + events)                                                      
+      113 +   - Just need board to subscribe to `TICKET_CREATED`         
+      114 +                                                              
+      115 +2. From Spec-Driven Skill:                                    
+      116 +   - Use `spec_cli.py sync push` to create tickets from local 
+          + files                                                        
+      117 +   - Board picks up via events                                
+      118 +   - OR add "Sync Specs" button to board that calls the API   
+      119 +                                                              
+      120 +**Files to modify:**                                          
+      121 +- `/app/(app)/board/[projectId]/page.tsx` - Handle            
+          +TICKET_CREATED event                                          
+      122 +                                                              
+      123 +### Phase 5: Spec-Driven Workflow UI (Optional - 2 hours)     
+      124 +**Goal:** Visual spec approval before implementation          
+      125 +                                                              
+      126 +This is a bigger piece - creating a spec workspace. Could be  
+          +Phase 2 of demo:                                              
+      127 +1. Spec approval page showing requirements/design             
+      128 +2. "Approve & Generate Tasks" button                          
+      129 +3. Tasks created → Tickets updated → Board shows work items   
+      130 +                                                              
+      131 +**Skip for MVP demo** - can show spec-driven via CLI instead. 
+      132 +                                                              
+      133 +### Phase 6: Demo Data + Polish (30 min)                      
+      134  **Goal:** Have a compelling demo ready                        
+      135                                                                
+      136 -1. Create seed script or API calls to set up:                 
+      137 -   - Project: "Demo Project"                                  
+      138 -   - Columns: Backlog, In Progress, Review, Done              
+      139 -   - 5 tickets with realistic titles                          
+      140 -   - Phase mappings for auto-progression                      
+      136 +1. Create seed script or use `spec_cli.py`:                   
+      137 +   ```bash                                                    
+      138 +   # Use spec-driven skill to generate specs                  
+      139 +   # Then sync to API                                         
+      140 +   cd .claude/skills/spec-driven-dev/scripts                  
+      141 +   python spec_cli.py sync push --project-id <id>             
+      142 +   ```                                                        
+      143                                                                
+      144 -2. Polish:                                                    
+      144 +2. Or create via Command Center:                              
+      145 +   - Create 5-10 tickets with realistic titles                
+      146 +   - Mix of different phases                                  
+      147 +                                                              
+      148 +3. Polish:                                                    
+      149     - Loading states while spawning                            
+      150     - Progress indicator (3/10 tasks complete)                 
+      151     - Success animation when all done                          
+      152                                                                
+      153  ---                                                           
+      154                                                                
+      155 -## Execution Order (Recommended)                              
+      155 +## Using Spec-Driven Dev Skill for Demo Data                  
+      156                                                                
+      157 +The spec-driven-dev skill can auto-generate tickets and tasks 
+          + from a feature description:                                  
+      158 +                                                              
+      159 +### Quick Generation Flow                                     
+      160 +```bash                                                       
+      161 +# 1. Describe feature to Claude with spec-driven skill        
+      162 +"I want to build a notification system with email and in-app  
+          +notifications"                                                
+      163 +                                                              
+      164 +# 2. Claude generates:                                        
+      165 +#    - .omoi_os/requirements/notifications.md                 
+      166 +#    - .omoi_os/designs/notifications.md                      
+      167 +#    - .omoi_os/tickets/TKT-001.md, TKT-002.md, etc.          
+      168 +#    - .omoi_os/tasks/TSK-001.md through TSK-010.md           
+      169 +                                                              
+      170 +# 3. Sync to API                                              
+      171 +cd .claude/skills/spec-driven-dev/scripts                     
+      172 +python spec_cli.py sync push --project-id <your-project-id>   
+      173 +                                                              
+      174 +# 4. Tickets and tasks now exist in system                    
+      175 +# 5. Go to /board/<project-id> and click "Start Processing"   
+      176  ```                                                           
+      177 -Day 1 Morning: Phase 1 + Phase 4 (seeding)                    
+      178 -  → You can click Start and see tasks spawn                   
+      177                                                                
+      178 -Day 1 Afternoon: Phase 2                                      
+      179 -  → Cards update in real-time                                 
+      178 +### What the Skill Generates                                  
+      179 +- **Requirements** (EARS format): "WHEN user receives         
+          +notification, THE SYSTEM SHALL display it within 5 seconds"   
+      180 +- **Designs**: Architecture, data models, API specs           
+      181 +- **Tickets**: Parent work items with acceptance criteria     
+      182 +- **Tasks**: Atomic units with dependencies                   
+      183                                                                
+      184 -Day 2: Phase 3                                                
+      185 -  → Split view with agent output                              
+      184 +### MCP Tools Available                                       
+      185 +If MCP server is running, Claude can use:                     
+      186 +```python                                                     
+      187 +mcp__spec_workflow__create_spec(project_id, title,            
+          +description)                                                  
+      188 +mcp__spec_workflow__add_requirement(spec_id, title,           
+          +condition, action)                                            
+      189 +mcp__spec_workflow__create_ticket(title, description,         
+          +priority, phase_id, project_id)                               
+      190 +mcp__spec_workflow__add_spec_task(spec_id, title,             
+          +description, phase, priority)                                 
+      191  ```                                                           
+      192                                                                
+      193  ---                                                           
+      194                                                                
+      195 -## API Endpoints Needed                                       
+      195 +## API Endpoints Reference                                    
+      196                                                                
+      197  ### Already Exist                                             
+      198  ```                                                           
+      199 -POST /api/v1/tickets/{id}/spawn-phase-tasks  ← Spawns tasks   
+          -for ticket                                                    
+      200 -GET  /api/v1/board/view?project_id={id}      ← Board columns  
+          -+ tickets                                                     
+      201 -POST /api/v1/board/move                       ← Move ticket   
+          -between columns                                               
+      202 -WS   /api/v1/ws/events                        ← Real-time     
+          -event stream                                                  
+      203 -GET  /api/v1/sandbox/{id}/events              ← Sandbox event 
+          - history                                                      
+      199 +POST /api/v1/tickets                            ← Create      
+          +ticket                                                        
+      200 +POST /api/v1/tickets/{id}/spawn-phase-tasks     ← Spawn tasks 
+          + for ticket                                                   
+      201 +GET  /api/v1/board/view?project_id={id}         ← Board       
+          +columns + tickets                                             
+      202 +POST /api/v1/board/move                          ← Move       
+          +ticket between columns                                        
+      203 +WS   /api/v1/ws/events                           ← Real-time  
+          +event stream                                                  
+      204 +GET  /api/v1/sandbox/{id}/events                 ← Sandbox    
+          +event history                                                 
+      205 +GET  /api/v1/tasks?ticket_id={id}               ← Tasks for a 
+          + ticket                                                       
+      206  ```                                                           
+      207                                                                
+      208  ### May Need to Add                                           
+     ...
+      158                                                                
+      159  | Event | Action |                                            
+      160  |-------|--------|                                            
+      161 +| `ticket.created` | Add new card to Backlog column |         
+      162  | `task.created` | Increment task count on ticket card |      
+      163  | `task.status_changed` | Update task status badge |          
+      164  | `task.completed` | Check if all tasks done, show checkmark  
+           |                                                             
+     ...
+      172                                                                
+      173  ```                                                           
+      174  ┌──────────────────────────────────────────────────────────── 
+           ─────────────────┐                                            
+      175 -│  Demo Board                                    [Start       
+          -Processing] [Settings]│                                       
+      175 +│  Demo Board                         [+ New Ticket] [Start   
+          +Processing] [⚙️] │                                            
+      176  ├──────────────────────────────────────────────────────────── 
+           ─────────────────┤                                            
+      177  │                                                             
+                            │                                            
+      178  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         
+           ┌──────────────┐       │                                      
+      179  │  │   BACKLOG    │ │ IN PROGRESS  │ │    REVIEW    │ │       
+           DONE     │       │                                            
+      180 +│  │      3       │ │      2       │ │      0       │ │       
+          +1       │       │                                             
+      181  │  │              │ │              │ │              │ │       
+                   │       │                                             
+      182  │  │ ┌──────────┐ │ │ ┌──────────┐ │ │              │ │       
+           ┌──────────┐ │       │                                        
+      183  │  │ │ Ticket 1 │ │ │ │ Ticket 3 │ │ │              │ │ │     
+           Ticket 5 │ │       │                                          
+      184  │  │ │ 3 tasks  │ │ │ │ ●Running │ │ │              │ │ │ ✓   
+           Done   │ │       │                                            
+      185 +│  │ │ ○○○      │ │ │ │ ●●○      │ │ │              │ │ │ PR  
+          +#42   │ │       │                                             
+      186  │  │ └──────────┘ │ │ └──────────┘ │ │              │ │       
+           └──────────┘ │       │                                        
+      187  │  │              │ │              │ │              │ │       
+                   │       │                                             
+      188  │  │ ┌──────────┐ │ │ ┌──────────┐ │ │              │ │       
+                   │       │                                             
+     ...
+      204                                                                
+      205  ---                                                           
+      206                                                                
+      207 +## Demo Script (What to Show)                                 
+      208 +                                                              
+      209 +### Act 1: Create Work Items (2 min)                          
+      210 +1. Open Command Center (`/command`)                           
+      211 +2. Type: "Build a user notification system with email and     
+          +in-app alerts"                                                
+      212 +3. Select "Spec-Driven" mode                                  
+      213 +4. Click "Create Spec"                                        
+      214 +5. Show spec being generated (or use pre-seeded data)         
+      215 +6. Navigate to Board                                          
+      216 +                                                              
+      217 +### Act 2: Start Processing (1 min)                           
+      218 +1. Show board with tickets in Backlog                         
+      219 +2. Click "Start Processing"                                   
+      220 +3. Toast: "Spawned 8 tasks across 3 tickets"                  
+      221 +4. Cards start showing "Spawning..." status                   
+      222 +                                                              
+      223 +### Act 3: Watch Agents Work (3-5 min)                        
+      224 +1. Cards update to "Running" with animated indicator          
+      225 +2. Click a running card → Agent panel opens                   
+      226 +3. Watch agent:                                               
+      227 +   - Read files                                               
+      228 +   - Make edits (show diff)                                   
+      229 +   - Run tests                                                
+      230 +   - Create PR                                                
+      231 +4. Task completes → Card updates                              
+      232 +5. Show parallel execution (multiple cards running)           
+      233 +                                                              
+      234 +### Act 4: Completion (1 min)                                 
+      235 +1. All cards move to "Done"                                   
+      236 +2. Show PR links on completed cards                           
+      237 +3. Click through to see generated PR                          
+      238 +                                                              
+      239 +**Total demo time: ~7-10 minutes**                            
+      240 +                                                              
+      241 +---                                                           
+      242 +                                                              
+      243  ## Success Criteria                                           
+      244                                                                
+      245  A successful demo shows:                                      
+      246 -1. ✅ Click "Start" → Tasks spawn (toasts confirm)             
+      247 -2. ✅ Cards show "Running" indicator within seconds            
+      248 -3. ✅ Click card → See live agent output                       
+      249 -4. ✅ Watch agent read files, make edits, run tests            
+      250 -5. ✅ Card moves to next column when phase completes           
+      251 -6. ✅ Multiple cards processing in parallel                    
+      252 -7. ✅ Final state: All cards in "Done" with PR links           
+      246 +1. ✅ Create tickets (via command center or spec skill)        
+      247 +2. ✅ See tickets appear on board in real-time                 
+      248 +3. ✅ Click "Start" → Tasks spawn (toasts confirm)             
+      249 +4. ✅ Cards show "Running" indicator within seconds            
+      250 +5. ✅ Click card → See live agent output                       
+      251 +6. ✅ Watch agent read files, make edits, run tests            
+      252 +7. ✅ Card moves to next column when phase completes           
+      253 +8. ✅ Multiple cards processing in parallel                    
+      254 +9. ✅ Final state: All cards in "Done" with PR links           
+      255                                                                
+      256  ---                                                           
+      257                                                                
+      258 -## Risk Mitigation                                            
+      258 +## Execution Order (Monday Plan)                              
+      259                                                                
+      260 -| Risk | Mitigation |                                         
+      261 -|------|------------|                                         
+      262 -| Orchestrator not running | Add health check indicator |     
+      263 -| WebSocket disconnects | Already has auto-reconnect |        
+      264 -| Tasks fail | Show error state on card, allow retry |        
+      265 -| Too many parallel tasks | Respect existing concurrency      
+          -limits (5/project) |                                          
+      266 -| Slow sandbox spawn | Show "Provisioning..." state |         
+      260 +### Morning Session (3 hours)                                 
+      261 +```                                                           
+      262 +9:00  - Phase 1: Add Start Processing button (30 min)         
+      263 +9:30  - Phase 2: Real-time board updates (45 min)             
+      264 +10:15 - Break                                                 
+      265 +10:30 - Phase 3: Agent panel integration (1 hour)             
+      266 +11:30 - Testing + fixes (30 min)                              
+      267 +```                                                           
+      268                                                                
+      269 +### Afternoon Session (2 hours)                               
+      270 +```                                                           
+      271 +1:00  - Phase 4: Ticket creation flow (30 min)                
+      272 +1:30  - Phase 6: Demo data + polish (30 min)                  
+      273 +2:00  - Full demo run-through                                 
+      274 +2:30  - Record demo video or prepare live demo                
+      275 +```                                                           
+      276 +                                                              
+      277  ---                                                           
+      278                                                                
+      279  ## Files Summary                                              
+      280                                                                
+      281  **Modify:**                                                   
+      282 -- `/app/(app)/board/[projectId]/page.tsx` - Add start button, 
+          -event subscription                                            
+      282 +- `/app/(app)/board/[projectId]/page.tsx` - Add start button, 
+          +event subscription, agent panel                               
+      283  - `/hooks/useBoard.ts` - Add real-time handlers               
+      284  - `/lib/api/tickets.ts` - Add spawnPhaseTasks function        
+      285                                                                
+      286  **Create:**                                                   
+      287 -- `/app/(app)/demo/[projectId]/page.tsx` - Split view page    
+          -(optional)                                                    
+      287  - `/components/board/AgentPanel.tsx` - Embedded sandbox       
+           viewer                                                        
+      288 -- `/scripts/seed-demo-data.ts` - Demo data seeding            
+      288 +- `/lib/api/board.ts` - Add batch processing endpoint call    
+          +(if needed)                                                   
+      289                                                                
+      290  **Backend (if needed):**                                      
+      291  - `/api/routes/board.py` - Add batch start endpoint           
+      292 +                                                              
+      293 +**Use Existing:**                                             
+      294 +- `.claude/skills/spec-driven-dev/` - For generating demo     
+          +data                                                          
+      295 +- `spec_cli.py` - For syncing specs to API                    
+      296 +                                                              
+      297 +---                                                           
+      298 +                                                              
+      299 +## Risk Mitigation                                            
+      300 +                                                              
+      301 +| Risk | Mitigation |                                         
+      302 +|------|------------|                                         
+      303 +| Orchestrator not running | Add health check indicator on    
+          +board |                                                       
+      304 +| WebSocket disconnects | Already has auto-reconnect |        
+      305 +| Tasks fail | Show error state on card, allow retry |        
+      306 +| Too many parallel tasks | Respect existing concurrency      
+          +limits (5/project) |                                          
+      307 +| Slow sandbox spawn | Show "Provisioning..." state |         
+      308 +| Demo data not ready | Pre-seed via spec_cli.py before demo  
+          +|                                                             
+
+⏺ Now let me update the todos to reflect the complete plan:
+
+⏺ Done. The plan is updated at docs/plans/demo_board_plan.md. Here's what I added:
+
+  Key additions:
+
+  1. Three Entry Points - Documented how Command Center, Board, and Spec-Driven Skill all feed into the demo flow
+  2. Ticket Creation on Board - Added Phase 4 specifically for showing tickets appearing live when created (TICKET_CREATED event handling)
+  3. Spec-Driven Dev Integration - Full section on how to use the skill to generate demo data:
+    - Describe feature to Claude
+    - Skill generates requirements, designs, tickets, tasks in .omoi_os/
+    - spec_cli.py sync push syncs to API
+    - Board shows tickets ready to process
+  4. MCP Tools Reference - Listed all the spec workflow MCP tools available
+  5. Demo Script - 4-act demo showing the complete flow (7-10 min total)
+  6. Monday Execution Plan - Timed schedule for the morning and afternoon sessions
+
+  The todo list now has 11 items covering all phases including the optional spec-driven UI and polish items.
+
+  You're right that ticket creation visibility is important - watching a card appear on the board when you create it from command center or sync specs is part of the magic. That's now explicitly in Phase 4.
+
+  Rest up, and Monday you can hit the ground running with this plan. The heavy lifting is mostly frontend wiring - the backend is solid.
+
+
+

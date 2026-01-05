@@ -1,1253 +1,931 @@
 ---
 name: spec-driven-dev
-description: Spec-driven development workflow using Claude Agent SDK Python patterns. Use when planning new features, generating requirements docs, design docs, tickets, and tasks. **IMPORTANT: If MCP spec_workflow tools are available (mcp__spec_workflow__*), use them to create specs, requirements, tickets, and tasks via API. Otherwise, fall back to writing files in .omoi_os/ directory.** Integrates with DeepWiki and Context7 for research.
+description: Spec-driven development workflow for turning feature ideas into structured PRDs, requirements, designs, tickets, and tasks. Uses local files in .omoi_os/ and spec_cli.py for syncing to the API. Focus on deep reasoning, discovery questions, and systematic artifact generation.
 ---
 
 # Spec-Driven Development
 
-Systematic workflow for turning feature ideas into structured specifications, designs, and actionable work items using Claude Agent SDK patterns.
+A systematic workflow for turning feature ideas into actionable work items that AI agents can execute.
 
-## CRITICAL: Research-First, Question-Driven Approach
-
-**BEFORE creating any specs, requirements, or designs:**
-
-### Step 0: Explore Existing Codebase & Documentation
-
-**MANDATORY**: Always explore the existing codebase and documentation FIRST to understand context, patterns, and constraints.
+## The Core Flow
 
 ```
-1. Search for existing docs:
-   - Read docs/ directory for architecture, requirements, and design docs
-   - Check .omoi_os/ directory for existing specs, tickets, and tasks
-   - Look for CLAUDE.md, README.md, and other project guidance files
-
-2. Explore related code:
-   - Use Grep/Glob to find related components, services, and patterns
-   - Read existing implementations that the new feature will integrate with
-   - Identify coding patterns, naming conventions, and architecture styles
-
-3. Check for prior work:
-   - Look for existing tickets, tasks, or specs related to this feature
-   - Review git history for context on similar features
-   - Find any ADRs (Architecture Decision Records) that apply
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   IDEA → DISCOVER → PRD → REQUIREMENTS → DESIGN → TICKETS → TASKS → SYNC   │
+│                                                                             │
+│   Ask questions   Write the   Define WHAT    Define HOW    Break into      │
+│   Understand      vision      must happen    to build it   work items      │
+│   the problem                                                               │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### Step 1: Ask Discovery Questions (MANDATORY)
+**Output Directory:** All artifacts go in `.omoi_os/`
+**Sync Tool:** Use `spec_cli.py` to push to the API
 
-**NEVER proceed to design without asking thorough questions first.** Ask 5-15 questions depending on feature complexity:
+---
 
-**Feature Clarity Questions:**
-- What specific problem does this solve? What pain point exists today?
-- Who are the primary users/actors? Secondary?
-- What does success look like? How will we measure it?
+## Phase 1: DISCOVER (Most Important!)
 
-**Scope & Boundaries Questions:**
-- What is explicitly IN scope? What is explicitly OUT?
-- Are there existing features this overlaps with?
-- What are the hard constraints (time, budget, technical)?
+### Why This Phase Matters
 
-**Technical Context Questions:**
-- What existing systems/services will this integrate with?
-- Are there performance requirements (latency, throughput)?
-- What data will this feature need? Where does it come from?
-- What security/privacy considerations apply?
+The quality of everything downstream depends on deeply understanding the problem first. **Never skip discovery.** Rushing to create specs without understanding leads to wasted work.
 
-**Design Direction Questions:**
-- Are there multiple valid approaches? Which should we explore?
-- What are the trade-offs between approaches?
-- Are there existing patterns in the codebase we should follow?
-- What could go wrong? What are the risks?
+### Step 1.1: Explore Existing Context
 
-**Example Question Flow:**
-```
-User: "I want to add user notifications"
-
-Claude: Before designing, I need to understand the feature better. Let me ask some questions:
-
-**Scope:**
-1. What types of notifications? (in-app, email, SMS, push?)
-2. What events trigger notifications? (task complete, agent stuck, PR ready?)
-3. Should users be able to configure notification preferences?
-
-**Technical:**
-4. I see we have an EventBusService - should notifications hook into that?
-5. Do we need real-time delivery or is near-real-time (polling) acceptable?
-6. What's the expected volume of notifications per user per day?
-
-**Constraints:**
-7. Are there any third-party services we must/must not use?
-8. What's the timeline/priority for this feature?
-
-Let me know your thoughts on these, and I may have follow-up questions.
-```
-
-### Step 2: Always Create Tangible Artifacts in `.omoi_os/`
-
-Even when using MCP tools, **ALSO write local files in `.omoi_os/`** for these benefits:
-- **Reference**: AI can re-read files if context is lost
-- **Debugging**: Humans can inspect what was generated
-- **Version Control**: Files can be committed to git
-- **Portability**: Works even if MCP tools fail
-
-**Dual-Write Strategy:**
-```
-1. Call MCP tool to create in backend system
-2. ALSO write to .omoi_os/ directory with same content
-3. If MCP fails, .omoi_os/ files serve as fallback
-```
-
-### Python Scripts for API Reference
-
-Use the utility scripts in `scripts/` to interact with APIs and validate state:
+**BEFORE asking questions, gather context:**
 
 ```bash
-# Initialize feature directory structure
-uv run python .claude/skills/spec-driven-dev/scripts/init_feature.py --feature notifications
+# Check for existing documentation
+Read docs/CLAUDE.md
+Read docs/architecture/
+ls .omoi_os/
 
-# Generate next ticket/task IDs
-uv run python .claude/skills/spec-driven-dev/scripts/generate_ids.py
-
-# Validate spec completeness
-uv run python .claude/skills/spec-driven-dev/scripts/validate_specs.py --feature notifications
-
-# Call spec workflow APIs (if backend is running)
-# These help verify MCP tool operations and debug issues
-uv run python scripts/test_spec_workflow.py --list-specs
-uv run python scripts/test_spec_workflow.py --get-spec spec-123
-```
-
-**When to use scripts:**
-- After MCP tool calls, verify the data was created correctly
-- When debugging why a spec/ticket isn't showing up
-- To list existing specs before creating new ones
-- To validate generated specs match requirements
-
----
-
-## MCP Spec Workflow Tools (USE WHEN AVAILABLE!)
-
-**IMPORTANT**: If you have access to the `mcp__spec_workflow__*` tools, use them instead of writing files to `.omoi_os/`. These tools create specs, requirements, and tickets directly in the OmoiOS backend system.
-
-### Available MCP Tools
-
-Check if these tools are available in your current session:
-
-| Tool | Purpose | Use Instead Of |
-|------|---------|----------------|
-| `mcp__spec_workflow__create_spec` | Create a new specification | Writing `.omoi_os/requirements/*.md` |
-| `mcp__spec_workflow__add_requirement` | Add EARS-style requirement | Manually formatting requirements |
-| `mcp__spec_workflow__add_acceptance_criterion` | Add acceptance criteria | Writing criteria in markdown |
-| `mcp__spec_workflow__update_design` | Update architecture/design | Writing `.omoi_os/designs/*.md` |
-| `mcp__spec_workflow__add_spec_task` | Add task to spec | Writing `.omoi_os/tasks/*.md` |
-| `mcp__spec_workflow__create_ticket` | Create workflow ticket | Writing `.omoi_os/tickets/*.md` |
-| `mcp__spec_workflow__approve_requirements` | Move to Design phase | Manual status updates |
-| `mcp__spec_workflow__approve_design` | Move to Implementation phase | Manual status updates |
-| `mcp__spec_workflow__get_spec` | Get spec details | Reading files |
-| `mcp__spec_workflow__list_project_specs` | List all specs | Listing directories |
-| `mcp__spec_workflow__get_ticket` | Get ticket details | Reading ticket files |
-
-### MCP-Based Workflow (with Dual-Write)
-
-When MCP tools are available, follow this flow. **Always dual-write to `.omoi_os/` as backup!**
-
-```
-0. EXPLORE existing docs, code, and prior specs (MANDATORY)
-1. ASK discovery questions to understand the feature (5-15 questions)
-2. RESEARCH using DeepWiki/Context7 for external libraries/patterns
-3. Create Spec:        mcp__spec_workflow__create_spec + write .omoi_os/requirements/{feature}.md
-4. Add Requirements:   mcp__spec_workflow__add_requirement (for each) + append to local file
-5. Add Criteria:       mcp__spec_workflow__add_acceptance_criterion + append to local file
-6. Approve Reqs:       mcp__spec_workflow__approve_requirements
-7. Update Design:      mcp__spec_workflow__update_design + write .omoi_os/designs/{feature}.md
-8. Approve Design:     mcp__spec_workflow__approve_design
-9. Add Tasks:          mcp__spec_workflow__add_spec_task (for each) + write .omoi_os/tasks/TSK-{N}.md
-10. Create Ticket:     mcp__spec_workflow__create_ticket + write .omoi_os/tickets/TKT-{N}.md
-11. VERIFY:            Run scripts to confirm data was created correctly
-```
-
-**Why Dual-Write?**
-- If MCP server fails, you have local files as fallback
-- AI can re-read .omoi_os/ files if context is lost mid-conversation
-- Human reviewers can see exactly what was generated
-- Files can be committed to version control for audit trail
-
-### Example MCP Usage
-
-```python
-# 1. Create the spec
-mcp__spec_workflow__create_spec(
-    project_id="proj-123",
-    title="Real-Time Collaboration",
-    description="Enable multiple users to edit documents simultaneously"
-)
-# Returns: spec_id
-
-# 2. Add requirements (EARS format: WHEN condition, THE SYSTEM SHALL action)
-mcp__spec_workflow__add_requirement(
-    spec_id="spec-456",
-    title="Live cursor display",
-    condition="a user opens a shared document",
-    action="display all active collaborators' cursors in real-time"
-)
-
-# 3. Add acceptance criteria
-mcp__spec_workflow__add_acceptance_criterion(
-    spec_id="spec-456",
-    requirement_id="req-789",
-    text="Cursor positions update within 100ms of remote changes"
-)
-
-# 4. Approve requirements to move to Design phase
-mcp__spec_workflow__approve_requirements(spec_id="spec-456")
-
-# 5. Update design
-mcp__spec_workflow__update_design(
-    spec_id="spec-456",
-    architecture="## Architecture\n\nWebSocket-based sync using CRDT...",
-    data_model="## Data Model\n\n```sql\nCREATE TABLE collaborators...",
-    api_spec=[
-        {"method": "WS", "endpoint": "/ws/collab/{doc_id}", "description": "Real-time sync"}
-    ]
-)
-
-# 6. Approve design to move to Implementation
-mcp__spec_workflow__approve_design(spec_id="spec-456")
-
-# 7. Add tasks
-mcp__spec_workflow__add_spec_task(
-    spec_id="spec-456",
-    title="Implement CRDT data structures",
-    description="Create RGA-based CRDT for text sequences",
-    phase="Implementation",
-    priority="high"
-)
-
-# 8. Create ticket to trigger orchestrator
-mcp__spec_workflow__create_ticket(
-    title="Implement Real-Time Collaboration",
-    description="Full implementation of collaborative editing feature",
-    priority="HIGH",
-    phase_id="PHASE_IMPLEMENTATION",
-    project_id="proj-123"
-)
-```
-
----
-
-## Fallback: File-Based Workflow
-
-If MCP tools are NOT available, fall back to writing files in `.omoi_os/` as described below.
-
-## Workflow Overview
-
-```
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  1. Understand  │────>│  2. Research     │────>│  3. Generate    │
-│  Feature        │     │  (DeepWiki/C7)   │     │  Requirements   │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-                                                         │
-                                                         ▼
-┌─────────────────┐     ┌──────────────────┐     ┌─────────────────┐
-│  6. Tasks       │<────│  5. Tickets      │<────│  4. Design Doc  │
-│  (Children)     │     │  (Work Items)    │     │  (Technical)    │
-└─────────────────┘     └──────────────────┘     └─────────────────┘
-```
-
-## Directory Structure
-
-All spec artifacts are stored in `.omoi_os/`:
-
-```
-.omoi_os/
-├── requirements/           # Requirements documents
-│   ├── feature-name.md     # REQ-XXX-YYY format
-│   └── ...
-├── designs/                # Technical design documents
-│   ├── feature-name.md     # Architecture, data models, APIs
-│   └── ...
-├── tickets/                # Work item tickets
-│   ├── TKT-001.md          # Parent work items
-│   └── ...
-└── tasks/                  # Child tasks
-    ├── TSK-001.md          # Individual actionable tasks
-    └── ...
-```
-
-## Phase 1: Feature Understanding (DEEP EXPLORATION)
-
-### When to Enter This Phase
-- User describes a new feature idea
-- User wants to plan implementation
-- User says "let's build..." or "I want to add..."
-
-### Process (Expanded)
-
-**Step 1a: Explore Existing Context FIRST**
-
-Before asking questions, gather context:
-```
-# Read project documentation
-Read docs/CLAUDE.md, docs/architecture/, docs/requirements/
-
-# Check for existing related specs
-ls .omoi_os/requirements/
-ls .omoi_os/designs/
-
-# Search codebase for related components
+# Search for related code
 Grep for related service names, models, patterns
+Read existing implementations this feature will integrate with
 
-# Check for prior discussions/ADRs
-ls docs/architecture/decisions/
+# Check for prior work
+ls .omoi_os/requirements/
+ls .omoi_os/tickets/
+git log --oneline -20
 ```
 
-**Step 1b: Ask Thorough Discovery Questions**
+### Step 1.2: Ask Discovery Questions (5-15 Questions)
 
-Ask 5-15 questions depending on complexity. Categories:
+**Structure your questions in categories:**
 
-1. **Problem & Value** (2-3 questions)
-   - What specific problem does this solve?
-   - What's the impact of not having this feature?
-   - How will we measure success?
+#### Problem & Value (2-3 questions)
+- What specific problem does this solve? What pain exists today?
+- What happens if we DON'T build this?
+- How will we measure success? What metrics matter?
 
-2. **Users & Interactions** (2-3 questions)
-   - Who are the users/actors?
-   - What are the key user journeys?
-   - What are the edge cases?
+#### Users & Journeys (2-3 questions)
+- Who are the primary users? Secondary?
+- What's the happy path user journey?
+- What are the edge cases and error scenarios?
 
-3. **Technical Context** (3-5 questions)
-   - What existing systems will this integrate with?
-   - What data does this need? Where does it come from?
-   - Are there performance/scale requirements?
-   - What security/auth considerations apply?
+#### Scope & Boundaries (2-3 questions)
+- What is explicitly IN scope?
+- What is explicitly OUT of scope? (Very important!)
+- Are there existing features this overlaps with?
 
-4. **Constraints & Trade-offs** (2-3 questions)
-   - What's explicitly out of scope?
-   - Are there time/budget constraints?
-   - What are the risks? What could go wrong?
+#### Technical Context (3-5 questions)
+- What existing systems/services will this integrate with?
+- What data does this need? Where does it come from?
+- Are there performance requirements (latency, throughput, scale)?
+- What security/privacy considerations apply?
+- Are there any hard technical constraints?
 
-**Step 1c: Confirm Understanding with Summary**
+#### Trade-offs & Risks (2-3 questions)
+- Are there multiple valid approaches? Which should we explore?
+- What are the trade-offs between approaches?
+- What could go wrong? What are the risks?
+- What's the timeline/priority?
 
-After questions are answered, summarize:
-- Feature name (kebab-case identifier)
-- One-line description
-- Key user stories (3-5)
-- Scope boundaries (IN/OUT explicitly listed)
-- Technical constraints discovered
-- Risks identified
+### Step 1.3: Summarize Understanding
 
-### Example Dialog
+After questions are answered, write a summary:
 
-```
-User: "I want to add real-time collaboration to the editor"
+```markdown
+## Feature Summary
 
-Claude: Let me first explore the codebase to understand context...
+**Name**: feature-name (kebab-case)
+**One-liner**: Brief description of what this does
 
-[Reads docs/CLAUDE.md, checks for existing specs, searches for editor-related code]
-
-Found: We have EventBusService for real-time events, WebSocket support in the frontend.
-No existing collaboration specs found.
-
-Now, before designing, I need to understand the feature better:
-
-**Problem & Value:**
-1. What specific problem does this solve? (Multiple people editing same doc causes conflicts?)
-2. How critical is real-time? (Sub-second updates vs eventual consistency?)
-
-**Users & Scope:**
-3. Who will collaborate? (Internal team only? External guests?)
-4. What types of content? (Just text? Code? Rich formatting?)
-5. What's explicitly OUT of scope? (Comments? Video chat?)
-
-**Technical:**
-6. I see we have EventBusService - should collaboration events flow through there?
-7. What's the expected concurrent editor count per document?
-8. Do we need conflict resolution or can we use CRDT for auto-merge?
-
-**Constraints:**
-9. Any third-party services we must use or avoid?
-10. What's the timeline? MVP vs full feature?
-
-[After user answers...]
-
-**Summary:**
-
-**Feature**: real-time-collaboration
-**Description**: Enable multiple users to edit documents simultaneously with live cursors and changes
+**Problem Statement**:
+[2-3 sentences about the pain point this solves]
 
 **User Stories**:
-1. As a user, I can see other editors' cursors in real-time
-2. As a user, I can see changes appear as others type
-3. As a user, I can see who is currently viewing the document
+1. As a [user], I can [action] so that [benefit]
+2. As a [user], I can [action] so that [benefit]
+3. ...
 
 **Scope**:
-- IN: Live cursors, text sync, presence indicators
-- OUT: Voice/video, commenting (separate feature)
+- IN: [list what's included]
+- OUT: [list what's explicitly excluded]
 
 **Technical Constraints**:
-- Must integrate with existing EventBusService
-- Max 10 concurrent editors per document
-- Use CRDT for conflict resolution
+- [constraint 1]
+- [constraint 2]
 
 **Risks Identified**:
-- Performance with large documents
-- Network latency affecting user experience
+- [risk 1]
+- [risk 2]
 
-Is this correct? Any changes before I proceed to research?
+**Success Metrics**:
+- [metric 1]
+- [metric 2]
 ```
 
-## Phase 2: Research
+**Get user confirmation before proceeding!**
 
-### Using DeepWiki and Context7
+---
 
-Research libraries and patterns before creating specifications:
+## Phase 2: PRD (Product Requirements Document)
 
-```python
-# For GitHub repositories (architecture, implementation patterns)
-mcp__deepwiki-mcp__read_wiki_structure(repoName="owner/repo")
-mcp__deepwiki-mcp__ask_question(
-    repoName="owner/repo",
-    question="How is real-time collaboration implemented?"
-)
+### Purpose
 
-# For library documentation (API, best practices)
-lib_id = mcp__context7-mcp__resolve-library-id(libraryName="yjs")
-mcp__context7-mcp__get-library-docs(
-    context7CompatibleLibraryID=lib_id,
-    topic="collaboration",
-    mode="code"  # or "info" for concepts
-)
-```
-
-### Research Questions by Feature Type
-
-**Data/Storage Features:**
-- What data models are needed?
-- What are the storage patterns?
-- What are the query patterns?
-
-**API Features:**
-- What endpoints are needed?
-- What authentication/authorization?
-- What error handling?
-
-**Real-time Features:**
-- What transport (WebSocket, SSE)?
-- What sync algorithm (CRDT, OT)?
-- What consistency model?
-
-**Agent Features:**
-- What tools are needed?
-- What hooks/callbacks?
-- What permissions model?
-
-## Phase 3: Requirements Document
+The PRD captures the "why" and "what" at a high level. It's the vision document that everything else traces back to.
 
 ### Location
+
+`.omoi_os/docs/prd-{feature-name}.md`
+
+### Template
+
+```markdown
+---
+id: PRD-{FEATURE}-001
+title: {Feature Name} PRD
+feature: {feature-name}
+created: {date}
+updated: {date}
+status: draft
+author: Claude
+---
+
+# {Feature Name}
+
+## Executive Summary
+
+[2-3 paragraph overview of the feature, the problem it solves, and why it matters]
+
+## Problem Statement
+
+### Current State
+[Describe the pain point that exists today]
+
+### Desired State
+[Describe what the world looks like after this feature ships]
+
+### Impact of Not Building
+[What happens if we don't build this?]
+
+## Goals & Success Metrics
+
+### Primary Goals
+1. [Goal 1]
+2. [Goal 2]
+
+### Success Metrics
+| Metric | Current | Target | How Measured |
+|--------|---------|--------|--------------|
+| [Metric 1] | [baseline] | [target] | [method] |
+
+## User Stories
+
+### Primary User: {User Type}
+
+1. **{Story Title}**
+   As a {user}, I want to {action} so that {benefit}.
+
+   Acceptance Criteria:
+   - [ ] {criterion 1}
+   - [ ] {criterion 2}
+
+2. ...
+
+## Scope
+
+### In Scope
+- [Feature/capability 1]
+- [Feature/capability 2]
+
+### Out of Scope
+- [Explicitly excluded 1]
+- [Explicitly excluded 2]
+
+### Future Considerations
+- [Things we might add later]
+
+## Constraints
+
+### Technical Constraints
+- [Constraint 1]
+- [Constraint 2]
+
+### Business Constraints
+- [Timeline, budget, etc.]
+
+## Risks & Mitigations
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|------------|--------|------------|
+| [Risk 1] | High/Med/Low | High/Med/Low | [How to mitigate] |
+
+## Dependencies
+
+- [Dependency 1 - what we need from other teams/systems]
+- [Dependency 2]
+
+## Open Questions
+
+- [ ] [Question that still needs answering]
+- [ ] [Another question]
+```
+
+---
+
+## Phase 3: REQUIREMENTS
+
+### Purpose
+
+Requirements define the specific, testable behaviors the system must have. Use EARS format (Easy Approach to Requirements Syntax).
+
+### Location
+
 `.omoi_os/requirements/{feature-name}.md`
 
-### Template Structure
+### EARS Format
 
-See [references/requirements_template.md](references/requirements_template.md) for full template.
-
-### Key Patterns
-
-**Requirement IDs:**
 ```
-REQ-{DOMAIN}-{AREA}-{NUM}
+WHEN [trigger/condition], THE SYSTEM SHALL [action/behavior].
+```
 
 Examples:
-REQ-COLLAB-SYNC-001    # Collaboration > Sync > Requirement 1
-REQ-AUTH-JWT-002       # Auth > JWT > Requirement 2
-REQ-AGENT-TOOL-003     # Agent > Tool > Requirement 3
-```
+- WHEN a user submits valid credentials, THE SYSTEM SHALL create an authenticated session within 2 seconds.
+- WHEN a notification is triggered, THE SYSTEM SHALL deliver it to the user within 5 seconds.
+- WHEN an API rate limit is exceeded, THE SYSTEM SHALL return a 429 status with retry-after header.
 
-**State Machines (Mermaid):**
-```mermaid
-stateDiagram-v2
-    [*] --> idle
-    idle --> syncing : Document Opened
-    syncing --> idle : Document Closed
-    syncing --> error : Sync Failed
-    error --> syncing : Retry
-```
+### Template
 
-**Configuration Tables:**
 ```markdown
-| Parameter | Default | Range | Description |
-|-----------|---------|-------|-------------|
-| sync_interval_ms | 100 | 50-1000 | Sync frequency |
-| max_peers | 10 | 1-50 | Maximum collaborators |
+---
+id: REQ-{FEATURE}-001
+title: {Feature Name} Requirements
+feature: {feature-name}
+created: {date}
+updated: {date}
+status: draft
+category: functional
+priority: HIGH
+prd_ref: docs/prd-{feature-name}.md
+design_ref: designs/{feature-name}.md
+---
+
+# {Feature Name} Requirements
+
+## Overview
+
+[Brief description of what these requirements cover]
+
+## Functional Requirements
+
+### REQ-{FEATURE}-FUNC-001: {Requirement Title}
+
+**Priority**: HIGH | MEDIUM | LOW
+**Category**: Functional
+
+WHEN {trigger condition}, THE SYSTEM SHALL {required behavior}.
+
+**Acceptance Criteria**:
+- [ ] {Testable criterion 1}
+- [ ] {Testable criterion 2}
+
+**Notes**: {Any additional context}
+
+---
+
+### REQ-{FEATURE}-FUNC-002: {Requirement Title}
+
+...
+
+## Non-Functional Requirements
+
+### REQ-{FEATURE}-PERF-001: {Performance Requirement}
+
+**Priority**: HIGH
+**Category**: Performance
+
+THE SYSTEM SHALL {performance requirement with measurable target}.
+
+**Metrics**:
+- P50 latency: < X ms
+- P99 latency: < Y ms
+- Throughput: > Z requests/second
+
+---
+
+### REQ-{FEATURE}-SEC-001: {Security Requirement}
+
+**Priority**: HIGH
+**Category**: Security
+
+THE SYSTEM SHALL {security requirement}.
+
+## Traceability
+
+| Requirement ID | PRD Section | Design Section | Ticket |
+|----------------|-------------|----------------|--------|
+| REQ-{FEATURE}-FUNC-001 | User Stories #1 | Component A | TKT-001 |
 ```
 
-**Pydantic Models:**
-```python
-from pydantic import BaseModel, Field
+---
 
-class CollaboratorPresence(BaseModel):
-    user_id: str
-    cursor_position: int
-    last_seen: datetime
-    color: str = Field(description="Assigned cursor color")
-```
+## Phase 4: DESIGN
 
-## Phase 4: Design Document
+### Purpose
+
+The design document defines HOW to implement the requirements. It covers architecture, data models, APIs, and implementation details.
 
 ### Location
+
 `.omoi_os/designs/{feature-name}.md`
 
-### Template Structure
+### Template
 
-See [references/design_template.md](references/design_template.md) for full template.
+```markdown
+---
+id: DESIGN-{FEATURE}-001
+title: {Feature Name} Design
+feature: {feature-name}
+created: {date}
+updated: {date}
+status: draft
+requirements:
+  - REQ-{FEATURE}-001
+---
 
-### Key Sections
+# {Feature Name} Design
 
-1. **Architecture Overview** (Mermaid flowchart)
-2. **Component Responsibilities** (table)
-3. **Data Models** (SQL + Pydantic)
-4. **API Specifications** (endpoints table)
-5. **Integration Points** (external systems)
-6. **Implementation Details** (algorithms, pseudocode)
+## Overview
 
-### Claude Agent SDK Integration Patterns
+[Brief description of the technical approach]
 
-When the feature involves agents, include:
+## Architecture
 
-**Custom Tools:**
-```python
-@tool("sync_document", "Sync document changes", {"doc_id": str, "changes": dict})
-async def sync_document(args: dict[str, Any]) -> dict[str, Any]:
-    # Implementation
-    return {"content": [{"type": "text", "text": f"Synced {len(changes)} changes"}]}
+### System Context
+
+```mermaid
+flowchart TB
+    subgraph External
+        User[User]
+        ExtAPI[External API]
+    end
+
+    subgraph System
+        API[API Layer]
+        Service[Service Layer]
+        DB[(Database)]
+    end
+
+    User --> API
+    API --> Service
+    Service --> DB
+    Service --> ExtAPI
 ```
 
-**Hooks:**
-```python
-async def validate_changes(input_data, tool_use_id, context):
-    """PreToolUse hook to validate changes before applying."""
-    changes = input_data["tool_input"].get("changes", {})
-    if not validate_change_format(changes):
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": "Invalid change format"
-            }
-        }
-    return {}
+### Component Diagram
+
+[Describe the main components and their responsibilities]
+
+| Component | Responsibility | Technology |
+|-----------|---------------|------------|
+| {Component 1} | {What it does} | {Stack} |
+
+## Data Model
+
+### Database Schema
+
+```sql
+CREATE TABLE {table_name} (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    {column} {type} {constraints},
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX idx_{table}_{column} ON {table}({column});
 ```
 
-**Agent Options:**
+### Pydantic Models
+
 ```python
-options = ClaudeAgentOptions(
-    system_prompt="You are a document collaboration assistant.",
-    mcp_servers={"collab": collab_server},
-    allowed_tools=["mcp__collab__sync_document", "mcp__collab__get_peers"],
-    hooks={
-        "PreToolUse": [HookMatcher(matcher="sync_document", hooks=[validate_changes])]
-    },
-    max_turns=20,
-    max_budget_usd=1.0
-)
+from pydantic import BaseModel, Field
+from datetime import datetime
+from uuid import UUID
+
+class {ModelName}(BaseModel):
+    id: UUID
+    {field}: {type} = Field(description="{description}")
+    created_at: datetime
+    updated_at: datetime
 ```
 
-## Phase 5: Tickets
+## API Specification
+
+### Endpoints
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| POST | /api/v1/{resource} | Create resource | Required |
+| GET | /api/v1/{resource}/{id} | Get resource | Required |
+
+### Request/Response Examples
+
+#### POST /api/v1/{resource}
+
+**Request:**
+```json
+{
+  "field": "value"
+}
+```
+
+**Response (201):**
+```json
+{
+  "id": "uuid",
+  "field": "value",
+  "created_at": "2025-01-01T00:00:00Z"
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "error": "validation_error",
+  "message": "Field X is required"
+}
+```
+
+## Implementation Details
+
+### Algorithm/Logic
+
+[Describe any complex algorithms or business logic]
+
+```python
+# Pseudocode for complex logic
+def process_feature(input):
+    # Step 1: Validate
+    # Step 2: Transform
+    # Step 3: Persist
+    # Step 4: Notify
+    pass
+```
+
+### State Machine (if applicable)
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created
+    Created --> Processing : start
+    Processing --> Completed : success
+    Processing --> Failed : error
+    Failed --> Processing : retry
+    Completed --> [*]
+```
+
+## Integration Points
+
+| System | Integration Type | Purpose |
+|--------|-----------------|---------|
+| {System 1} | REST API | {Why} |
+| {System 2} | Event Bus | {Why} |
+
+## Configuration
+
+| Parameter | Default | Range | Description |
+|-----------|---------|-------|-------------|
+| {param} | {default} | {range} | {description} |
+
+## Testing Strategy
+
+### Unit Tests
+- [ ] {Component} - {What to test}
+
+### Integration Tests
+- [ ] {Integration point} - {What to test}
+
+### E2E Tests
+- [ ] {User journey} - {What to test}
+
+## Security Considerations
+
+- [ ] {Security consideration 1}
+- [ ] {Security consideration 2}
+
+## Performance Considerations
+
+- [ ] {Performance consideration 1}
+- [ ] {Performance consideration 2}
+
+## Open Questions
+
+- [ ] {Technical question that needs resolution}
+```
+
+---
+
+## Phase 5: TICKETS
+
+### Purpose
+
+Tickets are the parent work items that group related tasks. One ticket typically maps to one major component or capability from the design.
 
 ### Location
-`.omoi_os/tickets/TKT-{NUM}.md`
 
-### Template Structure
+`.omoi_os/tickets/TKT-{NNN}.md`
 
-See [references/ticket_template.md](references/ticket_template.md) for full template.
+### ID Convention
+
+Generate sequential IDs: TKT-001, TKT-002, etc.
+
+Check existing: `ls .omoi_os/tickets/`
+
+### Template
+
+```markdown
+---
+id: TKT-{NNN}
+title: {Ticket Title}
+status: backlog
+priority: HIGH
+estimate: M
+design_ref: designs/{feature-name}.md
+requirements:
+  - REQ-{FEATURE}-FUNC-001
+  - REQ-{FEATURE}-FUNC-002
+dependencies:
+  blocked_by: []
+  blocks: []
+---
+
+# TKT-{NNN}: {Ticket Title}
+
+## Description
+
+[Clear description of what this ticket accomplishes]
+
+## Acceptance Criteria
+
+- [ ] {Criterion 1 - specific and testable}
+- [ ] {Criterion 2}
+- [ ] {Criterion 3}
+- [ ] All tests pass
+- [ ] Code reviewed and approved
+
+## Technical Notes
+
+[Any technical context or decisions relevant to implementation]
+
+## Tasks
+
+- TSK-{NNN}: {Task 1 title}
+- TSK-{NNN}: {Task 2 title}
+- TSK-{NNN}: {Task 3 title}
+
+## Dependencies
+
+**Blocked By**: {List tickets that must complete first, or "None"}
+**Blocks**: {List tickets waiting on this one, or "None"}
+
+## Estimate
+
+**Size**: S | M | L | XL
+**Rationale**: {Why this estimate}
+```
 
 ### Ticket Generation Rules
 
-1. **One ticket per major component** from design
+1. **One ticket per major component** from the design
 2. **Clear acceptance criteria** mapped from requirements
-3. **Dependencies** explicitly listed
-4. **Estimates** in T-shirt sizes (S/M/L/XL)
+3. **Dependencies explicitly listed** - what blocks this, what this blocks
+4. **Reasonable scope** - if > 5 tasks, consider splitting the ticket
 
-### Example Ticket
+---
 
-```markdown
-# TKT-001: Implement Sync Engine
+## Phase 6: TASKS
 
-**Status**: backlog
-**Priority**: HIGH
-**Estimate**: L
-**Requirements**: REQ-COLLAB-SYNC-001, REQ-COLLAB-SYNC-002
-**Design Reference**: designs/real-time-collaboration.md#sync-engine
+### Purpose
 
-## Description
-Implement the core synchronization engine using CRDT for conflict-free merging.
-
-## Acceptance Criteria
-- [ ] CRDT data structure implemented
-- [ ] Sync protocol handles concurrent edits
-- [ ] P95 sync latency < 100ms
-
-## Dependencies
-- TKT-002: WebSocket infrastructure (must complete first)
-
-## Tasks
-- TSK-001: Implement CRDT data types
-- TSK-002: Build sync protocol
-- TSK-003: Add unit tests
-```
-
-## Phase 6: Tasks
+Tasks are atomic units of work that an AI agent can complete in a single session. They should be specific, self-contained, and have clear deliverables.
 
 ### Location
-`.omoi_os/tasks/TSK-{NUM}.md`
 
-### Template Structure
+`.omoi_os/tasks/TSK-{NNN}.md`
 
-See [references/task_template.md](references/task_template.md) for full template.
+### ID Convention
+
+Generate sequential IDs: TSK-001, TSK-002, etc.
+
+Check existing: `ls .omoi_os/tasks/`
+
+### Template
+
+```markdown
+---
+id: TSK-{NNN}
+title: {Task Title}
+status: pending
+ticket_id: TKT-{NNN}
+estimate: S
+type: implementation
+dependencies:
+  depends_on: []
+  blocks: []
+---
+
+# TSK-{NNN}: {Task Title}
+
+## Objective
+
+[One sentence describing what this task accomplishes]
+
+## Context
+
+[Brief context about why this task exists and how it fits into the bigger picture]
+
+## Deliverables
+
+- [ ] `{path/to/file.py}` - {What this file does}
+- [ ] `{path/to/test_file.py}` - {Tests for the above}
+
+## Implementation Notes
+
+[Specific guidance for how to implement this]
+
+```python
+# Example code structure or pseudocode
+class FeatureService:
+    def do_thing(self):
+        pass
+```
+
+## Acceptance Criteria
+
+- [ ] {Specific, testable criterion}
+- [ ] {Another criterion}
+- [ ] All new code has tests
+- [ ] Tests pass
+
+## Dependencies
+
+**Depends On**: {List task IDs that must complete first, or "None"}
+**Blocks**: {List task IDs waiting on this one, or "None"}
+
+## Estimate
+
+**Size**: S (< 2 hours) | M (2-4 hours) | L (4-8 hours)
+```
 
 ### Task Generation Rules
 
-1. **Atomic units of work** (1-4 hours ideal)
-2. **Clear deliverable** (file, test, endpoint)
-3. **No ambiguity** in implementation approach
-4. **Test requirements** included
+1. **Atomic** - Can be completed in a single focused session (1-4 hours ideal)
+2. **Self-contained** - All context needed is in the task
+3. **Clear deliverable** - Specific files, tests, or outcomes
+4. **Testable** - Clear acceptance criteria that can be verified
+5. **Dependencies explicit** - What must complete before this can start
 
-### Example Task
+### Task Types
 
-```markdown
-# TSK-001: Implement CRDT Data Types
+- `implementation` - Write new code
+- `refactor` - Improve existing code
+- `test` - Write tests
+- `documentation` - Write docs
+- `research` - Investigate options
+- `bugfix` - Fix a specific bug
 
-**Status**: pending
-**Parent Ticket**: TKT-001
-**Estimate**: M
-**Assignee**: (unassigned)
+---
 
-## Objective
-Create CRDT data structures for text collaboration.
+## Phase 7: SYNC TO API
 
-## Deliverables
-- [ ] `src/collab/crdt.py` - CRDT implementation
-- [ ] `tests/collab/test_crdt.py` - Unit tests
+### Using spec_cli.py
 
-## Implementation Notes
-Use RGA (Replicated Growable Array) for text sequences.
-Reference: https://github.com/yjs/yjs
+After creating all artifacts locally, sync them to the OmoiOS API:
 
-## Acceptance Criteria
-- All unit tests pass
-- Handles concurrent inserts at same position
-- Maintains consistent ordering across replicas
+```bash
+# Navigate to scripts directory
+cd .claude/skills/spec-driven-dev/scripts
+
+# 1. Validate local specs first
+python spec_cli.py validate
+
+# 2. Preview what you have
+python spec_cli.py show all
+
+# 3. Find your project ID
+python spec_cli.py projects --api-url http://0.0.0.0:18000
+
+# 4. Dry-run sync to see what would change
+python spec_cli.py sync diff --project-id <uuid> --api-url http://0.0.0.0:18000
+
+# 5. Push to API
+python spec_cli.py sync push --project-id <uuid> --api-url http://0.0.0.0:18000
+
+# 6. Verify in API
+python spec_cli.py project <uuid> --api-url http://0.0.0.0:18000
 ```
 
-## Interactive Workflow
+### Environment Variables
 
-### Starting a New Feature
+Set these to avoid passing flags every time:
 
-```
-User: "I want to build a notification system"
-
-Claude: [Phase 1 - Understand]
-Let me understand the feature...
-[Asks clarifying questions]
-
-Claude: [Phase 2 - Research]
-Let me research notification patterns...
-[Uses DeepWiki/Context7]
-
-Claude: [Phase 3-6 - Generate]
-Here's what I'll create:
-1. .omoi_os/requirements/notifications.md
-2. .omoi_os/designs/notifications.md
-3. .omoi_os/tickets/TKT-00X.md (N tickets)
-4. .omoi_os/tasks/TSK-00X.md (M tasks)
-
-Shall I proceed?
+```bash
+export OMOIOS_API_URL="http://0.0.0.0:18000"
+export OMOIOS_API_KEY="your-api-key"
 ```
 
-### Updating Existing Specs
+### Sync Behavior
 
-When updating:
-1. Read existing spec first
-2. Identify what changed
-3. Update requirements → design → tickets → tasks (cascade)
-4. Note revision in document history
+- **CREATE**: New tickets/tasks are created
+- **UPDATE**: Existing items with changed descriptions are updated
+- **SKIP**: Items already in sync are skipped
 
-## Recovery: When Context is Lost
+---
 
-If you lose context mid-conversation or need to resume work on a spec:
+## Complete Example Workflow
 
-### Re-Orient from Local Files
+### User Request
 
-```
-1. Read the spec files to understand where you were:
-   - .omoi_os/requirements/{feature}.md - Current requirements
-   - .omoi_os/designs/{feature}.md - Current design
-   - .omoi_os/tickets/ - Existing tickets
-   - .omoi_os/tasks/ - Existing tasks
+> "I want to add webhook notifications so external systems can subscribe to events"
 
-2. Check MCP for current state:
-   mcp__spec_workflow__list_project_specs(project_id="...")
-   mcp__spec_workflow__get_spec(spec_id="...")
-
-3. Use scripts to verify state:
-   uv run python scripts/test_spec_workflow.py --get-spec spec-123
-```
-
-### Resume Checklist
-
-When resuming work on an existing spec:
-
-- [ ] Read .omoi_os/ files to understand current state
-- [ ] Query MCP to get live data
-- [ ] Identify what phase you're in (Requirements, Design, Implementation)
-- [ ] Check for pending questions that were never answered
-- [ ] Review any TODOs or blockers noted in files
-- [ ] Continue from where you left off
-
-### Example Recovery
+### Step 1: Discover
 
 ```
-Claude: I notice we're continuing work on the "notifications" feature. Let me check our progress...
+Claude: Before designing, let me explore the codebase and ask some questions.
 
-[Reads .omoi_os/requirements/notifications.md]
-[Reads .omoi_os/designs/notifications.md]
-[Calls mcp__spec_workflow__get_spec]
+[Reads docs/CLAUDE.md, checks .omoi_os/ for existing specs, searches for event-related code]
 
-Status:
-- Requirements: 5 defined, approved
-- Design: In progress (architecture done, API spec pending)
-- Tickets: Not yet created
-- Tasks: Not yet created
+Found: We have an EventBusService for internal pub/sub. No existing webhook specs.
 
-Next step: Complete the API specification section of the design.
+Now I need to understand the feature better:
 
-Would you like me to continue from here?
+**Problem & Value:**
+1. What specific external systems need to receive notifications?
+2. What events should be subscribable? (task complete, PR ready, agent stuck?)
+3. What happens if a webhook delivery fails?
+
+**Scope:**
+4. Should users configure webhooks via UI, API, or both?
+5. Do we need authentication for webhook endpoints (HMAC signing)?
+6. Is retry logic needed? How many retries?
+
+**Technical:**
+7. Should webhooks integrate with the existing EventBusService?
+8. What's the expected volume of webhook deliveries per day?
+9. Do we need rate limiting per subscriber?
+
+**Constraints:**
+10. Are there any specific protocols required (Slack, Discord, custom)?
+11. What's the timeline for this feature?
+```
+
+### Step 2: User Answers
+
+> "We need Slack and Discord initially, plus generic HTTP. Events: task_completed,
+> ticket_status_changed, agent_error. HMAC signing required. 3 retries with
+> exponential backoff. Use existing EventBusService. Volume: ~1000/day initially."
+
+### Step 3: Create PRD
+
+Write `.omoi_os/docs/prd-webhook-notifications.md`
+
+### Step 4: Create Requirements
+
+Write `.omoi_os/requirements/webhook-notifications.md` with EARS-format requirements
+
+### Step 5: Create Design
+
+Write `.omoi_os/designs/webhook-notifications.md` with architecture, data models, APIs
+
+### Step 6: Create Tickets
+
+- `.omoi_os/tickets/TKT-001.md` - Webhook Infrastructure (models, service, delivery)
+- `.omoi_os/tickets/TKT-002.md` - Slack/Discord Formatters
+
+### Step 7: Create Tasks
+
+For TKT-001:
+- `TSK-001.md` - Add webhook URL fields to Organization model
+- `TSK-002.md` - Create database migration
+- `TSK-003.md` - Implement WebhookDeliveryService
+- `TSK-004.md` - Implement WebhookNotificationService
+- `TSK-005.md` - Update API routes for webhook management
+- `TSK-006.md` - Write tests
+
+For TKT-002:
+- `TSK-007.md` - Implement SlackWebhookFormatter
+- `TSK-008.md` - Implement DiscordWebhookFormatter
+
+### Step 8: Sync to API
+
+```bash
+cd .claude/skills/spec-driven-dev/scripts
+python spec_cli.py validate
+python spec_cli.py sync push --project-id <uuid>
+```
+
+---
+
+## Directory Structure Summary
+
+```
+.omoi_os/
+├── docs/                    # PRDs and high-level documents
+│   └── prd-{feature}.md
+├── requirements/            # EARS-format requirements
+│   └── {feature}.md
+├── designs/                 # Technical designs
+│   └── {feature}.md
+├── tickets/                 # Parent work items
+│   ├── TKT-001.md
+│   └── TKT-002.md
+└── tasks/                   # Atomic work units
+    ├── TSK-001.md
+    ├── TSK-002.md
+    └── ...
+```
+
+---
+
+## CLI Reference
+
+### View Local Specs
+
+```bash
+python spec_cli.py show all           # Everything
+python spec_cli.py show requirements  # Just requirements
+python spec_cli.py show designs       # Just designs
+python spec_cli.py show tickets       # Just tickets
+python spec_cli.py show tasks         # Just tasks
+python spec_cli.py show graph         # Task dependency graph
+python spec_cli.py show ticket-graph  # Ticket dependency graph
+python spec_cli.py show traceability  # Full traceability matrix
+python spec_cli.py show ready         # Tasks ready to work on
+```
+
+### Validate
+
+```bash
+python spec_cli.py validate           # Check for issues
+```
+
+### Sync to API
+
+```bash
+python spec_cli.py projects                              # List projects
+python spec_cli.py sync diff --project-id <uuid>         # Preview changes
+python spec_cli.py sync push --project-id <uuid>         # Push to API
+python spec_cli.py project <uuid>                        # View project in API
+python spec_cli.py api-trace <uuid>                      # Full API traceability
 ```
 
 ---
 
 ## Best Practices
 
+### Discovery
+- **Never skip questions** - The 5 minutes spent asking saves hours of rework
+- **Get explicit scope boundaries** - "Out of scope" is as important as "in scope"
+- **Identify risks early** - What could go wrong?
+
+### PRDs
+- Write for a human reader who doesn't have context
+- Focus on "why" and "what", not "how"
+- Keep it concise but complete
+
 ### Requirements
-- Use normative language (SHALL, MUST, SHOULD, MAY)
-- Include measurable criteria (latency < Xms)
-- Reference related requirements explicitly
+- Use EARS format consistently
+- Make every requirement testable
+- Include acceptance criteria
 
 ### Designs
-- Architecture first, then details
-- Include both happy path and error handling
-- Provide pseudocode for complex algorithms
+- Architecture diagrams first
+- Include data models with actual SQL/Pydantic
+- Specify APIs completely
 
 ### Tickets
-- Clear scope boundaries
+- One component per ticket
+- Clear acceptance criteria
 - Explicit dependencies
-- Realistic estimates
 
 ### Tasks
-- Small enough to complete in one session
-- Self-contained with all context needed
-- Include test expectations
-
-### Recovery & Reference
-- ALWAYS write to .omoi_os/ even when using MCP
-- Re-read local files when resuming work
-- Use scripts to verify backend state
-- Keep local files in sync with MCP state
-
-## Scripts
-
-This skill includes utility scripts in `scripts/`:
-
-- `init_feature.py` - Initialize directory structure for new feature
-- `generate_ids.py` - Generate next ticket/task IDs
-- `validate_specs.py` - Validate spec documents for completeness
-- `spec_cli.py` - **Main CLI** for viewing, validating, and syncing specs
-- `api_client.py` - Direct HTTP client for OmoiOS API (bypasses MCP)
-- `parse_specs.py` - Parser for .omoi_os/ markdown files
-- `models.py` - Data models with cross-ticket dependency logic
+- 1-4 hours of work max
+- All context included
+- Specific file deliverables
 
 ---
 
-## Spec CLI (spec_cli.py)
+## Recovering from Lost Context
 
-The main CLI tool for working with specs locally and syncing to the API.
-
-### View Local Specs
+If you lose context mid-conversation:
 
 ```bash
-# From the scripts directory:
-cd .claude/skills/spec-driven-dev/scripts
+# 1. Check what exists locally
+ls .omoi_os/
+cat .omoi_os/docs/prd-*.md
+cat .omoi_os/requirements/*.md
+cat .omoi_os/designs/*.md
 
-# Show all specs (requirements, designs, tickets, tasks, traceability)
+# 2. View the full state
 python spec_cli.py show all
 
-# Show only requirements (EARS format)
-python spec_cli.py show requirements
-
-# Show only designs
-python spec_cli.py show designs
-
-# Show only tickets
-python spec_cli.py show tickets
-
-# Show only tasks (with blocking reasons)
-python spec_cli.py show tasks
-
-# Show task dependency graph (within tickets)
-python spec_cli.py show graph
-
-# Show cross-ticket dependency graph
-python spec_cli.py show ticket-graph
-
-# Show full traceability matrix (Requirements → Designs → Tickets → Tasks)
-python spec_cli.py show traceability
-
-# Show only ready tasks (not blocked)
-python spec_cli.py show ready
-
-# Validate specs (circular deps, missing refs)
-python spec_cli.py validate
-
-# Export to JSON (includes all specs + traceability stats)
-python spec_cli.py export json
+# 3. Check what's in the API
+python spec_cli.py project <uuid>
 ```
 
-### API Integration
-
-```bash
-# List all projects
-python spec_cli.py projects --api-url http://0.0.0.0:18000
-
-# Show project with all tickets and tasks
-python spec_cli.py project <project-id> --api-url http://0.0.0.0:18000
-
-# Dry-run sync (see what would change)
-python spec_cli.py sync diff --api-url http://0.0.0.0:18000 --project-id <id>
-
-# Push local specs to API
-python spec_cli.py sync push --api-url http://0.0.0.0:18000 --project-id <id>
-```
-
-### Sync Specs to API (Requirements & Designs)
-
-```bash
-# Sync local requirements and designs to API specs
-# This creates or updates specs with EARS-format requirements
-
-# Dry-run: See what would be synced
-python spec_cli.py sync-specs diff --project-id <id> --api-url http://0.0.0.0:18000
-
-# Push: Actually create/update specs
-python spec_cli.py sync-specs push --project-id <id> --api-url http://0.0.0.0:18000
-
-# Optional: Specify a custom spec title
-python spec_cli.py sync-specs push --project-id <id> --spec-title "My Feature Spec"
-```
-
-### View API Traceability
-
-```bash
-# View full traceability from API: Specs → Requirements → Tickets → Tasks
-python spec_cli.py api-trace <project-id> --api-url http://0.0.0.0:18000
-```
-
-### Authentication Options
-
-```bash
-# Via API key (recommended)
-python spec_cli.py sync push --api-key <key> ...
-# Or set OMOIOS_API_KEY environment variable
-
-# Via JWT token
-python spec_cli.py sync push --token <jwt> ...
-# Or set OMOIOS_TOKEN environment variable
-
-# Via email/password login
-python spec_cli.py sync push --email user@example.com --password secret ...
-# Or set OMOIOS_EMAIL and OMOIOS_PASSWORD environment variables
-```
-
-### Sync Behavior
-
-The sync command uses **create-or-skip** logic:
-- **CREATE**: If ticket/task doesn't exist (matched by title)
-- **UPDATE**: If exists but description differs
-- **SKIP**: If exists with same description
-
----
-
-## Cross-Ticket Dependencies
-
-Tasks can be blocked by dependencies at two levels:
-
-### 1. Task-Level Dependencies (within a ticket)
-
-```yaml
-# In .omoi_os/tasks/TSK-002.md
-dependencies:
-  depends_on: [TSK-001]  # Must complete TSK-001 first
-  blocks: [TSK-003]      # TSK-003 waits for this
-```
-
-### 2. Ticket-Level Dependencies (cross-ticket)
-
-```yaml
-# In .omoi_os/tickets/TKT-002.md
-dependencies:
-  blocked_by: [TKT-001]  # ALL tasks in TKT-002 wait for ALL tasks in TKT-001
-  blocks: [TKT-003]      # TKT-003 waits for this ticket
-  related: []            # Informational only
-```
-
-### How Cross-Ticket Blocking Works
-
-When a ticket has `blocked_by: [TKT-001]`:
-1. ALL tasks in that ticket are blocked
-2. They remain blocked until ALL tasks in TKT-001 have `status: done`
-3. The CLI shows: `[BLOCKED: blocked by ticket(s): TKT-001]`
-
-### Viewing Dependency Graphs
-
-```bash
-# Task dependencies (within tickets)
-python spec_cli.py show graph
-# Output:
-# └─> TSK-001 (Add models)
-#     └─> TSK-002 (Create migration)
-#         └─> TSK-003 (Implement service)
-
-# Cross-ticket dependencies
-python spec_cli.py show ticket-graph
-# Output:
-# └─> [○] TKT-001 (Webhook Infrastructure) [6 tasks]
-#     └─> [○] TKT-002 (Slack/Discord Integration) [2 tasks]
-# Legend: ✓ = all tasks complete, ○ = incomplete
-```
-
----
-
-## Direct API Client (api_client.py)
-
-For programmatic access to the OmoiOS API without MCP:
-
-```python
-from api_client import OmoiOSClient
-
-# Initialize client
-client = OmoiOSClient(
-    base_url="http://0.0.0.0:18000",
-    api_key="your-api-key"  # or token="jwt-token"
-)
-
-# List projects
-projects = await client.list_projects()
-
-# Get project with tickets and tasks
-data = await client.get_project_with_tickets(project_id)
-
-# List tickets for a project
-tickets = await client.list_tickets(project_id)
-
-# Create a ticket
-from models import ParsedTicket
-success, msg = await client.create_ticket(parsed_ticket, project_id)
-
-# Create a task
-from models import ParsedTask
-success, msg = await client.create_task(parsed_task, ticket_api_id)
-
-# Full sync from local specs (tickets/tasks)
-from parse_specs import SpecParser
-parser = SpecParser()
-result = parser.parse_all()
-summary = await client.sync(result, project_id)
-```
-
-### Spec/Requirement/Design API Operations
-
-```python
-# === SPEC OPERATIONS ===
-
-# Create a new spec
-success, msg, spec_id = await client.create_spec(
-    title="My Feature Spec",
-    project_id="project-uuid",
-    description="Optional description"
-)
-
-# Get spec by ID
-spec = await client.get_spec(spec_id)
-
-# List all specs for a project
-specs = await client.list_specs(project_id)
-
-# === REQUIREMENT OPERATIONS (EARS Format) ===
-
-# Add a requirement using EARS format
-success, msg, req_id = await client.add_requirement(
-    spec_id=spec_id,
-    title="User authentication",
-    condition="a user submits valid credentials",  # WHEN clause
-    action="authenticate the user and create a session"  # SHALL clause
-)
-
-# Add acceptance criterion to a requirement
-success, msg = await client.add_acceptance_criterion(
-    spec_id=spec_id,
-    requirement_id=req_id,
-    text="Session token expires after 24 hours"
-)
-
-# === DESIGN OPERATIONS ===
-
-# Update spec's design artifact
-success, msg = await client.update_design(
-    spec_id=spec_id,
-    architecture="## Architecture\n\nJWT-based auth with refresh tokens...",
-    data_model="## Data Model\n\n```sql\nCREATE TABLE sessions...",
-    api_spec=[
-        {"method": "POST", "path": "/api/auth/login", "description": "User login"},
-        {"method": "POST", "path": "/api/auth/logout", "description": "User logout"}
-    ]
-)
-
-# === SYNC LOCAL SPECS TO API ===
-
-# Sync local requirements and designs to API specs
-from parse_specs import SpecParser
-from models import ParseResult
-
-parser = SpecParser()
-result: ParseResult = parser.parse_all()
-
-# Dry-run: See what would change
-summary = await client.sync_specs(result, project_id, dry_run=True)
-
-# Actual sync: Create/update specs
-summary = await client.sync_specs(result, project_id)
-
-# Diff only (shorthand for dry_run=True)
-summary = await client.diff_specs(result, project_id)
-
-# === FULL TRACEABILITY ===
-
-# Get complete traceability from API
-# Returns: Specs → Requirements → Tickets → Tasks
-trace = await client.get_full_traceability(project_id)
-```
-
----
-
-## Complete Sync Workflow
-
-This section provides step-by-step instructions for syncing local specs to the OmoiOS API.
-
-### Prerequisites
-
-1. **Backend running** at your API URL
-2. **Project exists** in the system (get project ID via `spec_cli.py projects`)
-3. **Local specs** in `.omoi_os/` with proper YAML frontmatter
-
-### Environment Variables
-
-Set these environment variables to avoid passing flags on every command:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OMOIOS_API_URL` | Base URL of the OmoiOS API | `http://localhost:18000` |
-| `OMOIOS_API_KEY` | API key for authentication | (none) |
-| `OMOIOS_TOKEN` | JWT token for authentication | (none) |
-
-**Example setup:**
-```bash
-# Set in your shell profile (.bashrc, .zshrc, etc.)
-export OMOIOS_API_URL="http://0.0.0.0:18000"
-export OMOIOS_API_KEY="your-api-key"
-
-# Or set per-session
-OMOIOS_API_URL="http://0.0.0.0:18000" python spec_cli.py projects
-```
-
-**Priority order:**
-1. Command-line flag (e.g., `--api-url`)
-2. Environment variable (e.g., `OMOIOS_API_URL`)
-3. Default value (`http://localhost:18000`)
-
-### Step 1: Prepare Local Spec Files
-
-Ensure your files have proper YAML frontmatter:
-
-**Requirements** (`.omoi_os/requirements/{feature}.md`):
-```yaml
----
-id: REQ-FEATURE-001
-title: Feature Name Requirements
-feature: feature-name
-created: 2025-12-29
-updated: 2025-12-29
-status: draft
-category: functional
-priority: HIGH
-design_ref: designs/feature-name.md  # Links to design
----
-```
-
-**Designs** (`.omoi_os/designs/{feature}.md`):
-```yaml
----
-id: DESIGN-FEATURE-001
-title: Feature Name Design
-feature: feature-name
-created: 2025-12-29
-updated: 2025-12-29
-status: draft
-requirements:
-  - REQ-FEATURE-001  # Links back to requirements
----
-```
-
-**Tickets** (`.omoi_os/tickets/TKT-{N}.md`):
-```yaml
----
-id: TKT-001
-title: Implement Feature
-status: backlog
-priority: HIGH
-design_ref: designs/feature-name.md
-dependencies:
-  blocked_by: []
-  blocks: []
----
-```
-
-**Tasks** (`.omoi_os/tasks/TSK-{N}.md`):
-```yaml
----
-id: TSK-001
-title: Create data models
-status: pending
-ticket_id: TKT-001
-estimate: M
-dependencies:
-  depends_on: []
-  blocks: [TSK-002]
----
-```
-
-### Step 2: Validate Local Specs
-
-```bash
-cd .claude/skills/spec-driven-dev/scripts
-
-# Validate for errors (circular deps, missing refs)
-python spec_cli.py validate
-
-# Preview what you have locally
-python spec_cli.py show all
-
-# Check traceability (Requirements → Designs → Tickets → Tasks)
-python spec_cli.py show traceability
-```
-
-### Step 3: Find Your Project ID
-
-```bash
-# List all projects (uses OMOIOS_API_URL env var or default)
-python spec_cli.py projects
-
-# Or specify URL explicitly
-python spec_cli.py projects --api-url http://0.0.0.0:18000
-
-# Note the project ID (UUID format)
-```
-
-### Step 4: Sync Specs (Requirements & Designs)
-
-```bash
-# DRY RUN: See what would be synced (no changes made)
-python spec_cli.py sync-specs diff --project-id <project-uuid>
-
-# Output shows:
-# - CREATE: New specs that will be created
-# - UPDATE: Specs that exist but need updates
-# - SKIP: Specs already in sync
-
-# PUSH: Actually sync to API
-python spec_cli.py sync-specs push --project-id <project-uuid>
-
-# Optional: Custom spec title
-python spec_cli.py sync-specs push \
-  --project-id <project-uuid> \
-  --spec-title "Webhook Notifications"
-```
-
-### Step 5: Sync Tickets & Tasks
-
-```bash
-# DRY RUN: Preview ticket/task sync
-python spec_cli.py sync diff --project-id <project-uuid>
-
-# PUSH: Actually sync tickets and tasks
-python spec_cli.py sync push --project-id <project-uuid>
-```
-
-### Step 6: Verify in API
-
-```bash
-# View full traceability from API
-python spec_cli.py api-trace <project-uuid>
-
-# View project with all tickets/tasks
-python spec_cli.py project <project-uuid>
-```
-
-### What Gets Synced
-
-| Local File | API Entity | Linking |
-|------------|------------|---------|
-| `.omoi_os/requirements/*.md` | Spec + Requirements | `design_ref` → Design link |
-| `.omoi_os/designs/*.md` | Spec design artifact | `requirements` → Requirement links |
-| `.omoi_os/tickets/*.md` | Ticket | `design_ref` → links to spec |
-| `.omoi_os/tasks/*.md` | Task | `ticket_id` → parent ticket |
-
-### Traceability Flow
-
-```
-Requirements (EARS format)
-    ↓ design_ref
-Designs (Architecture, API specs)
-    ↓ requirements list
-Tickets (Work items)
-    ↓ ticket_id
-Tasks (Atomic units)
-```
-
-### Sync Summary Output
-
-After push, you'll see a summary:
-```
-Summary: 2 created, 1 updated, 3 skipped, 0 failed
-```
-
-- **created**: New entities added to API
-- **updated**: Existing entities modified
-- **skipped**: Already in sync (no changes needed)
-- **failed**: Errors (check messages)
-
-### Common Issues
-
-**"Spec not found"**: Run `sync-specs push` before `sync push` (specs must exist first)
-
-**"DetachedInstanceError"**: Backend session issue - restart backend
-
-**"Project not found"**: Verify project ID with `spec_cli.py projects`
-
-**Missing linked_design**: Ensure requirements have `design_ref` in frontmatter
-
----
-
-## References
-
-- [references/requirements_template.md](references/requirements_template.md) - Full requirements template with YAML frontmatter
-- [references/design_template.md](references/design_template.md) - Full design template with YAML frontmatter
-- [references/ticket_template.md](references/ticket_template.md) - Ticket template with dependencies
-- [references/task_template.md](references/task_template.md) - Task template with dependencies
-- [references/claude_sdk_patterns.md](references/claude_sdk_patterns.md) - Claude Agent SDK integration patterns
+Then resume from where you left off based on what's complete and what's missing.
