@@ -4,6 +4,7 @@
  */
 
 import type { APIError } from "./types"
+import { addAPIBreadcrumb, captureAPIError } from "@/lib/sentry/context"
 
 // ============================================================================
 // Configuration
@@ -272,6 +273,9 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const { method = "GET", body, headers = {}, requireAuth = true } = options
 
+  // Track request timing for breadcrumbs
+  const startTime = Date.now()
+
   // Build headers
   const requestHeaders: Record<string, string> = {
     "Content-Type": "application/json",
@@ -296,45 +300,101 @@ export async function apiRequest<T>(
     requestInit.body = JSON.stringify(body)
   }
 
-  // Make request
-  let response = await fetch(`${API_BASE_URL}${endpoint}`, requestInit)
+  try {
+    // Make request
+    let response = await fetch(`${API_BASE_URL}${endpoint}`, requestInit)
 
-  // Handle 401 - try token refresh
-  if (response.status === 401 && requireAuth) {
-    // Prevent multiple simultaneous refresh attempts
-    if (!isRefreshing) {
-      isRefreshing = true
-      refreshPromise = refreshAccessToken()
-    }
+    // Handle 401 - try token refresh
+    if (response.status === 401 && requireAuth) {
+      // Prevent multiple simultaneous refresh attempts
+      if (!isRefreshing) {
+        isRefreshing = true
+        refreshPromise = refreshAccessToken()
+      }
 
-    const refreshed = await refreshPromise
-    isRefreshing = false
-    refreshPromise = null
+      const refreshed = await refreshPromise
+      isRefreshing = false
+      refreshPromise = null
 
-    if (refreshed) {
-      // Retry request with new token
-      const newToken = getAccessToken()
-      if (newToken) {
-        requestHeaders["Authorization"] = `Bearer ${newToken}`
-        response = await fetch(`${API_BASE_URL}${endpoint}`, {
-          ...requestInit,
-          headers: requestHeaders,
-        })
+      if (refreshed) {
+        // Retry request with new token
+        const newToken = getAccessToken()
+        if (newToken) {
+          requestHeaders["Authorization"] = `Bearer ${newToken}`
+          response = await fetch(`${API_BASE_URL}${endpoint}`, {
+            ...requestInit,
+            headers: requestHeaders,
+          })
+        }
       }
     }
-  }
 
-  // Handle errors
-  if (!response.ok) {
-    throw await parseErrorResponse(response)
-  }
+    // Calculate request duration
+    const duration = Date.now() - startTime
 
-  // Handle empty responses
-  if (response.status === 204) {
-    return {} as T
-  }
+    // Handle errors
+    if (!response.ok) {
+      const error = await parseErrorResponse(response)
 
-  return response.json()
+      // Add breadcrumb for failed request
+      addAPIBreadcrumb({
+        method,
+        url: endpoint,
+        status: response.status,
+        duration,
+        error: error.message,
+      })
+
+      // Capture error in Sentry (non-blocking)
+      captureAPIError(error, {
+        method,
+        url: endpoint,
+        status: response.status,
+      })
+
+      throw error
+    }
+
+    // Add breadcrumb for successful request
+    addAPIBreadcrumb({
+      method,
+      url: endpoint,
+      status: response.status,
+      duration,
+    })
+
+    // Handle empty responses
+    if (response.status === 204) {
+      return {} as T
+    }
+
+    return response.json()
+  } catch (error) {
+    // Handle network errors (not API errors)
+    if (error instanceof ApiError) {
+      throw error
+    }
+
+    const duration = Date.now() - startTime
+    const networkError =
+      error instanceof Error ? error : new Error("Network request failed")
+
+    // Add breadcrumb for network failure
+    addAPIBreadcrumb({
+      method,
+      url: endpoint,
+      duration,
+      error: networkError.message,
+    })
+
+    // Capture network error
+    captureAPIError(networkError, {
+      method,
+      url: endpoint,
+    })
+
+    throw networkError
+  }
 }
 
 // ============================================================================
