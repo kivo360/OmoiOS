@@ -3,6 +3,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { track, ANALYTICS_EVENTS } from "@/lib/analytics"
 import {
   getStripeConfig,
   getBillingAccount,
@@ -157,6 +158,22 @@ export function useRemovePaymentMethod() {
 export function useCreateCreditCheckout() {
   return useMutation<CheckoutResponse, Error, { orgId: string; data: CreditPurchaseRequest }>({
     mutationFn: ({ orgId, data }) => createCreditCheckout(orgId, data),
+    onSuccess: (response, { orgId, data }) => {
+      track(ANALYTICS_EVENTS.CHECKOUT_STARTED, {
+        plan_type: 'free', // Credits are add-ons, not plan changes
+        price_amount: data.amount_usd,
+        currency: 'USD',
+        organization_id: orgId,
+      })
+    },
+    onError: (error, { orgId, data }) => {
+      track(ANALYTICS_EVENTS.CHECKOUT_FAILED, {
+        plan_type: 'free',
+        price_amount: data.amount_usd,
+        organization_id: orgId,
+        error_message: error.message,
+      })
+    },
   })
 }
 
@@ -170,6 +187,11 @@ export function useCreateCreditCheckout() {
 export function useCreateCustomerPortal() {
   return useMutation<PortalResponse, Error, string>({
     mutationFn: (orgId) => createCustomerPortal(orgId),
+    onSuccess: (_, orgId) => {
+      track(ANALYTICS_EVENTS.BILLING_PORTAL_OPENED, {
+        page_path: window?.location?.pathname,
+      })
+    },
   })
 }
 
@@ -347,6 +369,10 @@ export function useCancelSubscription() {
     onSuccess: (_, { orgId }) => {
       queryClient.invalidateQueries({ queryKey: billingKeys.subscription(orgId) })
       queryClient.invalidateQueries({ queryKey: billingKeys.account(orgId) })
+      track(ANALYTICS_EVENTS.SUBSCRIPTION_CANCELLED, {
+        organization_id: orgId,
+        plan_type: 'pro', // Could be enhanced to get actual tier
+      })
     },
   })
 }
@@ -362,6 +388,10 @@ export function useReactivateSubscription() {
     onSuccess: (_, orgId) => {
       queryClient.invalidateQueries({ queryKey: billingKeys.subscription(orgId) })
       queryClient.invalidateQueries({ queryKey: billingKeys.account(orgId) })
+      track(ANALYTICS_EVENTS.SUBSCRIPTION_REACTIVATED, {
+        organization_id: orgId,
+        plan_type: 'pro', // Could be enhanced to get actual tier
+      })
     },
   })
 }
@@ -372,6 +402,21 @@ export function useReactivateSubscription() {
 export function useCreateLifetimeCheckout() {
   return useMutation<CheckoutResponse, Error, { orgId: string; request?: LifetimePurchaseRequest }>({
     mutationFn: ({ orgId, request }) => createLifetimeCheckout(orgId, request),
+    onSuccess: (response, { orgId }) => {
+      track(ANALYTICS_EVENTS.CHECKOUT_STARTED, {
+        plan_type: 'lifetime',
+        price_amount: 299, // Lifetime plan price
+        currency: 'USD',
+        organization_id: orgId,
+      })
+    },
+    onError: (error, { orgId }) => {
+      track(ANALYTICS_EVENTS.CHECKOUT_FAILED, {
+        plan_type: 'lifetime',
+        organization_id: orgId,
+        error_message: error.message,
+      })
+    },
   })
 }
 
@@ -381,5 +426,20 @@ export function useCreateLifetimeCheckout() {
 export function useCreateSubscriptionCheckout() {
   return useMutation<CheckoutResponse, Error, { orgId: string; data: SubscriptionCheckoutRequest }>({
     mutationFn: ({ orgId, data }) => createSubscriptionCheckout(orgId, data),
+    onSuccess: (response, { orgId, data }) => {
+      track(ANALYTICS_EVENTS.CHECKOUT_STARTED, {
+        plan_type: data.tier,
+        price_amount: data.tier === 'pro' ? 50 : 150, // Pro = $50, Team = $150
+        currency: 'USD',
+        organization_id: orgId,
+      })
+    },
+    onError: (error, { orgId, data }) => {
+      track(ANALYTICS_EVENTS.CHECKOUT_FAILED, {
+        plan_type: data.tier,
+        organization_id: orgId,
+        error_message: error.message,
+      })
+    },
   })
 }
