@@ -14,11 +14,20 @@ from fastapi.exceptions import RequestValidationError
 
 from omoi_os.config import get_app_settings
 from omoi_os.logging import configure_logging, get_logger, bind_context, clear_context
+from omoi_os.observability.sentry import init_sentry
+from omoi_os.analytics.posthog import init_posthog
 
 # Configure structured logging at module load time
 # This ensures logging is configured before any other imports that might log
 _env = os.environ.get("OMOIOS_ENV", "development")
 configure_logging(env=_env)  # type: ignore[arg-type]
+
+# Initialize Sentry for error tracking and performance monitoring
+# Must be done early, before any other operations that might raise exceptions
+init_sentry()
+
+# Initialize PostHog for server-side analytics
+init_posthog()
 from omoi_os.mcp.fastmcp_server import mcp_app
 from omoi_os.api.routes import (
     agents,
@@ -968,6 +977,15 @@ async def general_exception_handler(request: Request, exc: Exception):
         f"Unhandled exception on {request.method} {request.url.path}: {exc}",
         exc_info=True,
     )
+    # Capture to Sentry with request context
+    import sentry_sdk
+    with sentry_sdk.push_scope() as scope:
+        scope.set_context("request", {
+            "method": request.method,
+            "path": request.url.path,
+            "query": str(request.query_params),
+        })
+        sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={"detail": "Internal server error"},
