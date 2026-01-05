@@ -269,7 +269,9 @@ def init_sentry() -> bool:
             debug=settings.debug,
             # Sampling
             traces_sample_rate=settings.traces_sample_rate if settings.enable_tracing else 0.0,
-            profiles_sample_rate=settings.profiles_sample_rate if settings.enable_tracing else 0.0,
+            # Profiling (continuous profiling tied to traces)
+            profile_session_sample_rate=settings.profile_session_sample_rate if settings.enable_tracing else 0.0,
+            profile_lifecycle=settings.profile_lifecycle,
             # PII
             send_default_pii=settings.send_default_pii,
             before_send=filter_pii,
@@ -295,6 +297,8 @@ def init_sentry() -> bool:
             environment=settings.environment,
             tracing_enabled=settings.enable_tracing,
             traces_sample_rate=settings.traces_sample_rate,
+            profile_session_sample_rate=settings.profile_session_sample_rate,
+            profile_lifecycle=settings.profile_lifecycle,
         )
         return True
 
@@ -439,6 +443,178 @@ def set_context(name: str, data: Dict[str, Any]) -> None:
     sentry_sdk.set_context(name, data)
 
 
+# =============================================================================
+# Metrics API
+# =============================================================================
+# Sentry metrics for tracking queue depth, task counts, etc.
+# These are lightweight and don't require sampling - they aggregate on Sentry's side.
+
+
+def metric_increment(name: str, value: int = 1, tags: Optional[Dict[str, str]] = None) -> None:
+    """Increment a counter metric.
+
+    Use for counting events like task completions, failures, retries.
+
+    Args:
+        name: Metric name (e.g., "task.completed", "task.failed")
+        value: Amount to increment (default 1)
+        tags: Optional tags for filtering (e.g., {"task_type": "workflow"})
+
+    Example:
+        metric_increment("task.completed", tags={"phase": "implementation"})
+        metric_increment("task.failed", tags={"error_type": "timeout"})
+    """
+    if not _sentry_initialized:
+        return
+
+    from sentry_sdk import metrics
+    metrics.incr(name, value, tags=tags or {})
+
+
+def metric_gauge(name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+    """Set a gauge metric (point-in-time value).
+
+    Use for tracking current state like queue depth, active workers.
+
+    Args:
+        name: Metric name (e.g., "queue.depth", "workers.active")
+        value: Current value
+        tags: Optional tags for filtering
+
+    Example:
+        metric_gauge("queue.depth", 42, tags={"priority": "high"})
+        metric_gauge("workers.active", 3)
+    """
+    if not _sentry_initialized:
+        return
+
+    from sentry_sdk import metrics
+    metrics.gauge(name, value, tags=tags or {})
+
+
+def metric_distribution(name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+    """Record a distribution metric (for percentiles, histograms).
+
+    Use for tracking values that vary like task duration, payload sizes.
+
+    Args:
+        name: Metric name (e.g., "task.duration_ms", "payload.size_bytes")
+        value: Value to record
+        tags: Optional tags for filtering
+
+    Example:
+        metric_distribution("task.duration_ms", 1523.5, tags={"task_type": "build"})
+        metric_distribution("llm.tokens_used", 4500, tags={"model": "claude"})
+    """
+    if not _sentry_initialized:
+        return
+
+    from sentry_sdk import metrics
+    metrics.distribution(name, value, tags=tags or {})
+
+
+def metric_set(name: str, value: str, tags: Optional[Dict[str, str]] = None) -> None:
+    """Add a value to a set metric (for counting unique values).
+
+    Use for tracking unique users, unique errors, etc.
+
+    Args:
+        name: Metric name (e.g., "users.unique", "errors.unique")
+        value: Value to add to the set
+        tags: Optional tags for filtering
+
+    Example:
+        metric_set("users.active", user_id)
+        metric_set("tasks.unique_types", task_type)
+    """
+    if not _sentry_initialized:
+        return
+
+    from sentry_sdk import metrics
+    metrics.set(name, value, tags=tags or {})
+
+
+# =============================================================================
+# Pre-built metrics for common OmoiOS operations
+# =============================================================================
+
+
+def track_task_completed(task_id: str, phase: str, duration_ms: float) -> None:
+    """Track a completed task with standard metrics.
+
+    Args:
+        task_id: The task ID
+        phase: Task phase (e.g., "PHASE_IMPLEMENTATION")
+        duration_ms: How long the task took in milliseconds
+    """
+    metric_increment("omoios.task.completed", tags={"phase": phase})
+    metric_distribution("omoios.task.duration_ms", duration_ms, tags={"phase": phase})
+
+
+def track_task_failed(task_id: str, phase: str, error_type: str) -> None:
+    """Track a failed task with standard metrics.
+
+    Args:
+        task_id: The task ID
+        phase: Task phase (e.g., "PHASE_IMPLEMENTATION")
+        error_type: Type of error (e.g., "timeout", "validation", "llm_error")
+    """
+    metric_increment("omoios.task.failed", tags={"phase": phase, "error_type": error_type})
+
+
+def track_task_retried(task_id: str, phase: str, retry_count: int) -> None:
+    """Track a task retry.
+
+    Args:
+        task_id: The task ID
+        phase: Task phase
+        retry_count: Current retry attempt number
+    """
+    metric_increment("omoios.task.retried", tags={"phase": phase})
+    metric_gauge("omoios.task.retry_count", retry_count, tags={"task_id": task_id})
+
+
+def track_queue_depth(queue_name: str, depth: int, priority: Optional[str] = None) -> None:
+    """Track current queue depth.
+
+    Args:
+        queue_name: Name of the queue (e.g., "tasks", "tickets")
+        depth: Number of items in queue
+        priority: Optional priority level
+    """
+    tags = {"queue": queue_name}
+    if priority:
+        tags["priority"] = priority
+    metric_gauge("omoios.queue.depth", depth, tags=tags)
+
+
+def track_agent_health(agent_id: str, status: str) -> None:
+    """Track agent health status.
+
+    Args:
+        agent_id: The agent ID
+        status: Agent status (e.g., "healthy", "stale", "failed")
+    """
+    metric_increment(f"omoios.agent.{status}", tags={"agent_id": agent_id})
+    metric_set("omoios.agents.active", agent_id)
+
+
+def track_llm_usage(model: str, tokens_in: int, tokens_out: int, duration_ms: float) -> None:
+    """Track LLM API usage.
+
+    Args:
+        model: Model name (e.g., "glm-4.7", "claude-sonnet")
+        tokens_in: Input tokens
+        tokens_out: Output tokens
+        duration_ms: Request duration in milliseconds
+    """
+    tags = {"model": model}
+    metric_increment("omoios.llm.requests", tags=tags)
+    metric_distribution("omoios.llm.tokens_in", tokens_in, tags=tags)
+    metric_distribution("omoios.llm.tokens_out", tokens_out, tags=tags)
+    metric_distribution("omoios.llm.duration_ms", duration_ms, tags=tags)
+
+
 __all__ = [
     "init_sentry",
     "filter_pii",
@@ -447,4 +623,16 @@ __all__ = [
     "set_user",
     "set_tag",
     "set_context",
+    # Metrics
+    "metric_increment",
+    "metric_gauge",
+    "metric_distribution",
+    "metric_set",
+    # Pre-built metrics
+    "track_task_completed",
+    "track_task_failed",
+    "track_task_retried",
+    "track_queue_depth",
+    "track_agent_health",
+    "track_llm_usage",
 ]
