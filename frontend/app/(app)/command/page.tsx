@@ -71,14 +71,17 @@ export default function CommandCenterPage() {
   // Track if we've already redirected to prevent double redirects
   const hasRedirectedRef = useRef(false)
 
-  // Helper to handle successful sandbox detection
+  // Helper to handle successful sandbox detection - redirect to board to watch progress
   const handleSandboxReady = useCallback((sandboxId: string) => {
     if (hasRedirectedRef.current) return // Prevent double redirect
     hasRedirectedRef.current = true
     setLaunchState({ status: "redirecting", sandboxId })
-    toast.success("Sandbox launched!")
-    router.push(`/sandbox/${sandboxId}`)
-  }, [router])
+    toast.success("Agent started! Redirecting to board...")
+    // Redirect to board instead of sandbox - board shows real-time progress
+    // and user can click on running tasks to see agent output
+    const projectId = selectedProject?.id || "all"
+    router.push(`/board/${projectId}`)
+  }, [router, selectedProject])
 
   // Handle event from WebSocket that signals sandbox is ready
   const handleEvent = useCallback((event: SystemEvent) => {

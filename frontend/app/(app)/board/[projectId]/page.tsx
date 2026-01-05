@@ -55,9 +55,17 @@ import {
   ListFilter,
   X,
   FolderGit2,
+  Play,
+  Loader2,
+  Radio,
+  CircleDot,
 } from "lucide-react"
+import { toast } from "sonner"
 import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
 import { useProject } from "@/hooks/useProjects"
+import { useBatchSpawnPhaseTasks } from "@/hooks/useTickets"
+import { useBoardEvents, type BoardEvent, type RunningTaskInfo } from "@/hooks/useBoardEvents"
+import { AgentPanel } from "@/components/board"
 import type { Ticket as ApiTicket, BoardColumn } from "@/lib/api/types"
 
 interface BoardPageProps {
@@ -106,9 +114,13 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 function SortableTicketCard({
   ticket,
   projectId,
+  runningTasks,
+  onViewAgent,
 }: {
   ticket: BoardTicket
   projectId: string
+  runningTasks?: RunningTaskInfo[]
+  onViewAgent?: (taskInfo: RunningTaskInfo) => void
 }) {
   const {
     attributes,
@@ -131,6 +143,8 @@ function SortableTicketCard({
         ticket={ticket}
         projectId={projectId}
         dragHandleProps={{ ...attributes, ...listeners }}
+        runningTasks={runningTasks}
+        onViewAgent={onViewAgent}
       />
     </div>
   )
@@ -142,21 +156,34 @@ function TicketCard({
   projectId,
   dragHandleProps,
   isOverlay = false,
+  runningTasks = [],
+  onViewAgent,
 }: {
   ticket: BoardTicket
   projectId: string
   dragHandleProps?: Record<string, unknown>
   isOverlay?: boolean
+  runningTasks?: RunningTaskInfo[]
+  onViewAgent?: (taskInfo: RunningTaskInfo) => void
 }) {
   const priorityCfg = priorityConfig[ticket.priority] || { label: ticket.priority, color: "outline" }
   const statusCfg = statusConfig[ticket.status] || { label: ticket.status, color: "outline" }
+  const hasRunningTasks = runningTasks.length > 0
+
+  const handleAgentClick = (e: React.MouseEvent, taskInfo: RunningTaskInfo) => {
+    e.preventDefault()
+    e.stopPropagation()
+    onViewAgent?.(taskInfo)
+  }
 
   const content = (
     <Card
       className={`cursor-pointer transition-all ${
         isOverlay
           ? "shadow-lg ring-2 ring-primary"
-          : "hover:border-primary/50 hover:shadow-sm"
+          : hasRunningTasks
+            ? "ring-2 ring-green-500/50 shadow-green-500/20 shadow-md hover:shadow-lg"
+            : "hover:border-primary/50 hover:shadow-sm"
       }`}
     >
       <CardContent className="p-3 space-y-2">
@@ -178,6 +205,17 @@ function TicketCard({
                   {ticket.title}
                 </p>
               </div>
+              {/* Running task indicator */}
+              {hasRunningTasks && (
+                <button
+                  onClick={(e) => handleAgentClick(e, runningTasks[0])}
+                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md bg-green-500/10 hover:bg-green-500/20 text-green-600 transition-colors"
+                  title="View agent output"
+                >
+                  <Bot className="h-3.5 w-3.5 animate-pulse" />
+                  <span className="text-xs font-medium">{runningTasks.length}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -228,11 +266,15 @@ function KanbanColumn({
   tickets,
   projectId,
   isOver,
+  getRunningTasksForTicket,
+  onViewAgent,
 }: {
   column: Column
   tickets: BoardTicket[]
   projectId: string
   isOver?: boolean
+  getRunningTasksForTicket?: (ticketId: string) => RunningTaskInfo[]
+  onViewAgent?: (taskInfo: RunningTaskInfo) => void
 }) {
   const isOverWipLimit = column.wipLimit !== null && column.wipLimit > 0 && tickets.length > column.wipLimit
 
@@ -284,6 +326,8 @@ function KanbanColumn({
                 key={ticket.id}
                 ticket={ticket}
                 projectId={projectId}
+                runningTasks={getRunningTasksForTicket?.(ticket.id)}
+                onViewAgent={onViewAgent}
               />
             ))}
 
@@ -318,10 +362,68 @@ export default function BoardPage({ params }: BoardPageProps) {
   const [overId, setOverId] = useState<string | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
 
+  // Agent panel state
+  const [selectedSandboxId, setSelectedSandboxId] = useState<string | null>(null)
+  const [selectedTaskInfo, setSelectedTaskInfo] = useState<{ ticketTitle?: string; taskTitle?: string }>({})
+  const [isAgentPanelExpanded, setIsAgentPanelExpanded] = useState(false)
+
   // Fetch project and board data from API
   const { data: project } = useProject(projectId === "all" ? undefined : projectId)
   const { data: boardData, isLoading, error } = useBoardView(projectId === "all" ? undefined : projectId)
   const moveTicket = useMoveTicket()
+  const batchSpawn = useBatchSpawnPhaseTasks()
+
+  // Handle WebSocket events for real-time updates
+  const handleBoardEvent = useCallback((event: BoardEvent) => {
+    // Show toast for significant events
+    switch (event.event_type) {
+      case "TICKET_CREATED":
+        toast.success("New ticket created", {
+          description: (event.payload.title as string) || event.entity_id.slice(0, 8),
+        })
+        break
+      case "TASK_ASSIGNED":
+        toast.info("Task started", {
+          description: `Agent assigned to task ${event.entity_id.slice(0, 8)}`,
+        })
+        break
+      case "TASK_COMPLETED":
+        toast.success("Task completed", {
+          description: `Task ${event.entity_id.slice(0, 8)} finished`,
+        })
+        break
+      case "TICKET_PHASE_ADVANCED":
+        toast.success("Phase advanced", {
+          description: `Ticket moved to ${(event.payload.new_phase as string) || "next phase"}`,
+        })
+        break
+      case "SANDBOX_SPAWNED":
+        // Auto-select sandbox when it spawns
+        const sandboxId = event.entity_id
+        const taskTitle = event.payload.task_title as string | undefined
+        const ticketTitle = event.payload.ticket_title as string | undefined
+        setSelectedSandboxId(sandboxId)
+        setSelectedTaskInfo({ ticketTitle, taskTitle })
+        toast.info("Agent started", {
+          description: taskTitle || `Sandbox ${sandboxId.slice(0, 8)}`,
+        })
+        break
+    }
+  }, [])
+
+  const { isConnected: wsConnected, runningTasks, getRunningTasksForTicket } = useBoardEvents({
+    projectId: projectId === "all" ? undefined : projectId,
+    onEvent: handleBoardEvent,
+    enabled: projectId !== "all",
+  })
+
+  // Handler for clicking on agent indicator
+  const handleViewAgent = useCallback((taskInfo: RunningTaskInfo) => {
+    if (taskInfo.sandboxId) {
+      setSelectedSandboxId(taskInfo.sandboxId)
+      setSelectedTaskInfo({ taskTitle: taskInfo.taskTitle })
+    }
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -440,6 +542,50 @@ export default function BoardPage({ params }: BoardPageProps) {
 
   const hasFilters = searchQuery || filterStatus !== "all" || filterPriority !== "all"
 
+  // Get processable tickets (backlog/in_progress that aren't blocked)
+  const processableTickets = allTickets.filter(
+    (t) => t.status !== "done" && t.status !== "blocked"
+  )
+
+  // Start processing all eligible tickets
+  const handleStartProcessing = async () => {
+    if (processableTickets.length === 0) {
+      toast.info("No tickets to process", {
+        description: "All tickets are either done or blocked.",
+      })
+      return
+    }
+
+    const ticketIds = processableTickets.map((t) => t.id)
+
+    try {
+      const results = await batchSpawn.mutateAsync(ticketIds)
+
+      // Count successes and failures
+      const successes = results.filter((r) => r.tasks_spawned > 0)
+      const failures = results.filter((r) => r.error)
+      const totalTasks = successes.reduce((sum, r) => sum + r.tasks_spawned, 0)
+
+      if (failures.length === 0) {
+        toast.success(`Started processing ${successes.length} tickets`, {
+          description: `Spawned ${totalTasks} tasks. They will be picked up by the orchestrator.`,
+        })
+      } else if (successes.length > 0) {
+        toast.warning(`Partial success`, {
+          description: `Spawned ${totalTasks} tasks for ${successes.length} tickets. ${failures.length} tickets failed.`,
+        })
+      } else {
+        toast.error("Failed to start processing", {
+          description: failures[0]?.error || "Unknown error occurred",
+        })
+      }
+    } catch (error) {
+      toast.error("Failed to start processing", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -512,6 +658,15 @@ export default function BoardPage({ params }: BoardPageProps) {
               <Badge variant="outline">
                 {filteredTickets.length} tickets
               </Badge>
+              {/* WebSocket connection indicator */}
+              {projectId !== "all" && (
+                <div className="flex items-center gap-1.5" title={wsConnected ? "Live updates connected" : "Connecting..."}>
+                  <CircleDot className={`h-3 w-3 ${wsConnected ? "text-green-500 animate-pulse" : "text-yellow-500"}`} />
+                  <span className="text-xs text-muted-foreground">
+                    {wsConnected ? "Live" : "..."}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {/* Search */}
@@ -572,6 +727,31 @@ export default function BoardPage({ params }: BoardPageProps) {
                 </Link>
               </Button>
 
+              {/* Start Processing - spawns tasks for all eligible tickets */}
+              <Button
+                variant="default"
+                onClick={handleStartProcessing}
+                disabled={batchSpawn.isPending || processableTickets.length === 0}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                {batchSpawn.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Starting...
+                  </>
+                ) : (
+                  <>
+                    <Play className="mr-2 h-4 w-4" />
+                    Start Processing
+                    {processableTickets.length > 0 && (
+                      <Badge variant="secondary" className="ml-2 bg-green-800">
+                        {processableTickets.length}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </Button>
+
               {/* Create Ticket */}
               <Button onClick={() => setIsCreateDialogOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
@@ -581,21 +761,49 @@ export default function BoardPage({ params }: BoardPageProps) {
           </div>
         </div>
 
-        {/* Board */}
-        <ScrollArea className="flex-1">
-          <div className="flex gap-4 p-4 pb-8">
-            {columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                tickets={ticketsByColumn[column.id] || []}
-                projectId={projectId}
-                isOver={overId === column.id || ticketsByColumn[column.id]?.some(t => t.id === overId)}
-              />
-            ))}
+        {/* Main Content Area - Board + Agent Panel */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Board */}
+          <div className={`flex-1 transition-all duration-300 ${selectedSandboxId && !isAgentPanelExpanded ? "mr-0" : ""}`}>
+            <ScrollArea className="h-full">
+              <div className="flex gap-4 p-4 pb-8">
+                {columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    tickets={ticketsByColumn[column.id] || []}
+                    projectId={projectId}
+                    isOver={overId === column.id || ticketsByColumn[column.id]?.some(t => t.id === overId)}
+                    getRunningTasksForTicket={getRunningTasksForTicket}
+                    onViewAgent={handleViewAgent}
+                  />
+                ))}
+              </div>
+              <ScrollBar orientation="horizontal" />
+            </ScrollArea>
           </div>
-          <ScrollBar orientation="horizontal" />
-        </ScrollArea>
+
+          {/* Agent Panel - Slide in from right */}
+          {selectedSandboxId && (
+            <div
+              className={`shrink-0 transition-all duration-300 ${
+                isAgentPanelExpanded ? "w-[60%]" : "w-[400px]"
+              }`}
+            >
+              <AgentPanel
+                sandboxId={selectedSandboxId}
+                ticketTitle={selectedTaskInfo.ticketTitle}
+                taskTitle={selectedTaskInfo.taskTitle}
+                onClose={() => {
+                  setSelectedSandboxId(null)
+                  setSelectedTaskInfo({})
+                }}
+                isExpanded={isAgentPanelExpanded}
+                onToggleExpand={() => setIsAgentPanelExpanded(!isAgentPanelExpanded)}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Drag Overlay */}
         <DragOverlay>

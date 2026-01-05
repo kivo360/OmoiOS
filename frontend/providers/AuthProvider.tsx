@@ -14,6 +14,7 @@ import {
   shouldRefreshToken,
   setLastValidated,
 } from "@/lib/api/client"
+import { setUserContext, clearUserContext, addNavigationBreadcrumb } from "@/lib/sentry/context"
 import { identifyUser, resetUser, clearOrganization, track, ANALYTICS_EVENTS } from "@/lib/analytics"
 
 // ============================================================================
@@ -44,12 +45,15 @@ const useAuthStore = create<AuthState>()(
       error: null,
       lastValidatedAt: null,
 
-      setUser: (user) =>
+      setUser: (user) => {
+        // Update Sentry user context for error tracking
+        setUserContext(user)
         set({
           user,
           isAuthenticated: !!user,
           error: null,
-        }),
+        })
+      },
 
       setLoading: (isLoading) => set({ isLoading }),
 
@@ -57,14 +61,17 @@ const useAuthStore = create<AuthState>()(
 
       setLastValidatedAt: (lastValidatedAt) => set({ lastValidatedAt }),
 
-      reset: () =>
+      reset: () => {
+        // Clear Sentry user context
+        clearUserContext()
         set({
           user: null,
           isLoading: false,
           isAuthenticated: false,
           error: null,
           lastValidatedAt: null,
-        }),
+        })
+      },
     }),
     {
       name: "omoios-auth",
@@ -304,6 +311,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => clearInterval(interval)
   }, [isAuthenticated, validateInBackground])
+
+  // Track navigation changes for Sentry breadcrumbs
+  const previousPathnameRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (pathname && previousPathnameRef.current && previousPathnameRef.current !== pathname) {
+      addNavigationBreadcrumb(previousPathnameRef.current, pathname)
+    }
+    previousPathnameRef.current = pathname
+  }, [pathname])
 
   const value: AuthContextValue = {
     user,
