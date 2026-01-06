@@ -255,8 +255,6 @@ def init_sentry() -> bool:
         from sentry_sdk.integrations.redis import RedisIntegration
         from sentry_sdk.integrations.logging import LoggingIntegration
         from sentry_sdk.integrations.httpx import HttpxIntegration
-        from sentry_sdk.integrations.anthropic import AnthropicIntegration
-
         # Configure logging integration - capture errors and warnings
         logging_integration = LoggingIntegration(
             level=None,  # Don't capture logs at any level as breadcrumbs
@@ -279,10 +277,7 @@ def init_sentry() -> bool:
             # Additional settings
             attach_stacktrace=settings.attach_stacktrace,
             max_breadcrumbs=settings.max_breadcrumbs,
-            # Disable default integrations and explicitly add only the ones we want
-            # This prevents auto-instrumentation of anthropic which fails due to SDK version mismatch
-            default_integrations=False,
-            # Integrations - explicitly list all integrations we want
+            # Integrations - add our explicit integrations alongside auto-detected ones
             integrations=[
                 StarletteIntegration(transaction_style="endpoint"),
                 FastApiIntegration(transaction_style="endpoint"),
