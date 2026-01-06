@@ -32,6 +32,7 @@ from omoi_os.mcp.fastmcp_server import mcp_app
 from omoi_os.api.routes import (
     agents,
     alerts,
+    analytics_proxy,
     auth,
     billing,
     board,
@@ -1079,6 +1080,9 @@ app.include_router(reasoning.router, prefix="/api/v1", tags=["reasoning"])
 
 # Code exploration routes
 app.include_router(explore.router, prefix="/api/v1", tags=["explore"])
+
+# Analytics proxy routes (for bypassing ad blockers)
+app.include_router(analytics_proxy.router, prefix="/ingest", tags=["analytics"])
 
 # Mount FastMCP server at /mcp
 app.mount("/mcp", mcp_app)
