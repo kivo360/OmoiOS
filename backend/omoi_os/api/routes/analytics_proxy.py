@@ -189,6 +189,33 @@ async def proxy_session_recording(request: Request) -> Response:
     return await proxy_to_posthog(request, "/s/")
 
 
+@router.get("/flags")
+@router.post("/flags")
+@router.get("/flags/")
+@router.post("/flags/")
+async def proxy_flags(request: Request) -> Response:
+    """Proxy feature flags requests to PostHog.
+
+    Used to fetch feature flag values for the current user.
+    """
+    method = request.method
+    return await proxy_to_posthog(request, "/flags/", method=method)
+
+
+@router.get("/static/{path:path}")
+async def proxy_static(request: Request, path: str) -> Response:
+    """Proxy static JS files from PostHog.
+
+    PostHog loads additional JS files for features like:
+    - dead-clicks-autocapture.js
+    - posthog-recorder.js
+    - toolbar.js
+    - surveys.js
+    - exception-autocapture.js
+    """
+    return await proxy_to_posthog(request, f"/static/{path}", method="GET")
+
+
 @router.options("/{path:path}")
 async def options_handler(path: str) -> Response:
     """Handle CORS preflight requests.
