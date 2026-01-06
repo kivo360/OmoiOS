@@ -1,6 +1,7 @@
 "use client"
 
 import { use, useState, useCallback, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -355,6 +356,7 @@ function KanbanColumn({
 
 export default function BoardPage({ params }: BoardPageProps) {
   const { projectId } = use(params)
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterPriority, setFilterPriority] = useState<string>("all")
@@ -406,15 +408,20 @@ export default function BoardPage({ params }: BoardPageProps) {
         setSelectedTaskInfo({ ticketTitle, taskTitle })
         toast.info("Agent started", {
           description: taskTitle || `Sandbox ${sandboxId.slice(0, 8)}`,
+          action: {
+            label: "View Sandbox",
+            onClick: () => router.push(`/sandbox/${sandboxId}`),
+          },
+          duration: 10000, // Keep visible longer so user can click
         })
         break
     }
-  }, [])
+  }, [router])
 
   const { isConnected: wsConnected, runningTasks, getRunningTasksForTicket } = useBoardEvents({
     projectId: projectId === "all" ? undefined : projectId,
     onEvent: handleBoardEvent,
-    enabled: projectId !== "all",
+    enabled: true, // Always enable WebSocket events, even for "all" projects view
   })
 
   // Handler for clicking on agent indicator
@@ -659,14 +666,12 @@ export default function BoardPage({ params }: BoardPageProps) {
                 {filteredTickets.length} tickets
               </Badge>
               {/* WebSocket connection indicator */}
-              {projectId !== "all" && (
-                <div className="flex items-center gap-1.5" title={wsConnected ? "Live updates connected" : "Connecting..."}>
-                  <CircleDot className={`h-3 w-3 ${wsConnected ? "text-green-500 animate-pulse" : "text-yellow-500"}`} />
-                  <span className="text-xs text-muted-foreground">
-                    {wsConnected ? "Live" : "..."}
-                  </span>
-                </div>
-              )}
+              <div className="flex items-center gap-1.5" title={wsConnected ? "Live updates connected" : "Connecting..."}>
+                <CircleDot className={`h-3 w-3 ${wsConnected ? "text-green-500 animate-pulse" : "text-yellow-500"}`} />
+                <span className="text-xs text-muted-foreground">
+                  {wsConnected ? "Live" : "..."}
+                </span>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               {/* Search */}

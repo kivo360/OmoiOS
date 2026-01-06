@@ -71,17 +71,14 @@ export default function CommandCenterPage() {
   // Track if we've already redirected to prevent double redirects
   const hasRedirectedRef = useRef(false)
 
-  // Helper to handle successful sandbox detection - redirect to board to watch progress
+  // Helper to handle successful sandbox detection - redirect to sandbox for quick mode
   const handleSandboxReady = useCallback((sandboxId: string) => {
     if (hasRedirectedRef.current) return // Prevent double redirect
     hasRedirectedRef.current = true
     setLaunchState({ status: "redirecting", sandboxId })
-    toast.success("Agent started! Redirecting to board...")
-    // Redirect to board instead of sandbox - board shows real-time progress
-    // and user can click on running tasks to see agent output
-    const projectId = selectedProject?.id || "all"
-    router.push(`/board/${projectId}`)
-  }, [router, selectedProject])
+    toast.success("Agent started! Redirecting to sandbox...")
+    router.push(`/sandbox/${sandboxId}`)
+  }, [router])
 
   // Handle event from WebSocket that signals sandbox is ready
   const handleEvent = useCallback((event: SystemEvent) => {
@@ -211,17 +208,19 @@ export default function CommandCenterPage() {
         return
       }
 
+      // Get project ID from ticket response or selected project
+      // The backend may auto-create a project or the ticket may have one assigned
+      const projectId = result.project_id || selectedProject?.id || "all"
+
       // Handle navigation based on mode
       if (selectedMode === "quick") {
         // Ticket created, now wait for the orchestrator to spawn a sandbox
         toast.info("Launching sandbox...")
         setLaunchState({ status: "waiting_for_sandbox", ticketId: result.id, prompt })
       } else {
-        // Spec-driven: redirect to spec workspace
-        toast.info("Creating spec...")
-        // For now, redirect to tickets page until spec workspace is built
-        // TODO: Update to /specs/:id when spec workspace is implemented
-        router.push(`/tickets/${result.id}`)
+        // Spec-driven: redirect to board to watch progress
+        toast.success("Spec creation started! Redirecting to board...")
+        router.push(`/board/${projectId}`)
       }
 
     } catch (error) {

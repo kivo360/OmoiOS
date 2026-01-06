@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 if TYPE_CHECKING:
     from omoi_os.models.task import Task
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from omoi_os.models.project import Project
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from pgvector.sqlalchemy import Vector
 
@@ -102,6 +102,15 @@ class Ticket(Base):
         Text,
         nullable=True,
         comment="Reason for rejection if ticket was rejected (REQ-THA-005)",
+    )
+
+    # User ownership - required for filtering user's tickets
+    user_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="User who created/owns this ticket",
     )
 
     # Project relationship

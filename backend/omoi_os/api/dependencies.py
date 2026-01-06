@@ -904,8 +904,9 @@ async def verify_ticket_access(
     """
     Verify the current user has access to the specified ticket.
 
-    A ticket is accessible if it belongs to a project in an organization
-    the user is a member of.
+    A ticket is accessible if:
+    1. The ticket's user_id matches the current user (direct ownership)
+    2. OR the ticket belongs to a project in an organization the user is a member of
 
     Args:
         ticket_id: The ticket ID to check access for
@@ -933,10 +934,26 @@ async def verify_ticket_access(
                 detail="Ticket not found",
             )
 
-        # Verify access to the ticket's project
-        await verify_project_access(ticket.project_id, current_user, db)
+        # Check direct user ownership first (new user_id field)
+        if ticket.user_id and ticket.user_id == current_user.id:
+            return ticket_id
 
-        return ticket_id
+        # If ticket has a project, verify project access
+        if ticket.project_id:
+            await verify_project_access(ticket.project_id, current_user, db)
+            return ticket_id
+
+        # Ticket has no user_id and no project_id - deny access
+        # (Legacy tickets without user_id should be migrated)
+        logger.warning(
+            f"Ticket {ticket_id} has no user_id or project_id - denying access",
+            ticket_id=ticket_id,
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this ticket",
+        )
 
 
 async def verify_task_access(

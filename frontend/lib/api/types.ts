@@ -156,6 +156,7 @@ export interface Project {
 
 export interface ProjectCreate {
   name: string
+  organization_id: string  // Required - projects must belong to an organization
   description?: string
   default_phase_id?: string
   github_owner?: string
