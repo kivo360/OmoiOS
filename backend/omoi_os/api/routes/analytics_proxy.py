@@ -216,6 +216,27 @@ async def proxy_static(request: Request, path: str) -> Response:
     return await proxy_to_posthog(request, f"/static/{path}", method="GET")
 
 
+@router.api_route("/i/v0/e/", methods=["GET", "POST"])
+@router.api_route("/i/v0/e", methods=["GET", "POST"])
+async def proxy_ingest_v0(request: Request) -> Response:
+    """Proxy ingest v0 requests to PostHog.
+
+    Some SDK versions use this newer ingest path format.
+    """
+    method = request.method
+    return await proxy_to_posthog(request, "/i/v0/e/", method=method)
+
+
+@router.api_route("/{path:path}", methods=["GET", "POST"])
+async def proxy_catchall(request: Request, path: str) -> Response:
+    """Catch-all proxy for any other PostHog paths.
+
+    This handles any PostHog endpoint we haven't explicitly defined.
+    """
+    method = request.method
+    return await proxy_to_posthog(request, f"/{path}", method=method)
+
+
 @router.options("/{path:path}")
 async def options_handler(path: str) -> Response:
     """Handle CORS preflight requests.
