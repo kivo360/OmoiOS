@@ -39,3 +39,28 @@ demo:
   add_security_analyzer: false
   confirm_all: true
 
+# Sentry error tracking (uses env vars for DSN)
+sentry:
+  environment: development
+  debug: false
+  traces_sample_rate: 0.1
+  profile_session_sample_rate: 0.1
+  enable_tracing: true
+
+# PostHog analytics (uses env vars for API key)
+posthog:
+  host: https://us.i.posthog.com
+  debug: false
+  disabled: false
+
+# Daytona sandbox configuration
+daytona:
+  api_url: https://app.daytona.io/api
+  target: us
+  image: nikolaik/python-nodejs:python3.12-nodejs22
+  snapshot: claude-agent-sdk-medium
+  timeout: 300
+  sandbox_memory_gb: 4
+  sandbox_cpu: 2
+  sandbox_disk_gb: 8
+
