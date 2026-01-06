@@ -278,6 +278,8 @@ def init_sentry() -> bool:
             # Additional settings
             attach_stacktrace=settings.attach_stacktrace,
             max_breadcrumbs=settings.max_breadcrumbs,
+            # Disable auto-instrumentation for AI libraries (anthropic SDK version mismatch)
+            disabled_integrations=["anthropic"],
             # Integrations
             integrations=[
                 StarletteIntegration(transaction_style="endpoint"),
