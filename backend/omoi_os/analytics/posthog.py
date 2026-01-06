@@ -71,7 +71,7 @@ def init_posthog() -> bool:
         from posthog import Posthog
 
         _posthog_client = Posthog(
-            api_key=settings.api_key,
+            project_api_key=settings.api_key,
             host=settings.host,
             debug=settings.debug,
             sync_mode=False,  # Use async batch sending
