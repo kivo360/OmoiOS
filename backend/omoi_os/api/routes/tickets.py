@@ -293,6 +293,7 @@ async def create_ticket(
             status=TicketStatus.BACKLOG.value,  # Start in backlog per REQ-TKT-SM-001
             priority=ticket_data.priority,
             project_id=ticket_data.project_id,  # Associate ticket with project
+            user_id=current_user.id,  # Associate ticket with user for filtering (UUID)
         )
 
         # Store embedding if we generated one during dedup check

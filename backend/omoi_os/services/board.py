@@ -1,6 +1,7 @@
 """Board service for Kanban visualization and workflow management."""
 
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Union
+from uuid import UUID
 
 from sqlalchemy import select, func
 from sqlalchemy.orm import Session
@@ -28,7 +29,7 @@ class BoardService:
         self.event_bus = event_bus
 
     def get_board_view(
-        self, session: Session, project_id: Optional[str] = None
+        self, session: Session, project_id: Optional[str] = None, user_id: Optional[Union[str, UUID]] = None
     ) -> Dict[str, Any]:
         """
         Get complete Kanban board view with all columns and tickets.
@@ -36,6 +37,7 @@ class BoardService:
         Args:
             session: Database session.
             project_id: Optional project ID to filter tickets. If None, shows all tickets (cross-project board).
+            user_id: Optional user ID to filter tickets. If provided, only shows tickets owned by this user.
 
         Returns:
             Dictionary with columns and tickets organized by column.
@@ -59,7 +61,10 @@ class BoardService:
                 # Filter by project if specified
                 if project_id is not None:
                     query = query.where(Ticket.project_id == project_id)
-                
+                # Filter by user if specified (only show user's tickets)
+                if user_id is not None:
+                    query = query.where(Ticket.user_id == user_id)
+
                 tickets = session.execute(query).scalars().all()
                 tickets_in_column.extend(tickets)
 

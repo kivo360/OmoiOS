@@ -2,11 +2,13 @@
 
 import asyncio
 from typing import List, Dict, Any, Optional
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from omoi_os.api.dependencies import get_db_service
+from omoi_os.api.dependencies import get_db_service, get_current_user
+from omoi_os.models.user import User
 from omoi_os.services.board import BoardService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
@@ -67,6 +69,7 @@ def get_board_service() -> BoardService:
 def _get_board_view_sync(
     db: DatabaseService,
     board_service: BoardService,
+    user_id: UUID,
     project_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Get board view (runs in thread pool)."""
@@ -80,7 +83,7 @@ def _get_board_view_sync(
             board_service.create_default_board(session=session)
             session.commit()
 
-        board_data = board_service.get_board_view(session=session, project_id=project_id)
+        board_data = board_service.get_board_view(session=session, project_id=project_id, user_id=user_id)
         return board_data
 
 
@@ -168,22 +171,24 @@ def _get_column_for_phase_sync(
 @router.get("/view", response_model=BoardViewResponse)
 async def get_board_view(
     project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for cross-project board."),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> BoardViewResponse:
     """
-    Get complete Kanban board view.
+    Get complete Kanban board view for the authenticated user.
 
     Returns all columns with tickets organized by current phase.
     Automatically initializes default board columns if none exist.
+    Only shows tickets belonging to the authenticated user.
 
     Args:
-        project_id: Optional project ID to filter tickets. If omitted, shows all tickets (cross-project board).
+        project_id: Optional project ID to filter tickets. If omitted, shows all user's tickets (cross-project board).
     """
     try:
         # Run sync service in thread pool (non-blocking)
         board_data = await asyncio.to_thread(
-            _get_board_view_sync, db, board_service, project_id
+            _get_board_view_sync, db, board_service, current_user.id, project_id
         )
         return BoardViewResponse(**board_data)
     except Exception as e:

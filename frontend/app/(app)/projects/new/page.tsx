@@ -21,6 +21,7 @@ import { ArrowLeft, Loader2, FolderGit2, Github, Lock, Globe } from "lucide-reac
 import { useCreateProject, useProjects } from "@/hooks/useProjects"
 import { useGitHubRepos } from "@/hooks/useGitHubRepos"
 import { useIsProviderConnected } from "@/hooks/useOAuth"
+import { useOrganizations } from "@/hooks/useOrganizations"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -32,11 +33,15 @@ export default function NewProjectPage() {
 
   const createMutation = useCreateProject()
   const { data: projectsData } = useProjects()
+  const { data: organizations, isLoading: orgsLoading } = useOrganizations()
   const { isConnected: isGitHubConnected, isLoading: isCheckingConnection } = useIsProviderConnected("github")
   const { data: repos, isLoading: reposLoading } = useGitHubRepos(
     { sort: "updated" },
     isGitHubConnected && !isCheckingConnection // Only fetch if GitHub is connected
   )
+
+  // Get the user's first organization (default organization)
+  const defaultOrganization = organizations?.[0]
 
   // Get repos that are not already connected to projects
   const availableRepos = useMemo(() => {
@@ -58,12 +63,18 @@ export default function NewProjectPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
+    if (!defaultOrganization) {
+      toast.error("No organization found. Please create an organization first.")
+      return
+    }
+
     // Parse owner/repo from selection
     const [github_owner, github_repo] = formData.repository.split("/")
 
     try {
       await createMutation.mutateAsync({
         name: formData.name,
+        organization_id: defaultOrganization.id,
         description: formData.description || undefined,
         github_owner,
         github_repo,
@@ -199,7 +210,7 @@ export default function NewProjectPage() {
               <Button type="button" variant="outline" asChild>
                 <Link href="/projects">Cancel</Link>
               </Button>
-              <Button type="submit" disabled={createMutation.isPending || !formData.name}>
+              <Button type="submit" disabled={createMutation.isPending || !formData.name || orgsLoading || !defaultOrganization}>
                 {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Create Project
               </Button>
