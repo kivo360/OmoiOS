@@ -92,19 +92,12 @@ def configure_logging(
     if json_logs is None:
         json_logs: bool = env == "production"
 
-    # Exception transformer for structured exception data
+    # Exception transformer for structured exception data (JSON logs)
+    # Note: ExceptionDictTransformer has a simpler API in structlog 23.x
     exception_transformer: ExceptionDictTransformer = ExceptionDictTransformer(
         show_locals=show_locals,
-        locals_max_length=locals_max_length,
         locals_max_string=locals_max_string,
-        locals_hide_dunder=True,
-        locals_hide_sunder=False,
         max_frames=max_frames,
-        use_rich=not json_logs,  # Use rich formatting in dev mode
-        suppress=(
-            "structlog",
-            "logging",
-        ),
     )
 
     # Shared processors for all log entries

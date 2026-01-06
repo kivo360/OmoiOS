@@ -11,6 +11,12 @@ import posthog from 'posthog-js'
 const POSTHOG_KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const POSTHOG_HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
 
+// Use proxy to bypass ad blockers - routes through your own backend
+// The proxy forwards requests to PostHog, but ad blockers can't detect it
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:18000'
+const USE_PROXY = process.env.NEXT_PUBLIC_POSTHOG_USE_PROXY !== 'false'
+const POSTHOG_API_HOST = USE_PROXY ? `${API_URL}/ingest` : POSTHOG_HOST
+
 // Check if we're in the browser
 const isBrowser = typeof window !== 'undefined'
 
@@ -36,7 +42,10 @@ export function initPostHog(): void {
   }
 
   posthog.init(POSTHOG_KEY, {
-    api_host: POSTHOG_HOST,
+    api_host: POSTHOG_API_HOST,
+
+    // UI host is where PostHog's toolbar/features are served from (not proxied)
+    ui_host: POSTHOG_HOST,
 
     // Capture all clicks, form submissions automatically
     autocapture: true,
