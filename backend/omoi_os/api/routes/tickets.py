@@ -270,6 +270,7 @@ async def create_ticket(
     # This enables the "select repo, auto-create project" workflow from the frontend
     if not ticket_data.project_id and ticket_data.github_owner and ticket_data.github_repo:
         from omoi_os.models.project import Project
+        from omoi_os.models.organization import OrganizationMembership
         from omoi_os.logging import get_logger
         from sqlalchemy import select, or_
         logger = get_logger(__name__)
@@ -279,14 +280,16 @@ async def create_ticket(
             f"github_repo={ticket_data.github_repo}, user_id={current_user.id}"
         )
 
-        # Get user's organization IDs for scoped project lookup
-        # This ensures we only find/create projects the user has access to
-        user_org_ids = [
-            m.organization_id for m in (current_user.memberships or [])
-        ]
-        logger.info(f"User org IDs for project lookup: {user_org_ids}")
-
         async with db.get_async_session() as session:
+            # Get user's organization IDs for scoped project lookup
+            # This ensures we only find/create projects the user has access to
+            # Query memberships within the session to avoid DetachedInstanceError
+            membership_query = select(OrganizationMembership.organization_id).where(
+                OrganizationMembership.user_id == current_user.id
+            )
+            membership_result = await session.execute(membership_query)
+            user_org_ids = [row[0] for row in membership_result.fetchall()]
+            logger.info(f"User org IDs for project lookup: {user_org_ids}")
             # Check if a project already exists for this repo that the user can access
             # A user can access a project if:
             # 1. They created it (created_by = user.id), OR
