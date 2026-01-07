@@ -704,7 +704,7 @@ async def post_sandbox_event(
                         )
 
             if task_id:
-                task_queue = TaskQueueService(db)
+                task_queue = TaskQueueService(db, event_bus=get_event_bus())
 
                 # Handle agent.started -> transition to running (async)
                 if event.event_type == "agent.started":
@@ -810,9 +810,38 @@ async def post_sandbox_event(
 
                     if is_validator:
                         # This is a validator completion - process validation result
-                        logger.info(f"Validator completed for task {task_id}")
-                        # Validation result is handled separately via validation API
-                        # Just record the cost, don't change task status here
+                        # Extract validation_passed from the event data
+                        validation_passed = event.event_data.get("validation_passed", False)
+                        validation_feedback = event.event_data.get(
+                            "validation_feedback",
+                            "Validation passed" if validation_passed else "Validation failed"
+                        )
+                        logger.info(
+                            f"Validator completed for task {task_id}: passed={validation_passed}",
+                            extra={"validation_feedback": validation_feedback}
+                        )
+
+                        # Call handle_validation_result to properly update task status
+                        from omoi_os.services.task_validator import get_task_validator
+
+                        validator_service = get_task_validator(db=db, event_bus=get_event_bus())
+                        await validator_service.handle_validation_result(
+                            task_id=task_id,
+                            validator_agent_id=event.event_data.get("agent_id", f"validator-{sandbox_id[:8]}"),
+                            passed=validation_passed,
+                            feedback=validation_feedback,
+                            evidence={
+                                "tests_passed": event.event_data.get("tests_passed", False),
+                                "code_pushed": event.event_data.get("code_pushed", False),
+                                "pr_created": event.event_data.get("pr_created", False),
+                                "pr_url": event.event_data.get("pr_url"),
+                            },
+                            recommendations=None,
+                        )
+                        logger.info(
+                            f"Validation result processed for task {task_id}: "
+                            f"new_status={'completed' if validation_passed else 'needs_revision'}"
+                        )
                     elif validation_enabled:
                         # Implementation completed - trigger validation
                         logger.info(
