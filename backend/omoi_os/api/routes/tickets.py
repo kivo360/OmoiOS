@@ -141,6 +141,11 @@ class TicketCreate(BaseModel):
     similarity_threshold: float = 0.85  # Threshold for considering duplicates
     force_create: bool = False  # Create even if duplicates found
 
+    # GitHub repo info for auto-project creation when project_id is not provided
+    # Format: github_owner="kivo360", github_repo="OmioOS" for repo "kivo360/OmioOS"
+    github_owner: str | None = None
+    github_repo: str | None = None
+
 
 class DuplicateCandidateResponse(BaseModel):
     """Response model for duplicate candidate."""
@@ -251,6 +256,80 @@ async def create_ticket(
     # If project_id provided, verify user has access
     if ticket_data.project_id:
         await verify_project_access(ticket_data.project_id, current_user, db)
+
+    # Auto-create project if github_owner/github_repo provided but no project_id
+    # This enables the "select repo, auto-create project" workflow from the frontend
+    if not ticket_data.project_id and ticket_data.github_owner and ticket_data.github_repo:
+        from omoi_os.models.project import Project
+        from omoi_os.logging import get_logger
+        from sqlalchemy import select, or_
+        logger = get_logger(__name__)
+
+        # Get user's organization IDs for scoped project lookup
+        # This ensures we only find/create projects the user has access to
+        user_org_ids = [
+            m.organization_id for m in (current_user.organization_memberships or [])
+        ]
+
+        async with db.get_async_session() as session:
+            # Check if a project already exists for this repo that the user can access
+            # A user can access a project if:
+            # 1. They created it (created_by = user.id), OR
+            # 2. It belongs to one of their organizations
+            query = select(Project).where(
+                Project.github_owner == ticket_data.github_owner,
+                Project.github_repo == ticket_data.github_repo,
+            )
+
+            # Add user access filter
+            if user_org_ids:
+                query = query.where(
+                    or_(
+                        Project.created_by == current_user.id,
+                        Project.organization_id.in_(user_org_ids),
+                    )
+                )
+            else:
+                # No org memberships - only match projects created by this user
+                query = query.where(Project.created_by == current_user.id)
+
+            existing_project = await session.execute(query)
+            existing = existing_project.scalar_one_or_none()
+
+            if existing:
+                # Use existing project for this repo (that user has access to)
+                ticket_data.project_id = existing.id
+                logger.info(
+                    f"Using existing project {existing.id} for repo "
+                    f"{ticket_data.github_owner}/{ticket_data.github_repo} "
+                    f"(user: {current_user.id})"
+                )
+            else:
+                # Create new project for this repo scoped to this user
+                # Get user's primary organization (if any)
+                org_id = user_org_ids[0] if user_org_ids else None
+
+                new_project = Project(
+                    name=f"{ticket_data.github_owner}/{ticket_data.github_repo}",
+                    description=f"Auto-created project for GitHub repository {ticket_data.github_owner}/{ticket_data.github_repo}",
+                    github_owner=ticket_data.github_owner,
+                    github_repo=ticket_data.github_repo,
+                    github_connected=True,
+                    created_by=current_user.id,
+                    organization_id=org_id,
+                    status="active",
+                )
+                session.add(new_project)
+                await session.commit()
+                await session.refresh(new_project)
+
+                ticket_data.project_id = new_project.id
+                logger.info(
+                    f"Auto-created project {new_project.id} for repo "
+                    f"{ticket_data.github_owner}/{ticket_data.github_repo} "
+                    f"(user: {current_user.id}, org: {org_id})"
+                )
+
     # Check for duplicates if enabled
     embedding = None
     if ticket_data.check_duplicates and not ticket_data.force_create:
