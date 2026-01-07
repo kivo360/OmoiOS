@@ -511,9 +511,24 @@ async def orchestrator_loop():
                                 ).decode()
 
                                 if ticket.project:
+                                    log.info(
+                                        "project_found_for_ticket",
+                                        ticket_id=str(ticket_id),
+                                        project_id=str(ticket.project.id),
+                                        project_name=ticket.project.name,
+                                        github_owner=ticket.project.github_owner,
+                                        github_repo=ticket.project.github_repo,
+                                        created_by=str(ticket.project.created_by) if ticket.project.created_by else None,
+                                    )
                                     if ticket.project.created_by:
                                         user_id_for_token = ticket.project.created_by
                                         extra_env["USER_ID"] = str(user_id_for_token)
+                                    else:
+                                        log.warning(
+                                            "project_missing_created_by",
+                                            project_id=str(ticket.project.id),
+                                            msg="Project has no created_by - cannot fetch GitHub token",
+                                        )
                                     # Combine owner/repo into GITHUB_REPO format
                                     owner = ticket.project.github_owner
                                     repo = ticket.project.github_repo
@@ -522,6 +537,20 @@ async def orchestrator_loop():
                                         # Also keep separate vars for backwards compat
                                         extra_env["GITHUB_REPO_OWNER"] = owner
                                         extra_env["GITHUB_REPO_NAME"] = repo
+                                    else:
+                                        log.warning(
+                                            "project_missing_github_info",
+                                            project_id=str(ticket.project.id),
+                                            github_owner=owner,
+                                            github_repo=repo,
+                                            msg="Project missing github_owner or github_repo",
+                                        )
+                                else:
+                                    log.warning(
+                                        "ticket_has_no_project",
+                                        ticket_id=str(ticket_id),
+                                        msg="Ticket has no project - cannot get GitHub info",
+                                    )
 
                             # Fetch GitHub token from user attributes
                             # Token is stored in user.attributes.github_access_token (via OAuth)
@@ -529,18 +558,41 @@ async def orchestrator_loop():
                                 user = session.get(User, user_id_for_token)
                                 if user:
                                     attrs = user.attributes or {}
+                                    log.info(
+                                        "checking_user_github_token",
+                                        user_id=str(user_id_for_token),
+                                        user_email=user.email,
+                                        has_attributes=bool(attrs),
+                                        attribute_keys=list(attrs.keys()) if attrs else [],
+                                    )
                                     github_token = attrs.get("github_access_token")
                                     if github_token:
                                         extra_env["GITHUB_TOKEN"] = github_token
-                                        log.debug(
+                                        log.info(
                                             "github_token_found",
                                             user_id=str(user_id_for_token),
+                                            token_prefix=github_token[:10] + "..." if len(github_token) > 10 else "***",
                                         )
                                     else:
-                                        log.debug(
-                                            "no_github_token",
+                                        log.warning(
+                                            "no_github_token_in_user_attributes",
                                             user_id=str(user_id_for_token),
+                                            user_email=user.email,
+                                            available_attrs=list(attrs.keys()) if attrs else [],
+                                            msg="User has no github_access_token in attributes - repo clone will fail",
                                         )
+                                else:
+                                    log.error(
+                                        "user_not_found_for_token",
+                                        user_id=str(user_id_for_token),
+                                        msg="Could not find user to get GitHub token",
+                                    )
+                            else:
+                                log.warning(
+                                    "no_user_id_for_github_token",
+                                    ticket_id=str(ticket_id),
+                                    msg="No user_id_for_token set - cannot fetch GitHub token",
+                                )
 
                         log.debug(
                             "env_extracted",
