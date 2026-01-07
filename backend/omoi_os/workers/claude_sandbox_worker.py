@@ -971,31 +971,65 @@ class WorkerConfig:
             append_parts.append("""
 ## Execution Mode: EXPLORATION
 
-You are in **exploration mode**. Your purpose is to:
-1. Explore and understand the codebase structure
-2. Create specifications (requirements, designs, PRDs) for new features
-3. Break down features into tickets and tasks
-4. Analyze dependencies between components
-5. Save all documentation to the `.omoi_os/` directory
+You are in **exploration mode**. Your purpose is to create structured specifications for features.
 
-**DO NOT write implementation code in this mode.** Focus on planning and documentation.
+### 🔴 MANDATORY: Use the spec-driven-dev Skill
 
-### Documentation Output
-All specs, PRDs, and design docs should be saved to `.omoi_os/`:
-- `.omoi_os/specs/` - Feature specifications and requirements
-- `.omoi_os/docs/` - PRDs, design documents, architecture docs
-- `.omoi_os/tickets/` - Ticket definitions
-- `.omoi_os/tasks/` - Task breakdowns
+**YOU MUST follow the `spec-driven-dev` skill document located at:**
+`/root/.claude/skills/spec-driven-dev/SKILL.md`
 
-### Git Workflow (REQUIRED if you create any files)
-If you create or modify ANY files, you MUST:
-1. **Stage and commit**: `git add -A && git commit -m "docs(scope): description"`
-2. **Push to remote**: `git push` (or `git push -u origin <branch>` for first push)
-3. **Create a Pull Request**: Use `gh pr create --title "..." --body "..."`
+**BEFORE creating any files:**
+1. **READ THE ENTIRE SKILL DOCUMENT** - It contains required formats, templates, and examples
+2. **CHECK EXISTING FILES** - Run `ls -la .omoi_os/` to see what already exists
+3. **REFERENCE TEMPLATES** - Copy the exact frontmatter structure from the skill
 
-Your work is NOT complete until documentation is committed and pushed.
+**YOUR WORKFLOW:**
+1. Read the skill document thoroughly
+2. Ask discovery questions (see Phase 1: DISCOVER in the skill)
+3. Create PRD → Requirements → Design → Tickets → Tasks (in order)
+4. Validate: `cd /root/.claude/skills/spec-driven-dev/scripts && python spec_cli.py validate`
+5. Sync: `python spec_cli.py sync push`
 
-You may also use spec workflow MCP tools to upload specs/tickets/tasks to the API.""")
+### Required Output Format
+
+**ALL files MUST have YAML frontmatter.** Example:
+```yaml
+---
+id: TKT-001
+title: Feature Title
+status: backlog
+priority: HIGH
+type: feature
+# ... other required fields from skill document
+---
+```
+
+**DO NOT improvise formats.** Copy exactly from the skill document templates.
+
+### Documentation Directories
+- `.omoi_os/docs/` - PRDs (prd-*.md)
+- `.omoi_os/requirements/` - Requirements docs
+- `.omoi_os/designs/` - Design docs
+- `.omoi_os/tickets/` - Ticket definitions (TKT-*.md)
+- `.omoi_os/tasks/` - Task breakdowns (TSK-*.md)
+
+### Git Workflow (REQUIRED)
+After creating files:
+1. `git add -A && git commit -m "docs(scope): description"`
+2. `git push` (or `git push -u origin <branch>`)
+3. `gh pr create --title "..." --body "..."`
+
+### Sync to API (REQUIRED)
+After git workflow:
+```bash
+cd /root/.claude/skills/spec-driven-dev/scripts
+python spec_cli.py validate
+python spec_cli.py sync push
+```
+
+**Your work is NOT complete until specs are validated, committed, pushed, and synced to the API.**
+
+**DO NOT write implementation code in this mode.** Focus on planning and documentation only.""")
         elif self.execution_mode == "validation":
             append_parts.append("""
 ## Execution Mode: VALIDATION

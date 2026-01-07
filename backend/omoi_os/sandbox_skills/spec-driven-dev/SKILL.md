@@ -9,6 +9,38 @@ A systematic workflow for turning feature ideas into actionable work items that 
 
 ---
 
+## 🔴 CRITICAL: Read This Skill Document Thoroughly
+
+**YOU MUST follow this skill document exactly.** This is not optional guidance—it is the required workflow.
+
+### Before Creating ANY Spec Files:
+
+1. **READ THIS ENTIRE SKILL DOCUMENT** - Don't skim. Read every section to understand the required formats.
+2. **CHECK EXISTING FILES** - Run `ls -la .omoi_os/` to see what already exists. Don't duplicate.
+3. **REFERENCE THE TEMPLATES** - Every file type has a specific format. Copy the exact structure.
+4. **USE THE CLI TOOLS** - Validate with `python spec_cli.py validate` before syncing.
+
+### During Spec Creation:
+
+1. **REFER BACK TO THIS DOCUMENT OFTEN** - When unsure about format, re-read the relevant section.
+2. **COPY FRONTMATTER EXACTLY** - Don't improvise. Use the exact field names shown in templates.
+3. **CHECK YOUR WORK** - After creating files, run validation to catch errors early.
+
+### Output Requirements:
+
+- **ALL files MUST have YAML frontmatter** - No exceptions
+- **ALL frontmatter fields MUST match the templates** - Use exact field names
+- **ALL specs MUST be synced** - Run `python spec_cli.py sync push` when done
+- **ALL IDs MUST follow conventions** - TKT-001, TSK-001, REQ-FEATURE-001, etc.
+
+### If You're Unsure:
+
+1. **Re-read this skill document** - The answer is here
+2. **Look at the Concrete Example section** - Full file contents are provided
+3. **Run validation** - `python spec_cli.py validate` will tell you what's wrong
+
+---
+
 ## 🚨 MANDATORY: YAML Frontmatter on ALL Files
 
 **EVERY file you create in `.omoi_os/` MUST begin with YAML frontmatter.** This is NON-NEGOTIABLE.
