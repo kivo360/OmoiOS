@@ -35,6 +35,13 @@ Environment Variables (optional - skills & subagents):
 Environment Variables (optional - MCP tools):
     ENABLE_SPEC_TOOLS   - Set to "true" to enable spec workflow MCP tools (default: true)
 
+Environment Variables (optional - skill enforcement):
+    REQUIRE_SPEC_SKILL  - Set to "true" to enforce spec-driven-dev skill usage.
+                          When enabled:
+                          1. Skill content is injected directly into system prompt
+                          2. Spec output validation runs before task completion
+                          3. Task fails if .omoi_os/ files lack proper frontmatter
+
 Environment Variables (optional - behavior):
     SYSTEM_PROMPT       - Custom system prompt (replaces default, but append still works)
     SYSTEM_PROMPT_APPEND - Additional text to append to system prompt (extends default)
@@ -345,6 +352,244 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         result["errors"].append(f"Git validation error: {str(e)}")
 
     return result
+
+
+# =============================================================================
+# Spec Output Validation (for exploration mode completion checking)
+# =============================================================================
+
+
+def check_spec_output(cwd: str) -> dict[str, Any]:
+    """Check spec output for exploration mode validation.
+
+    Validates that:
+    1. .omoi_os/ directory exists
+    2. At least one spec file was created (tickets or tasks)
+    3. Files have valid YAML frontmatter with required fields
+
+    Returns dict with:
+    - has_omoi_dir: .omoi_os directory exists
+    - files_found: List of spec files found
+    - files_with_frontmatter: Files that have valid frontmatter
+    - files_missing_frontmatter: Files missing or with invalid frontmatter
+    - errors: List of validation errors
+    - is_valid: Overall validation passed
+    """
+    import re
+
+    result = {
+        "has_omoi_dir": False,
+        "files_found": [],
+        "files_with_frontmatter": [],
+        "files_missing_frontmatter": [],
+        "errors": [],
+        "is_valid": False,
+    }
+
+    omoi_dir = Path(cwd) / ".omoi_os"
+
+    # Check if .omoi_os directory exists
+    if not omoi_dir.exists():
+        result["errors"].append(".omoi_os/ directory does not exist - no specs created")
+        return result
+
+    result["has_omoi_dir"] = True
+
+    # Define spec directories and required frontmatter fields
+    spec_dirs = {
+        "docs": ["id", "title", "status"],
+        "requirements": ["id", "title", "status", "category"],
+        "designs": ["id", "title", "status"],
+        "tickets": ["id", "title", "status", "priority"],
+        "tasks": ["id", "title", "status", "ticket_id"],
+    }
+
+    # YAML frontmatter pattern
+    frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+
+    for dir_name, required_fields in spec_dirs.items():
+        dir_path = omoi_dir / dir_name
+        if not dir_path.exists():
+            continue
+
+        for file_path in dir_path.glob("*.md"):
+            result["files_found"].append(str(file_path.relative_to(cwd)))
+
+            try:
+                content = file_path.read_text()
+
+                # Check for frontmatter
+                match = frontmatter_pattern.match(content)
+                if not match:
+                    result["files_missing_frontmatter"].append(str(file_path.relative_to(cwd)))
+                    result["errors"].append(f"{file_path.name}: Missing YAML frontmatter")
+                    continue
+
+                # Parse frontmatter (basic check - look for required fields)
+                frontmatter_text = match.group(1)
+                missing_fields = []
+                for field in required_fields:
+                    # Simple check - field should appear at start of line
+                    if not re.search(rf"^{field}:", frontmatter_text, re.MULTILINE):
+                        missing_fields.append(field)
+
+                if missing_fields:
+                    result["files_missing_frontmatter"].append(str(file_path.relative_to(cwd)))
+                    result["errors"].append(
+                        f"{file_path.name}: Missing required fields: {', '.join(missing_fields)}"
+                    )
+                else:
+                    result["files_with_frontmatter"].append(str(file_path.relative_to(cwd)))
+
+            except Exception as e:
+                result["errors"].append(f"{file_path.name}: Error reading file: {str(e)}")
+
+    # Determine if valid
+    # Valid if: has directory, has at least one file, all files have proper frontmatter
+    if not result["files_found"]:
+        result["errors"].append("No spec files found in .omoi_os/ - create tickets and tasks")
+    elif result["files_missing_frontmatter"]:
+        # Some files are invalid
+        pass
+    else:
+        result["is_valid"] = True
+
+    return result
+
+
+def get_spec_skill_content() -> str:
+    """Get the critical sections of the spec-driven-dev skill for prompt injection.
+
+    Returns the frontmatter templates and CLI workflow sections that MUST be
+    included directly in the system prompt to ensure compliance.
+    """
+    # This is extracted from the first ~250 lines of SKILL.md
+    # Contains: critical warnings, frontmatter templates, CLI workflow
+    return '''## 🚨 SPEC-DRIVEN-DEV SKILL (MANDATORY - READ CAREFULLY)
+
+This skill content is REQUIRED. You MUST follow these formats exactly.
+
+### YAML Frontmatter Templates (COPY EXACTLY)
+
+**EVERY file in `.omoi_os/` MUST begin with YAML frontmatter.** No exceptions.
+
+**PRDs** (`.omoi_os/docs/prd-*.md`):
+```yaml
+---
+id: PRD-{FEATURE}-001
+title: {Feature Name} PRD
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft
+author: Claude
+---
+```
+
+**Requirements** (`.omoi_os/requirements/*.md`):
+```yaml
+---
+id: REQ-{FEATURE}-001
+title: {Feature Name} Requirements
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft
+category: functional
+priority: HIGH
+prd_ref: docs/prd-{feature-name}.md
+design_ref: designs/{feature-name}.md
+---
+```
+
+**Designs** (`.omoi_os/designs/*.md`):
+```yaml
+---
+id: DESIGN-{FEATURE}-001
+title: {Feature Name} Design
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft
+requirements:
+  - REQ-{FEATURE}-001
+---
+```
+
+**Tickets** (`.omoi_os/tickets/TKT-*.md`):
+```yaml
+---
+id: TKT-{NNN}
+title: {Ticket Title}
+status: backlog
+priority: HIGH
+estimate: M
+design_ref: designs/{feature-name}.md
+requirements:
+  - REQ-{FEATURE}-FUNC-001
+dependencies:
+  blocked_by: []
+  blocks: []
+---
+```
+
+**Tasks** (`.omoi_os/tasks/TSK-*.md`):
+```yaml
+---
+id: TSK-{NNN}
+title: {Task Title}
+status: pending
+ticket_id: TKT-{NNN}
+estimate: S
+type: implementation
+dependencies:
+  depends_on: []
+  blocks: []
+---
+```
+
+### Required Workflow: Create → Validate → Sync
+
+**EVERY time you create files in `.omoi_os/`, you MUST run:**
+
+```bash
+# Navigate to spec CLI
+cd /root/.claude/skills/spec-driven-dev/scripts
+
+# Validate (check for errors)
+python spec_cli.py validate
+
+# Sync specs (PRDs, requirements, designs)
+python spec_cli.py sync-specs push
+
+# Sync tickets and tasks
+python spec_cli.py sync push
+```
+
+### Directory Structure
+
+Create these directories and files:
+- `.omoi_os/docs/prd-{feature}.md` - Product Requirements Document
+- `.omoi_os/requirements/{feature}.md` - Functional requirements
+- `.omoi_os/designs/{feature}.md` - Technical design
+- `.omoi_os/tickets/TKT-001.md` - Work tickets
+- `.omoi_os/tasks/TSK-001.md` - Individual tasks
+
+### ❌ Files Without Frontmatter WILL FAIL Validation
+
+The validation hook checks ALL files. If ANY file is missing frontmatter
+or has incorrect fields, the task will NOT complete successfully.
+
+### Validation Checks (Automatic)
+
+Before task completion, the system validates:
+1. `.omoi_os/` directory exists
+2. At least one ticket or task file exists
+3. ALL files have valid YAML frontmatter
+4. ALL required fields are present
+
+**If validation fails, you must fix the issues and try again.**
+'''
 
 
 # =============================================================================
@@ -966,52 +1211,43 @@ class WorkerConfig:
             or self.execution_mode == "exploration"
         )
 
+        # Spec-driven-dev skill enforcement
+        # When REQUIRE_SPEC_SKILL=true (set from frontend dropdown):
+        # 1. Inject skill content directly into system prompt
+        # 2. Run spec output validation before task completion
+        # This is NOT automatic for all exploration - only when explicitly requested
+        self.require_spec_skill = os.environ.get("REQUIRE_SPEC_SKILL", "").lower() == "true"
+
         # Add execution mode-specific instructions to system prompt
         if self.execution_mode == "exploration":
-            append_parts.append("""
-## Execution Mode: EXPLORATION
+            if self.require_spec_skill:
+                # Inject the actual skill content directly - agent can't ignore what's in context
+                skill_content = get_spec_skill_content()
+                append_parts.append(f"""
+## Execution Mode: EXPLORATION (Spec-Driven Development)
 
-You are in **exploration mode**. Your purpose is to create structured specifications for features.
+You are in **exploration mode** with **spec-driven-dev skill REQUIRED**.
+Your purpose is to create structured specifications for features.
 
-### 🔴 MANDATORY: Use the spec-driven-dev Skill
+### 🔴 CRITICAL: Spec Output Will Be Validated
 
-**YOU MUST follow the `spec-driven-dev` skill document located at:**
+**Your output WILL BE AUTOMATICALLY VALIDATED before task completion.**
+The validation checks:
+1. `.omoi_os/` directory exists
+2. At least one ticket or task file was created
+3. ALL files have valid YAML frontmatter
+4. ALL required fields are present in frontmatter
+
+**If validation fails, you must fix the issues and the task will continue.**
+
+{skill_content}
+
+### Additional Reference
+
+The full skill document is also available at:
 `/root/.claude/skills/spec-driven-dev/SKILL.md`
 
-**BEFORE creating any files:**
-1. **READ THE ENTIRE SKILL DOCUMENT** - It contains required formats, templates, and examples
-2. **CHECK EXISTING FILES** - Run `ls -la .omoi_os/` to see what already exists
-3. **REFERENCE TEMPLATES** - Copy the exact frontmatter structure from the skill
-
-**YOUR WORKFLOW:**
-1. Read the skill document thoroughly
-2. Ask discovery questions (see Phase 1: DISCOVER in the skill)
-3. Create PRD → Requirements → Design → Tickets → Tasks (in order)
-4. Validate: `cd /root/.claude/skills/spec-driven-dev/scripts && python spec_cli.py validate`
-5. Sync: `python spec_cli.py sync push`
-
-### Required Output Format
-
-**ALL files MUST have YAML frontmatter.** Example:
-```yaml
----
-id: TKT-001
-title: Feature Title
-status: backlog
-priority: HIGH
-type: feature
-# ... other required fields from skill document
----
-```
-
-**DO NOT improvise formats.** Copy exactly from the skill document templates.
-
-### Documentation Directories
-- `.omoi_os/docs/` - PRDs (prd-*.md)
-- `.omoi_os/requirements/` - Requirements docs
-- `.omoi_os/designs/` - Design docs
-- `.omoi_os/tickets/` - Ticket definitions (TKT-*.md)
-- `.omoi_os/tasks/` - Task breakdowns (TSK-*.md)
+Read it for additional examples, discovery questions, and detailed workflows.
 
 ### Git Workflow (REQUIRED)
 After creating files:
@@ -1019,17 +1255,30 @@ After creating files:
 2. `git push` (or `git push -u origin <branch>`)
 3. `gh pr create --title "..." --body "..."`
 
-### Sync to API (REQUIRED)
-After git workflow:
-```bash
-cd /root/.claude/skills/spec-driven-dev/scripts
-python spec_cli.py validate
-python spec_cli.py sync push
-```
-
 **Your work is NOT complete until specs are validated, committed, pushed, and synced to the API.**
 
 **DO NOT write implementation code in this mode.** Focus on planning and documentation only.""")
+            else:
+                # Normal exploration mode - no forced skill, just general guidance
+                append_parts.append("""
+## Execution Mode: EXPLORATION
+
+You are in **exploration mode**. Your purpose is to explore the codebase, research solutions,
+and optionally create documentation or specifications.
+
+### Available Skills
+
+You have access to skills in `/root/.claude/skills/` that can help with various tasks.
+Use them as needed based on your objectives.
+
+### If Creating Documentation
+
+If you create any files, ensure you:
+1. Use consistent formats with proper markdown
+2. Commit and push your work: `git add -A && git commit -m "..." && git push`
+3. Create a PR if appropriate: `gh pr create --title "..." --body "..."`
+
+**DO NOT write implementation code in this mode.** Focus on exploration, research, and documentation.""")
         elif self.execution_mode == "validation":
             append_parts.append("""
 ## Execution Mode: VALIDATION
@@ -2422,6 +2671,32 @@ class SandboxWorker:
         if config.require_pr_created and not git_status["has_pr"]:
             validation_errors.append("No PR created")
 
+        # Additional validation for spec-driven-dev skill
+        # When REQUIRE_SPEC_SKILL is set, validate spec output format
+        if config.require_spec_skill:
+            logger.info("Running spec output validation (REQUIRE_SPEC_SKILL=true)...")
+            spec_status = check_spec_output(config.cwd)
+
+            if not spec_status["is_valid"]:
+                validation_errors.extend(spec_status["errors"])
+                logger.info(
+                    "Spec validation FAILED",
+                    extra={
+                        "files_found": spec_status["files_found"],
+                        "files_with_frontmatter": spec_status["files_with_frontmatter"],
+                        "files_missing_frontmatter": spec_status["files_missing_frontmatter"],
+                        "errors": spec_status["errors"],
+                    }
+                )
+            else:
+                logger.info(
+                    "Spec validation PASSED",
+                    extra={
+                        "files_found": len(spec_status["files_found"]),
+                        "files_with_frontmatter": len(spec_status["files_with_frontmatter"]),
+                    }
+                )
+
         if not validation_errors:
             state.validation_passed = True
             state.validation_feedback = "All validation checks passed"
@@ -2429,7 +2704,7 @@ class SandboxWorker:
         else:
             state.validation_passed = False
             state.validation_feedback = "; ".join(validation_errors)
-            logger.info("Git validation FAILED", extra={"errors": validation_errors})
+            logger.info("Validation FAILED", extra={"errors": validation_errors})
 
             # Update notes file with validation feedback for next iteration
             self._update_notes_with_validation(validation_errors, git_status)
