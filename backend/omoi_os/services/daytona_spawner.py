@@ -727,6 +727,8 @@ class DaytonaSpawnerService:
         github_token = env_vars.pop("GITHUB_TOKEN", None)
         github_owner = env_vars.pop("GITHUB_REPO_OWNER", None)
         github_repo_name = env_vars.pop("GITHUB_REPO_NAME", None)
+        # Extract branch name but keep it in env_vars for the worker
+        branch_name = env_vars.get("BRANCH_NAME")
 
         # Helper function to escape environment variable values for shell export
         def escape_env_value(v: str) -> str:
@@ -829,7 +831,10 @@ class DaytonaSpawnerService:
         )
 
         if github_repo and github_token:
-            logger.info(f"Cloning repository {github_repo} via Daytona SDK...")
+            logger.info(
+                f"Cloning repository {github_repo} via Daytona SDK... "
+                f"(branch: {branch_name or 'default'})"
+            )
 
             # Validate token before attempting clone
             repo_url = f"https://github.com/{github_repo}.git"
@@ -877,21 +882,46 @@ class DaytonaSpawnerService:
             try:
                 # Use Daytona SDK's native git.clone() with authentication
                 # username="x-access-token" is GitHub's convention for token auth
-                sandbox.git.clone(
-                    url=repo_url,
-                    path=workspace_path,
-                    username="x-access-token",
-                    password=github_token,
+                # Pass branch parameter to clone the feature branch directly
+                clone_kwargs = {
+                    "url": repo_url,
+                    "path": workspace_path,
+                    "username": "x-access-token",
+                    "password": github_token,
+                }
+                if branch_name:
+                    clone_kwargs["branch"] = branch_name
+                    logger.info(f"Cloning branch '{branch_name}' from {github_repo}")
+
+                sandbox.git.clone(**clone_kwargs)
+
+                logger.info(
+                    f"Repository cloned successfully to {workspace_path} "
+                    f"(branch: {branch_name or 'default'})"
                 )
 
-                logger.info(f"Repository cloned successfully to {workspace_path}")
-
-                # Verify clone worked by listing files
+                # Verify clone worked and check which branch we're on
                 try:
                     result = sandbox.process.exec(f"ls -la {workspace_path}")
                     logger.info(f"Workspace contents after clone:\n{result.stdout[:500] if hasattr(result, 'stdout') else result}")
+
+                    # Verify we're on the expected branch
+                    branch_check = sandbox.process.exec(f"cd {workspace_path} && git branch --show-current")
+                    current_branch = branch_check.stdout.strip() if hasattr(branch_check, 'stdout') else str(branch_check).strip()
+                    logger.info(f"Current git branch after clone: '{current_branch}'")
+
+                    if branch_name and current_branch != branch_name:
+                        logger.warning(
+                            f"Branch mismatch! Expected '{branch_name}' but got '{current_branch}'. "
+                            f"Attempting to checkout the correct branch..."
+                        )
+                        # Try to checkout the expected branch
+                        checkout_result = sandbox.process.exec(
+                            f"cd {workspace_path} && git checkout {branch_name}"
+                        )
+                        logger.info(f"Checkout result: {checkout_result}")
                 except Exception as e:
-                    logger.warning(f"Could not list workspace after clone: {e}")
+                    logger.warning(f"Could not verify workspace after clone: {e}")
 
                 # Set WORKSPACE_PATH env var so worker knows where code is
                 env_vars["WORKSPACE_PATH"] = workspace_path
