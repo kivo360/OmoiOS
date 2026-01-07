@@ -254,6 +254,7 @@ def handle_validation_failed(event_data: dict) -> None:
 
             # Reset task for re-implementation
             # Keep the revision feedback in task.result so implementer can see it
+            old_status = task.status
             task.status = "pending"
             task.sandbox_id = None  # Clear sandbox so it gets a fresh one
             task.assigned_agent_id = None  # Clear agent assignment
@@ -266,6 +267,24 @@ def handle_validation_failed(event_data: dict) -> None:
                 iteration=iteration,
                 new_status="pending",
             )
+
+            # Publish TASK_STATUS_CHANGED event for WebSocket/sidebar updates
+            if event_bus:
+                from omoi_os.services.event_bus import SystemEvent
+                event_bus.publish(
+                    SystemEvent(
+                        event_type="TASK_STATUS_CHANGED",
+                        entity_type="task",
+                        entity_id=task_id,
+                        payload={
+                            "task_id": task_id,
+                            "status": "pending",
+                            "old_status": old_status,
+                            "reason": "reset_for_revision",
+                            "iteration": iteration,
+                        },
+                    )
+                )
 
         # Wake up the orchestrator to pick up the reset task
         task_ready_event.set()
@@ -924,14 +943,20 @@ async def orchestrator_loop():
                         # Update task with sandbox info
                         queue.assign_task(validation_task.id, agent_id)
 
+                        # Update sandbox_id in database
                         with db.get_session() as session:
                             task_obj = (
                                 session.query(Task).filter(Task.id == validation_task.id).first()
                             )
                             if task_obj:
                                 task_obj.sandbox_id = sandbox_id
-                                task_obj.status = "running"  # Move from validating to running
                                 session.commit()
+
+                        # Use TaskQueueService to update status and publish TASK_STARTED event for WebSocket
+                        queue.update_task_status(
+                            task_id=validation_task.id,
+                            status="running",
+                        )
 
                         stats["tasks_processed"] += 1
                         val_log.info(
@@ -1182,13 +1207,13 @@ async def init_services():
     db = DatabaseService(connection_string=app_settings.database.url)
     logger.info("service_initialized", service="database")
 
-    # Task Queue (Redis-backed)
-    queue = TaskQueueService(db)
-    logger.info("service_initialized", service="task_queue")
-
-    # Event Bus (Redis-backed)
+    # Event Bus (Redis-backed) - initialize before TaskQueueService for event publishing
     event_bus = EventBusService(redis_url=app_settings.redis.url)
     logger.info("service_initialized", service="event_bus")
+
+    # Task Queue (Redis-backed) - with event_bus for WebSocket notifications
+    queue = TaskQueueService(db, event_bus=event_bus)
+    logger.info("service_initialized", service="task_queue")
 
     # Agent Registry
     registry_service = AgentRegistryService(db)

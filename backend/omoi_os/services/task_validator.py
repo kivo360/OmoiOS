@@ -243,6 +243,7 @@ class TaskValidatorService:
                 logger.info(f"Task {task_id} validation PASSED on iteration {iteration}")
 
                 if self.event_bus:
+                    # Publish validation passed event
                     self.event_bus.publish(
                         SystemEvent(
                             event_type="TASK_VALIDATION_PASSED",
@@ -251,6 +252,19 @@ class TaskValidatorService:
                             payload={
                                 "iteration": iteration,
                                 "feedback": feedback,
+                            },
+                        )
+                    )
+                    # Also publish TASK_COMPLETED for sidebar/UI updates
+                    self.event_bus.publish(
+                        SystemEvent(
+                            event_type="TASK_COMPLETED",
+                            entity_type="task",
+                            entity_id=task_id,
+                            payload={
+                                "status": "completed",
+                                "validation_passed": True,
+                                "validation_iteration": iteration,
                             },
                         )
                     )
@@ -279,6 +293,19 @@ class TaskValidatorService:
                                 "iteration": iteration,
                                 "feedback": feedback,
                                 "recommendations": recommendations,
+                            },
+                        )
+                    )
+                    # Also publish status change event for sidebar/UI updates
+                    self.event_bus.publish(
+                        SystemEvent(
+                            event_type="TASK_STATUS_CHANGED",
+                            entity_type="task",
+                            entity_id=task_id,
+                            payload={
+                                "status": "needs_revision",
+                                "validation_passed": False,
+                                "validation_iteration": iteration,
                             },
                         )
                     )
