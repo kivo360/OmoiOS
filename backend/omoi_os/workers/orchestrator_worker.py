@@ -513,7 +513,7 @@ async def orchestrator_loop():
                                 if ticket.project:
                                     log.info(
                                         "project_found_for_ticket",
-                                        ticket_id=str(ticket_id),
+                                        ticket_id=str(ticket.id),
                                         project_id=str(ticket.project.id),
                                         project_name=ticket.project.name,
                                         github_owner=ticket.project.github_owner,
@@ -548,7 +548,7 @@ async def orchestrator_loop():
                                 else:
                                     log.warning(
                                         "ticket_has_no_project",
-                                        ticket_id=str(ticket_id),
+                                        ticket_id=str(ticket.id),
                                         msg="Ticket has no project - cannot get GitHub info",
                                     )
 
@@ -590,7 +590,7 @@ async def orchestrator_loop():
                             else:
                                 log.warning(
                                     "no_user_id_for_github_token",
-                                    ticket_id=str(ticket_id),
+                                    ticket_id=str(ticket.id),
                                     msg="No user_id_for_token set - cannot fetch GitHub token",
                                 )
 
