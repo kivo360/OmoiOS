@@ -143,6 +143,8 @@ class DaytonaSpawnerService:
         continuous_mode: Optional[bool] = None,  # None = auto-enable for implementation/validation
         task_requirements: Optional["TaskRequirements"] = None,  # LLM-analyzed requirements
         require_spec_skill: bool = False,  # Force spec-driven-dev skill usage
+        project_id: Optional[str] = None,  # Project ID for spec CLI
+        omoios_api_key: Optional[str] = None,  # API key for spec CLI authentication
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -171,6 +173,10 @@ class DaytonaSpawnerService:
                 - Injects skill content directly into system prompt
                 - Validates spec output format before task completion
                 - Fails task if .omoi_os/ files lack proper frontmatter
+            project_id: Project ID for spec CLI to sync specs/tickets. Required for
+                spec-driven-dev skill to function properly.
+            omoios_api_key: API key for authenticating with OmoiOS API. If not provided,
+                falls back to LLM_API_KEY from settings.
 
         Returns:
             Sandbox ID
@@ -220,6 +226,21 @@ class DaytonaSpawnerService:
                 "Spec skill enforcement enabled",
                 extra={"task_id": task_id, "execution_mode": execution_mode}
             )
+
+        # Add spec CLI env vars for syncing specs/tickets/tasks
+        # These are needed for the spec-driven-dev skill to work properly
+        if project_id:
+            env_vars["OMOIOS_PROJECT_ID"] = project_id
+
+        # Get API key from parameter or fall back to LLM settings
+        if omoios_api_key:
+            env_vars["OMOIOS_API_KEY"] = omoios_api_key
+        else:
+            # Fall back to LLM API key from settings
+            from omoi_os.config import get_app_settings
+            app_settings = get_app_settings()
+            if app_settings.llm.api_key:
+                env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
 
         # Determine continuous mode:
         # - None (default): Auto-enable for implementation/validation modes with Claude runtime
