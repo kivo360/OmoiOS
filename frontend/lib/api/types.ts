@@ -350,6 +350,9 @@ export interface TicketCreate {
   check_duplicates?: boolean
   similarity_threshold?: number
   force_create?: boolean
+  // GitHub repo info for auto-project creation when project_id is not provided
+  github_owner?: string
+  github_repo?: string
 }
 
 export interface TicketListParams {

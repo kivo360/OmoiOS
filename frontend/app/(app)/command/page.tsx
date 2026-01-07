@@ -172,6 +172,17 @@ export default function CommandCenterPage() {
     try {
       setLaunchState({ status: "creating_ticket", prompt })
 
+      // Parse github_owner and github_repo from selectedRepo (format: "owner/repo")
+      let github_owner: string | undefined
+      let github_repo: string | undefined
+      if (selectedRepo && !selectedProject) {
+        const parts = selectedRepo.split("/")
+        if (parts.length === 2) {
+          github_owner = parts[0]
+          github_repo = parts[1]
+        }
+      }
+
       // Build payload based on selected mode
       const basePayload = {
         title: prompt.slice(0, 100) + (prompt.length > 100 ? "..." : ""),
@@ -180,6 +191,9 @@ export default function CommandCenterPage() {
         check_duplicates: false, // Don't check for dups on command prompts
         force_create: true,
         project_id: selectedProject?.id,
+        // Pass repo info for auto-project creation when no project selected
+        github_owner,
+        github_repo,
       }
 
       // Mode-specific parameters
