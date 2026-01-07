@@ -145,7 +145,8 @@ class ParsedTicket:
     design_ref: Optional[str] = None
     tasks: list[str] = field(default_factory=list)
     dependencies: TicketDependencies = field(default_factory=TicketDependencies)
-    description: str = ""
+    description: str = ""  # Short summary/description
+    full_body: str = ""    # Full markdown body with all sections (for AI context)
     file_path: str = ""
 
     def is_blocked(self) -> bool:
@@ -168,7 +169,8 @@ class ParsedTask:
     created: date
     assignee: Optional[str] = None
     dependencies: TaskDependencies = field(default_factory=TaskDependencies)
-    objective: str = ""
+    objective: str = ""    # Short objective/description
+    full_body: str = ""    # Full markdown body with all sections (for AI context)
     file_path: str = ""
 
     def is_blocked(self, completed_tasks: set[str]) -> bool:
