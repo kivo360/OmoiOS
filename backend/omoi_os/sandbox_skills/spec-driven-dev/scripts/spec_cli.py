@@ -718,12 +718,16 @@ Examples:
         help="Export format",
     )
 
+    # Default API URL from environment or fallback to localhost
+    default_api_url = os.environ.get("OMOIOS_API_URL", "http://localhost:18000")
+    default_project_id = os.environ.get("OMOIOS_PROJECT_ID")
+
     # projects command
     projects_parser = subparsers.add_parser("projects", help="List API projects")
     projects_parser.add_argument(
         "--api-url",
-        default="http://localhost:18000",
-        help="API base URL",
+        default=default_api_url,
+        help="API base URL (or set OMOIOS_API_URL env var)",
     )
     projects_parser.add_argument(
         "--api-key",
@@ -734,12 +738,14 @@ Examples:
     project_parser = subparsers.add_parser("project", help="Show project details with tickets and tasks")
     project_parser.add_argument(
         "project_id",
-        help="Project ID to display",
+        nargs="?",
+        default=default_project_id,
+        help="Project ID to display (or set OMOIOS_PROJECT_ID env var)",
     )
     project_parser.add_argument(
         "--api-url",
-        default="http://localhost:18000",
-        help="API base URL",
+        default=default_api_url,
+        help="API base URL (or set OMOIOS_API_URL env var)",
     )
     project_parser.add_argument(
         "--api-key",
@@ -755,12 +761,13 @@ Examples:
     )
     sync_parser.add_argument(
         "--api-url",
-        default="http://localhost:18000",
-        help="API base URL",
+        default=default_api_url,
+        help="API base URL (or set OMOIOS_API_URL env var)",
     )
     sync_parser.add_argument(
         "--project-id",
-        help="Project ID to associate tickets with",
+        default=default_project_id,
+        help="Project ID to associate tickets with (or set OMOIOS_PROJECT_ID env var)",
     )
     sync_parser.add_argument(
         "--email",
@@ -788,13 +795,13 @@ Examples:
     )
     sync_specs_parser.add_argument(
         "--api-url",
-        default="http://localhost:18000",
-        help="API base URL",
+        default=default_api_url,
+        help="API base URL (or set OMOIOS_API_URL env var)",
     )
     sync_specs_parser.add_argument(
         "--project-id",
-        required=True,
-        help="Project ID to associate spec with (required)",
+        default=default_project_id,
+        help="Project ID to associate spec with (or set OMOIOS_PROJECT_ID env var)",
     )
     sync_specs_parser.add_argument(
         "--spec-title",
@@ -813,12 +820,14 @@ Examples:
     trace_parser = subparsers.add_parser("api-trace", help="Show traceability from API")
     trace_parser.add_argument(
         "project_id",
-        help="Project ID to show traceability for",
+        nargs="?",
+        default=default_project_id,
+        help="Project ID to show traceability for (or set OMOIOS_PROJECT_ID env var)",
     )
     trace_parser.add_argument(
         "--api-url",
-        default="http://localhost:18000",
-        help="API base URL",
+        default=default_api_url,
+        help="API base URL (or set OMOIOS_API_URL env var)",
     )
     trace_parser.add_argument(
         "--api-key",
@@ -892,6 +901,10 @@ Examples:
         import asyncio
         import os
         from api_client import OmoiOSClient
+
+        if not args.project_id:
+            print("Error: project_id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var.")
+            sys.exit(1)
 
         async def show_project():
             api_key = args.api_key or os.environ.get("OMOIOS_API_KEY")
@@ -979,6 +992,10 @@ Examples:
         import os
         from api_client import OmoiOSClient, print_sync_summary
 
+        if not args.project_id:
+            print("Error: --project-id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var.")
+            sys.exit(1)
+
         async def run_sync_specs():
             api_key = args.api_key or os.environ.get("OMOIOS_API_KEY")
             token = args.token or os.environ.get("OMOIOS_TOKEN")
@@ -1025,6 +1042,10 @@ Examples:
         import asyncio
         import os
         from api_client import OmoiOSClient
+
+        if not args.project_id:
+            print("Error: project_id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var.")
+            sys.exit(1)
 
         async def show_api_traceability():
             api_key = args.api_key or os.environ.get("OMOIOS_API_KEY")

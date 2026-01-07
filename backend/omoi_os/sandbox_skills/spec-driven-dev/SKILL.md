@@ -141,26 +141,29 @@ cd /root/.claude/skills/spec-driven-dev/scripts
 python spec_cli.py validate
 
 # Step 3: Preview what will be synced (dry run)
-python spec_cli.py sync-specs diff --project-id $OMOIOS_PROJECT_ID --api-url $OMOIOS_API_URL
+# Note: OMOIOS_PROJECT_ID and OMOIOS_API_URL are auto-injected - no need to specify!
+python spec_cli.py sync-specs diff
 
 # Step 4: Sync requirements and designs to create specs
-python spec_cli.py sync-specs push --project-id $OMOIOS_PROJECT_ID --api-url $OMOIOS_API_URL
+python spec_cli.py sync-specs push
 
 # Step 5: Preview ticket/task sync
-python spec_cli.py sync diff --project-id $OMOIOS_PROJECT_ID --api-url $OMOIOS_API_URL
+python spec_cli.py sync diff
 
 # Step 6: Sync tickets and tasks
-python spec_cli.py sync push --project-id $OMOIOS_PROJECT_ID --api-url $OMOIOS_API_URL
+python spec_cli.py sync push
 
 # Step 7: Verify traceability
-python spec_cli.py api-trace $OMOIOS_PROJECT_ID --api-url $OMOIOS_API_URL
+python spec_cli.py api-trace
 ```
 
-### Environment Variables (Pre-configured in Sandbox)
+### Environment Variables (Auto-Injected by Sandbox)
 
-These environment variables are available in the sandbox:
-- `OMOIOS_API_URL` - The OmoiOS API URL
-- `OMOIOS_PROJECT_ID` - The current project ID
+These environment variables are **automatically set** when the sandbox is created:
+- `OMOIOS_API_URL` - The OmoiOS API URL (auto-injected)
+- `OMOIOS_PROJECT_ID` - The current project ID (auto-injected)
+
+You don't need to specify `--api-url` or `--project-id` - the CLI reads them from environment variables.
 
 ### Quick Reference Commands
 
@@ -180,11 +183,11 @@ python spec_cli.py show graph
 # Show ready tasks (not blocked)
 python spec_cli.py show ready
 
-# List projects from server
-python spec_cli.py projects --api-url $OMOIOS_API_URL
+# List projects from server (uses OMOIOS_API_URL automatically)
+python spec_cli.py projects
 
-# View project details
-python spec_cli.py project $OMOIOS_PROJECT_ID --api-url $OMOIOS_API_URL
+# View project details (uses OMOIOS_PROJECT_ID and OMOIOS_API_URL automatically)
+python spec_cli.py project
 ```
 
 ### ❌ DO NOT Skip Syncing

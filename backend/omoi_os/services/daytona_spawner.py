@@ -204,6 +204,8 @@ class DaytonaSpawnerService:
             # IS_SANDBOX=1 tells Claude Code it's running in a secure sandbox,
             # allowing --dangerously-skip-permissions to work even as root
             "IS_SANDBOX": "1",
+            # Spec CLI env vars - API URL for syncing specs/tickets/tasks
+            "OMOIOS_API_URL": base_url,
         }
 
         # Determine continuous mode:

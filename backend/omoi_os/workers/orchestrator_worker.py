@@ -511,6 +511,8 @@ async def orchestrator_loop():
                                 ).decode()
 
                                 if ticket.project:
+                                    # Inject project ID for spec CLI syncing
+                                    extra_env["OMOIOS_PROJECT_ID"] = str(ticket.project.id)
                                     log.info(
                                         "project_found_for_ticket",
                                         ticket_id=str(ticket.id),
