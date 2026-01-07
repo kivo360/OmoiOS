@@ -282,7 +282,7 @@ async def create_ticket(
         # Get user's organization IDs for scoped project lookup
         # This ensures we only find/create projects the user has access to
         user_org_ids = [
-            m.organization_id for m in (current_user.organization_memberships or [])
+            m.organization_id for m in (current_user.memberships or [])
         ]
         logger.info(f"User org IDs for project lookup: {user_org_ids}")
 
