@@ -131,6 +131,15 @@ class Task(Base):
         Vector(1536), nullable=True
     )
 
+    # Execution configuration for sandbox spawning
+    # Stores skill selection and other execution-time settings from frontend
+    # Example: {"require_spec_skill": true, "selected_skill": "spec-driven-dev"}
+    execution_config: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Execution config from frontend: skill selection, spawn options",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )

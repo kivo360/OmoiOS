@@ -223,6 +223,16 @@ async def orchestrator_loop():
                             ):
                                 execution_mode = "validation"
 
+                        # Extract execution config from task (skill selection from frontend)
+                        require_spec_skill = False
+                        project_id = None
+                        if hasattr(task, "execution_config") and task.execution_config:
+                            exec_config = task.execution_config
+                            require_spec_skill = exec_config.get("require_spec_skill", False)
+                            # Get project_id from ticket's project
+                            if hasattr(task, "ticket") and task.ticket:
+                                project_id = task.ticket.project_id
+
                         # Spawn sandbox with appropriate skills for execution mode
                         sandbox_id = await daytona_spawner.spawn_for_task(
                             task_id=task_id,
@@ -230,6 +240,8 @@ async def orchestrator_loop():
                             phase_id=phase_id,
                             agent_type=agent_type,
                             execution_mode=execution_mode,
+                            require_spec_skill=require_spec_skill,
+                            project_id=project_id,
                         )
 
                         # Update task with sandbox info
