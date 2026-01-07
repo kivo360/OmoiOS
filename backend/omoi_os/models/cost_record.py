@@ -5,6 +5,7 @@ from typing import Optional
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
@@ -43,8 +44,8 @@ class CostRecord(Base):
     )
 
     # Billing association (for cost aggregation per organization)
-    billing_account_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("billing_accounts.id"), nullable=True, index=True
+    billing_account_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True), ForeignKey("billing_accounts.id"), nullable=True, index=True
     )
     
     # LLM provider information
@@ -88,7 +89,7 @@ class CostRecord(Base):
             "task_id": self.task_id,
             "agent_id": self.agent_id,
             "sandbox_id": self.sandbox_id,
-            "billing_account_id": self.billing_account_id,
+            "billing_account_id": str(self.billing_account_id) if self.billing_account_id else None,
             "provider": self.provider,
             "model": self.model,
             "prompt_tokens": self.prompt_tokens,
