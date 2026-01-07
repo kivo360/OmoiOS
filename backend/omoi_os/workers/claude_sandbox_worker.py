@@ -79,6 +79,7 @@ import base64
 import difflib
 import logging
 import os
+from re import Match, Pattern
 import signal
 import subprocess
 import sys
@@ -158,15 +159,16 @@ class IterationState:
     - Limits are reached (max_runs, max_cost, max_duration)
     - 3 consecutive errors occur
     """
-    iteration_num: int = 0                    # Current iteration
-    successful_iterations: int = 0            # Completed successfully
-    error_count: int = 0                      # Consecutive errors
-    total_cost: float = 0.0                   # Accumulated cost
-    completion_signal_count: int = 0          # Consecutive completion signals
-    start_time: Optional[float] = None        # For duration tracking
-    last_session_id: Optional[str] = None     # For potential resume
-    validation_passed: bool = False           # Whether git validation passed
-    validation_feedback: str = ""             # Feedback from validation
+
+    iteration_num: int = 0  # Current iteration
+    successful_iterations: int = 0  # Completed successfully
+    error_count: int = 0  # Consecutive errors
+    total_cost: float = 0.0  # Accumulated cost
+    completion_signal_count: int = 0  # Consecutive completion signals
+    start_time: Optional[float] = None  # For duration tracking
+    last_session_id: Optional[str] = None  # For potential resume
+    validation_passed: bool = False  # Whether git validation passed
+    validation_feedback: str = ""  # Feedback from validation
 
     # Track what's been accomplished
     tests_passed: bool = False
@@ -183,6 +185,7 @@ class IterationState:
     def to_event_data(self) -> dict:
         """Convert state to event payload."""
         import time
+
         elapsed = time.time() - self.start_time if self.start_time else 0
         return {
             "iteration_num": self.iteration_num,
@@ -259,7 +262,9 @@ def check_git_status(cwd: str) -> dict[str, Any]:
             timeout=10,
         )
         result["status_output"] = status_result.stdout
-        result["is_clean"] = status_result.returncode == 0 and not status_result.stdout.strip()
+        result["is_clean"] = (
+            status_result.returncode == 0 and not status_result.stdout.strip()
+        )
 
         if not result["is_clean"]:
             result["errors"].append("Uncommitted changes detected")
@@ -277,7 +282,10 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         if "Your branch is ahead" in status_text:
             result["is_pushed"] = False
             result["errors"].append("Code not pushed to remote")
-        elif "Your branch is up to date" in status_text or "nothing to commit" in status_text:
+        elif (
+            "Your branch is up to date" in status_text
+            or "nothing to commit" in status_text
+        ):
             result["is_pushed"] = True
         else:
             # If we can't determine, assume it's pushed
@@ -297,6 +305,7 @@ def check_git_status(cwd: str) -> dict[str, Any]:
                 # Parse PR info
                 try:
                     import json
+
                     pr_data = json.loads(pr_result.stdout)
                     result["pr_number"] = pr_data.get("number")
                     result["pr_url"] = pr_data.get("url")
@@ -396,7 +405,7 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     result["has_omoi_dir"] = True
 
     # Define spec directories and required frontmatter fields
-    spec_dirs = {
+    spec_dirs: dict[str, list[str]] = {
         "docs": ["id", "title", "status"],
         "requirements": ["id", "title", "status", "category"],
         "designs": ["id", "title", "status"],
@@ -405,7 +414,7 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     }
 
     # YAML frontmatter pattern
-    frontmatter_pattern = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
+    frontmatter_pattern: Pattern[str] = re.compile(r"^---\s*\n(.*?)\n---", re.DOTALL)
 
     for dir_name, required_fields in spec_dirs.items():
         dir_path = omoi_dir / dir_name
@@ -419,10 +428,14 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
                 content = file_path.read_text()
 
                 # Check for frontmatter
-                match = frontmatter_pattern.match(content)
+                match: Match[str] | None = frontmatter_pattern.match(content)
                 if not match:
-                    result["files_missing_frontmatter"].append(str(file_path.relative_to(cwd)))
-                    result["errors"].append(f"{file_path.name}: Missing YAML frontmatter")
+                    result["files_missing_frontmatter"].append(
+                        str(file_path.relative_to(cwd))
+                    )
+                    result["errors"].append(
+                        f"{file_path.name}: Missing YAML frontmatter"
+                    )
                     continue
 
                 # Parse frontmatter (basic check - look for required fields)
@@ -434,20 +447,28 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
                         missing_fields.append(field)
 
                 if missing_fields:
-                    result["files_missing_frontmatter"].append(str(file_path.relative_to(cwd)))
+                    result["files_missing_frontmatter"].append(
+                        str(file_path.relative_to(cwd))
+                    )
                     result["errors"].append(
                         f"{file_path.name}: Missing required fields: {', '.join(missing_fields)}"
                     )
                 else:
-                    result["files_with_frontmatter"].append(str(file_path.relative_to(cwd)))
+                    result["files_with_frontmatter"].append(
+                        str(file_path.relative_to(cwd))
+                    )
 
             except Exception as e:
-                result["errors"].append(f"{file_path.name}: Error reading file: {str(e)}")
+                result["errors"].append(
+                    f"{file_path.name}: Error reading file: {str(e)}"
+                )
 
     # Determine if valid
     # Valid if: has directory, has at least one file, all files have proper frontmatter
     if not result["files_found"]:
-        result["errors"].append("No spec files found in .omoi_os/ - create tickets and tasks")
+        result["errors"].append(
+            "No spec files found in .omoi_os/ - create tickets and tasks"
+        )
     elif result["files_missing_frontmatter"]:
         # Some files are invalid
         pass
@@ -465,7 +486,7 @@ def get_spec_skill_content() -> str:
     """
     # This is extracted from the first ~250 lines of SKILL.md
     # Contains: critical warnings, frontmatter templates, CLI workflow
-    return '''## 🚨 SPEC-DRIVEN-DEV SKILL (MANDATORY - READ CAREFULLY)
+    return """## 🚨 SPEC-DRIVEN-DEV SKILL (MANDATORY - READ CAREFULLY)
 
 This skill content is REQUIRED. You MUST follow these formats exactly.
 
@@ -589,7 +610,7 @@ Before task completion, the system validates:
 4. ALL required fields are present
 
 **If validation fails, you must fix the issues and try again.**
-'''
+"""
 
 
 # =============================================================================
@@ -617,7 +638,7 @@ class FileChangeTracker:
             new_lines = new_content.splitlines()
             lines_added = len(new_lines)
             lines_removed = 0
-            diff = [f"--- /dev/null", f"+++ b/{path}"]
+            diff = ["--- /dev/null", f"+++ b/{path}"]
             for line in new_lines:
                 diff.append(f"+{line}")
             change_type = "created"
@@ -721,7 +742,9 @@ if SDK_AVAILABLE:
                     f"Phase: {spec['phase']}"
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -735,7 +758,9 @@ if SDK_AVAILABLE:
         try:
             api_base = _get_api_base()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
-                response = await client.get(f"{api_base}/api/v1/specs/{args['spec_id']}")
+                response = await client.get(
+                    f"{api_base}/api/v1/specs/{args['spec_id']}"
+                )
                 response.raise_for_status()
                 spec = response.json()
 
@@ -755,11 +780,15 @@ if SDK_AVAILABLE:
 
                 output += f"\nTasks ({len(spec['tasks'])}):\n"
                 for task in spec["tasks"]:
-                    output += f"  [{task['status']}] {task['title']} ({task['priority']})\n"
+                    output += (
+                        f"  [{task['status']}] {task['title']} ({task['priority']})\n"
+                    )
 
                 return _format_mcp_response(output)
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -791,7 +820,9 @@ if SDK_AVAILABLE:
 
                 return _format_mcp_response(output)
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -827,7 +858,9 @@ if SDK_AVAILABLE:
                     f"THE SYSTEM SHALL {req['action']}"
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -857,7 +890,9 @@ if SDK_AVAILABLE:
                     f"Text: {criterion['text']}"
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -886,9 +921,13 @@ if SDK_AVAILABLE:
                     json=design,
                 )
                 response.raise_for_status()
-                return _format_mcp_response(f"Updated design for spec {args['spec_id']}")
+                return _format_mcp_response(
+                    f"Updated design for spec {args['spec_id']}"
+                )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -926,7 +965,9 @@ if SDK_AVAILABLE:
                     f"Priority: {task['priority']}"
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -965,7 +1006,9 @@ if SDK_AVAILABLE:
                     f"Phase: {ticket['phase_id']}"
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -979,7 +1022,9 @@ if SDK_AVAILABLE:
         try:
             api_base = _get_api_base()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
-                response = await client.get(f"{api_base}/api/v1/tickets/{args['ticket_id']}")
+                response = await client.get(
+                    f"{api_base}/api/v1/tickets/{args['ticket_id']}"
+                )
                 response.raise_for_status()
                 ticket = response.json()
 
@@ -993,7 +1038,9 @@ if SDK_AVAILABLE:
 
                 return _format_mcp_response(output)
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -1016,7 +1063,9 @@ if SDK_AVAILABLE:
                     f"Spec is now in the Design phase."
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -1039,7 +1088,9 @@ if SDK_AVAILABLE:
                     f"Spec is now in the Implementation phase."
                 )
         except httpx.HTTPStatusError as e:
-            return _format_mcp_error(f"HTTP {e.response.status_code}: {e.response.text}")
+            return _format_mcp_error(
+                f"HTTP {e.response.status_code}: {e.response.text}"
+            )
         except Exception as e:
             return _format_mcp_error(str(e))
 
@@ -1112,6 +1163,7 @@ class WorkerConfig:
             try:
                 import base64
                 import json
+
                 task_json = base64.b64decode(task_data_b64).decode()
                 self.task_data = json.loads(task_json)
                 # Extract task description (this is the FULL spec markdown)
@@ -1121,11 +1173,15 @@ class WorkerConfig:
                     self.ticket_id = self.task_data["ticket_id"]
                 if not self.ticket_title and self.task_data.get("ticket_title"):
                     self.ticket_title = self.task_data["ticket_title"]
-                if not self.ticket_description and self.task_data.get("ticket_description"):
+                if not self.ticket_description and self.task_data.get(
+                    "ticket_description"
+                ):
                     self.ticket_description = self.task_data["ticket_description"]
                 if not self.task_id and self.task_data.get("task_id"):
                     self.task_id = self.task_data["task_id"]
-                logger.info(f"Loaded task data from TASK_DATA_BASE64: task_description={len(self.task_description)} chars")
+                logger.info(
+                    f"Loaded task data from TASK_DATA_BASE64: task_description={len(self.task_description)} chars"
+                )
             except Exception as e:
                 logger.warning(f"Failed to decode TASK_DATA_BASE64: {e}")
 
@@ -1173,7 +1229,9 @@ class WorkerConfig:
         if allowed_tools_env:
             # User explicitly wants to replace defaults - use their exact list
             # WARNING: This loses SDK defaults like Skill, Task, WebSearch, etc.
-            self.allowed_tools = [t.strip() for t in allowed_tools_env.split(",") if t.strip()]
+            self.allowed_tools = [
+                t.strip() for t in allowed_tools_env.split(",") if t.strip()
+            ]
             self.tools_mode = "replace"
         else:
             # Use SDK defaults (recommended) - includes all standard tools
@@ -1184,7 +1242,9 @@ class WorkerConfig:
         # Example: DISALLOWED_TOOLS=Bash,Write to prevent file modifications
         disallowed_tools_env = os.environ.get("DISALLOWED_TOOLS")
         if disallowed_tools_env:
-            self.disallowed_tools = [t.strip() for t in disallowed_tools_env.split(",") if t.strip()]
+            self.disallowed_tools = [
+                t.strip() for t in disallowed_tools_env.split(",") if t.strip()
+            ]
         else:
             self.disallowed_tools = None
 
@@ -1216,7 +1276,9 @@ class WorkerConfig:
         # 1. Inject skill content directly into system prompt
         # 2. Run spec output validation before task completion
         # This is NOT automatic for all exploration - only when explicitly requested
-        self.require_spec_skill = os.environ.get("REQUIRE_SPEC_SKILL", "").lower() == "true"
+        self.require_spec_skill = (
+            os.environ.get("REQUIRE_SPEC_SKILL", "").lower() == "true"
+        )
 
         # Add execution mode-specific instructions to system prompt
         if self.execution_mode == "exploration":
@@ -1388,11 +1450,15 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         else:
             # Use preset pattern to extend default claude_code prompt
             # This preserves the SDK's default system prompt and appends our additions
-            self.system_prompt = {
-                "type": "preset",
-                "preset": "claude_code",
-                "append": combined_append,
-            } if combined_append else None
+            self.system_prompt = (
+                {
+                    "type": "preset",
+                    "preset": "claude_code",
+                    "append": combined_append,
+                }
+                if combined_append
+                else None
+            )
 
         # Setting sources for loading skills and settings
         # - user: ~/.claude/settings.json (user-level defaults)
@@ -1435,7 +1501,11 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         # - implementation: code pushed, PR created
         # - validation: tests run, results reported
         # - exploration: docs/specs pushed if files created
-        continuous_default = self.execution_mode in ("implementation", "validation", "exploration")
+        continuous_default = self.execution_mode in (
+            "implementation",
+            "validation",
+            "exploration",
+        )
         continuous_env = os.environ.get("CONTINUOUS_MODE", "")
         self.continuous_mode = (
             continuous_env.lower() == "true" if continuous_env else continuous_default
@@ -1450,13 +1520,15 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
                 "continuous_default": continuous_default,
                 "execution_mode": self.execution_mode,
                 "task_id": self.task_id,
-            }
+            },
         )
 
         # Iteration limits
         self.max_iterations = int(os.environ.get("MAX_ITERATIONS", "10"))
         self.max_total_cost_usd = float(os.environ.get("MAX_TOTAL_COST_USD", "20.0"))
-        self.max_duration_seconds = int(os.environ.get("MAX_DURATION_SECONDS", "3600"))  # 1 hour
+        self.max_duration_seconds = int(
+            os.environ.get("MAX_DURATION_SECONDS", "3600")
+        )  # 1 hour
         self.max_consecutive_errors = int(os.environ.get("MAX_CONSECUTIVE_ERRORS", "3"))
 
         # Completion detection
@@ -1467,9 +1539,15 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
         self.notes_file = os.environ.get("NOTES_FILE", "ITERATION_NOTES.md")
 
         # Git validation requirements for implementation mode completion
-        self.require_clean_git = os.environ.get("REQUIRE_CLEAN_GIT", "true").lower() == "true"
-        self.require_code_pushed = os.environ.get("REQUIRE_CODE_PUSHED", "true").lower() == "true"
-        self.require_pr_created = os.environ.get("REQUIRE_PR_CREATED", "true").lower() == "true"
+        self.require_clean_git = (
+            os.environ.get("REQUIRE_CLEAN_GIT", "true").lower() == "true"
+        )
+        self.require_code_pushed = (
+            os.environ.get("REQUIRE_CODE_PUSHED", "true").lower() == "true"
+        )
+        self.require_pr_created = (
+            os.environ.get("REQUIRE_PR_CREATED", "true").lower() == "true"
+        )
 
         # Log full continuous mode settings
         if self.continuous_mode:
@@ -1485,7 +1563,7 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
                     "require_clean_git": self.require_clean_git,
                     "require_code_pushed": self.require_code_pushed,
                     "require_pr_created": self.require_pr_created,
-                }
+                },
             )
         else:
             logger.info(
@@ -1493,7 +1571,7 @@ DO NOT start {"coding" if self.execution_mode == "implementation" else "validati
                 extra={
                     "execution_mode": self.execution_mode,
                     "continuous_env_var": continuous_env or "(not set)",
-                }
+                },
             )
 
         # Append conversation context to system prompt if provided (for hydration)
@@ -1532,7 +1610,9 @@ Continue from where we left off, acknowledging the previous context."""
             "max_budget_usd": self.max_budget_usd,
             "permission_mode": self.permission_mode,
             "tools_mode": self.tools_mode,
-            "allowed_tools": self.allowed_tools if self.allowed_tools else "SDK_DEFAULTS",
+            "allowed_tools": self.allowed_tools
+            if self.allowed_tools
+            else "SDK_DEFAULTS",
             "disallowed_tools": self.disallowed_tools or [],
             "enable_skills": self.enable_skills,
             "enable_subagents": self.enable_subagents,
@@ -1687,7 +1767,9 @@ Systematically investigate issues:
                 options_kwargs["mcp_servers"] = {"spec_workflow": mcp_server}
                 logger.info("Spec workflow MCP server enabled")
             except Exception as e:
-                logger.warning("Failed to create spec workflow MCP server", extra={"error": str(e)})
+                logger.warning(
+                    "Failed to create spec workflow MCP server", extra={"error": str(e)}
+                )
 
         # Add hooks
         hooks = {}
@@ -1745,7 +1827,13 @@ Systematically investigate issues:
 
             # Write the transcript
             transcript_path.write_text(transcript_content)
-            logger.info("Imported session transcript", extra={"session_id": self.resume_session_id, "path": str(transcript_path)})
+            logger.info(
+                "Imported session transcript",
+                extra={
+                    "session_id": self.resume_session_id,
+                    "path": str(transcript_path),
+                },
+            )
             return True
 
         except Exception as e:
@@ -1832,7 +1920,13 @@ class EventReporter:
                     # Silently fail - heartbeats are non-critical and 502s are transient
                     return False
                 # Log other non-200 status codes
-                logger.warning("Event report failed", extra={"event_type": event_type, "status_code": response.status_code})
+                logger.warning(
+                    "Event report failed",
+                    extra={
+                        "event_type": event_type,
+                        "status_code": response.status_code,
+                    },
+                )
             return success
         except httpx.HTTPStatusError as e:
             # Handle HTTP errors (like 502 Bad Gateway)
@@ -1842,7 +1936,10 @@ class EventReporter:
                 # Heartbeats are non-critical, so we silently fail
                 return False
             else:
-                logger.warning("HTTP error reporting event", extra={"event_type": event_type, "status_code": status_code})
+                logger.warning(
+                    "HTTP error reporting event",
+                    extra={"event_type": event_type, "status_code": status_code},
+                )
             return False
         except httpx.RequestError as e:
             # Network-level errors (connection refused, timeout, etc.)
@@ -1853,7 +1950,10 @@ class EventReporter:
                 return False
             # Log other network errors (but not for heartbeats to reduce spam)
             if event_type != "agent.heartbeat":
-                logger.warning("Network error reporting event", extra={"event_type": event_type, "error": str(e)})
+                logger.warning(
+                    "Network error reporting event",
+                    extra={"event_type": event_type, "error": str(e)},
+                )
             return False
         except Exception as e:
             # Only log unexpected errors, not network timeouts or 502s
@@ -1863,7 +1963,10 @@ class EventReporter:
                 return False
             # Log other unexpected errors (but not for heartbeats)
             if event_type != "agent.heartbeat":
-                logger.error("Failed to report event", extra={"event_type": event_type, "error": str(e)})
+                logger.error(
+                    "Failed to report event",
+                    extra={"event_type": event_type, "error": str(e)},
+                )
             return False
 
     async def heartbeat(self) -> bool:
@@ -2033,7 +2136,10 @@ class SandboxWorker:
                             },
                         )
                     except Exception as e:
-                        logger.warning("Failed to generate diff", extra={"file_path": file_path, "error": str(e)})
+                        logger.warning(
+                            "Failed to generate diff",
+                            extra={"file_path": file_path, "error": str(e)},
+                        )
 
             elif tool_name == "Edit":
                 file_path = tool_input.get("file_path")
@@ -2054,7 +2160,10 @@ class SandboxWorker:
                                 },
                             )
                     except Exception as e:
-                        logger.warning("Failed to read file after edit", extra={"file_path": str(file_path), "error": str(e)})
+                        logger.warning(
+                            "Failed to read file after edit",
+                            extra={"file_path": str(file_path), "error": str(e)},
+                        )
 
             # Serialize tool_response properly
             # Claude SDK tool results (like CLIResult) are objects with stdout/stderr fields
@@ -2068,8 +2177,11 @@ class SandboxWorker:
                 elif hasattr(tool_response, "__dict__"):
                     # Generic object - try to serialize nicely
                     import json
+
                     try:
-                        serialized_response = json.dumps(tool_response.__dict__, default=str)
+                        serialized_response = json.dumps(
+                            tool_response.__dict__, default=str
+                        )
                     except (TypeError, ValueError):
                         serialized_response = str(tool_response)
                 else:
@@ -2099,6 +2211,7 @@ class SandboxWorker:
                 if serialized_response:
                     try:
                         import json
+
                         # Try to parse the response as JSON
                         if isinstance(serialized_response, str):
                             result_data = json.loads(serialized_response)
@@ -2156,7 +2269,10 @@ class SandboxWorker:
                                 str(file_path), old_content
                             )
                         except Exception as e:
-                            logger.warning("Failed to cache file", extra={"file_path": str(file_path), "error": str(e)})
+                            logger.warning(
+                                "Failed to cache file",
+                                extra={"file_path": str(file_path), "error": str(e)},
+                            )
 
             return {}
 
@@ -2180,7 +2296,9 @@ class SandboxWorker:
                 message_stream = client.receive_messages()
             except Exception as stream_init_error:
                 error_msg = str(stream_init_error)
-                logger.error("Failed to initialize message stream", extra={"error": error_msg})
+                logger.error(
+                    "Failed to initialize message stream", extra={"error": error_msg}
+                )
                 if self.reporter:
                     await self.reporter.report(
                         "agent.stream_error",
@@ -2219,7 +2337,10 @@ class SandboxWorker:
                                         "thinking_type": "extended_thinking",
                                     },
                                 )
-                            logger.debug("Agent thinking", extra={"content_preview": block.text[:100]})
+                            logger.debug(
+                                "Agent thinking",
+                                extra={"content_preview": block.text[:100]},
+                            )
 
                         elif isinstance(block, ToolUseBlock):
                             tool_event = {
@@ -2245,7 +2366,14 @@ class SandboxWorker:
                                     await self.reporter.report(
                                         "agent.subagent_invoked", tool_event
                                     )
-                                logger.info("Subagent invoked", extra={"subagent_type": block.input.get('subagent_type')})
+                                logger.info(
+                                    "Subagent invoked",
+                                    extra={
+                                        "subagent_type": block.input.get(
+                                            "subagent_type"
+                                        )
+                                    },
+                                )
 
                             # Special handling for skill invocation
                             elif block.name == "Skill":
@@ -2257,7 +2385,10 @@ class SandboxWorker:
                                     await self.reporter.report(
                                         "agent.skill_invoked", tool_event
                                     )
-                                logger.info("Skill invoked", extra={"skill_name": tool_event['skill_name']})
+                                logger.info(
+                                    "Skill invoked",
+                                    extra={"skill_name": tool_event["skill_name"]},
+                                )
 
                             # Standard tool use
                             else:
@@ -2285,7 +2416,13 @@ class SandboxWorker:
                                     },
                                 )
                             is_error = getattr(block, "is_error", False)
-                            logger.debug("Tool result", extra={"is_error": is_error, "result_preview": result_content[:80]})
+                            logger.debug(
+                                "Tool result",
+                                extra={
+                                    "is_error": is_error,
+                                    "result_preview": result_content[:80],
+                                },
+                            )
 
                         elif isinstance(block, TextBlock):
                             if self.reporter:
@@ -2298,7 +2435,10 @@ class SandboxWorker:
                                     },
                                 )
                             final_output.append(block.text)
-                            logger.debug("Agent message", extra={"content_preview": block.text[:100]})
+                            logger.debug(
+                                "Agent message",
+                                extra={"content_preview": block.text[:100]},
+                            )
 
                 elif isinstance(msg, UserMessage):
                     for block in msg.content:
@@ -2348,9 +2488,15 @@ class SandboxWorker:
                                 msg.session_id
                             )
                             if transcript_b64:
-                                logger.info("Exported session transcript", extra={"size_bytes": len(transcript_b64)})
+                                logger.info(
+                                    "Exported session transcript",
+                                    extra={"size_bytes": len(transcript_b64)},
+                                )
                         except Exception as e:
-                            logger.warning("Failed to export session transcript", extra={"error": str(e)})
+                            logger.warning(
+                                "Failed to export session transcript",
+                                extra={"error": str(e)},
+                            )
 
                     # Safely extract message attributes (handle both object and dict)
                     num_turns = getattr(msg, "num_turns", None)
@@ -2404,10 +2550,13 @@ class SandboxWorker:
                                     "pr_created": state.pr_created,
                                     "tests_passed": state.tests_passed,
                                     "pr_url": state.pr_url,
-                                }
+                                },
                             )
                         except Exception as e:
-                            logger.warning("Failed to capture git status before completion", extra={"error": str(e)})
+                            logger.warning(
+                                "Failed to capture git status before completion",
+                                extra={"error": str(e)},
+                            )
 
                         # Build completion event with final output
                         completion_event: dict[str, Any] = {
@@ -2425,7 +2574,9 @@ class SandboxWorker:
                             if final_output
                             else None,  # Include final output for task result
                             # Include branch name for validation workflow
-                            "branch_name": self.config.branch_name if self.config.branch_name else None,
+                            "branch_name": self.config.branch_name
+                            if self.config.branch_name
+                            else None,
                             # Include agent type for proper event handling (validator vs implementer)
                             "agent_type": self.config.agent_type,
                         }
@@ -2433,17 +2584,19 @@ class SandboxWorker:
                         # Include validation/iteration state for artifact generation
                         if self.iteration_state:
                             state = self.iteration_state
-                            completion_event.update({
-                                "validation_passed": state.validation_passed,
-                                "tests_passed": state.tests_passed,
-                                "code_committed": state.code_committed,
-                                "code_pushed": state.code_pushed,
-                                "pr_created": state.pr_created,
-                                "pr_url": state.pr_url,
-                                "pr_number": state.pr_number,
-                                "files_changed": state.files_changed,
-                                "ci_status": state.ci_status,
-                            })
+                            completion_event.update(
+                                {
+                                    "validation_passed": state.validation_passed,
+                                    "tests_passed": state.tests_passed,
+                                    "code_committed": state.code_committed,
+                                    "code_pushed": state.code_pushed,
+                                    "pr_created": state.pr_created,
+                                    "pr_url": state.pr_url,
+                                    "pr_number": state.pr_number,
+                                    "files_changed": state.files_changed,
+                                    "ci_status": state.ci_status,
+                                }
+                            )
 
                         # Try to report completion with retries (critical for task finalization)
                         max_retries = 3
@@ -2458,13 +2611,24 @@ class SandboxWorker:
                             if reported:
                                 break
                             if attempt < max_retries - 1:
-                                logger.warning("Retrying completion event", extra={"attempt": attempt + 1, "max_retries": max_retries})
+                                logger.warning(
+                                    "Retrying completion event",
+                                    extra={
+                                        "attempt": attempt + 1,
+                                        "max_retries": max_retries,
+                                    },
+                                )
                                 await asyncio.sleep(retry_delay)
                                 retry_delay *= 2  # Exponential backoff
 
                         if not reported:
-                            logger.warning("Failed to report completion after retries - task status may not update")
-                    logger.info("Agent completed", extra={"turns": num_turns, "cost_usd": total_cost_usd})
+                            logger.warning(
+                                "Failed to report completion after retries - task status may not update"
+                            )
+                    logger.info(
+                        "Agent completed",
+                        extra={"turns": num_turns, "cost_usd": total_cost_usd},
+                    )
                     return msg, final_output
 
         except Exception as e:
@@ -2474,12 +2638,23 @@ class SandboxWorker:
             # Detect specific error types
             if "exit code -9" in error_str or "SIGKILL" in error_str:
                 error_type = "sigkill"
-                logger.error("Stream error: Process killed (SIGKILL/exit -9)", extra={
-                    "possible_causes": ["OOM killer", "Resource limits exceeded", "Process timeout", "System resource constraints"]
-                })
+                logger.error(
+                    "Stream error: Process killed (SIGKILL/exit -9)",
+                    extra={
+                        "possible_causes": [
+                            "OOM killer",
+                            "Resource limits exceeded",
+                            "Process timeout",
+                            "System resource constraints",
+                        ]
+                    },
+                )
             elif "Command failed" in error_str:
                 error_type = "command_failed"
-                logger.error("Stream error: Command failed in message reader", extra={"error": error_str})
+                logger.error(
+                    "Stream error: Command failed in message reader",
+                    extra={"error": error_str},
+                )
             else:
                 logger.error("Stream error", extra={"error": str(e)})
 
@@ -2498,7 +2673,9 @@ class SandboxWorker:
 
             # If we have partial output, return it instead of None
             if final_output:
-                logger.warning("Returning partial output", extra={"block_count": len(final_output)})
+                logger.warning(
+                    "Returning partial output", extra={"block_count": len(final_output)}
+                )
 
         return None, final_output
 
@@ -2509,6 +2686,7 @@ class SandboxWorker:
     def _should_continue_iteration(self) -> bool:
         """Check if iteration should continue in continuous mode."""
         import time
+
         state = self.iteration_state
         config = self.config
 
@@ -2521,7 +2699,9 @@ class SandboxWorker:
             # Only stop if validation passed
             if not state.validation_passed:
                 # Continue to allow agent to fix issues
-                logger.info("Completion signal reached but validation not passed - continuing")
+                logger.info(
+                    "Completion signal reached but validation not passed - continuing"
+                )
                 state.completion_signal_count = 0  # Reset to allow more iterations
             else:
                 return False
@@ -2553,6 +2733,7 @@ class SandboxWorker:
     def _get_stop_reason(self) -> str:
         """Determine why the iteration loop stopped."""
         import time
+
         state = self.iteration_state
         config = self.config
 
@@ -2615,9 +2796,11 @@ class SandboxWorker:
         # This applies to ALL modes - if no files were created, no git workflow needed
         is_research_task = (
             # Clean working directory (no uncommitted changes)
-            git_status["is_clean"] and
+            git_status["is_clean"]
+            and
             # Not ahead of remote (nothing to push)
-            git_status["is_pushed"] and
+            git_status["is_pushed"]
+            and
             # On main/master branch (no feature branch was created)
             git_status.get("branch_name") in ("main", "master", None)
         )
@@ -2634,10 +2817,12 @@ class SandboxWorker:
                     "is_clean": git_status["is_clean"],
                     "is_pushed": git_status["is_pushed"],
                     "execution_mode": config.execution_mode,
-                }
+                },
             )
             state.validation_passed = True
-            state.validation_feedback = "Research/analysis task completed - no code changes required"
+            state.validation_feedback = (
+                "Research/analysis task completed - no code changes required"
+            )
 
             # Report validation result for research task
             if self.reporter:
@@ -2684,17 +2869,21 @@ class SandboxWorker:
                     extra={
                         "files_found": spec_status["files_found"],
                         "files_with_frontmatter": spec_status["files_with_frontmatter"],
-                        "files_missing_frontmatter": spec_status["files_missing_frontmatter"],
+                        "files_missing_frontmatter": spec_status[
+                            "files_missing_frontmatter"
+                        ],
                         "errors": spec_status["errors"],
-                    }
+                    },
                 )
             else:
                 logger.info(
                     "Spec validation PASSED",
                     extra={
                         "files_found": len(spec_status["files_found"]),
-                        "files_with_frontmatter": len(spec_status["files_with_frontmatter"]),
-                    }
+                        "files_with_frontmatter": len(
+                            spec_status["files_with_frontmatter"]
+                        ),
+                    },
                 )
 
         if not validation_errors:
@@ -2749,19 +2938,19 @@ The completion signal was detected, but validation checks failed.
 
             feedback_section += f"""
 ### Git Status:
-- Branch: {git_status.get('branch_name', 'unknown')}
-- Clean working directory: {'✅ Yes' if git_status['is_clean'] else '❌ No'}
-- Code pushed to remote: {'✅ Yes' if git_status['is_pushed'] else '❌ No'}
-- PR exists: {'✅ Yes' if git_status['has_pr'] else '❌ No'}
+- Branch: {git_status.get("branch_name", "unknown")}
+- Clean working directory: {"✅ Yes" if git_status["is_clean"] else "❌ No"}
+- Code pushed to remote: {"✅ Yes" if git_status["is_pushed"] else "❌ No"}
+- PR exists: {"✅ Yes" if git_status["has_pr"] else "❌ No"}
 
 ### Required Actions:
 """
             if not git_status["is_clean"]:
-                feedback_section += "1. Stage and commit all changes: `git add -A && git commit -m \"...\"`\n"
+                feedback_section += '1. Stage and commit all changes: `git add -A && git commit -m "..."`\n'
             if not git_status["is_pushed"]:
                 feedback_section += "2. Push code to remote: `git push`\n"
             if not git_status["has_pr"]:
-                feedback_section += "3. Create a pull request: `gh pr create --title \"...\" --body \"...\"`\n"
+                feedback_section += '3. Create a pull request: `gh pr create --title "..." --body "..."`\n'
 
             feedback_section += f"""
 **After fixing these issues, include `{config.completion_signal}` in your response again.**
@@ -2771,7 +2960,10 @@ The completion signal was detected, but validation checks failed.
             logger.info("Updated notes file with validation feedback")
 
         except Exception as e:
-            logger.warning("Failed to update notes with validation feedback", extra={"error": str(e)})
+            logger.warning(
+                "Failed to update notes with validation feedback",
+                extra={"error": str(e)},
+            )
 
     def _build_iteration_prompt(self, base_task: str) -> str:
         """Build enhanced prompt with iteration context."""
@@ -2848,7 +3040,9 @@ This is a continuation of your previous work. Please review the notes below and 
             return 1
 
         if not SDK_AVAILABLE:
-            logger.error("claude_agent_sdk package not installed - Run: pip install claude-agent-sdk")
+            logger.error(
+                "claude_agent_sdk package not installed - Run: pip install claude-agent-sdk"
+            )
             return 1
 
         # Setup workspace
@@ -2914,11 +3108,14 @@ This is a continuation of your previous work. Please review the notes below and 
                 try:
                     # Debug: Log options structure before creating client
                     logger.debug("Creating SDK client with options")
-                    logger.debug("SDK options type", extra={"options_type": str(type(sdk_options))})
+                    logger.debug(
+                        "SDK options type",
+                        extra={"options_type": str(type(sdk_options))},
+                    )
                     if hasattr(sdk_options, "hooks") and sdk_options.hooks:
                         logger.debug(
                             "Hooks present in SDK options",
-                            extra={"hooks": list(sdk_options.hooks.keys())}
+                            extra={"hooks": list(sdk_options.hooks.keys())},
                         )
 
                     async with ClaudeSDKClient(options=sdk_options) as client:
@@ -2934,6 +3131,7 @@ This is a continuation of your previous work. Please review the notes below and 
                         if initial_task and initial_task.strip():
                             # Initialize iteration state
                             import time
+
                             self.iteration_state.start_time = time.time()
 
                             # Log mode decision for debugging
@@ -2944,7 +3142,7 @@ This is a continuation of your previous work. Please review the notes below and 
                                     "execution_mode": self.config.execution_mode,
                                     "task_id": self.config.task_id,
                                     "initial_task_preview": initial_task[:200],
-                                }
+                                },
                             )
 
                             if self.config.continuous_mode:
@@ -2985,7 +3183,9 @@ This is a continuation of your previous work. Please review the notes below and 
                                 # Iteration loop
                                 while self._should_continue_iteration():
                                     self.iteration_state.iteration_num += 1
-                                    iteration_prompt = self._build_iteration_prompt(initial_task)
+                                    iteration_prompt = self._build_iteration_prompt(
+                                        initial_task
+                                    )
 
                                     # Report iteration start
                                     await reporter.report(
@@ -3000,22 +3200,38 @@ This is a continuation of your previous work. Please review the notes below and 
                                     logger.info(
                                         "Starting iteration %d",
                                         self.iteration_state.iteration_num,
-                                        extra={"state": self.iteration_state.to_event_data()}
+                                        extra={
+                                            "state": self.iteration_state.to_event_data()
+                                        },
                                     )
 
                                     try:
                                         await client.query(iteration_prompt)
-                                        result, output = await self._process_messages(client)
+                                        result, output = await self._process_messages(
+                                            client
+                                        )
 
                                         if result:
                                             # Track cost
-                                            iteration_cost = getattr(result, "total_cost_usd", 0.0) or 0.0
-                                            self.iteration_state.total_cost += iteration_cost
-                                            self.iteration_state.last_session_id = getattr(result, "session_id", None)
+                                            iteration_cost = (
+                                                getattr(result, "total_cost_usd", 0.0)
+                                                or 0.0
+                                            )
+                                            self.iteration_state.total_cost += (
+                                                iteration_cost
+                                            )
+                                            self.iteration_state.last_session_id = (
+                                                getattr(result, "session_id", None)
+                                            )
 
                                             # Check for completion signal in output
-                                            output_text = "\n".join(output) if output else ""
-                                            if self.config.completion_signal in output_text:
+                                            output_text = (
+                                                "\n".join(output) if output else ""
+                                            )
+                                            if (
+                                                self.config.completion_signal
+                                                in output_text
+                                            ):
                                                 self.iteration_state.completion_signal_count += 1
                                                 logger.info(
                                                     "Completion signal detected (%d/%d)",
@@ -3037,7 +3253,9 @@ This is a continuation of your previous work. Please review the notes below and 
 
                                                 # If validation passed, we're done!
                                                 if self.iteration_state.validation_passed:
-                                                    logger.info("Validation PASSED - task truly complete!")
+                                                    logger.info(
+                                                        "Validation PASSED - task truly complete!"
+                                                    )
                                                     break
                                             else:
                                                 # No completion signal - reset counter
@@ -3052,7 +3270,9 @@ This is a continuation of your previous work. Please review the notes below and 
                                                 {
                                                     "iteration_num": self.iteration_state.iteration_num,
                                                     "cost_usd": iteration_cost,
-                                                    "output_preview": output_text[:1000] if output_text else None,
+                                                    "output_preview": output_text[:1000]
+                                                    if output_text
+                                                    else None,
                                                     **self.iteration_state.to_event_data(),
                                                 },
                                             )
@@ -3104,7 +3324,7 @@ This is a continuation of your previous work. Please review the notes below and 
                                         "successful": self.iteration_state.successful_iterations,
                                         "total_cost": self.iteration_state.total_cost,
                                         "validation_passed": self.iteration_state.validation_passed,
-                                    }
+                                    },
                                 )
 
                             else:
@@ -3112,7 +3332,9 @@ This is a continuation of your previous work. Please review the notes below and 
                                 # SINGLE-RUN MODE: Execute once (original behavior)
                                 # =================================================
                                 logger.info("=" * 60)
-                                logger.info("WORKER RUN: SINGLE-RUN MODE (no iteration)")
+                                logger.info(
+                                    "WORKER RUN: SINGLE-RUN MODE (no iteration)"
+                                )
                                 logger.info("=" * 60)
                                 logger.info(
                                     "WORKER RUN: Single-run mode - task will execute ONCE only",
@@ -3121,13 +3343,17 @@ This is a continuation of your previous work. Please review the notes below and 
                                         "task_id": self.config.task_id,
                                         "continuous_mode": self.config.continuous_mode,
                                         "task_preview": initial_task[:200],
-                                    }
+                                    },
                                 )
                                 try:
                                     await client.query(initial_task)
                                     await self._process_messages(client)
                                 except Exception as e:
-                                    logger.error("Failed to process initial task", extra={"error": str(e)}, exc_info=True)
+                                    logger.error(
+                                        "Failed to process initial task",
+                                        extra={"error": str(e)},
+                                        exc_info=True,
+                                    )
                                     if self.reporter:
                                         await self.reporter.report(
                                             "agent.error",
@@ -3179,7 +3405,13 @@ This is a continuation of your previous work. Please review the notes below and 
                                     if not content:
                                         continue
 
-                                    logger.info("Received message", extra={"msg_type": msg_type, "content_preview": content[:80]})
+                                    logger.info(
+                                        "Received message",
+                                        extra={
+                                            "msg_type": msg_type,
+                                            "content_preview": content[:80],
+                                        },
+                                    )
 
                                     # Handle interrupt
                                     if msg_type == "interrupt":
@@ -3214,7 +3446,11 @@ This is a continuation of your previous work. Please review the notes below and 
                                         await client.query(content)
                                         await self._process_messages(client)
                                     except Exception as e:
-                                        logger.error("Failed to process message", extra={"error": str(e)}, exc_info=True)
+                                        logger.error(
+                                            "Failed to process message",
+                                            extra={"error": str(e)},
+                                            exc_info=True,
+                                        )
                                         if self.reporter:
                                             await self.reporter.report(
                                                 "agent.error",
@@ -3245,7 +3481,11 @@ This is a continuation of your previous work. Please review the notes below and 
                             except asyncio.CancelledError:
                                 break
                             except Exception as e:
-                                logger.error("Main loop error", extra={"error": str(e)}, exc_info=True)
+                                logger.error(
+                                    "Main loop error",
+                                    extra={"error": str(e)},
+                                    exc_info=True,
+                                )
                                 await reporter.report("agent.error", {"error": str(e)})
                                 await asyncio.sleep(1)
 
@@ -3266,20 +3506,31 @@ This is a continuation of your previous work. Please review the notes below and 
                     if "asdict()" in str(e):
                         debug_info = {"options_type": str(type(sdk_options))}
                         if hasattr(sdk_options, "__dict__"):
-                            debug_info["options_keys"] = list(sdk_options.__dict__.keys())
+                            debug_info["options_keys"] = list(
+                                sdk_options.__dict__.keys()
+                            )
                             if hasattr(sdk_options, "hooks"):
                                 debug_info["hooks_type"] = str(type(sdk_options.hooks))
                                 if sdk_options.hooks:
                                     hooks_debug = {}
-                                    for hook_type, hook_list in sdk_options.hooks.items():
+                                    for (
+                                        hook_type,
+                                        hook_list,
+                                    ) in sdk_options.hooks.items():
                                         hooks_debug[hook_type] = {
                                             "type": str(type(hook_list)),
-                                            "length": len(hook_list) if isinstance(hook_list, list) else "N/A",
+                                            "length": len(hook_list)
+                                            if isinstance(hook_list, list)
+                                            else "N/A",
                                         }
                                         if isinstance(hook_list, list) and hook_list:
-                                            hooks_debug[hook_type]["first_item_type"] = str(type(hook_list[0]))
+                                            hooks_debug[hook_type][
+                                                "first_item_type"
+                                            ] = str(type(hook_list[0]))
                                     debug_info["hooks"] = hooks_debug
-                        logger.debug("asdict() error - options structure debug", extra=debug_info)
+                        logger.debug(
+                            "asdict() error - options structure debug", extra=debug_info
+                        )
 
                     await reporter.report(
                         "agent.error",
@@ -3301,7 +3552,9 @@ This is a continuation of your previous work. Please review the notes below and 
                     },
                     source="worker",
                 )
-                logger.info("Worker shutdown complete", extra={"total_turns": self.turn_count})
+                logger.info(
+                    "Worker shutdown complete", extra={"total_turns": self.turn_count}
+                )
 
         return 0
 
