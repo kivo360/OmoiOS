@@ -524,11 +524,23 @@ async def orchestrator_loop():
                                         user_id_for_token = ticket.project.created_by
                                         extra_env["USER_ID"] = str(user_id_for_token)
                                     else:
-                                        log.warning(
-                                            "project_missing_created_by",
-                                            project_id=str(ticket.project.id),
-                                            msg="Project has no created_by - cannot fetch GitHub token",
-                                        )
+                                        # Fallback: use ticket's user_id if project has no created_by
+                                        # This handles older projects created before we tracked created_by
+                                        if ticket.user_id:
+                                            user_id_for_token = ticket.user_id
+                                            extra_env["USER_ID"] = str(user_id_for_token)
+                                            log.info(
+                                                "using_ticket_user_id_fallback",
+                                                project_id=str(ticket.project.id),
+                                                ticket_user_id=str(ticket.user_id),
+                                                msg="Project has no created_by, falling back to ticket.user_id",
+                                            )
+                                        else:
+                                            log.warning(
+                                                "project_missing_created_by",
+                                                project_id=str(ticket.project.id),
+                                                msg="Project has no created_by and ticket has no user_id - cannot fetch GitHub token",
+                                            )
                                     # Combine owner/repo into GITHUB_REPO format
                                     owner = ticket.project.github_owner
                                     repo = ticket.project.github_repo
@@ -546,11 +558,22 @@ async def orchestrator_loop():
                                             msg="Project missing github_owner or github_repo",
                                         )
                                 else:
-                                    log.warning(
-                                        "ticket_has_no_project",
-                                        ticket_id=str(ticket.id),
-                                        msg="Ticket has no project - cannot get GitHub info",
-                                    )
+                                    # No project - try to get user_id from ticket directly
+                                    if ticket.user_id:
+                                        user_id_for_token = ticket.user_id
+                                        extra_env["USER_ID"] = str(user_id_for_token)
+                                        log.info(
+                                            "using_ticket_user_id_no_project",
+                                            ticket_id=str(ticket.id),
+                                            ticket_user_id=str(ticket.user_id),
+                                            msg="Ticket has no project, using ticket.user_id for GitHub token",
+                                        )
+                                    else:
+                                        log.warning(
+                                            "ticket_has_no_project",
+                                            ticket_id=str(ticket.id),
+                                            msg="Ticket has no project and no user_id - cannot get GitHub info",
+                                        )
 
                             # Fetch GitHub token from user attributes
                             # Token is stored in user.attributes.github_access_token (via OAuth)
