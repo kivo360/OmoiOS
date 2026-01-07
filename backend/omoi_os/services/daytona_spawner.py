@@ -905,23 +905,43 @@ class DaytonaSpawnerService:
                     result = sandbox.process.exec(f"ls -la {workspace_path}")
                     logger.info(f"Workspace contents after clone:\n{result.stdout[:500] if hasattr(result, 'stdout') else result}")
 
-                    # Verify we're on the expected branch
+                    # Check current branch
                     branch_check = sandbox.process.exec(f"cd {workspace_path} && git branch --show-current")
                     current_branch = branch_check.stdout.strip() if hasattr(branch_check, 'stdout') else str(branch_check).strip()
                     logger.info(f"Current git branch after clone: '{current_branch}'")
 
-                    if branch_name and current_branch != branch_name:
-                        logger.warning(
-                            f"Branch mismatch! Expected '{branch_name}' but got '{current_branch}'. "
-                            f"Attempting to checkout the correct branch..."
-                        )
-                        # Try to checkout the expected branch
+                    # ALWAYS checkout the target branch if specified
+                    # Don't rely on SDK's branch parameter - explicitly switch to ensure we're on the right branch
+                    if branch_name:
+                        if current_branch != branch_name:
+                            logger.info(
+                                f"Switching from '{current_branch}' to feature branch '{branch_name}'..."
+                            )
+                        else:
+                            logger.info(f"Already on branch '{branch_name}', confirming checkout...")
+
+                        # Fetch all remote branches first to ensure we have the branch ref
+                        sandbox.process.exec(f"cd {workspace_path} && git fetch origin")
+
+                        # Checkout the feature branch (this works whether we're already on it or not)
                         checkout_result = sandbox.process.exec(
                             f"cd {workspace_path} && git checkout {branch_name}"
                         )
-                        logger.info(f"Checkout result: {checkout_result}")
+                        checkout_output = checkout_result.stdout if hasattr(checkout_result, 'stdout') else str(checkout_result)
+                        logger.info(f"Checkout result: {checkout_output}")
+
+                        # Verify we're now on the correct branch
+                        final_branch_check = sandbox.process.exec(f"cd {workspace_path} && git branch --show-current")
+                        final_branch = final_branch_check.stdout.strip() if hasattr(final_branch_check, 'stdout') else str(final_branch_check).strip()
+
+                        if final_branch == branch_name:
+                            logger.info(f"✅ Successfully on feature branch '{branch_name}'")
+                        else:
+                            logger.error(
+                                f"❌ Failed to checkout branch '{branch_name}', still on '{final_branch}'"
+                            )
                 except Exception as e:
-                    logger.warning(f"Could not verify workspace after clone: {e}")
+                    logger.warning(f"Could not verify/switch branch after clone: {e}")
 
                 # Set WORKSPACE_PATH env var so worker knows where code is
                 env_vars["WORKSPACE_PATH"] = workspace_path
