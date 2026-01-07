@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { PromptInput, ModelSelector, RepoSelector, Project, Repository, WorkflowModeSelector, getWorkflowModeConfig, type WorkflowMode } from "@/components/command"
 import { useProjects } from "@/hooks/useProjects"
 import { useConnectedRepositories } from "@/hooks/useGitHub"
+import { useGitHubRepos } from "@/hooks/useGitHubRepos"
 import { useCreateTicket } from "@/hooks/useTickets"
 import { useEvents, type SystemEvent } from "@/hooks/useEvents"
 import { listTasks } from "@/lib/api/tasks"
@@ -41,6 +42,10 @@ export default function CommandCenterPage() {
   const { data: connectedRepos } = useConnectedRepositories()
   const createTicketMutation = useCreateTicket()
 
+  // Fetch ALL GitHub repos for the user (not just connected ones)
+  // This allows selecting any repo, and the backend will auto-create a project
+  const { data: allGitHubRepos } = useGitHubRepos({ sort: "updated", per_page: 100 })
+
   // Transform API projects to component format
   const projects: Project[] = useMemo(() => {
     if (!projectsData?.projects) return []
@@ -52,14 +57,15 @@ export default function CommandCenterPage() {
     }))
   }, [projectsData?.projects])
 
-  // Transform connected repos to component format
+  // Transform ALL GitHub repos to component format (not just connected ones)
+  // This allows users to select any repo they have access to
   const repositories: Repository[] = useMemo(() => {
-    if (!connectedRepos) return []
-    return connectedRepos.map((r) => ({
-      fullName: `${r.owner}/${r.repo}`,
-      isPrivate: false,
+    if (!allGitHubRepos) return []
+    return allGitHubRepos.map((r) => ({
+      fullName: r.full_name,
+      isPrivate: r.private,
     }))
-  }, [connectedRepos])
+  }, [allGitHubRepos])
 
   // Set default project when data loads
   useMemo(() => {
