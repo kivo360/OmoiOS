@@ -67,12 +67,14 @@ export default function CommandCenterPage() {
     }))
   }, [allGitHubRepos])
 
-  // Set default project when data loads
-  useMemo(() => {
-    if (projects.length > 0 && !selectedProject) {
+  // Set default project when data loads (only on initial load, not when user clears selection)
+  const hasInitializedRef = useRef(false)
+  useEffect(() => {
+    if (projects.length > 0 && !hasInitializedRef.current) {
+      hasInitializedRef.current = true
       setSelectedProject(projects[0])
     }
-  }, [projects, selectedProject])
+  }, [projects])
 
   // Track if we've already redirected to prevent double redirects
   const hasRedirectedRef = useRef(false)
@@ -255,10 +257,8 @@ export default function CommandCenterPage() {
   }
 
   const handleRepoSelect = (repo: string) => {
-    console.log("handleRepoSelect called with:", repo)
     setSelectedProject(null)
     setSelectedRepo(repo)
-    console.log("After setSelectedRepo, selectedRepo should update to:", repo)
   }
 
   const isLoading = launchState.status !== "idle"
