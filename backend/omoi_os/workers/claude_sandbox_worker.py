@@ -955,6 +955,10 @@ class WorkerConfig:
         # - validation: For verifying implementation
         self.execution_mode = os.environ.get("EXECUTION_MODE", "implementation")
 
+        # Agent type - passed from orchestrator for proper event handling
+        # Used to identify validator agents vs implementer agents
+        self.agent_type = os.environ.get("AGENT_TYPE", "implementer")
+
         # MCP spec workflow tools - only enable for exploration mode
         # Implementation agents should NOT be creating new specs/tickets
         self.enable_spec_tools = (
@@ -2139,6 +2143,8 @@ class SandboxWorker:
                             else None,  # Include final output for task result
                             # Include branch name for validation workflow
                             "branch_name": self.config.branch_name if self.config.branch_name else None,
+                            # Include agent type for proper event handling (validator vs implementer)
+                            "agent_type": self.config.agent_type,
                         }
 
                         # Include validation/iteration state for artifact generation

@@ -69,6 +69,7 @@ def sample_ticket_with_project(db_service: DatabaseService, sample_project: Proj
             description="Test description",
             phase_id="PHASE_IMPLEMENTATION",
             status="in_progress",
+            priority="MEDIUM",  # Required field
             project_id=sample_project.id,
         )
         session.add(ticket)
@@ -86,7 +87,9 @@ def running_task_with_sandbox(db_service: DatabaseService, sample_ticket_with_pr
             ticket_id=sample_ticket_with_project.id,
             phase_id="PHASE_IMPLEMENTATION",
             task_type="implement_feature",
+            title="Test Task",  # Required field
             description="Test task",
+            priority="MEDIUM",  # Required field
             status="running",
             sandbox_id=f"sandbox-{uuid4().hex[:8]}",
             result={"branch_name": "feature/test-branch"},

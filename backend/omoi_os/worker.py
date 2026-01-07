@@ -728,7 +728,7 @@ def main():
 
     db = DatabaseService(database_url)
     event_bus = EventBusService(redis_url)
-    task_queue = TaskQueueService(db)
+    task_queue = TaskQueueService(db, event_bus=event_bus)
     health_service = AgentHealthService(db)
 
     # Import heartbeat protocol service for enhanced heartbeat
