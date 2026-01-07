@@ -146,6 +146,11 @@ class TicketCreate(BaseModel):
     github_owner: str | None = None
     github_repo: str | None = None
 
+    # Workflow mode from frontend - determines execution behavior
+    # - "quick": Direct implementation mode
+    # - "spec_driven": Spec-driven development with structured output
+    workflow_mode: str | None = None  # "quick" or "spec_driven"
+
 
 class DuplicateCandidateResponse(BaseModel):
     """Response model for duplicate candidate."""
@@ -437,6 +442,7 @@ async def create_ticket(
         phase_for_task = ticket_data.phase_id
         title_for_task = ticket_data.title
         priority_for_task = ticket_data.priority
+        workflow_mode_for_task = ticket_data.workflow_mode
 
         # Build response before any background work
         response = TicketResponse.model_validate(ticket)
@@ -444,12 +450,21 @@ async def create_ticket(
     # Only create initial task if ticket is approved (REQ-THA-007)
     # IMPORTANT: This must happen AFTER commit so ticket is visible in new session
     if should_create_task:
+        # Build execution_config based on workflow_mode from frontend
+        execution_config = None
+        if workflow_mode_for_task == "spec_driven":
+            execution_config = {
+                "require_spec_skill": True,
+                "selected_skill": "spec-driven-dev",
+            }
+
         queue.enqueue_task(
             ticket_id=ticket_id_for_task,
             phase_id=phase_for_task,
             task_type="analyze_requirements",
             description=f"Analyze requirements for: {title_for_task}",
             priority=priority_for_task,
+            execution_config=execution_config,
             session=None,  # Creates own session, ticket already committed
         )
 
