@@ -140,6 +140,7 @@ class TaskQueueService:
         dependencies: dict | None = None,
         session: Optional["Session"] = None,
         title: Optional[str] = None,
+        execution_config: dict | None = None,
     ) -> Task:
         """
         Add a task to the queue.
@@ -154,6 +155,8 @@ class TaskQueueService:
             session: Optional database session to use. If not provided, creates a new session.
             title: Optional human-readable title. If not provided, can be generated later
                    using generate_task_title().
+            execution_config: Optional execution config dict with skill selection and spawn options.
+                Example: {"require_spec_skill": true, "selected_skill": "spec-driven-dev"}
 
         Returns:
             Created Task object
@@ -169,6 +172,7 @@ class TaskQueueService:
                 priority=priority,
                 status="pending",
                 dependencies=dependencies,
+                execution_config=execution_config,
             )
             session.add(task)
             session.flush()
@@ -195,6 +199,7 @@ class TaskQueueService:
                     priority=priority,
                     status="pending",
                     dependencies=dependencies,
+                    execution_config=execution_config,
                 )
                 session.add(task)
                 session.flush()

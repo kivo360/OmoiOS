@@ -528,6 +528,13 @@ async def list_tasks(
         ]
 
 
+class ExecutionConfig(BaseModel):
+    """Execution configuration for sandbox spawning."""
+
+    require_spec_skill: bool = False  # Force spec-driven-dev skill usage
+    selected_skill: Optional[str] = None  # Skill name selected from frontend dropdown
+
+
 class TaskCreate(BaseModel):
     """Request model for creating a task."""
 
@@ -538,6 +545,7 @@ class TaskCreate(BaseModel):
     priority: str = "MEDIUM"
     phase_id: str = "PHASE_IMPLEMENTATION"
     dependencies: Optional[Dict[str, Any]] = None  # {"depends_on": ["task_id_1"]}
+    execution_config: Optional[ExecutionConfig] = None  # Skill selection from frontend
 
 
 @router.post("", response_model=dict, status_code=201)
@@ -567,6 +575,11 @@ async def create_task(
     await verify_ticket_access(task_data.ticket_id, current_user, db)
 
     try:
+        # Convert execution_config to dict for JSONB storage
+        execution_config_dict = None
+        if task_data.execution_config:
+            execution_config_dict = task_data.execution_config.model_dump(mode="json")
+
         task = queue.enqueue_task(
             ticket_id=task_data.ticket_id,
             phase_id=task_data.phase_id,
@@ -575,6 +588,7 @@ async def create_task(
             priority=task_data.priority,
             dependencies=task_data.dependencies,
             title=task_data.title,
+            execution_config=execution_config_dict,
         )
 
         return {
@@ -587,6 +601,7 @@ async def create_task(
             "priority": task.priority,
             "status": task.status,
             "dependencies": task.dependencies,
+            "execution_config": task.execution_config,
             "created_at": task.created_at.isoformat(),
         }
     except Exception as e:
