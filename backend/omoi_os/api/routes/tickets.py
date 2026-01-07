@@ -253,6 +253,15 @@ async def create_ticket(
     Returns:
         Created ticket, or DuplicateCheckResponse if duplicates found
     """
+    # Log incoming ticket data for debugging
+    from omoi_os.logging import get_logger
+    _logger = get_logger(__name__)
+    _logger.info(
+        f"create_ticket called: project_id={ticket_data.project_id}, "
+        f"github_owner={ticket_data.github_owner}, github_repo={ticket_data.github_repo}, "
+        f"user_id={current_user.id}, title={ticket_data.title[:50] if ticket_data.title else 'N/A'}..."
+    )
+
     # If project_id provided, verify user has access
     if ticket_data.project_id:
         await verify_project_access(ticket_data.project_id, current_user, db)
@@ -265,11 +274,17 @@ async def create_ticket(
         from sqlalchemy import select, or_
         logger = get_logger(__name__)
 
+        logger.info(
+            f"Auto-project check: github_owner={ticket_data.github_owner}, "
+            f"github_repo={ticket_data.github_repo}, user_id={current_user.id}"
+        )
+
         # Get user's organization IDs for scoped project lookup
         # This ensures we only find/create projects the user has access to
         user_org_ids = [
             m.organization_id for m in (current_user.organization_memberships or [])
         ]
+        logger.info(f"User org IDs for project lookup: {user_org_ids}")
 
         async with db.get_async_session() as session:
             # Check if a project already exists for this repo that the user can access
