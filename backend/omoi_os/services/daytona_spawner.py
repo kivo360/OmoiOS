@@ -820,12 +820,59 @@ class DaytonaSpawnerService:
         # Clone GitHub repository using Daytona SDK (if configured)
         # This uses sandbox.git.clone() directly instead of shell commands
         # Token is passed via SDK, never exposed in environment variables
+        logger.info(
+            f"Git clone check: github_repo={github_repo}, "
+            f"has_token={bool(github_token)}, "
+            f"token_prefix={github_token[:10] + '...' if github_token and len(github_token) > 10 else 'N/A'}"
+        )
+
         if github_repo and github_token:
             logger.info(f"Cloning repository {github_repo} via Daytona SDK...")
-            try:
-                repo_url = f"https://github.com/{github_repo}.git"
-                workspace_path = "/workspace"
 
+            # Validate token before attempting clone
+            repo_url = f"https://github.com/{github_repo}.git"
+            workspace_path = "/workspace"
+
+            # Pre-clone validation: check if we can access the repo with this token
+            logger.info(f"Validating GitHub token can access {github_repo}...")
+            try:
+                import httpx
+                headers = {
+                    "Authorization": f"token {github_token}",
+                    "Accept": "application/vnd.github.v3+json",
+                }
+                validation_url = f"https://api.github.com/repos/{github_repo}"
+                with httpx.Client(timeout=10) as client:
+                    resp = client.get(validation_url, headers=headers)
+                    if resp.status_code == 200:
+                        repo_info = resp.json()
+                        logger.info(
+                            f"GitHub token validated: can access {github_repo} "
+                            f"(private={repo_info.get('private')}, "
+                            f"default_branch={repo_info.get('default_branch')})"
+                        )
+                    elif resp.status_code == 401:
+                        logger.error(
+                            f"GitHub token is invalid or expired (401). "
+                            f"User needs to re-authenticate with GitHub."
+                        )
+                    elif resp.status_code == 403:
+                        logger.error(
+                            f"GitHub token lacks permission to access {github_repo} (403). "
+                            f"Token may need 'repo' scope."
+                        )
+                    elif resp.status_code == 404:
+                        logger.error(
+                            f"Repository {github_repo} not found or token lacks access (404)."
+                        )
+                    else:
+                        logger.warning(
+                            f"GitHub API returned {resp.status_code} for {github_repo}: {resp.text[:200]}"
+                        )
+            except Exception as e:
+                logger.warning(f"Failed to validate GitHub token (non-fatal): {e}")
+
+            try:
                 # Use Daytona SDK's native git.clone() with authentication
                 # username="x-access-token" is GitHub's convention for token auth
                 sandbox.git.clone(
@@ -836,6 +883,13 @@ class DaytonaSpawnerService:
                 )
 
                 logger.info(f"Repository cloned successfully to {workspace_path}")
+
+                # Verify clone worked by listing files
+                try:
+                    result = sandbox.process.exec(f"ls -la {workspace_path}")
+                    logger.info(f"Workspace contents after clone:\n{result.stdout[:500] if hasattr(result, 'stdout') else result}")
+                except Exception as e:
+                    logger.warning(f"Could not list workspace after clone: {e}")
 
                 # Set WORKSPACE_PATH env var so worker knows where code is
                 env_vars["WORKSPACE_PATH"] = workspace_path
