@@ -142,6 +142,7 @@ class DaytonaSpawnerService:
         execution_mode: str = "implementation",  # "exploration", "implementation", "validation"
         continuous_mode: Optional[bool] = None,  # None = auto-enable for implementation/validation
         task_requirements: Optional["TaskRequirements"] = None,  # LLM-analyzed requirements
+        require_spec_skill: bool = False,  # Force spec-driven-dev skill usage
     ) -> str:
         """Spawn a Daytona sandbox for executing a task.
 
@@ -166,6 +167,10 @@ class DaytonaSpawnerService:
             task_requirements: Optional LLM-analyzed TaskRequirements object.
                 When provided, these settings override execution_mode-based defaults
                 for git validation requirements (commit, push, PR).
+            require_spec_skill: When True, enforces spec-driven-dev skill usage:
+                - Injects skill content directly into system prompt
+                - Validates spec output format before task completion
+                - Fails task if .omoi_os/ files lack proper frontmatter
 
         Returns:
             Sandbox ID
@@ -207,6 +212,14 @@ class DaytonaSpawnerService:
             # Spec CLI env vars - API URL for syncing specs/tickets/tasks
             "OMOIOS_API_URL": base_url,
         }
+
+        # Add spec skill enforcement if requested (from frontend dropdown)
+        if require_spec_skill:
+            env_vars["REQUIRE_SPEC_SKILL"] = "true"
+            logger.info(
+                "Spec skill enforcement enabled",
+                extra={"task_id": task_id, "execution_mode": execution_mode}
+            )
 
         # Determine continuous mode:
         # - None (default): Auto-enable for implementation/validation modes with Claude runtime
