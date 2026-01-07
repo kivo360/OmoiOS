@@ -98,6 +98,12 @@ def load_yaml_section(section: str, env_name: Optional[str] = None) -> Dict[str,
 class OmoiBaseSettings(BaseSettings):
     yaml_section: ClassVar[Optional[str]] = None
 
+    model_config = SettingsConfigDict(
+        env_file=get_env_files(),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -239,6 +245,8 @@ class RedisSettings(OmoiBaseSettings):
 
     yaml_section = "redis"
     model_config = SettingsConfigDict(
+        env_file=get_env_files(),
+        env_file_encoding="utf-8",
         env_prefix="REDIS_",
         extra="ignore",
     )
