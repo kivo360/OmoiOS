@@ -255,8 +255,10 @@ export default function CommandCenterPage() {
   }
 
   const handleRepoSelect = (repo: string) => {
+    console.log("handleRepoSelect called with:", repo)
     setSelectedProject(null)
     setSelectedRepo(repo)
+    console.log("After setSelectedRepo, selectedRepo should update to:", repo)
   }
 
   const isLoading = launchState.status !== "idle"
