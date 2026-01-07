@@ -7,6 +7,105 @@ description: Spec-driven development workflow using Claude Agent SDK Python patt
 
 Systematic workflow for turning feature ideas into structured specifications, designs, and actionable work items using Claude Agent SDK patterns.
 
+---
+
+## 🚨 MANDATORY: YAML Frontmatter on ALL Files
+
+**EVERY file you create in `.omoi_os/` MUST begin with YAML frontmatter.** This is NON-NEGOTIABLE.
+
+### Why Frontmatter is Required
+
+1. **Programmatic Parsing**: The CLI tools, API sync, and orchestrator all parse frontmatter to understand file structure
+2. **Traceability**: Frontmatter enables linking requirements → designs → tickets → tasks
+3. **Status Tracking**: Status, priority, and dependencies are tracked via frontmatter fields
+4. **API Integration**: When syncing to backend, frontmatter provides the structured data
+
+### Required Frontmatter by File Type
+
+**Requirements** (`.omoi_os/requirements/*.md`):
+```yaml
+---
+id: REQ-{DOMAIN}-001
+title: {Feature Name} Requirements
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft  # draft | review | approved
+category: functional  # functional | non-functional | constraint
+priority: HIGH  # CRITICAL | HIGH | MEDIUM | LOW
+design_ref: designs/{feature-name}.md
+condition: "{EARS WHEN clause}"
+action: "{EARS SHALL clause}"
+---
+```
+
+**Designs** (`.omoi_os/designs/*.md`):
+```yaml
+---
+id: DESIGN-{DOMAIN}-001
+title: {Feature Name} Design
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft  # draft | review | approved
+requirements:
+  - REQ-{DOMAIN}-001
+---
+```
+
+**Tickets** (`.omoi_os/tickets/TKT-*.md`):
+```yaml
+---
+id: TKT-{NUM}
+title: {Ticket Title}
+status: backlog  # backlog | analyzing | building | testing | done | blocked
+priority: MEDIUM  # CRITICAL | HIGH | MEDIUM | LOW
+estimate: M  # S | M | L | XL
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+feature: {feature-name}
+requirements:
+  - REQ-XXX-YYY
+design_ref: designs/{feature-name}.md
+tasks:
+  - TSK-{NUM}
+dependencies:
+  blocked_by: []
+  blocks: []
+  related: []
+---
+```
+
+**Tasks** (`.omoi_os/tasks/TSK-*.md`):
+```yaml
+---
+id: TSK-{NUM}
+title: {Task Title}
+status: pending  # pending | in_progress | review | done | blocked
+parent_ticket: TKT-{NUM}
+estimate: M  # S | M | L
+created: {YYYY-MM-DD}
+assignee: null
+dependencies:
+  depends_on: []
+  blocks: []
+---
+```
+
+### ❌ Files Without Frontmatter Will Fail
+
+Files missing frontmatter will:
+- Not appear in `spec_cli.py show` commands
+- Not sync to the API
+- Not be tracked in traceability reports
+- Not be picked up by the orchestrator
+
+### ✅ Always Start With Frontmatter
+
+When creating ANY file in `.omoi_os/`, your FIRST action should be writing the YAML frontmatter block, THEN the content.
+
+---
+
 ## CRITICAL: Research-First, Question-Driven Approach
 
 **BEFORE creating any specs, requirements, or designs:**
