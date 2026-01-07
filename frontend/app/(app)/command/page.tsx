@@ -15,8 +15,8 @@ import { Loader2 } from "lucide-react"
 type LaunchState =
   | { status: "idle" }
   | { status: "creating_ticket"; prompt: string }
-  | { status: "waiting_for_sandbox"; ticketId: string; prompt: string }
-  | { status: "redirecting"; sandboxId: string }
+  | { status: "waiting_for_sandbox"; ticketId: string; prompt: string; mode: WorkflowMode; projectId: string }
+  | { status: "redirecting"; destination: string }
 
 // All event types the backend might send for sandbox creation
 const SANDBOX_EVENT_TYPES = [
@@ -79,14 +79,27 @@ export default function CommandCenterPage() {
   // Track if we've already redirected to prevent double redirects
   const hasRedirectedRef = useRef(false)
 
-  // Helper to handle successful sandbox detection - redirect to sandbox for quick mode
+  // Helper to handle successful sandbox detection
+  // - quick mode: redirects to sandbox page to watch agent work
+  // - spec_driven mode: redirects to board page to watch tasks/cards being created
   const handleSandboxReady = useCallback((sandboxId: string) => {
     if (hasRedirectedRef.current) return // Prevent double redirect
+    if (launchState.status !== "waiting_for_sandbox") return // Not in the right state
+
     hasRedirectedRef.current = true
-    setLaunchState({ status: "redirecting", sandboxId })
-    toast.success("Agent started! Redirecting to sandbox...")
-    router.push(`/sandbox/${sandboxId}`)
-  }, [router])
+    const { mode, projectId } = launchState
+
+    if (mode === "quick") {
+      setLaunchState({ status: "redirecting", destination: `/sandbox/${sandboxId}` })
+      toast.success("Agent started! Redirecting to sandbox...")
+      router.push(`/sandbox/${sandboxId}`)
+    } else {
+      // spec_driven mode - redirect to board to watch tasks being created
+      setLaunchState({ status: "redirecting", destination: `/board/${projectId}` })
+      toast.success("Spec generation started! Redirecting to board...")
+      router.push(`/board/${projectId}`)
+    }
+  }, [router, launchState])
 
   // Handle event from WebSocket that signals sandbox is ready
   const handleEvent = useCallback((event: SystemEvent) => {
@@ -205,6 +218,9 @@ export default function CommandCenterPage() {
       }
 
       // Mode-specific parameters
+      // Both modes spawn sandboxes - the difference is:
+      // - quick: redirects to sandbox page (implementation focused)
+      // - spec_driven: redirects to board page (watch tasks/dependencies being created)
       const modePayload = selectedMode === "quick"
         ? {
             phase_id: "PHASE_IMPLEMENTATION",
@@ -215,7 +231,7 @@ export default function CommandCenterPage() {
             phase_id: "PHASE_REQUIREMENTS",
             workflow_mode: "spec_driven" as const,
             generate_spec: true,
-            auto_spawn_sandbox: false,
+            auto_spawn_sandbox: true, // Spawn sandbox for spec generation too!
           }
 
       const result = await createTicketMutation.mutateAsync({
@@ -234,16 +250,17 @@ export default function CommandCenterPage() {
       // The backend may auto-create a project or the ticket may have one assigned
       const projectId = result.project_id || selectedProject?.id || "all"
 
-      // Handle navigation based on mode
-      if (selectedMode === "quick") {
-        // Ticket created, now wait for the orchestrator to spawn a sandbox
-        toast.info("Launching sandbox...")
-        setLaunchState({ status: "waiting_for_sandbox", ticketId: result.id, prompt })
-      } else {
-        // Spec-driven: redirect to board to watch progress
-        toast.success("Spec creation started! Redirecting to board...")
-        router.push(`/board/${projectId}`)
-      }
+      // Both modes wait for sandbox to spawn, then redirect appropriately:
+      // - quick: redirects to sandbox page
+      // - spec_driven: redirects to board page to watch tasks being created
+      toast.info("Launching sandbox...")
+      setLaunchState({
+        status: "waiting_for_sandbox",
+        ticketId: result.id,
+        prompt,
+        mode: selectedMode,
+        projectId,
+      })
 
     } catch (error) {
       toast.error("Failed to create task. Please try again.")
@@ -293,10 +310,20 @@ export default function CommandCenterPage() {
                 <span>Creating task...</span>
               )}
               {launchState.status === "waiting_for_sandbox" && (
-                <span>Launching sandbox environment...</span>
+                <span>
+                  {launchState.mode === "quick"
+                    ? "Launching sandbox environment..."
+                    : "Starting spec generation agent..."
+                  }
+                </span>
               )}
               {launchState.status === "redirecting" && (
-                <span>Redirecting to sandbox...</span>
+                <span>
+                  {launchState.destination.includes("/sandbox/")
+                    ? "Redirecting to sandbox..."
+                    : "Redirecting to board..."
+                  }
+                </span>
               )}
             </div>
           </div>
