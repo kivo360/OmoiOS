@@ -667,10 +667,12 @@ async def post_sandbox_event(
         )
 
     # Handle task status transitions based on event type
-    # This includes: agent.started -> running, agent.completed -> completed, agent.failed/error -> failed
+    # This includes: agent.started -> running, agent.completed/continuous.completed -> completed, agent.failed/error -> failed
+    # NOTE: continuous.completed contains the actual validation result (validation_passed field)
     if event.event_type in (
         "agent.started",
         "agent.completed",
+        "continuous.completed",  # Contains validation_passed result
         "agent.failed",
         "agent.error",
     ):
@@ -717,8 +719,9 @@ async def post_sandbox_event(
                     )
                     logger.info(f"Successfully updated task {task_id} to running")
 
-                # Handle agent.completed -> trigger validation or complete directly
-                elif event.event_type == "agent.completed":
+                # Handle agent.completed or continuous.completed -> trigger validation or complete directly
+                # continuous.completed contains the actual validation_passed result after validation runs
+                elif event.event_type in ("agent.completed", "continuous.completed"):
                     # Check if this is a validator agent completion
                     is_validator = event.event_data.get("agent_type") == "validator"
 
@@ -803,15 +806,40 @@ async def post_sandbox_event(
                             extra={"artifact_types": [a["type"] for a in artifacts]}
                         )
 
-                    # Check if validation is enabled
-                    validation_enabled = os.environ.get(
-                        "TASK_VALIDATION_ENABLED", "true"
-                    ).lower() in ("true", "1", "yes")
+                    # Handle completion events:
+                    # - continuous.completed with validation_passed = true: In-sandbox validation passed, mark complete
+                    # - continuous.completed with validation_passed = false: In-sandbox validation failed
+                    # - agent.completed: Agent work done, check if validation_passed is set
+                    # - Validator agent completion: External validator result
 
-                    if is_validator:
-                        # This is a validator completion - process validation result
-                        # Extract validation_passed from the event data
-                        validation_passed = event.event_data.get("validation_passed", False)
+                    validation_passed = event.event_data.get("validation_passed")
+
+                    # continuous.completed is the final validation result from in-sandbox validation
+                    if event.event_type == "continuous.completed":
+                        if validation_passed:
+                            # In-sandbox validation passed - mark task complete
+                            logger.info(
+                                f"In-sandbox validation passed for task {task_id}, marking completed"
+                            )
+                            await task_queue.update_task_status_async(
+                                task_id=task_id,
+                                status="completed",
+                                result={
+                                    **result,
+                                    "validation_passed": True,
+                                    "validation_type": "in_sandbox",
+                                },
+                            )
+                            logger.info(f"Successfully updated task {task_id} to completed")
+                        else:
+                            # In-sandbox validation failed
+                            logger.info(
+                                f"In-sandbox validation failed for task {task_id}"
+                            )
+                            # Don't mark as failed yet - may have recommendations
+                            # The task stays in current status
+                    elif is_validator:
+                        # This is an external validator agent completion
                         validation_feedback = event.event_data.get(
                             "validation_feedback",
                             "Validation passed" if validation_passed else "Validation failed"
@@ -828,7 +856,7 @@ async def post_sandbox_event(
                         await validator_service.handle_validation_result(
                             task_id=task_id,
                             validator_agent_id=event.event_data.get("agent_id", f"validator-{sandbox_id[:8]}"),
-                            passed=validation_passed,
+                            passed=validation_passed or False,
                             feedback=validation_feedback,
                             evidence={
                                 "tests_passed": event.event_data.get("tests_passed", False),
@@ -842,29 +870,12 @@ async def post_sandbox_event(
                             f"Validation result processed for task {task_id}: "
                             f"new_status={'completed' if validation_passed else 'needs_revision'}"
                         )
-                    elif validation_enabled:
-                        # Implementation completed - trigger validation
-                        logger.info(
-                            f"Task {task_id} implementation complete, requesting validation"
-                        )
-                        from omoi_os.services.task_validator import get_task_validator
-
-                        validator = get_task_validator(db=db, event_bus=get_event_bus())
-                        await validator.request_validation(
-                            task_id=task_id,
-                            sandbox_id=sandbox_id,
-                            implementation_result=result,
-                        )
-                        logger.info(f"Validation requested for task {task_id}")
                     else:
-                        # Validation disabled - mark as completed directly
-                        logger.info(f"Updating task {task_id} status to completed (validation disabled)")
-                        await task_queue.update_task_status_async(
-                            task_id=task_id,
-                            status="completed",
-                            result=result,
+                        # agent.completed - implementation done, wait for continuous.completed
+                        # Don't trigger external validation since we use in-sandbox validation
+                        logger.info(
+                            f"Agent completed for task {task_id}, waiting for validation result"
                         )
-                        logger.info(f"Successfully updated task {task_id} to completed")
 
                     # Record cost if cost data is available
                     cost_usd = event.event_data.get("cost_usd")
