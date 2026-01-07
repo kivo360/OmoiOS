@@ -220,6 +220,7 @@ export function RepoSelector({
                     <button
                       key={repo.fullName}
                       onClick={() => {
+                        console.log("RepoSelector: clicking repo", repo.fullName, "onRepoSelect exists:", !!onRepoSelect)
                         onRepoSelect?.(repo.fullName)
                         setOpen(false)
                       }}
