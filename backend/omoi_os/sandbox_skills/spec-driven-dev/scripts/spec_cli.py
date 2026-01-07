@@ -718,8 +718,9 @@ Examples:
         help="Export format",
     )
 
-    # Default API URL from environment or fallback to localhost
-    default_api_url = os.environ.get("OMOIOS_API_URL", "http://localhost:18000")
+    # Default API URL from environment or fallback to production
+    # In sandbox environments, OMOIOS_API_URL is auto-injected by the orchestrator
+    default_api_url = os.environ.get("OMOIOS_API_URL", "https://api.omoios.dev")
     default_project_id = os.environ.get("OMOIOS_PROJECT_ID")
 
     # projects command

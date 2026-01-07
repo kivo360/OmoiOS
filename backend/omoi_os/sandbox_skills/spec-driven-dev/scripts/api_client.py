@@ -30,8 +30,9 @@ from typing import Optional
 
 import httpx
 
-# Default API URL - can be overridden via environment variable
-DEFAULT_API_URL = "http://localhost:18000"
+# Default API URL - production URL, can be overridden via OMOIOS_API_URL env var
+# In sandbox environments, OMOIOS_API_URL is auto-injected by the spawner
+DEFAULT_API_URL = "https://api.omoios.dev"
 
 from models import (
     ParseResult,
@@ -98,12 +99,20 @@ class OmoiOSClient:
         Args:
             base_url: Base URL of OmoiOS API. If not provided, uses
                       OMOIOS_API_URL environment variable, or falls back
-                      to DEFAULT_API_URL (http://localhost:18000)
+                      to DEFAULT_API_URL (https://api.omoios.dev)
             timeout: Request timeout in seconds
             token: JWT access token for authentication. If not provided,
                    uses OMOIOS_TOKEN environment variable.
             api_key: API key for authentication (alternative to JWT).
                      If not provided, uses OMOIOS_API_KEY environment variable.
+
+        Note:
+            In sandbox environments, these environment variables are auto-injected:
+            - OMOIOS_API_URL: API endpoint URL
+            - OMOIOS_API_KEY: Authentication key
+            - OMOIOS_PROJECT_ID: Current project ID
+
+            You typically don't need to pass any arguments when running inside a sandbox.
         """
         # Resolve base URL: explicit > env var > default
         if base_url:
