@@ -185,15 +185,27 @@ class SpecParser:
 
     def _extract_description(self, body: str) -> str:
         """Extract description section from markdown body."""
-        # Look for ## Description or ## Objective section
+        # Look for ## Description, ## Objective, or ## Summary section
         match = re.search(
-            r"##\s+(?:Description|Objective)\s*\n(.*?)(?=\n##|\n---|\Z)",
+            r"##\s+(?:Description|Objective|Summary)\s*\n(.*?)(?=\n##|\n---|\Z)",
             body,
             re.DOTALL | re.IGNORECASE,
         )
         if match:
             return match.group(1).strip()
         return ""
+
+    def _extract_full_body(self, body: str) -> str:
+        """Extract the full markdown body (everything after the title).
+
+        This preserves all sections (Summary, Acceptance Criteria, Technical Details, etc.)
+        for rich context in AI-assisted task execution.
+        """
+        # Remove the main title (# TKT-XXX: Title) if present
+        lines = body.strip().split('\n')
+        if lines and lines[0].startswith('# '):
+            lines = lines[1:]
+        return '\n'.join(lines).strip()
 
     def _extract_section(self, body: str, section_name: str) -> str:
         """Extract a named section from markdown body."""
@@ -391,6 +403,7 @@ class SpecParser:
             tasks=frontmatter.get("tasks", []) or [],
             dependencies=dependencies,
             description=self._extract_description(body),
+            full_body=self._extract_full_body(body),
             file_path=str(file_path),
         )
 
@@ -432,6 +445,7 @@ class SpecParser:
             assignee=frontmatter.get("assignee"),
             dependencies=dependencies,
             objective=self._extract_description(body),
+            full_body=self._extract_full_body(body),
             file_path=str(file_path),
         )
 
