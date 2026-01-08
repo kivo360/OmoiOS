@@ -37,9 +37,9 @@ Settings are loaded in this order (highest to lowest priority):
 
 ### `SANDBOX_SNAPSHOT`
 - **Description**: Snapshot name to create sandbox from (takes precedence over image)
-- **Default**: `claude-agent-sdk-medium` (from config)
+- **Default**: `ai-agent-dev-light` (from config)
 - **YAML Config**: `daytona.snapshot`
-- **Example**: `export SANDBOX_SNAPSHOT=claude-agent-sdk-medium`
+- **Example**: `export SANDBOX_SNAPSHOT=ai-agent-dev-light`
 - **Note**: If set, this will be used instead of `SANDBOX_IMAGE`
 
 ### `SANDBOX_IMAGE`
@@ -148,7 +148,7 @@ export SANDBOX_CPU=4
 export SANDBOX_DISK_GB=10
 
 # Sandbox Source (snapshot takes precedence)
-export SANDBOX_SNAPSHOT=claude-agent-sdk-medium
+export SANDBOX_SNAPSHOT=ai-agent-dev-light
 # OR use image instead:
 # export SANDBOX_IMAGE=nikolaik/python-nodejs:python3.12-nodejs22
 
@@ -171,7 +171,7 @@ daytona:
   api_key: ${DAYTONA_API_KEY}
   api_url: https://app.daytona.io/api
   target: us
-  snapshot: claude-agent-sdk-medium  # Default snapshot
+  snapshot: ai-agent-dev-light  # Default snapshot
   image: nikolaik/python-nodejs:python3.12-nodejs22  # Fallback image
   timeout: 300
   sandbox_execution: true
