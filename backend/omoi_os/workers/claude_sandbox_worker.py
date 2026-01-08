@@ -405,12 +405,13 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     result["has_omoi_dir"] = True
 
     # Define spec directories and required frontmatter fields
+    # Note: tasks use "parent_ticket" (not "ticket_id") per SKILL.md template
     spec_dirs: dict[str, list[str]] = {
         "docs": ["id", "title", "status"],
         "requirements": ["id", "title", "status", "category"],
         "designs": ["id", "title", "status"],
         "tickets": ["id", "title", "status", "priority"],
-        "tasks": ["id", "title", "status", "ticket_id"],
+        "tasks": ["id", "title", "status", "parent_ticket"],
     }
 
     # YAML frontmatter pattern
@@ -1273,7 +1274,7 @@ class WorkerConfig:
 
         # Spec-driven-dev skill enforcement
         # When REQUIRE_SPEC_SKILL=true (set from frontend dropdown):
-        # 1. Inject skill content directly into system prompt
+        # 1. Provide clear intent and reference to skill file (not content injection)
         # 2. Run spec output validation before task completion
         # This is NOT automatic for all exploration - only when explicitly requested
         self.require_spec_skill = (
@@ -1283,43 +1284,83 @@ class WorkerConfig:
         # Add execution mode-specific instructions to system prompt
         if self.execution_mode == "exploration":
             if self.require_spec_skill:
-                # Inject the actual skill content directly - agent can't ignore what's in context
-                skill_content = get_spec_skill_content()
-                append_parts.append(f"""
+                # Use clear intent + skill reference instead of content injection
+                # This gives the agent explicit instructions to READ and FOLLOW the skill
+                append_parts.append("""
 ## Execution Mode: EXPLORATION (Spec-Driven Development)
 
-You are in **exploration mode** with **spec-driven-dev skill REQUIRED**.
-Your purpose is to create structured specifications for features.
+You are in **exploration mode** with **spec-driven-dev skill MANDATORY**.
 
-### 🔴 CRITICAL: Spec Output Will Be Validated
+### 🔴 FIRST STEP - LOAD THE SKILL
+
+**BEFORE doing anything else, you MUST load and follow the spec-driven-dev skill.**
+
+**Option A: If you have Claude Code Agent's skill system available:**
+
+Use the Skill tool to invoke the spec-driven-dev skill:
+```
+/spec-driven-dev
+```
+This will load the skill directly into your capabilities.
+
+**Option B: If you don't have the Skill tool available:**
+
+Read the skill file and act out the skill as if it is a capability you have:
+```bash
+cat /root/.claude/skills/spec-driven-dev/SKILL.md
+```
+After reading, follow ALL instructions in the skill file exactly as written.
+
+The skill file contains:
+- YAML frontmatter templates you MUST copy exactly
+- Directory structure for `.omoi_os/`
+- CLI commands for validation and syncing
+- Complete workflow from discovery to sync
+
+**DO NOT proceed without loading/reading this skill first.**
+
+### 🔴 MANDATORY WORKFLOW
+
+After reading the skill, follow this exact workflow:
+
+1. **DISCOVER** - Ask 5-15 discovery questions before designing
+2. **CREATE SPECS** - Create files in `.omoi_os/` with proper YAML frontmatter:
+   - `.omoi_os/docs/prd-*.md` - Product Requirements Documents
+   - `.omoi_os/requirements/*.md` - Functional requirements (EARS format)
+   - `.omoi_os/designs/*.md` - Technical designs
+   - `.omoi_os/tickets/TKT-*.md` - Work tickets
+   - `.omoi_os/tasks/TSK-*.md` - Individual tasks
+3. **VALIDATE** - Run `python /root/.claude/skills/spec-driven-dev/scripts/spec_cli.py validate`
+4. **SYNC** - Run `python /root/.claude/skills/spec-driven-dev/scripts/spec_cli.py sync push`
+5. **GIT** - Commit and push: `git add -A && git commit -m "docs(scope): ..." && git push`
+
+### 🔴 VALIDATION WILL BE ENFORCED
 
 **Your output WILL BE AUTOMATICALLY VALIDATED before task completion.**
 The validation checks:
 1. `.omoi_os/` directory exists
 2. At least one ticket or task file was created
-3. ALL files have valid YAML frontmatter
+3. ALL files have valid YAML frontmatter (starting with `---`)
 4. ALL required fields are present in frontmatter
 
-**If validation fails, you must fix the issues and the task will continue.**
+**If validation fails, you must fix the issues before the task can complete.**
 
-{skill_content}
+### Required Frontmatter Fields
 
-### Additional Reference
+- **docs**: id, title, status
+- **requirements**: id, title, status, category
+- **designs**: id, title, status
+- **tickets**: id, title, status, priority
+- **tasks**: id, title, status, parent_ticket (NOT ticket_id!)
 
-The full skill document is also available at:
-`/root/.claude/skills/spec-driven-dev/SKILL.md`
+### ❌ FORBIDDEN
 
-Read it for additional examples, discovery questions, and detailed workflows.
+- DO NOT write implementation code in this mode
+- DO NOT create files without YAML frontmatter
+- DO NOT skip the validation step
+- DO NOT ignore the skill file instructions
 
-### Git Workflow (REQUIRED)
-After creating files:
-1. `git add -A && git commit -m "docs(scope): description"`
-2. `git push` (or `git push -u origin <branch>`)
-3. `gh pr create --title "..." --body "..."`
-
-**Your work is NOT complete until specs are validated, committed, pushed, and synced to the API.**
-
-**DO NOT write implementation code in this mode.** Focus on planning and documentation only.""")
+**Focus on planning and documentation only.**""")
             else:
                 # Normal exploration mode - no forced skill, just general guidance
                 append_parts.append("""
