@@ -1,0 +1,100 @@
+# AI Coding Agent Container - LIGHT VERSION
+# Focused on essentials only - faster build, smaller image
+# Extended from nikolaik/python-nodejs for LLM-powered development environments
+#
+# Use this for: Quick prototyping, JS/TS/Python focused projects
+# Use full version for: Multi-language polyglot projects
+
+FROM nikolaik/python-nodejs:python3.12-nodejs22
+
+LABEL maintainer="AI Agent Dev Environment"
+LABEL description="Lightweight development environment for AI coding agents"
+LABEL version="1.0.0-light"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ============================================================================
+# CORE CLI TOOLS - Essentials for AI Agents
+# ============================================================================
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Critical for Claude Code / AI agents
+    ripgrep \
+    fd-find \
+    jq \
+    tree \
+    # Version control
+    git \
+    git-lfs \
+    # Network
+    curl \
+    wget \
+    # Archive
+    unzip \
+    zip \
+    # Build (minimal)
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symlinks
+RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd
+
+# ============================================================================
+# GITHUB CLI - Critical for PR workflows
+# ============================================================================
+
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
+    apt-get update && \
+    apt-get install -y gh && \
+    rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# PYTHON TOOLS
+# ============================================================================
+
+RUN pip install --break-system-packages --no-cache-dir \
+    uv \
+    black \
+    ruff \
+    pytest \
+    ipython
+
+# ============================================================================
+# NODE.JS TOOLS
+# ============================================================================
+
+# Note: pnpm may already exist in base image, use --force to update
+RUN npm install -g --force \
+    typescript \
+    ts-node \
+    tsx \
+    prettier \
+    pnpm \
+    docx
+
+# ============================================================================
+# DATABASE CLIENTS (Minimal)
+# ============================================================================
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    sqlite3 \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# ENVIRONMENT
+# ============================================================================
+
+WORKDIR /workspace
+
+RUN echo '\n\
+alias ll="ls -la"\n\
+alias gs="git status"\n\
+alias gd="git diff"\n\
+' >> /root/.bashrc
+
+RUN git config --global init.defaultBranch main && \
+    git config --global pull.rebase false
+
+CMD ["sleep", "infinity"]
