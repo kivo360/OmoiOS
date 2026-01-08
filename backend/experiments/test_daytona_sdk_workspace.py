@@ -77,14 +77,14 @@ def test_new_sdk_adapter():
 
     is_local = isinstance(workspace, LocalWorkspace)
     print(f"isinstance(workspace, LocalWorkspace): {is_local}")
-    
+
     if not is_local:
         print("❌ FAIL: Should inherit from LocalWorkspace")
         return False
 
     # Create agent (no tools)
     llm = LLM(
-        model="anthropic/claude-sonnet-4-20250514",
+        model="anthropic/claude-sonnet-4-5-20250929",
         api_key=SecretStr("test-key"),
     )
     agent = Agent(llm=llm, tools=[])
@@ -152,6 +152,7 @@ def test_daytona_sandbox_operations():
     except Exception as e:
         print(f"\n❌ Error: {type(e).__name__}: {e}")
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -173,7 +174,7 @@ def test_local_workspace_baseline():
         print(f"✓ Created LocalWorkspace at {tmpdir}")
 
         llm = LLM(
-            model="anthropic/claude-sonnet-4-20250514",
+            model="anthropic/claude-sonnet-4-5-20250929",
             api_key=SecretStr("test-key"),
         )
         agent = Agent(llm=llm, tools=[])

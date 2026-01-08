@@ -27,6 +27,7 @@ from omoi_os.utils.datetime import utc_now
 
 # TYPE_CHECKING import for TaskRequirements to avoid circular imports
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from omoi_os.services.task_requirements_analyzer import TaskRequirements
 
@@ -140,8 +141,12 @@ class DaytonaSpawnerService:
         labels: Optional[Dict[str, str]] = None,
         runtime: str = "openhands",  # "openhands" or "claude"
         execution_mode: str = "implementation",  # "exploration", "implementation", "validation"
-        continuous_mode: Optional[bool] = None,  # None = auto-enable for implementation/validation
-        task_requirements: Optional["TaskRequirements"] = None,  # LLM-analyzed requirements
+        continuous_mode: Optional[
+            bool
+        ] = None,  # None = auto-enable for implementation/validation
+        task_requirements: Optional[
+            "TaskRequirements"
+        ] = None,  # LLM-analyzed requirements
         require_spec_skill: bool = False,  # Force spec-driven-dev skill usage
         project_id: Optional[str] = None,  # Project ID for spec CLI
         omoios_api_key: Optional[str] = None,  # API key for spec CLI authentication
@@ -201,7 +206,7 @@ class DaytonaSpawnerService:
                 "has_extra_env": extra_env is not None,
                 "has_labels": labels is not None,
                 "has_task_requirements": task_requirements is not None,
-            }
+            },
         )
 
         if not self.daytona_api_key:
@@ -251,7 +256,7 @@ class DaytonaSpawnerService:
                     "execution_mode": execution_mode,
                     "sandbox_id": sandbox_id,
                     "project_id": project_id,
-                }
+                },
             )
         else:
             logger.info(
@@ -259,7 +264,7 @@ class DaytonaSpawnerService:
                 extra={
                     "task_id": task_id,
                     "execution_mode": execution_mode,
-                }
+                },
             )
 
         # Add spec CLI env vars for syncing specs/tickets/tasks
@@ -268,14 +273,14 @@ class DaytonaSpawnerService:
             env_vars["OMOIOS_PROJECT_ID"] = project_id
             logger.info(
                 "[SPEC-SKILL] Project ID set for spec CLI",
-                extra={"project_id": project_id, "task_id": task_id}
+                extra={"project_id": project_id, "task_id": task_id},
             )
         elif require_spec_skill:
             # Warn if spec skill is enabled but no project_id
             logger.warning(
                 "[SPEC-SKILL] ⚠️ require_spec_skill=true but NO project_id provided! "
                 "Spec sync will fail without project_id.",
-                extra={"task_id": task_id}
+                extra={"task_id": task_id},
             )
 
         # Get API key from parameter or fall back to LLM settings
@@ -286,6 +291,7 @@ class DaytonaSpawnerService:
         else:
             # Fall back to LLM API key from settings
             from omoi_os.config import get_app_settings
+
             app_settings = get_app_settings()
             if app_settings.llm.api_key:
                 env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
@@ -298,7 +304,7 @@ class DaytonaSpawnerService:
                     "api_key_source": api_key_source or "NOT_SET",
                     "has_api_key": api_key_source is not None,
                     "task_id": task_id,
-                }
+                },
             )
 
         # Determine continuous mode:
@@ -313,19 +319,23 @@ class DaytonaSpawnerService:
                 "runtime": runtime,
                 "execution_mode": execution_mode,
                 "task_id": task_id,
-            }
+            },
         )
         if continuous_mode is None and runtime == "claude":
             # Auto-enable for implementation and validation modes
             # These modes need to ensure tasks complete fully (code pushed, PR created)
-            effective_continuous_mode = execution_mode in ("implementation", "validation")
+            effective_continuous_mode = execution_mode in (
+                "implementation",
+                "validation",
+            )
             logger.info(
                 "SPAWNER: Auto-determined continuous mode",
                 extra={
                     "effective_continuous_mode": effective_continuous_mode,
                     "execution_mode": execution_mode,
-                    "is_implementation_or_validation": execution_mode in ("implementation", "validation"),
-                }
+                    "is_implementation_or_validation": execution_mode
+                    in ("implementation", "validation"),
+                },
             )
 
         # Add continuous mode settings if enabled
@@ -341,7 +351,7 @@ class DaytonaSpawnerService:
                     "max_iterations": env_vars.get("MAX_ITERATIONS"),
                     "max_cost_usd": env_vars.get("MAX_TOTAL_COST_USD"),
                     "max_duration_seconds": env_vars.get("MAX_DURATION_SECONDS"),
-                }
+                },
             )
         else:
             logger.info(
@@ -349,8 +359,10 @@ class DaytonaSpawnerService:
                 extra={
                     "effective_continuous_mode": effective_continuous_mode,
                     "runtime": runtime,
-                    "reason": "not claude runtime" if runtime != "claude" else "continuous_mode=False",
-                }
+                    "reason": "not claude runtime"
+                    if runtime != "claude"
+                    else "continuous_mode=False",
+                },
             )
 
         # Set validation requirements based on task_requirements (LLM-analyzed) or execution_mode
@@ -360,22 +372,24 @@ class DaytonaSpawnerService:
                 # Use LLM-analyzed requirements for fine-grained control
                 env_vars.setdefault(
                     "REQUIRE_CLEAN_GIT",
-                    "true" if task_requirements.requires_git_commit else "false"
+                    "true" if task_requirements.requires_git_commit else "false",
                 )
                 env_vars.setdefault(
                     "REQUIRE_CODE_PUSHED",
-                    "true" if task_requirements.requires_git_push else "false"
+                    "true" if task_requirements.requires_git_push else "false",
                 )
                 env_vars.setdefault(
                     "REQUIRE_PR_CREATED",
-                    "true" if task_requirements.requires_pull_request else "false"
+                    "true" if task_requirements.requires_pull_request else "false",
                 )
                 env_vars.setdefault(
                     "REQUIRE_TESTS",
-                    "true" if task_requirements.requires_tests else "false"
+                    "true" if task_requirements.requires_tests else "false",
                 )
                 # Also pass output type for context
-                env_vars.setdefault("TASK_OUTPUT_TYPE", task_requirements.output_type.value)
+                env_vars.setdefault(
+                    "TASK_OUTPUT_TYPE", task_requirements.output_type.value
+                )
                 logger.info(
                     "Using LLM-analyzed task requirements",
                     extra={
@@ -387,7 +401,7 @@ class DaytonaSpawnerService:
                         "requires_pr": task_requirements.requires_pull_request,
                         "requires_tests": task_requirements.requires_tests,
                         "reasoning": task_requirements.reasoning[:100],
-                    }
+                    },
                 )
             elif execution_mode == "exploration":
                 # Fallback: Research/analysis tasks don't need git validation
@@ -457,7 +471,9 @@ class DaytonaSpawnerService:
         # Prefer OAuth token for Claude Agent SDK, fallback to API key
         if creds.oauth_token:
             env_vars["CLAUDE_CODE_OAUTH_TOKEN"] = creds.oauth_token
-            logger.info(f"Using OAuth token for Claude Agent SDK (prefix: {creds.oauth_token[:15]}...)")
+            logger.info(
+                f"Using OAuth token for Claude Agent SDK (prefix: {creds.oauth_token[:15]}...)"
+            )
         elif creds.api_key:
             env_vars["ANTHROPIC_API_KEY"] = creds.api_key
             logger.debug("Using API key for authentication (OAuth token not available)")
@@ -701,12 +717,16 @@ class DaytonaSpawnerService:
                     "omoios_api_url": env_vars.get("OMOIOS_API_URL"),
                     # Key env vars being passed
                     "env_vars_summary": {
-                        "REQUIRE_SPEC_SKILL": env_vars.get("REQUIRE_SPEC_SKILL", "not_set"),
-                        "OMOIOS_PROJECT_ID": env_vars.get("OMOIOS_PROJECT_ID", "not_set"),
+                        "REQUIRE_SPEC_SKILL": env_vars.get(
+                            "REQUIRE_SPEC_SKILL", "not_set"
+                        ),
+                        "OMOIOS_PROJECT_ID": env_vars.get(
+                            "OMOIOS_PROJECT_ID", "not_set"
+                        ),
                         "EXECUTION_MODE": env_vars.get("EXECUTION_MODE"),
                         "CONTINUOUS_MODE": env_vars.get("CONTINUOUS_MODE", "not_set"),
                     },
-                }
+                },
             )
             return sandbox_id
 
@@ -817,6 +837,7 @@ class DaytonaSpawnerService:
         except Exception as e:
             logger.error(f"Failed to create Daytona sandbox: {e}")
             import traceback
+
             logger.error(f"Traceback: {traceback.format_exc()}")
             await self._create_mock_sandbox(sandbox_id, env_vars)
             return  # Don't try to start worker in mock sandbox here
@@ -826,8 +847,11 @@ class DaytonaSpawnerService:
         try:
             # Pass continuous_mode from spawn_for_task to control worker logging
             await self._start_worker_in_sandbox(
-                sandbox, env_vars, runtime, execution_mode,
-                continuous_mode=continuous_mode
+                sandbox,
+                env_vars,
+                runtime,
+                execution_mode,
+                continuous_mode=continuous_mode,
             )
             logger.info(f"Worker started successfully in sandbox {sandbox.id}")
         except Exception as e:
@@ -835,9 +859,12 @@ class DaytonaSpawnerService:
             # The sandbox exists, we just failed to start the worker
             logger.error(f"Failed to start worker in sandbox {sandbox.id}: {e}")
             import traceback
+
             logger.error(f"Worker startup traceback: {traceback.format_exc()}")
             # Re-raise so the caller knows something went wrong
-            raise RuntimeError(f"Worker startup failed in sandbox {sandbox.id}: {e}") from e
+            raise RuntimeError(
+                f"Worker startup failed in sandbox {sandbox.id}: {e}"
+            ) from e
 
     async def _start_worker_in_sandbox(
         self,
@@ -934,8 +961,13 @@ class DaytonaSpawnerService:
     "deny": []
   }
 }"""
-                sandbox.fs.upload_file(settings_content.encode("utf-8"), "/root/.claude/settings.local.json")
-                logger.info("Uploaded Claude settings.local.json (bypassPermissions mode)")
+                sandbox.fs.upload_file(
+                    settings_content.encode("utf-8"),
+                    "/root/.claude/settings.local.json",
+                )
+                logger.info(
+                    "Uploaded Claude settings.local.json (bypassPermissions mode)"
+                )
 
                 # Get skills based on execution mode
                 # - exploration: spec-driven-dev (for creating specs/tickets/tasks)
@@ -950,7 +982,9 @@ class DaytonaSpawnerService:
                     sandbox.fs.upload_file(content.encode("utf-8"), skill_path)
                     logger.debug(f"Uploaded skill: {skill_path}")
 
-                logger.info(f"Uploaded {len(skills)} Claude skills for '{execution_mode}' mode")
+                logger.info(
+                    f"Uploaded {len(skills)} Claude skills for '{execution_mode}' mode"
+                )
             except Exception as e:
                 logger.warning(f"Failed to upload Claude skills: {e}")
                 # Continue without skills - agent can still function
@@ -978,6 +1012,7 @@ class DaytonaSpawnerService:
             logger.info(f"Validating GitHub token can access {github_repo}...")
             try:
                 import httpx
+
                 headers = {
                     "Authorization": f"token {github_token}",
                     "Accept": "application/vnd.github.v3+json",
@@ -1037,11 +1072,19 @@ class DaytonaSpawnerService:
                 # Verify clone worked and check which branch we're on
                 try:
                     result = sandbox.process.exec(f"ls -la {workspace_path}")
-                    logger.info(f"Workspace contents after clone:\n{result.stdout[:500] if hasattr(result, 'stdout') else result}")
+                    logger.info(
+                        f"Workspace contents after clone:\n{result.stdout[:500] if hasattr(result, 'stdout') else result}"
+                    )
 
                     # Check current branch
-                    branch_check = sandbox.process.exec(f"cd {workspace_path} && git branch --show-current")
-                    current_branch = branch_check.stdout.strip() if hasattr(branch_check, 'stdout') else str(branch_check).strip()
+                    branch_check = sandbox.process.exec(
+                        f"cd {workspace_path} && git branch --show-current"
+                    )
+                    current_branch = (
+                        branch_check.stdout.strip()
+                        if hasattr(branch_check, "stdout")
+                        else str(branch_check).strip()
+                    )
                     logger.info(f"Current git branch after clone: '{current_branch}'")
 
                     # ALWAYS checkout the target branch if specified
@@ -1052,7 +1095,9 @@ class DaytonaSpawnerService:
                                 f"Switching from '{current_branch}' to feature branch '{branch_name}'..."
                             )
                         else:
-                            logger.info(f"Already on branch '{branch_name}', confirming checkout...")
+                            logger.info(
+                                f"Already on branch '{branch_name}', confirming checkout..."
+                            )
 
                         # Fetch all remote branches first to ensure we have the branch ref
                         sandbox.process.exec(f"cd {workspace_path} && git fetch origin")
@@ -1061,15 +1106,27 @@ class DaytonaSpawnerService:
                         checkout_result = sandbox.process.exec(
                             f"cd {workspace_path} && git checkout {branch_name}"
                         )
-                        checkout_output = checkout_result.stdout if hasattr(checkout_result, 'stdout') else str(checkout_result)
+                        checkout_output = (
+                            checkout_result.stdout
+                            if hasattr(checkout_result, "stdout")
+                            else str(checkout_result)
+                        )
                         logger.info(f"Checkout result: {checkout_output}")
 
                         # Verify we're now on the correct branch
-                        final_branch_check = sandbox.process.exec(f"cd {workspace_path} && git branch --show-current")
-                        final_branch = final_branch_check.stdout.strip() if hasattr(final_branch_check, 'stdout') else str(final_branch_check).strip()
+                        final_branch_check = sandbox.process.exec(
+                            f"cd {workspace_path} && git branch --show-current"
+                        )
+                        final_branch = (
+                            final_branch_check.stdout.strip()
+                            if hasattr(final_branch_check, "stdout")
+                            else str(final_branch_check).strip()
+                        )
 
                         if final_branch == branch_name:
-                            logger.info(f"✅ Successfully on feature branch '{branch_name}'")
+                            logger.info(
+                                f"✅ Successfully on feature branch '{branch_name}'"
+                            )
                         else:
                             logger.error(
                                 f"❌ Failed to checkout branch '{branch_name}', still on '{final_branch}'"
@@ -1090,7 +1147,9 @@ class DaytonaSpawnerService:
                 # Configure git for pushing
                 # 1. Set up git credential helper to use the token
                 # Store credentials in memory for the session (more secure than file)
-                sandbox.process.exec("git config --global credential.helper 'cache --timeout=86400'")
+                sandbox.process.exec(
+                    "git config --global credential.helper 'cache --timeout=86400'"
+                )
 
                 # 2. Configure the remote URL with token for push access
                 # This embeds the token in the remote URL (standard GitHub approach)
@@ -1100,8 +1159,12 @@ class DaytonaSpawnerService:
                 )
 
                 # 3. Configure git user for commits (use GitHub Actions bot identity)
-                sandbox.process.exec('git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"')
-                sandbox.process.exec('git config --global user.name "github-actions[bot]"')
+                sandbox.process.exec(
+                    'git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"'
+                )
+                sandbox.process.exec(
+                    'git config --global user.name "github-actions[bot]"'
+                )
 
                 # 4. Set default branch behavior for push
                 sandbox.process.exec("git config --global push.default current")
@@ -1132,7 +1195,9 @@ class DaytonaSpawnerService:
         if runtime == "claude":
             worker_script = self._get_claude_worker_script()
             if continuous_mode:
-                logger.info("Using Claude worker with continuous mode enabled via environment")
+                logger.info(
+                    "Using Claude worker with continuous mode enabled via environment"
+                )
         else:
             worker_script = self._get_worker_script()
         sandbox.fs.upload_file(worker_script.encode("utf-8"), "/tmp/sandbox_worker.py")
@@ -1168,9 +1233,13 @@ class DaytonaSpawnerService:
         sandbox.process.exec(f"cat >> /root/.bashrc << 'ENVEOF'\n{env_exports}\nENVEOF")
 
         # Also source the env file in bashrc for belt-and-suspenders persistence
-        sandbox.process.exec('echo "source /tmp/.sandbox_env 2>/dev/null || true" >> /root/.bashrc')
+        sandbox.process.exec(
+            'echo "source /tmp/.sandbox_env 2>/dev/null || true" >> /root/.bashrc'
+        )
 
-        logger.info(f"Persisted {len(env_vars)} environment variables (including GitHub tokens)")
+        logger.info(
+            f"Persisted {len(env_vars)} environment variables (including GitHub tokens)"
+        )
 
         # Create workspace directory (even if no repo cloned)
         sandbox.process.exec("mkdir -p /workspace")
@@ -1243,7 +1312,7 @@ AGENT_ID = os.environ.get("AGENT_ID")
 SANDBOX_ID = os.environ.get("SANDBOX_ID", "")
 # Base URL without /mcp suffix for API calls
 BASE_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000").replace("/mcp", "").rstrip("/")
-LLM_MODEL = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-4-20250514")
+LLM_MODEL = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-4-5-20250929")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 
 # GitHub configuration (Phase 3.5)
@@ -1727,7 +1796,7 @@ BASE_URL = os.environ.get("MCP_SERVER_URL", "http://localhost:18000").replace("/
 # Anthropic / Z.AI API configuration
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", os.environ.get("LLM_API_KEY", ""))
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")  # Custom API endpoint (e.g., Z.AI)
-ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-20250514"))
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-5-20250929"))
 
 # GitHub configuration (Phase 3.5)
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
@@ -2569,7 +2638,9 @@ if __name__ == "__main__":
                 if daytona_sandbox:
                     # Terminate via cached Daytona object
                     daytona_sandbox.stop()
-                    logger.info(f"Daytona sandbox {sandbox_id} terminated via cached reference")
+                    logger.info(
+                        f"Daytona sandbox {sandbox_id} terminated via cached reference"
+                    )
 
                 info.status = "terminated"
                 info.completed_at = utc_now()
@@ -2632,7 +2703,9 @@ if __name__ == "__main__":
                 # Sandbox doesn't exist in Daytona - might already be terminated
                 error_str = str(get_err).lower()
                 if "not found" in error_str or "404" in error_str:
-                    logger.info(f"Sandbox {sandbox_id} not found in Daytona (already terminated?)")
+                    logger.info(
+                        f"Sandbox {sandbox_id} not found in Daytona (already terminated?)"
+                    )
                     # Update in-memory cache if it exists
                     if info:
                         info.status = "terminated"
@@ -2642,7 +2715,9 @@ if __name__ == "__main__":
                     raise
 
         except Exception as e:
-            logger.error(f"Failed to terminate sandbox {sandbox_id} via direct API: {e}")
+            logger.error(
+                f"Failed to terminate sandbox {sandbox_id} via direct API: {e}"
+            )
             return False
 
     def _get_continuous_worker_script(self) -> str:
@@ -2823,9 +2898,7 @@ if __name__ == "__main__":
                             files = daytona_sandbox.fs.list_files(project_path)
                             for f in files:
                                 if hasattr(f, "name") and f.name.endswith(".jsonl"):
-                                    transcript_files.append(
-                                        f"{project_path}/{f.name}"
-                                    )
+                                    transcript_files.append(f"{project_path}/{f.name}")
                         except Exception:
                             continue
 
