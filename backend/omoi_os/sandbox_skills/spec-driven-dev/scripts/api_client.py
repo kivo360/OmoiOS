@@ -184,6 +184,16 @@ class OmoiOSClient:
         if project_id:
             payload["project_id"] = project_id
 
+        # Convert ticket dependencies to backend format
+        # Format: {"blocked_by": ["TKT-001"], "blocks": ["TKT-003"]}
+        if ticket.dependencies.blocked_by or ticket.dependencies.blocks:
+            dependencies = {}
+            if ticket.dependencies.blocked_by:
+                dependencies["blocked_by"] = ticket.dependencies.blocked_by
+            if ticket.dependencies.blocks:
+                dependencies["blocks"] = ticket.dependencies.blocks
+            payload["dependencies"] = dependencies
+
         status, data = await self._request("POST", "/api/v1/tickets", json=payload)
 
         if status in (200, 201):

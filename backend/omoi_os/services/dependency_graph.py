@@ -119,10 +119,36 @@ class DependencyGraphService:
             nodes = self._build_nodes(tasks, [], session)
             edges = self._build_edges(tasks, [])
             
+            # Build ticket lookup for dependency resolution
+            ticket_dict = {t.id: t for t in tickets}
+
             # Add ticket nodes
             for ticket in tickets:
                 # Count tasks for this ticket
                 ticket_tasks = [t for t in tasks if t.ticket_id == ticket.id]
+
+                # Get blocked_by from ticket dependencies
+                blocked_by = []
+                if ticket.dependencies:
+                    blocked_by = ticket.dependencies.get("blocked_by", [])
+
+                # Calculate blocks_count from other tickets that have this ticket in blocked_by
+                blocks_count = 0
+                for other_ticket in tickets:
+                    if other_ticket.dependencies:
+                        if ticket.id in other_ticket.dependencies.get("blocked_by", []):
+                            blocks_count += 1
+
+                # Ticket is blocked if is_blocked flag OR has incomplete blocking tickets
+                is_blocked = ticket.is_blocked
+                if not is_blocked and blocked_by:
+                    # Check if any blocking tickets are not done
+                    for blocker_id in blocked_by:
+                        blocker = ticket_dict.get(blocker_id)
+                        if blocker and blocker.status != "done":
+                            is_blocked = True
+                            break
+
                 nodes.append({
                     "id": f"ticket-{ticket.id}",
                     "type": "ticket",
@@ -131,10 +157,11 @@ class DependencyGraphService:
                     "status": ticket.status,
                     "priority": ticket.priority,
                     "phase_id": ticket.phase_id,
-                    "is_blocked": ticket.is_blocked,
-                    "blocks_count": 0,
+                    "is_blocked": is_blocked,
+                    "blocks_count": blocks_count,
                     "task_count": len(ticket_tasks),
                     "ticket_id": ticket.id,
+                    "blocked_by": blocked_by,  # Include for frontend tooltip
                 })
 
             # Add ticket → task edges
@@ -145,7 +172,21 @@ class DependencyGraphService:
                     "type": "ticket_contains",
                     "label": "contains"
                 })
-            
+
+            # Add ticket → ticket dependency edges (blocked_by relationships)
+            for ticket in tickets:
+                if ticket.dependencies:
+                    blocked_by = ticket.dependencies.get("blocked_by", [])
+                    for blocker_id in blocked_by:
+                        # Only add edge if blocking ticket exists in our set
+                        if blocker_id in ticket_dict:
+                            edges.append({
+                                "source": f"ticket-{blocker_id}",
+                                "target": f"ticket-{ticket.id}",
+                                "type": "ticket_blocks",
+                                "label": "blocks"
+                            })
+
             metadata = self._calculate_metadata(tasks, nodes, edges)
             
             return {

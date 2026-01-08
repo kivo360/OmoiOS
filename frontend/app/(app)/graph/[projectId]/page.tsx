@@ -310,6 +310,16 @@ function graphToFlowElements(
   const edges: Edge[] = apiEdges.map((edge) => {
     const targetNode = apiNodes.find((n) => n.id === edge.target)
     const isBlocked = targetNode?.status === "blocked"
+    const isTicketBlocking = edge.type === "ticket_blocks"
+
+    // Ticket-to-ticket blocking edges get special styling
+    let strokeColor = "#9ca3af" // default gray
+    if (isBlocked) {
+      strokeColor = "#ef4444" // red for blocked
+    } else if (isTicketBlocking) {
+      strokeColor = "#f59e0b" // amber for ticket blocking relationships
+    }
+
     return {
       id: `${edge.source}-${edge.target}`,
       source: edge.source,
@@ -317,13 +327,16 @@ function graphToFlowElements(
       type: "smoothstep",
       animated: isBlocked,
       style: {
-        stroke: isBlocked ? "#ef4444" : "#9ca3af",
-        strokeWidth: 2,
+        stroke: strokeColor,
+        strokeWidth: isTicketBlocking ? 3 : 2, // thicker for ticket dependencies
+        strokeDasharray: isTicketBlocking ? "5,5" : undefined, // dashed for ticket deps
       },
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: isBlocked ? "#ef4444" : "#9ca3af",
+        color: strokeColor,
       },
+      label: isTicketBlocking ? "blocks" : undefined,
+      labelStyle: isTicketBlocking ? { fontSize: 10, fill: "#f59e0b" } : undefined,
     }
   })
 
