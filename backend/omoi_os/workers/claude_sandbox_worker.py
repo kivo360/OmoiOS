@@ -1946,9 +1946,28 @@ Continue from where we left off, acknowledging the previous context."""
         logger.info(f"WORKER CONFIG: Sandbox ID = {self.sandbox_id}")
         logger.info(f"WORKER CONFIG: Execution Mode = {self.execution_mode}")
         logger.info(f"WORKER CONFIG: Model = {self.model or '(default)'}")
-        logger.info(f"WORKER CONFIG: OAuth Token = {'SET' if self.oauth_token else 'NOT SET'}")
-        logger.info(f"WORKER CONFIG: API Key = {'SET' if self.api_key else 'NOT SET'}")
+        # Log OAuth token prefix for verification (first 15 chars to confirm format)
+        if self.oauth_token:
+            token_prefix = self.oauth_token[:15] + "..." if len(self.oauth_token) > 15 else self.oauth_token
+            logger.info(f"WORKER CONFIG: OAuth Token = SET (prefix: {token_prefix})")
+        else:
+            logger.info("WORKER CONFIG: OAuth Token = NOT SET")
+            logger.info("WORKER CONFIG: Expected env var: CLAUDE_CODE_OAUTH_TOKEN")
+        # Log API key status with prefix check
+        if self.api_key:
+            key_prefix = self.api_key[:10] + "..." if len(self.api_key) > 10 else "(short key)"
+            logger.info(f"WORKER CONFIG: API Key = SET (prefix: {key_prefix})")
+        else:
+            logger.info("WORKER CONFIG: API Key = NOT SET")
         logger.info(f"WORKER CONFIG: API Base URL = {self.api_base_url or '(default Anthropic API)'}")
+        # Log all MODEL-related env vars to debug where glm-4.7 is coming from
+        logger.info("-" * 40)
+        logger.info("WORKER CONFIG: Model-related env vars (debug):")
+        logger.info(f"  - MODEL env: {os.environ.get('MODEL', '(not set)')}")
+        logger.info(f"  - ANTHROPIC_MODEL env: {os.environ.get('ANTHROPIC_MODEL', '(not set)')}")
+        logger.info(f"  - LLM_MODEL env: {os.environ.get('LLM_MODEL', '(not set)')}")
+        logger.info(f"  - ANTHROPIC_BASE_URL env: {os.environ.get('ANTHROPIC_BASE_URL', '(not set)')}")
+        logger.info(f"  - CLAUDE_CODE_OAUTH_TOKEN env: {'SET' if os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') else '(not set)'}")
         logger.info("-" * 80)
         logger.info("WORKER CONFIG: Task Data")
         logger.info(f"  - task_description: {len(self.task_description)} chars")
@@ -1956,7 +1975,6 @@ Continue from where we left off, acknowledging the previous context."""
         logger.info(f"  - ticket_title: {self.ticket_title or '(none)'}")
         logger.info(f"  - ticket_description: {len(self.ticket_description or '')} chars")
         logger.info(f"  - ticket_id: {self.ticket_id or '(none)'}")
-        logger.info(f"  - ticket_type: {self.ticket_type or '(none)'}")
         logger.info("-" * 80)
         logger.info("WORKER CONFIG: Git/GitHub")
         logger.info(f"  - github_repo: {self.github_repo or '(none)'}")
