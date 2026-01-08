@@ -452,8 +452,14 @@ class DaytonaSpawnerService:
                 source="config",
             )
 
-        if creds.api_key:
+        # Prefer OAuth token for Claude Agent SDK, fallback to API key
+        if creds.oauth_token:
+            env_vars["CLAUDE_CODE_OAUTH_TOKEN"] = creds.oauth_token
+            logger.debug("Using OAuth token for Claude Agent SDK authentication")
+        elif creds.api_key:
             env_vars["ANTHROPIC_API_KEY"] = creds.api_key
+            logger.debug("Using API key for authentication (OAuth token not available)")
+
         if creds.base_url:
             env_vars["ANTHROPIC_BASE_URL"] = creds.base_url
         if creds.model:
