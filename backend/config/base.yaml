@@ -1,5 +1,5 @@
 llm:
-  model: glm-4.7
+  model: openai/glm-4.7
   api_key: 009332196c644810b859e88f26d28fe3.a9dfM8z1qQDWCpiN
   base_url: https://api.z.ai/api/coding/paas/v4
   # fireworks_api_key loaded from LLM_FIREWORKS_API_KEY env var
