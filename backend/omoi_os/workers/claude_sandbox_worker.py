@@ -1853,11 +1853,61 @@ You are resuming a previous conversation. Here's what happened before:
 
 Continue from where we left off, acknowledging the previous context."""
 
+        # =================================================================
+        # COMPREHENSIVE LOGGING: WorkerConfig Initialization Complete
+        # =================================================================
+        logger.info("=" * 80)
+        logger.info("WORKER CONFIG: Initialization Complete")
+        logger.info("=" * 80)
+        logger.info(f"WORKER CONFIG: Task ID = {self.task_id}")
+        logger.info(f"WORKER CONFIG: Agent ID = {self.agent_id}")
+        logger.info(f"WORKER CONFIG: Sandbox ID = {self.sandbox_id}")
+        logger.info(f"WORKER CONFIG: Execution Mode = {self.execution_mode}")
+        logger.info(f"WORKER CONFIG: Model = {self.model or '(default)'}")
+        logger.info(f"WORKER CONFIG: OAuth Token = {'SET' if self.oauth_token else 'NOT SET'}")
+        logger.info(f"WORKER CONFIG: API Key = {'SET' if self.api_key else 'NOT SET'}")
+        logger.info(f"WORKER CONFIG: API Base URL = {self.api_base_url or '(default Anthropic API)'}")
+        logger.info("-" * 80)
+        logger.info("WORKER CONFIG: Task Data")
+        logger.info(f"  - task_description: {len(self.task_description)} chars")
+        logger.info(f"  - initial_prompt: {len(self.initial_prompt)} chars")
+        logger.info(f"  - ticket_title: {self.ticket_title or '(none)'}")
+        logger.info(f"  - ticket_description: {len(self.ticket_description or '')} chars")
+        logger.info(f"  - ticket_id: {self.ticket_id or '(none)'}")
+        logger.info(f"  - ticket_type: {self.ticket_type or '(none)'}")
+        logger.info("-" * 80)
+        logger.info("WORKER CONFIG: Git/GitHub")
+        logger.info(f"  - github_repo: {self.github_repo or '(none)'}")
+        logger.info(f"  - branch_name: {self.branch_name or '(none)'}")
+        logger.info(f"  - github_token: {'SET' if self.github_token else 'NOT SET'}")
+        logger.info("-" * 80)
+        logger.info("WORKER CONFIG: SDK Settings")
+        logger.info(f"  - permission_mode: {self.permission_mode}")
+        logger.info(f"  - max_turns: {self.max_turns}")
+        logger.info(f"  - max_budget_usd: {self.max_budget_usd}")
+        logger.info(f"  - tools_mode: {self.tools_mode}")
+        logger.info(f"  - enable_skills: {self.enable_skills}")
+        logger.info(f"  - enable_subagents: {self.enable_subagents}")
+        logger.info(f"  - enable_spec_tools: {self.enable_spec_tools}")
+        logger.info(f"  - require_spec_skill: {self.require_spec_skill}")
+        logger.info(f"  - setting_sources: {self.setting_sources}")
+        logger.info("-" * 80)
+        logger.info("WORKER CONFIG: Continuous Mode")
+        logger.info(f"  - continuous_mode: {self.continuous_mode}")
+        logger.info(f"  - max_iterations: {self.max_iterations}")
+        logger.info(f"  - max_total_cost_usd: {self.max_total_cost_usd}")
+        logger.info(f"  - max_duration_seconds: {self.max_duration_seconds}")
+        logger.info(f"  - require_clean_git: {self.require_clean_git}")
+        logger.info(f"  - require_code_pushed: {self.require_code_pushed}")
+        logger.info(f"  - require_pr_created: {self.require_pr_created}")
+        logger.info("=" * 80)
+
     def validate(self) -> list[str]:
         """Validate configuration, return list of errors."""
         errors = []
-        if not self.api_key:
-            errors.append("ANTHROPIC_API_KEY or ANTHROPIC_AUTH_TOKEN required")
+        # Accept either OAuth token or API key for authentication
+        if not self.oauth_token and not self.api_key:
+            errors.append("Authentication required: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY")
         if not self.callback_url:
             errors.append("CALLBACK_URL required")
         return errors
@@ -1973,18 +2023,32 @@ Systematically investigate issues:
             stderr_callback: Callback to receive stderr output from CLI subprocess.
                              If not provided, stderr is logged at DEBUG level.
         """
+        # =================================================================
+        # COMPREHENSIVE LOGGING: SDK Options Creation
+        # =================================================================
+        logger.info("=" * 80)
+        logger.info("SDK OPTIONS: Creating ClaudeAgentOptions")
+        logger.info("=" * 80)
+
         # Build environment variables for the CLI subprocess
         # Prefer OAuth token (CLAUDE_CODE_OAUTH_TOKEN) over API key for authentication
         env = {}
         if self.oauth_token:
             # OAuth token from `claude setup-token` - recommended auth method
             env["CLAUDE_CODE_OAUTH_TOKEN"] = self.oauth_token
+            logger.info("SDK OPTIONS: Using OAuth token for authentication (CLAUDE_CODE_OAUTH_TOKEN)")
         elif self.api_key:
             # Fallback to API key for backwards compatibility
             env["ANTHROPIC_API_KEY"] = self.api_key
+            logger.info("SDK OPTIONS: Using API key for authentication (ANTHROPIC_API_KEY)")
+        else:
+            logger.warning("SDK OPTIONS: No authentication configured! Neither OAuth token nor API key found.")
 
         if self.api_base_url:
             env["ANTHROPIC_BASE_URL"] = self.api_base_url
+            logger.info(f"SDK OPTIONS: Using custom base URL: {self.api_base_url}")
+        else:
+            logger.info("SDK OPTIONS: Using default Anthropic API (no custom base URL)")
 
         # Build options dict
         # Convert cwd to Path if it's a string (SDK expects Path)
@@ -2063,6 +2127,57 @@ Systematically investigate issues:
 
         if hooks:
             options_kwargs["hooks"] = hooks
+
+        # =================================================================
+        # COMPREHENSIVE LOGGING: Final SDK Options Summary
+        # =================================================================
+        logger.info("-" * 80)
+        logger.info("SDK OPTIONS: Final Configuration Summary")
+        logger.info("-" * 80)
+        logger.info(f"SDK OPTIONS: Model = {self.model or '(default)'}")
+        logger.info(f"SDK OPTIONS: Permission Mode = {self.permission_mode}")
+        logger.info(f"SDK OPTIONS: Max Turns = {self.max_turns}")
+        logger.info(f"SDK OPTIONS: Max Budget USD = {self.max_budget_usd}")
+        logger.info(f"SDK OPTIONS: CWD = {cwd_path}")
+        logger.info(f"SDK OPTIONS: Setting Sources = {self.setting_sources}")
+        logger.info(f"SDK OPTIONS: Resume Session ID = {self.resume_session_id or '(none)'}")
+        logger.info(f"SDK OPTIONS: Fork Session = {self.fork_session}")
+        logger.info(f"SDK OPTIONS: Allowed Tools = {self.allowed_tools or '(SDK defaults)'}")
+        logger.info(f"SDK OPTIONS: Disallowed Tools = {self.disallowed_tools or '(none)'}")
+        logger.info(f"SDK OPTIONS: Enable Subagents = {self.enable_subagents}")
+        logger.info(f"SDK OPTIONS: Enable Spec Tools = {self.enable_spec_tools}")
+        logger.info(f"SDK OPTIONS: MCP Servers = {list(options_kwargs.get('mcp_servers', {}).keys()) or '(none)'}")
+        logger.info(f"SDK OPTIONS: Hooks = {list(hooks.keys()) if hooks else '(none)'}")
+
+        # Log system prompt details
+        logger.info("-" * 80)
+        logger.info("SDK OPTIONS: System Prompt Configuration")
+        logger.info("-" * 80)
+        if isinstance(self.system_prompt, dict):
+            logger.info(f"SDK OPTIONS: System Prompt Type = preset pattern")
+            logger.info(f"SDK OPTIONS: System Prompt Preset = {self.system_prompt.get('preset', '(unknown)')}")
+            append_content = self.system_prompt.get('append', '')
+            logger.info(f"SDK OPTIONS: System Prompt Append Length = {len(append_content)} chars")
+            # Log the full append content for debugging
+            logger.info("SDK OPTIONS: System Prompt Append Content:")
+            logger.info("=" * 40 + " BEGIN SYSTEM PROMPT APPEND " + "=" * 40)
+            for line in append_content.split('\n'):
+                logger.info(f"  {line}")
+            logger.info("=" * 40 + " END SYSTEM PROMPT APPEND " + "=" * 40)
+        elif isinstance(self.system_prompt, str):
+            logger.info(f"SDK OPTIONS: System Prompt Type = custom string")
+            logger.info(f"SDK OPTIONS: System Prompt Length = {len(self.system_prompt)} chars")
+            logger.info("SDK OPTIONS: System Prompt Content:")
+            logger.info("=" * 40 + " BEGIN SYSTEM PROMPT " + "=" * 40)
+            for line in self.system_prompt.split('\n'):
+                logger.info(f"  {line}")
+            logger.info("=" * 40 + " END SYSTEM PROMPT " + "=" * 40)
+        else:
+            logger.info(f"SDK OPTIONS: System Prompt = {self.system_prompt} (using SDK default)")
+
+        logger.info("=" * 80)
+        logger.info("SDK OPTIONS: Configuration complete, creating ClaudeAgentOptions")
+        logger.info("=" * 80)
 
         return ClaudeAgentOptions(**options_kwargs)
 
@@ -3924,6 +4039,38 @@ The following dependencies were automatically installed before you started:
                             import time
 
                             self.iteration_state.start_time = time.time()
+
+                            # =================================================================
+                            # COMPREHENSIVE LOGGING: Initial Task/Prompt
+                            # =================================================================
+                            logger.info("=" * 80)
+                            logger.info("WORKER RUN: Initial Task Configuration")
+                            logger.info("=" * 80)
+                            logger.info(f"WORKER RUN: Task ID = {self.config.task_id}")
+                            logger.info(f"WORKER RUN: Execution Mode = {self.config.execution_mode}")
+                            logger.info(f"WORKER RUN: Continuous Mode = {self.config.continuous_mode}")
+                            logger.info(f"WORKER RUN: Ticket Title = {self.config.ticket_title or '(none)'}")
+                            logger.info(f"WORKER RUN: Ticket ID = {self.config.ticket_id or '(none)'}")
+                            logger.info(f"WORKER RUN: Branch Name = {self.config.branch_name or '(none)'}")
+                            logger.info(f"WORKER RUN: GitHub Repo = {self.config.github_repo or '(none)'}")
+
+                            # Log prompt source priority
+                            logger.info("-" * 80)
+                            logger.info("WORKER RUN: Prompt Source Priority (first non-empty wins):")
+                            logger.info(f"  1. task_description (from TASK_DATA_BASE64): {len(self.config.task_description)} chars")
+                            logger.info(f"  2. initial_prompt (from INITIAL_PROMPT env): {len(self.config.initial_prompt)} chars")
+                            logger.info(f"  3. ticket_description: {len(self.config.ticket_description or '')} chars")
+                            logger.info(f"  4. ticket_title fallback: {len(self.config.ticket_title or '')} chars")
+
+                            # Log the full initial task
+                            logger.info("-" * 80)
+                            logger.info(f"WORKER RUN: Initial Task Length = {len(initial_task)} chars")
+                            logger.info("WORKER RUN: Initial Task Content:")
+                            logger.info("=" * 40 + " BEGIN INITIAL TASK " + "=" * 40)
+                            for line in initial_task.split('\n'):
+                                logger.info(f"  {line}")
+                            logger.info("=" * 40 + " END INITIAL TASK " + "=" * 40)
+                            logger.info("=" * 80)
 
                             # Log mode decision for debugging
                             logger.info(
