@@ -543,7 +543,7 @@ class DaytonaSettings(OmoiBaseSettings):
     target: str = "us"  # DAYTONA_TARGET (us, eu)
     image: Optional[str] = None  # DAYTONA_IMAGE (custom Docker image)
     snapshot: Optional[str] = (
-        "claude-agent-sdk-medium"  # DAYTONA_SNAPSHOT (default snapshot name)
+        "ai-agent-dev-light"  # DAYTONA_SNAPSHOT (default snapshot name)
     )
     timeout: int = 300  # DAYTONA_TIMEOUT (seconds)
 
