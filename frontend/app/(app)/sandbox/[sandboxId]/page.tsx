@@ -149,7 +149,11 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     for (const event of events) {
       if (event.event_type === "agent.tool_completed") {
         const toolKey = getToolUseKey(event)
-        if (toolKey) completedToolKeys.add(toolKey)
+        if (toolKey) {
+          completedToolKeys.add(toolKey)
+          // Debug: log completed tool keys
+          console.debug("[EventDedup] tool_completed key:", toolKey)
+        }
 
         // Track file content keys
         const contentKey = getFileContentKey(event)
@@ -184,6 +188,8 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
         // Skip tool_use events if there's a corresponding tool_completed
         if (e.event_type === "agent.tool_use") {
           const key = getToolUseKey(e)
+          // Debug: log tool_use keys and match status
+          console.debug("[EventDedup] tool_use key:", key, "hasMatch:", key ? completedToolKeys.has(key) : "no key")
           if (key && completedToolKeys.has(key)) return false
         }
 
