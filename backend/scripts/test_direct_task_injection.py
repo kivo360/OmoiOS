@@ -83,7 +83,7 @@ WORKSPACE_PATH = os.environ.get("WORKSPACE_PATH", "/workspace")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
 ANTHROPIC_BASE_URL = os.environ.get("ANTHROPIC_BASE_URL", "")
 # Z.AI model mapping - use their default sonnet model if on Z.AI
-DEFAULT_MODEL = "glm-4.6" if "z.ai" in ANTHROPIC_BASE_URL else "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "glm-4.6" if "z.ai" in ANTHROPIC_BASE_URL else "claude-sonnet-4-5-20250929"
 ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL") or os.environ.get("ANTHROPIC_DEFAULT_SONNET_MODEL", DEFAULT_MODEL)
 
 
@@ -370,7 +370,9 @@ async def test_direct_injection(
         )
         base_url = os.environ.get("ANTHROPIC_BASE_URL", "")
         # Use Z.AI model if on Z.AI, otherwise default Anthropic model
-        default_model = "glm-4.6" if "z.ai" in base_url else "claude-sonnet-4-20250514"
+        default_model = (
+            "glm-4.6" if "z.ai" in base_url else "claude-sonnet-4-5-20250929"
+        )
         model = os.environ.get("ANTHROPIC_MODEL") or os.environ.get(
             "ANTHROPIC_DEFAULT_SONNET_MODEL", default_model
         )
@@ -384,7 +386,7 @@ async def test_direct_injection(
             print("   ⚠️  Using Z.AI proxy - Claude Code CLI compatibility unknown")
     else:
         api_key = os.environ.get("LLM_API_KEY")
-        model = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-4-20250514")
+        model = os.environ.get("LLM_MODEL", "anthropic/claude-sonnet-4-5-20250929")
         if not api_key:
             print("❌ LLM_API_KEY not set")
             return False

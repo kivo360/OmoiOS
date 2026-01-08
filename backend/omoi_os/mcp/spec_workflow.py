@@ -14,7 +14,7 @@ Usage with Claude Agent SDK:
 
     mcp_server = create_spec_workflow_mcp_server()
     options = ClaudeAgentOptions(
-        model="claude-sonnet-4-20250514",
+        model="claude-sonnet-4-5-20250929",
         mcp_servers=[mcp_server],
         allowed_tools=["mcp__spec_workflow__*"],
     )
@@ -128,9 +128,7 @@ async def get_spec(args: dict[str, Any]) -> dict[str, Any]:
 
             output += f"\nTasks ({len(spec['tasks'])}):\n"
             for task in spec["tasks"]:
-                output += (
-                    f"  [{task['status']}] {task['title']} ({task['priority']})\n"
-                )
+                output += f"  [{task['status']}] {task['title']} ({task['priority']})\n"
 
             return _format_response(output)
     except httpx.HTTPStatusError as e:
@@ -405,9 +403,7 @@ async def get_task(args: dict[str, Any]) -> dict[str, Any]:
     """Get task details including full description."""
     try:
         async with httpx.AsyncClient(timeout=API_TIMEOUT) as client:
-            response = await client.get(
-                f"{API_BASE}/api/v1/tasks/{args['task_id']}"
-            )
+            response = await client.get(f"{API_BASE}/api/v1/tasks/{args['task_id']}")
             response.raise_for_status()
             task = response.json()
 
@@ -433,7 +429,9 @@ async def get_task(args: dict[str, Any]) -> dict[str, Any]:
                         output += f"**Ticket Title:** {ticket['title']}\n"
                         output += f"**Ticket Status:** {ticket['status']}\n\n"
                         if ticket.get("description"):
-                            output += f"**Ticket Description:**\n{ticket['description']}\n"
+                            output += (
+                                f"**Ticket Description:**\n{ticket['description']}\n"
+                            )
                 except Exception:
                     pass  # Parent ticket fetch is optional
 
@@ -528,7 +526,7 @@ def create_spec_workflow_mcp_server():
         from claude_agent_sdk import ClaudeAgentOptions
 
         options = ClaudeAgentOptions(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             mcp_servers=[create_spec_workflow_mcp_server()],
         )
     """
