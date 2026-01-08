@@ -4078,7 +4078,7 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info(f"  - code_pushed: {state.code_pushed}")
         logger.info(f"  - pr_created: {state.pr_created}")
         logger.info(f"  - total_cost: ${state.total_cost:.4f}")
-        logger.info(f"  - consecutive_errors: {state.consecutive_errors}")
+        logger.info(f"  - error_count: {state.error_count}")
         logger.info("-" * 80)
         if notes_content:
             logger.info("CONTINUOUS MODE: Notes File Content:")
