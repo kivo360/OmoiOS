@@ -8,12 +8,20 @@ Note: This does NOT handle workspace execution - that's handled separately
 by AgentExecutor when needed.
 """
 
+import asyncio
+import random
 from typing import Optional, TypeVar
 
 from omoi_os.config import LLMSettings, load_llm_settings
+from omoi_os.logging import get_logger
 from omoi_os.services.pydantic_ai_service import PydanticAIService
 
+logger = get_logger(__name__)
+
 T = TypeVar("T")
+
+# HTTP status codes that are retryable (transient errors)
+RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
 
 class LLMService:
@@ -87,16 +95,21 @@ class LLMService:
         output_type: type[T],
         system_prompt: Optional[str] = None,
         output_retries: int = 5,
+        http_retries: int = 3,
         **kwargs,
     ) -> T:
         """
         Get structured output matching a Pydantic model.
+
+        Includes automatic retry with exponential backoff for transient HTTP errors
+        (503, 429, etc.) that can occur with LLM providers like Fireworks.
 
         Args:
             prompt: User prompt
             output_type: Pydantic model class for structured output
             system_prompt: Optional system prompt
             output_retries: Number of retries for structured output validation
+            http_retries: Number of retries for transient HTTP errors (503, 429, etc.)
             **kwargs: Additional arguments (ignored for now)
 
         Returns:
@@ -119,8 +132,56 @@ class LLMService:
             system_prompt=system_prompt,
             output_retries=output_retries,
         )
-        result = await agent.run(prompt)
-        return result.output
+
+        last_error = None
+        for attempt in range(http_retries + 1):
+            try:
+                result = await agent.run(prompt)
+                return result.output
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check if this is a retryable HTTP error
+                is_retryable = any(
+                    indicator in error_str
+                    for indicator in [
+                        "503",
+                        "502",
+                        "500",
+                        "504",
+                        "429",
+                        "service unavailable",
+                        "bad gateway",
+                        "gateway timeout",
+                        "rate limit",
+                        "too many requests",
+                    ]
+                )
+
+                if is_retryable and attempt < http_retries:
+                    # Exponential backoff with jitter: 1s, 2s, 4s + random jitter
+                    base_delay = 2**attempt
+                    jitter = random.uniform(0, 0.5 * base_delay)
+                    delay = base_delay + jitter
+                    logger.warning(
+                        f"LLM HTTP error (attempt {attempt + 1}/{http_retries + 1}), "
+                        f"retrying in {delay:.1f}s",
+                        extra={
+                            "error": str(e)[:200],
+                            "attempt": attempt + 1,
+                            "max_attempts": http_retries + 1,
+                            "delay_seconds": delay,
+                        },
+                    )
+                    await asyncio.sleep(delay)
+                    last_error = e
+                else:
+                    # Not retryable or exhausted retries
+                    raise
+
+        # Should not reach here, but if we do, raise the last error
+        if last_error:
+            raise last_error
+        raise RuntimeError("Unexpected state in structured_output retry loop")
 
 
 # Global singleton instance
