@@ -1,6 +1,6 @@
 llm:
   api_key: REDACTED_LLM_API_KEY
-  model: openai/glm-4.6
+  model: glm-4.7
   base_url: https://api.z.ai/api/coding/paas/v4
 
   fireworks_api_key: REDACTED_FIREWORKS_API_KEY
