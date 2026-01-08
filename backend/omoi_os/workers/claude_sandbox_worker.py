@@ -1354,8 +1354,7 @@ After discovery, you MUST create these files in `.omoi_os/`:
 ### Step 4: VALIDATE the Specs
 
 ```bash
-cd /root/.claude/skills/spec-driven-dev/scripts
-python spec_cli.py validate
+cd /root/.claude/skills/spec-driven-dev/scripts && python spec_cli.py validate
 ```
 
 Fix any errors before proceeding.
@@ -1364,10 +1363,11 @@ Fix any errors before proceeding.
 
 ### Step 5: SYNC TO THE API (Critical!)
 
+**Run these commands IN ORDER. Each command must succeed before the next.**
+
 ```bash
-# Preview what will be synced
-python spec_cli.py sync-specs diff
-python spec_cli.py sync diff
+# First, cd to the scripts directory
+cd /root/.claude/skills/spec-driven-dev/scripts
 
 # Push specs (requirements & designs) to create specs in the system
 python spec_cli.py sync-specs push
@@ -1375,20 +1375,20 @@ python spec_cli.py sync-specs push
 # Push tickets and tasks
 python spec_cli.py sync push
 
-# Verify it worked
+# Verify it worked - you should see your specs, tickets, and tasks
 python spec_cli.py api-trace
 ```
 
-**If you skip this step, your work is INVISIBLE to the system.**
+**IMPORTANT**: If any sync command fails, READ THE ERROR MESSAGE and fix the issue before proceeding.
+
+**If you skip this step, your work is INVISIBLE to the system and the task WILL FAIL.**
 
 ---
 
 ### Step 6: Commit and Push to Git
 
 ```bash
-git add -A
-git commit -m "docs(feature): add spec for {feature-name}"
-git push
+cd /workspace && git add -A && git commit -m "docs(feature): add spec for {feature-name}" && git push
 ```
 
 ---
