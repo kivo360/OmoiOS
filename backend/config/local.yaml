@@ -58,7 +58,7 @@ daytona:
   api_url: https://app.daytona.io/api
   target: us
   image: nikolaik/python-nodejs:python3.12-nodejs22
-  snapshot: claude-agent-sdk-medium
+  snapshot: ai-agent-dev-light
   timeout: 300
   sandbox_memory_gb: 4
   sandbox_cpu: 2

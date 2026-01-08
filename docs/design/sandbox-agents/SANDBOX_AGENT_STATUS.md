@@ -10,7 +10,7 @@
   - Memory: 4-8 GB (configurable via `SANDBOX_MEMORY_GB` or YAML)
   - CPU: 2-4 cores (configurable via `SANDBOX_CPU` or YAML)
   - Disk: 8-10 GB (configurable via `SANDBOX_DISK_GB` or YAML)
-  - Snapshot support: Default `claude-agent-sdk-medium` (configurable via `SANDBOX_SNAPSHOT` or YAML)
+  - Snapshot support: Default `ai-agent-dev-light` (configurable via `SANDBOX_SNAPSHOT` or YAML)
 - **Pre-Sandbox Branch Creation**: GitHub branches created before sandbox spawn using user's OAuth token
   - GitFlow-compliant branch names (e.g., `feature/calculate-binomial-coefficient`)
   - Branch name passed to sandbox via `BRANCH_NAME` environment variable
@@ -94,7 +94,7 @@ Key variables:
 - `SANDBOX_MEMORY_GB` - Memory allocation (default: 4)
 - `SANDBOX_CPU` - CPU cores (default: 2)
 - `SANDBOX_DISK_GB` - Disk space (default: 8)
-- `SANDBOX_SNAPSHOT` - Snapshot name (default: `claude-agent-sdk-medium`)
+- `SANDBOX_SNAPSHOT` - Snapshot name (default: `ai-agent-dev-light`)
 - `SANDBOX_IMAGE` - Base image (fallback if snapshot not set)
 - `CALLBACK_URL` - API endpoint for event reporting
 - `TASK_DESCRIPTION` - Task description
@@ -105,7 +105,7 @@ Configuration files: `backend/config/base.yaml`, `backend/config/production.yaml
 
 ```yaml
 daytona:
-  snapshot: "claude-agent-sdk-medium"
+  snapshot: "ai-agent-dev-light"
   sandbox_memory_gb: 4
   sandbox_cpu: 2
   sandbox_disk_gb: 8
