@@ -8,6 +8,16 @@
       "backend/omoi_os/services/**",
       "backend/omoi_os/models/**",
       "backend/omoi_os/config/**",
+      "backend/omoi_os/agents/**",
+      "backend/omoi_os/api/**",
+      "backend/omoi_os/mcp/**",
+      "backend/omoi_os/sandbox_skills/**",
+      "backend/omoi_os/schemas/**",
+      "backend/omoi_os/tasks/**",
+      "backend/omoi_os/tools/**",
+      "backend/omoi_os/utils/**",
+      "backend/omoi_os/*.py",
+      "backend/config/*.yaml",
       "backend/pyproject.toml",
       "backend/uv.lock"
     ]
