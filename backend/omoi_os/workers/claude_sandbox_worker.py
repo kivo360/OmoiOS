@@ -2680,15 +2680,18 @@ class SandboxWorker:
             tool_name = input_data.get("tool_name", "unknown")
             tool_input = input_data.get("tool_input", {})
 
-            # Debug: Log every hook invocation to confirm hooks are working
-            logger.debug(
-                "PostToolUse hook invoked",
-                extra={
-                    "tool_name": tool_name,
-                    "tool_use_id": tool_use_id,
-                    "require_spec_skill": self.config.require_spec_skill,
-                },
-            )
+            # Log every hook invocation to confirm hooks are working
+            # Using INFO level so we can see this in production logs
+            if tool_name == "Bash":
+                logger.info(
+                    "PostToolUse hook invoked for Bash",
+                    extra={
+                        "tool_name": tool_name,
+                        "tool_use_id": tool_use_id,
+                        "require_spec_skill": self.config.require_spec_skill,
+                        "command_preview": str(tool_input.get("command", ""))[:100],
+                    },
+                )
 
             # Get current reporter (may have been set after hook creation)
             reporter = self.reporter or reporter_ref
@@ -3758,6 +3761,32 @@ This is a continuation of your previous work. Please review the notes below and 
         # Setup workspace
         Path(self.config.cwd).mkdir(parents=True, exist_ok=True)
         setup_github_workspace(self.config)
+
+        # Install skill dependencies FIRST (spec_cli.py needs pyyaml, httpx, etc.)
+        # This is separate from workspace deps because skills are in /root/.claude/skills/
+        skill_scripts_dir = "/root/.claude/skills/spec-driven-dev/scripts"
+        if os.path.isdir(skill_scripts_dir):
+            skill_req = os.path.join(skill_scripts_dir, "requirements.txt")
+            if os.path.exists(skill_req):
+                logger.info(f"Installing skill dependencies from {skill_req}")
+                try:
+                    proc = subprocess.run(
+                        ["pip", "install", "-r", "requirements.txt"],
+                        cwd=skill_scripts_dir,
+                        capture_output=True,
+                        text=True,
+                        timeout=120
+                    )
+                    if proc.returncode == 0:
+                        logger.info("Skill dependencies installed successfully")
+                    else:
+                        logger.warning(f"Skill dependency install failed: {proc.stderr}")
+                except Exception as e:
+                    logger.warning(f"Error installing skill dependencies: {e}")
+            else:
+                logger.debug(f"No requirements.txt found in {skill_scripts_dir}")
+        else:
+            logger.debug(f"Skills directory not found: {skill_scripts_dir}")
 
         # Auto-install project dependencies (UV, Poetry, pip, pnpm, yarn, npm)
         # This runs BEFORE the agent starts to ensure dependencies are available
