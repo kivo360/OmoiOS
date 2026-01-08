@@ -2,7 +2,7 @@
 # Environment variables override these values
 
 llm:
-  model: ${LLM_MODEL:-glm-4.7}
+  model: ${LLM_MODEL:-openai/glm-4.7}
   api_key: ${LLM_API_KEY}
   base_url: ${LLM_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
 
