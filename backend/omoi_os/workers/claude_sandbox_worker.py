@@ -3808,7 +3808,21 @@ The following dependencies were automatically installed before you started:
 
 **Do NOT re-run dependency installation commands** unless you encounter errors or need to add new packages.
 """
-            self.config.system_prompt = self.config.system_prompt + "\n" + dep_prompt_section
+            # Handle both string and dict (preset pattern) system_prompt
+            if isinstance(self.config.system_prompt, dict):
+                # Preset pattern: append to the "append" field
+                current_append = self.config.system_prompt.get("append", "")
+                self.config.system_prompt["append"] = current_append + "\n" + dep_prompt_section
+            elif isinstance(self.config.system_prompt, str):
+                # String prompt: concatenate directly
+                self.config.system_prompt = self.config.system_prompt + "\n" + dep_prompt_section
+            else:
+                # None or unexpected: create new preset with just the dep section
+                self.config.system_prompt = {
+                    "type": "preset",
+                    "preset": "claude_code",
+                    "append": dep_prompt_section,
+                }
             logger.info("Added dependency status to system prompt")
 
         # Import session transcript if provided (for cross-sandbox resumption)
