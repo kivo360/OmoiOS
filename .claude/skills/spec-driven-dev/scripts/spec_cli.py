@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pyyaml>=6.0",
+#     "httpx>=0.25",
+# ]
+# ///
 """
 Unified CLI for spec-driven development.
 
@@ -6,32 +13,33 @@ Parse, validate, and visualize tickets and tasks from .omoi_os/ directory.
 
 Usage:
     # Show all tickets and tasks
-    uv run python spec_cli.py show all
+    uv run spec_cli.py show all
 
     # Show only tickets
-    uv run python spec_cli.py show tickets
+    uv run spec_cli.py show tickets
 
     # Show only tasks
-    uv run python spec_cli.py show tasks
+    uv run spec_cli.py show tasks
 
     # Show dependency graph
-    uv run python spec_cli.py show graph
+    uv run spec_cli.py show graph
 
     # Show ready tasks (no blocking dependencies)
-    uv run python spec_cli.py show ready
+    uv run spec_cli.py show ready
 
     # Validate specs (check for circular dependencies, missing refs)
-    uv run python spec_cli.py validate
+    uv run spec_cli.py validate
 
     # Export to JSON
-    uv run python spec_cli.py export json
+    uv run spec_cli.py export json
 
     # Sync to API (Phase 4)
-    uv run python spec_cli.py sync push
+    uv run spec_cli.py sync push
 """
 
 import argparse
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -201,10 +209,16 @@ def print_tickets(tickets: list[ParsedTicket]):
 
     for ticket in tickets:
         print(f"{ticket.id}: {ticket.title}")
-        print(f"  Status: {ticket.status} | Priority: {ticket.priority} | Estimate: {ticket.estimate}")
+        print(
+            f"  Status: {ticket.status} | Priority: {ticket.priority} | Estimate: {ticket.estimate}"
+        )
 
         # Truncate description
-        desc = ticket.description[:100] + "..." if len(ticket.description) > 100 else ticket.description
+        desc = (
+            ticket.description[:100] + "..."
+            if len(ticket.description) > 100
+            else ticket.description
+        )
         desc = desc.replace("\n", " ")
         if desc:
             print(f"  Description: {desc}")
@@ -238,10 +252,16 @@ def print_tasks(tasks: list[ParsedTask], result: Optional[ParseResult] = None):
         status_indicator = f"[BLOCKED: {reason}] " if is_blocked else ""
 
         print(f"{status_indicator}{task.id}: {task.title}")
-        print(f"  Parent: {task.parent_ticket} | Status: {task.status} | Estimate: {task.estimate}")
+        print(
+            f"  Parent: {task.parent_ticket} | Status: {task.status} | Estimate: {task.estimate}"
+        )
 
         # Truncate objective
-        obj = task.objective[:100] + "..." if len(task.objective) > 100 else task.objective
+        obj = (
+            task.objective[:100] + "..."
+            if len(task.objective) > 100
+            else task.objective
+        )
         obj = obj.replace("\n", " ")
         if obj:
             print(f"  Objective: {obj}")
@@ -307,10 +327,14 @@ def print_cross_ticket_graph(result: ParseResult):
     # Get ticket info
     ticket_info = {t.id: t for t in result.tickets}
 
-    if not any(t.dependencies.blocked_by or t.dependencies.blocks for t in result.tickets):
+    if not any(
+        t.dependencies.blocked_by or t.dependencies.blocks for t in result.tickets
+    ):
         print("No cross-ticket dependencies defined.")
         print()
-        print("To add cross-ticket dependencies, use the dependencies field in ticket YAML:")
+        print(
+            "To add cross-ticket dependencies, use the dependencies field in ticket YAML:"
+        )
         print()
         print("  dependencies:")
         print("    blocked_by: [TKT-001]  # This ticket waits for TKT-001")
@@ -335,10 +359,14 @@ def print_cross_ticket_graph(result: ParseResult):
             return
 
         status_mark = "✓" if ticket_id in completed_tickets else "○"
-        title_short = ticket.title[:35] + "..." if len(ticket.title) > 35 else ticket.title
+        title_short = (
+            ticket.title[:35] + "..." if len(ticket.title) > 35 else ticket.title
+        )
         task_count = len(result.get_tasks_for_ticket(ticket_id))
 
-        print(f"{prefix}{connector}[{status_mark}] {ticket_id} ({title_short}) [{task_count} tasks]")
+        print(
+            f"{prefix}{connector}[{status_mark}] {ticket_id} ({title_short}) [{task_count} tasks]"
+        )
 
         children = graph.get(ticket_id, [])
         for i, child in enumerate(children):
@@ -373,7 +401,11 @@ def print_ready_tasks(result: ParseResult):
         print(f"- {task.id}: {task.title}")
         print(f"    Parent: {task.parent_ticket} | Estimate: {task.estimate}")
         if task.objective:
-            obj = task.objective[:80] + "..." if len(task.objective) > 80 else task.objective
+            obj = (
+                task.objective[:80] + "..."
+                if len(task.objective) > 80
+                else task.objective
+            )
             obj = obj.replace("\n", " ")
             print(f"    {obj}")
         print()
@@ -391,10 +423,14 @@ def print_requirements(result: ParseResult):
 
     for req in result.requirements:
         print(f"{req.id}: {req.title}")
-        print(f"  Status: {req.status} | Priority: {req.priority} | Category: {req.category}")
+        print(
+            f"  Status: {req.status} | Priority: {req.priority} | Category: {req.category}"
+        )
 
         if req.condition:
-            cond = req.condition[:60] + "..." if len(req.condition) > 60 else req.condition
+            cond = (
+                req.condition[:60] + "..." if len(req.condition) > 60 else req.condition
+            )
             print(f"  WHEN: {cond}")
 
         if req.action:
@@ -453,23 +489,37 @@ def print_traceability(result: ParseResult):
 
     # Summary stats
     print("COVERAGE SUMMARY:")
-    print(f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)")
-    print(f"  Designs:      {stats['designs']['linked']}/{stats['designs']['total']} linked ({stats['designs']['coverage']:.1f}%)")
-    print(f"  Tickets:      {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)")
+    print(
+        f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)"
+    )
+    print(
+        f"  Designs:      {stats['designs']['linked']}/{stats['designs']['total']} linked ({stats['designs']['coverage']:.1f}%)"
+    )
+    print(
+        f"  Tickets:      {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)"
+    )
     print()
     print(f"TASK STATUS:")
-    print(f"  Done: {stats['tasks']['done']} | In Progress: {stats['tasks']['in_progress']} | Pending: {stats['tasks']['pending']}")
+    print(
+        f"  Done: {stats['tasks']['done']} | In Progress: {stats['tasks']['in_progress']} | Pending: {stats['tasks']['pending']}"
+    )
     print()
 
     # Orphans
     if any(trace["orphans"].values()):
         print("ORPHANED ITEMS (not linked):")
         if trace["orphans"]["requirements"]:
-            print(f"  Requirements without tickets: {', '.join(trace['orphans']['requirements'])}")
+            print(
+                f"  Requirements without tickets: {', '.join(trace['orphans']['requirements'])}"
+            )
         if trace["orphans"]["designs"]:
-            print(f"  Designs without tickets: {', '.join(trace['orphans']['designs'])}")
+            print(
+                f"  Designs without tickets: {', '.join(trace['orphans']['designs'])}"
+            )
         if trace["orphans"]["tickets"]:
-            print(f"  Tickets without requirements: {', '.join(trace['orphans']['tickets'])}")
+            print(
+                f"  Tickets without requirements: {', '.join(trace['orphans']['tickets'])}"
+            )
         print()
 
     # Detailed traceability
@@ -493,7 +543,9 @@ def print_traceability(result: ParseResult):
                 tasks = result.get_tasks_for_ticket(ticket_id)
                 if tasks:
                     done_count = sum(1 for t in tasks if t.status == "done")
-                    print(f"│       └─> Tasks for {ticket_id}: {done_count}/{len(tasks)} complete")
+                    print(
+                        f"│       └─> Tasks for {ticket_id}: {done_count}/{len(tasks)} complete"
+                    )
         else:
             print("│  └─> (no implementing tickets)")
 
@@ -703,7 +755,17 @@ Examples:
     show_parser = subparsers.add_parser("show", help="Show specs")
     show_parser.add_argument(
         "what",
-        choices=["all", "requirements", "designs", "tickets", "tasks", "graph", "ticket-graph", "traceability", "ready"],
+        choices=[
+            "all",
+            "requirements",
+            "designs",
+            "tickets",
+            "tasks",
+            "graph",
+            "ticket-graph",
+            "traceability",
+            "ready",
+        ],
         help="What to show (graph=task deps, ticket-graph=cross-ticket deps, traceability=full matrix)",
     )
 
@@ -735,7 +797,9 @@ Examples:
     )
 
     # project command (show single project with tickets/tasks)
-    project_parser = subparsers.add_parser("project", help="Show project details with tickets and tasks")
+    project_parser = subparsers.add_parser(
+        "project", help="Show project details with tickets and tasks"
+    )
     project_parser.add_argument(
         "project_id",
         nargs="?",
@@ -787,7 +851,9 @@ Examples:
     )
 
     # sync-specs command (sync requirements/designs to API)
-    sync_specs_parser = subparsers.add_parser("sync-specs", help="Sync requirements/designs to API specs")
+    sync_specs_parser = subparsers.add_parser(
+        "sync-specs", help="Sync requirements/designs to API specs"
+    )
     sync_specs_parser.add_argument(
         "action",
         choices=["push", "diff"],
@@ -876,7 +942,6 @@ Examples:
 
     elif args.command == "projects":
         import asyncio
-        import os
         from api_client import OmoiOSClient
 
         async def list_projects():
@@ -888,8 +953,12 @@ Examples:
                 print()
                 for p in projects:
                     print(f"  {p.get('id', 'N/A')}: {p.get('name', 'Unnamed')}")
-                    if p.get('description'):
-                        desc = p['description'][:60] + "..." if len(p['description']) > 60 else p['description']
+                    if p.get("description"):
+                        desc = (
+                            p["description"][:60] + "..."
+                            if len(p["description"]) > 60
+                            else p["description"]
+                        )
                         print(f"    {desc}")
                 print()
             else:
@@ -899,11 +968,12 @@ Examples:
 
     elif args.command == "project":
         import asyncio
-        import os
         from api_client import OmoiOSClient
 
         if not args.project_id:
-            print("Error: project_id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var.")
+            print(
+                "Error: project_id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var."
+            )
             sys.exit(1)
 
         async def show_project():
@@ -921,7 +991,7 @@ Examples:
             print_header(f"PROJECT: {project.get('name', 'Unknown')}")
             print()
             print(f"  ID: {project.get('id', 'N/A')}")
-            if project.get('description'):
+            if project.get("description"):
                 print(f"  Description: {project['description'][:80]}")
             print()
             print(f"  Total Tickets: {data.get('total_tickets', 0)}")
@@ -958,7 +1028,9 @@ Examples:
                         print(f"      Tasks: ({len(tasks)} total)")
                         for task in tasks[:5]:  # Show max 5 tasks per ticket
                             task_status = task.get("status", "unknown")
-                            print(f"        - [{task_status}] {task.get('title', task.get('description', 'No title')[:40])}")
+                            print(
+                                f"        - [{task_status}] {task.get('title', task.get('description', 'No title')[:40])}"
+                            )
                         if len(tasks) > 5:
                             print(f"        ... and {len(tasks) - 5} more tasks")
                     else:
@@ -969,10 +1041,9 @@ Examples:
 
     elif args.command == "sync":
         import asyncio
-        import os
         from api_client import run_sync
 
-        api_key = getattr(args, 'api_key', None) or os.environ.get("OMOIOS_API_KEY")
+        api_key = getattr(args, "api_key", None) or os.environ.get("OMOIOS_API_KEY")
         success = asyncio.run(
             run_sync(
                 args.api_url,
@@ -989,11 +1060,12 @@ Examples:
 
     elif args.command == "sync-specs":
         import asyncio
-        import os
         from api_client import OmoiOSClient, print_sync_summary
 
         if not args.project_id:
-            print("Error: --project-id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var.")
+            print(
+                "Error: --project-id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var."
+            )
             sys.exit(1)
 
         async def run_sync_specs():
@@ -1040,11 +1112,12 @@ Examples:
 
     elif args.command == "api-trace":
         import asyncio
-        import os
         from api_client import OmoiOSClient
 
         if not args.project_id:
-            print("Error: project_id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var.")
+            print(
+                "Error: project_id is required. Provide it as an argument or set OMOIOS_PROJECT_ID env var."
+            )
             sys.exit(1)
 
         async def show_api_traceability():
@@ -1065,7 +1138,9 @@ Examples:
                 ticket_count = len(spec.get("linked_tickets", []))
                 print(f"  [{spec['status']}] {spec['id'][:20]}...")
                 print(f"       Title: {spec['title']}")
-                print(f"       Requirements: {req_count} | Linked Tickets: {ticket_count}")
+                print(
+                    f"       Requirements: {req_count} | Linked Tickets: {ticket_count}"
+                )
                 print()
 
             # Tickets summary
