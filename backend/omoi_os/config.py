@@ -209,16 +209,16 @@ class AnthropicSettings(OmoiBaseSettings):
     auth_token: Optional[str] = None  # Alternative to api_key
     base_url: Optional[str] = None  # Use default Anthropic API (no custom endpoint)
 
-    # Model configuration - default to Claude Opus 4.5 for Claude Agent SDK
-    model: str = "claude-opus-4-5-20251101"  # Default model (Claude Opus 4.5)
-    default_model: str = "claude-opus-4-5-20251101"
-    default_haiku_model: str = "claude-haiku-4-20250514"
-    default_sonnet_model: str = "claude-sonnet-4-20250514"
+    # Model configuration - default to Claude Sonnet 4.5 for Claude Agent SDK
+    model: str = "claude-sonnet-4-5-20250929"  # Default model (Claude Sonnet 4.5)
+    default_model: str = "claude-sonnet-4-5-20250929"
+    default_haiku_model: str = "claude-haiku-4-5-20251001"
+    default_sonnet_model: str = "claude-sonnet-4-5-20250929"
     default_opus_model: str = "claude-opus-4-5-20251101"
 
     # Token limits
-    max_tokens: int = 16384  # Max output tokens per response
-    context_length: int = 128000  # GLM-4.6v context window (128k)
+    max_tokens: int = 64000  # Max output tokens per response (Claude 4.5 supports 64K)
+    context_length: int = 200000  # Claude 4.5 context window (200k)
 
     def get_api_key(self) -> Optional[str]:
         """Get API key, preferring api_key over auth_token."""
