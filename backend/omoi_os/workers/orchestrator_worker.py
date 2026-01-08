@@ -718,6 +718,22 @@ async def orchestrator_loop():
                             reasoning=task_requirements.reasoning[:100],
                         )
 
+                        # Extract spec-skill settings from task.execution_config
+                        # This is set by the frontend when workflow_mode="spec_driven"
+                        require_spec_skill = False
+                        if task.execution_config and isinstance(task.execution_config, dict):
+                            require_spec_skill = task.execution_config.get("require_spec_skill", False)
+
+                        # Get project_id from extra_env (set earlier from ticket.project.id)
+                        project_id = extra_env.get("OMOIOS_PROJECT_ID") if extra_env else None
+
+                        log.info(
+                            "spec_skill_config",
+                            require_spec_skill=require_spec_skill,
+                            project_id=project_id,
+                            execution_config=task.execution_config,
+                        )
+
                         # Spawn sandbox with user/repo context and analyzed requirements
                         sandbox_id = await daytona_spawner.spawn_for_task(
                             task_id=task_id,
@@ -728,6 +744,8 @@ async def orchestrator_loop():
                             runtime=sandbox_runtime,
                             execution_mode=execution_mode,
                             task_requirements=task_requirements,
+                            require_spec_skill=require_spec_skill,
+                            project_id=project_id,
                         )
 
                         log.info(
