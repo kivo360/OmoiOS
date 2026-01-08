@@ -1241,13 +1241,27 @@ class WorkerConfig:
 
         # Disallowed tools - block specific tools from the default set
         # Example: DISALLOWED_TOOLS=Bash,Write to prevent file modifications
+        #
+        # Default disallowed tools:
+        # - AskUserQuestion: Disabled by default because it disrupts automated
+        #   workflows and renders poorly in the event view. The discovery questions
+        #   it generates are not compatible with our spec-driven workflow.
+        #   Set ENABLE_ASK_USER_QUESTION=true to re-enable if needed.
+        DEFAULT_DISALLOWED = ["AskUserQuestion"]
+
+        # Allow re-enabling AskUserQuestion via environment if needed
+        if os.environ.get("ENABLE_ASK_USER_QUESTION", "").lower() == "true":
+            DEFAULT_DISALLOWED = []
+
         disallowed_tools_env = os.environ.get("DISALLOWED_TOOLS")
         if disallowed_tools_env:
-            self.disallowed_tools = [
+            # Merge user-specified disallowed tools with defaults
+            user_disallowed = [
                 t.strip() for t in disallowed_tools_env.split(",") if t.strip()
             ]
+            self.disallowed_tools = list(set(DEFAULT_DISALLOWED + user_disallowed))
         else:
-            self.disallowed_tools = None
+            self.disallowed_tools = DEFAULT_DISALLOWED if DEFAULT_DISALLOWED else None
 
         # Skills and subagents (informational flags - SDK handles these by default)
         self.enable_skills = os.environ.get("ENABLE_SKILLS", "true").lower() == "true"
