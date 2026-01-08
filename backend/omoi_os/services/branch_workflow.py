@@ -200,23 +200,63 @@ class BranchWorkflowService:
         try:
             # Get repository info for default branch
             repo_info = await self.github_service.get_repo(user_id, repo_owner, repo_name)
-            default_branch = repo_info.default_branch if repo_info else "main"
-            
+            default_branch = None
+            if repo_info and repo_info.default_branch:
+                default_branch = repo_info.default_branch
+
             # Get existing branches for collision detection and to find default branch SHA
             branches = await self.github_service.list_branches(user_id, repo_owner, repo_name)
             existing_branch_names = [b.name for b in branches]
-            
-            # Find SHA of default branch
+
+            if not branches:
+                logger.error(
+                    f"No branches found for {repo_owner}/{repo_name}. "
+                    "Repository may be empty or inaccessible."
+                )
+                return {
+                    "success": False,
+                    "error": f"No branches found in {repo_owner}/{repo_name}. Repository may be empty.",
+                }
+
+            # Find SHA of default branch with fallback logic
             source_sha = None
-            for branch in branches:
-                if branch.name == default_branch:
-                    source_sha = branch.sha
-                    break
-            
+
+            # First, try the default branch from repo info
+            if default_branch:
+                for branch in branches:
+                    if branch.name == default_branch:
+                        source_sha = branch.sha
+                        break
+
+            # If not found, try common default branch names
+            if not source_sha:
+                common_defaults = ["main", "master", "develop", "trunk"]
+                for fallback_name in common_defaults:
+                    for branch in branches:
+                        if branch.name == fallback_name:
+                            logger.warning(
+                                f"Default branch '{default_branch}' not found, "
+                                f"falling back to '{fallback_name}'"
+                            )
+                            default_branch = fallback_name
+                            source_sha = branch.sha
+                            break
+                    if source_sha:
+                        break
+
+            # Last resort: use the first branch we find
+            if not source_sha and branches:
+                first_branch = branches[0]
+                logger.warning(
+                    f"No common default branch found, using first available: '{first_branch.name}'"
+                )
+                default_branch = first_branch.name
+                source_sha = first_branch.sha
+
             if not source_sha:
                 return {
                     "success": False,
-                    "error": f"Default branch '{default_branch}' not found",
+                    "error": f"Could not find any branch to create from in {repo_owner}/{repo_name}",
                 }
             
             # Generate branch name
