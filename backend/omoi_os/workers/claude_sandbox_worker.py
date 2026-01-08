@@ -1896,6 +1896,8 @@ Systematically investigate issues:
                 HookMatcher(matcher="Edit", hooks=[pre_tool_hook]),
             ]
         if post_tool_hook:
+            # matcher=None means match ALL tools (for comprehensive event tracking)
+            # The hook itself filters for specific tools (e.g., Bash for spec validation)
             hooks["PostToolUse"] = [
                 HookMatcher(matcher=None, hooks=[post_tool_hook]),
             ]
@@ -2228,13 +2230,23 @@ class SandboxWorker:
 
         async def track_tool_use(input_data, tool_use_id, context):
             """PostToolUse hook for comprehensive event reporting."""
+            tool_name = input_data.get("tool_name", "unknown")
+            tool_input = input_data.get("tool_input", {})
+
+            # Debug: Log every hook invocation to confirm hooks are working
+            logger.debug(
+                "PostToolUse hook invoked",
+                extra={
+                    "tool_name": tool_name,
+                    "tool_use_id": tool_use_id,
+                    "require_spec_skill": self.require_spec_skill,
+                },
+            )
+
             # Get current reporter (may have been set after hook creation)
             reporter = self.reporter or reporter_ref
             if not reporter:
                 return {}  # Skip reporting if reporter not available
-
-            tool_name = input_data.get("tool_name", "unknown")
-            tool_input = input_data.get("tool_input", {})
             tool_response = input_data.get("tool_response", "")
 
             # NEW: File diff generation for Write/Edit
@@ -2368,12 +2380,99 @@ class SandboxWorker:
                 # Detect spec_cli.py validate command
                 if "spec_cli.py" in command and "validate" in command:
                     response_str = serialized_response or ""
-                    # Check for successful validation (no errors)
-                    if (
-                        "validation passed" in response_str.lower()
-                        or "✓" in response_str
-                        or ("validated" in response_str.lower() and "error" not in response_str.lower())
-                    ):
+
+                    # Debug logging to diagnose detection issues
+                    logger.info(
+                        "PostToolUse: spec_cli.py validate detected",
+                        extra={
+                            "command": command,
+                            "response_length": len(response_str),
+                            "response_preview": response_str[:500] if response_str else "(empty)",
+                        },
+                    )
+
+                    # Check for successful validation
+                    # The validate command outputs on success:
+                    #   "========================================================================"
+                    #   " VALIDATION"
+                    #   "========================================================================"
+                    #   ""
+                    #   "✓ No circular dependencies detected"
+                    #   "✓ All task references valid"
+                    #   "✓ All ticket references valid"
+                    #
+                    # On failure, exits with code 1 and shows "✗ Found X validation error(s)"
+                    response_lower = response_str.lower()
+
+                    # SUCCESS indicators - comprehensive list
+                    # Checkmarks (multiple unicode representations)
+                    has_checkmark = (
+                        "✓" in response_str or           # Direct checkmark
+                        "\u2713" in response_str or      # Unicode CHECK MARK
+                        "\u2714" in response_str or      # Unicode HEAVY CHECK MARK
+                        "[x]" in response_lower or       # Markdown checkbox
+                        "[✓]" in response_str            # Bracketed checkmark
+                    )
+
+                    # Specific success messages from spec_cli.py
+                    has_no_circular = "no circular dependencies" in response_lower
+                    has_task_refs_valid = "all task references valid" in response_lower
+                    has_ticket_refs_valid = "all ticket references valid" in response_lower
+
+                    # Generic success patterns
+                    has_validation_header = "validation" in response_lower and "======" in response_str
+                    has_success_keyword = (
+                        "success" in response_lower or
+                        "passed" in response_lower or
+                        "valid" in response_lower
+                    )
+
+                    # Exit code success (if captured in output)
+                    has_exit_zero = "exit code: 0" in response_lower or "exit code 0" in response_lower
+
+                    # FAILURE indicators (if present, don't inject reminder)
+                    has_error = (
+                        "validation error" in response_lower or
+                        "error(" in response_lower or      # "Found X error(s)"
+                        "✗" in response_str or             # X mark
+                        "\u2717" in response_str or        # Unicode BALLOT X
+                        "\u2718" in response_str or        # Unicode HEAVY BALLOT X
+                        "failed" in response_lower or
+                        "invalid" in response_lower or
+                        "circular dependency" in response_lower and "no circular" not in response_lower or
+                        "missing" in response_lower or
+                        "not found" in response_lower
+                    )
+
+                    # Combine success indicators
+                    success_signals = (
+                        has_checkmark or
+                        has_no_circular or
+                        has_task_refs_valid or
+                        has_ticket_refs_valid or
+                        has_exit_zero or
+                        (has_validation_header and has_success_keyword)
+                    )
+
+                    validation_passed = success_signals and not has_error
+
+                    logger.info(
+                        "PostToolUse: validation detection result",
+                        extra={
+                            "has_checkmark": has_checkmark,
+                            "has_no_circular": has_no_circular,
+                            "has_task_refs_valid": has_task_refs_valid,
+                            "has_ticket_refs_valid": has_ticket_refs_valid,
+                            "has_validation_header": has_validation_header,
+                            "has_success_keyword": has_success_keyword,
+                            "has_exit_zero": has_exit_zero,
+                            "has_error": has_error,
+                            "success_signals": success_signals,
+                            "validation_passed": validation_passed,
+                        },
+                    )
+
+                    if validation_passed:
                         logger.info(
                             "Spec validation successful - injecting sync reminder",
                             extra={"command": command},

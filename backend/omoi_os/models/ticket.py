@@ -72,6 +72,14 @@ class Ticket(Base):
     context: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     context_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Ticket dependencies for spec-driven workflows
+    # Format: {"blocked_by": ["TKT-001", "TKT-002"], "blocks": ["TKT-003"]}
+    dependencies: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Ticket dependencies: blocked_by and blocks other tickets",
+    )
+
     # Embedding for semantic search and duplicate detection
     # Dimension must match EmbeddingSettings.dimensions (default 1536)
     embedding_vector: Mapped[Optional[list[float]]] = mapped_column(

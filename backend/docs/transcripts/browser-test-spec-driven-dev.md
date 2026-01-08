@@ -160,11 +160,11 @@ You can verify the ticket was created correctly:
 
 ```bash
 # Get the ticket (replace {ticketId} with actual ID)
-curl -X GET "http://localhost:8000/api/v1/tickets/{ticketId}" \
+curl -X GET "http://localhost:18000/api/v1/tickets/{ticketId}" \
   -H "Authorization: Bearer {token}"
 
 # Check task execution_config
-curl -X GET "http://localhost:8000/api/v1/tasks?ticket_id={ticketId}" \
+curl -X GET "http://localhost:18000/api/v1/tasks?ticket_id={ticketId}" \
   -H "Authorization: Bearer {token}"
 ```
 
