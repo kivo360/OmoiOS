@@ -2329,6 +2329,256 @@ def setup_github_workspace(config: WorkerConfig) -> bool:
     return True
 
 
+def install_project_dependencies(cwd: str) -> dict:
+    """Detect and install project dependencies automatically.
+
+    Detects Python (UV, Poetry, pip) and Node.js (pnpm, yarn, npm) projects
+    and runs the appropriate install command.
+
+    Returns:
+        dict with keys: python_installed, node_installed, errors
+    """
+    result = {
+        "python_installed": False,
+        "python_manager": None,
+        "node_installed": False,
+        "node_manager": None,
+        "errors": []
+    }
+
+    logger.info("Detecting and installing project dependencies", extra={"cwd": cwd})
+
+    # Python dependency detection and installation
+    pyproject_path = os.path.join(cwd, "pyproject.toml")
+    requirements_path = os.path.join(cwd, "requirements.txt")
+    setup_py_path = os.path.join(cwd, "setup.py")
+    uv_lock_path = os.path.join(cwd, "uv.lock")
+    poetry_lock_path = os.path.join(cwd, "poetry.lock")
+
+    # Check for UV first (uv.lock is the most reliable indicator)
+    if os.path.exists(uv_lock_path):
+        # UV project - uv.lock exists
+        logger.info("Detected UV project (uv.lock found), running uv sync")
+        proc = subprocess.run(
+            ["uv", "sync"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout
+        )
+        if proc.returncode == 0:
+            result["python_installed"] = True
+            result["python_manager"] = "uv"
+            logger.info("UV sync completed successfully")
+        else:
+            error = f"uv sync failed: {proc.stderr}"
+            result["errors"].append(error)
+            logger.warning(error)
+
+    elif os.path.exists(poetry_lock_path):
+        # Poetry project - poetry.lock exists
+        logger.info("Detected Poetry project (poetry.lock found), running poetry install")
+        proc = subprocess.run(
+            ["poetry", "install"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if proc.returncode == 0:
+            result["python_installed"] = True
+            result["python_manager"] = "poetry"
+            logger.info("Poetry install completed successfully")
+        else:
+            error = f"poetry install failed: {proc.stderr}"
+            result["errors"].append(error)
+            logger.warning(error)
+
+    elif os.path.exists(pyproject_path):
+        # Read pyproject.toml to detect manager
+        try:
+            with open(pyproject_path) as f:
+                content = f.read()
+
+            if "[tool.uv]" in content:
+                # UV project (configured in pyproject.toml but no lock file yet)
+                logger.info("Detected UV project ([tool.uv] found), running uv sync")
+                proc = subprocess.run(
+                    ["uv", "sync"],
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout
+                )
+                if proc.returncode == 0:
+                    result["python_installed"] = True
+                    result["python_manager"] = "uv"
+                    logger.info("UV sync completed successfully")
+                else:
+                    error = f"uv sync failed: {proc.stderr}"
+                    result["errors"].append(error)
+                    logger.warning(error)
+
+            elif "[tool.poetry]" in content:
+                # Poetry project
+                logger.info("Detected Poetry project, running poetry install")
+                proc = subprocess.run(
+                    ["poetry", "install"],
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if proc.returncode == 0:
+                    result["python_installed"] = True
+                    result["python_manager"] = "poetry"
+                    logger.info("Poetry install completed successfully")
+                else:
+                    error = f"poetry install failed: {proc.stderr}"
+                    result["errors"].append(error)
+                    logger.warning(error)
+            else:
+                # Generic pyproject.toml - try pip
+                logger.info("Detected pyproject.toml, running pip install -e .")
+                proc = subprocess.run(
+                    ["pip", "install", "-e", "."],
+                    cwd=cwd,
+                    capture_output=True,
+                    text=True,
+                    timeout=300
+                )
+                if proc.returncode == 0:
+                    result["python_installed"] = True
+                    result["python_manager"] = "pip"
+                    logger.info("pip install completed successfully")
+                else:
+                    error = f"pip install failed: {proc.stderr}"
+                    result["errors"].append(error)
+                    logger.warning(error)
+
+        except Exception as e:
+            error = f"Error reading pyproject.toml: {e}"
+            result["errors"].append(error)
+            logger.warning(error)
+
+    elif os.path.exists(requirements_path):
+        # requirements.txt project
+        logger.info("Detected requirements.txt, running pip install")
+        proc = subprocess.run(
+            ["pip", "install", "-r", "requirements.txt"],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if proc.returncode == 0:
+            result["python_installed"] = True
+            result["python_manager"] = "pip"
+            logger.info("pip install completed successfully")
+        else:
+            error = f"pip install failed: {proc.stderr}"
+            result["errors"].append(error)
+            logger.warning(error)
+
+    elif os.path.exists(setup_py_path):
+        # setup.py project
+        logger.info("Detected setup.py, running pip install -e .")
+        proc = subprocess.run(
+            ["pip", "install", "-e", "."],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=300
+        )
+        if proc.returncode == 0:
+            result["python_installed"] = True
+            result["python_manager"] = "pip"
+            logger.info("pip install completed successfully")
+        else:
+            error = f"pip install failed: {proc.stderr}"
+            result["errors"].append(error)
+            logger.warning(error)
+
+    # Node.js dependency detection and installation
+    package_json_path = os.path.join(cwd, "package.json")
+
+    if os.path.exists(package_json_path):
+        pnpm_lock = os.path.join(cwd, "pnpm-lock.yaml")
+        yarn_lock = os.path.join(cwd, "yarn.lock")
+        npm_lock = os.path.join(cwd, "package-lock.json")
+
+        if os.path.exists(pnpm_lock):
+            # pnpm project
+            logger.info("Detected pnpm project, running pnpm install")
+            proc = subprocess.run(
+                ["pnpm", "install"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if proc.returncode == 0:
+                result["node_installed"] = True
+                result["node_manager"] = "pnpm"
+                logger.info("pnpm install completed successfully")
+            else:
+                error = f"pnpm install failed: {proc.stderr}"
+                result["errors"].append(error)
+                logger.warning(error)
+
+        elif os.path.exists(yarn_lock):
+            # Yarn project
+            logger.info("Detected Yarn project, running yarn install")
+            proc = subprocess.run(
+                ["yarn", "install"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if proc.returncode == 0:
+                result["node_installed"] = True
+                result["node_manager"] = "yarn"
+                logger.info("yarn install completed successfully")
+            else:
+                error = f"yarn install failed: {proc.stderr}"
+                result["errors"].append(error)
+                logger.warning(error)
+
+        else:
+            # npm project (default for package.json without lock file)
+            logger.info("Detected npm project, running npm install")
+            proc = subprocess.run(
+                ["npm", "install"],
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            if proc.returncode == 0:
+                result["node_installed"] = True
+                result["node_manager"] = "npm"
+                logger.info("npm install completed successfully")
+            else:
+                error = f"npm install failed: {proc.stderr}"
+                result["errors"].append(error)
+                logger.warning(error)
+
+    # Log summary
+    if result["python_installed"] or result["node_installed"]:
+        logger.info(
+            "Dependency installation complete",
+            extra={
+                "python_manager": result["python_manager"],
+                "node_manager": result["node_manager"],
+            }
+        )
+    elif not result["errors"]:
+        logger.info("No dependency files detected (no pyproject.toml, requirements.txt, setup.py, or package.json)")
+
+    return result
+
+
 # =============================================================================
 # Main Worker
 # =============================================================================
@@ -3455,6 +3705,15 @@ This is a continuation of your previous work. Please review the notes below and 
         # Setup workspace
         Path(self.config.cwd).mkdir(parents=True, exist_ok=True)
         setup_github_workspace(self.config)
+
+        # Auto-install project dependencies (UV, Poetry, pip, pnpm, yarn, npm)
+        # This runs BEFORE the agent starts to ensure dependencies are available
+        dep_result = install_project_dependencies(self.config.cwd)
+        if dep_result["errors"]:
+            logger.warning(
+                "Some dependency installation errors occurred",
+                extra={"errors": dep_result["errors"]}
+            )
 
         # Import session transcript if provided (for cross-sandbox resumption)
         if self.config.session_transcript_b64 and self.config.resume_session_id:
