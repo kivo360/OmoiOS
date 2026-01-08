@@ -695,29 +695,31 @@ class FeatureService:
 
 ### Using spec_cli.py
 
-After creating all artifacts locally, sync them to the OmoiOS API:
+After creating all artifacts locally, sync them to the OmoiOS API.
+
+**IMPORTANT:** Always use `uv run` to execute the scripts. This automatically handles dependency installation via PEP 723 inline metadata.
 
 ```bash
 # Navigate to scripts directory
 cd .claude/skills/spec-driven-dev/scripts
 
 # 1. Validate local specs first
-python spec_cli.py validate
+uv run spec_cli.py validate
 
 # 2. Preview what you have
-python spec_cli.py show all
+uv run spec_cli.py show all
 
 # 3. Find your project ID
-python spec_cli.py projects --api-url http://0.0.0.0:18000
+uv run spec_cli.py projects --api-url http://0.0.0.0:18000
 
 # 4. Dry-run sync to see what would change
-python spec_cli.py sync diff --project-id <uuid> --api-url http://0.0.0.0:18000
+uv run spec_cli.py sync diff --project-id <uuid> --api-url http://0.0.0.0:18000
 
 # 5. Push to API
-python spec_cli.py sync push --project-id <uuid> --api-url http://0.0.0.0:18000
+uv run spec_cli.py sync push --project-id <uuid> --api-url http://0.0.0.0:18000
 
 # 6. Verify in API
-python spec_cli.py project <uuid> --api-url http://0.0.0.0:18000
+uv run spec_cli.py project <uuid> --api-url http://0.0.0.0:18000
 ```
 
 ### Environment Variables
@@ -815,8 +817,8 @@ For TKT-002:
 
 ```bash
 cd .claude/skills/spec-driven-dev/scripts
-python spec_cli.py validate
-python spec_cli.py sync push --project-id <uuid>
+uv run spec_cli.py validate
+uv run spec_cli.py sync push --project-id <uuid>
 ```
 
 ---
@@ -844,34 +846,36 @@ python spec_cli.py sync push --project-id <uuid>
 
 ## CLI Reference
 
+**IMPORTANT:** Always use `uv run` to execute the scripts. This handles dependency installation automatically.
+
 ### View Local Specs
 
 ```bash
-python spec_cli.py show all           # Everything
-python spec_cli.py show requirements  # Just requirements
-python spec_cli.py show designs       # Just designs
-python spec_cli.py show tickets       # Just tickets
-python spec_cli.py show tasks         # Just tasks
-python spec_cli.py show graph         # Task dependency graph
-python spec_cli.py show ticket-graph  # Ticket dependency graph
-python spec_cli.py show traceability  # Full traceability matrix
-python spec_cli.py show ready         # Tasks ready to work on
+uv run spec_cli.py show all           # Everything
+uv run spec_cli.py show requirements  # Just requirements
+uv run spec_cli.py show designs       # Just designs
+uv run spec_cli.py show tickets       # Just tickets
+uv run spec_cli.py show tasks         # Just tasks
+uv run spec_cli.py show graph         # Task dependency graph
+uv run spec_cli.py show ticket-graph  # Ticket dependency graph
+uv run spec_cli.py show traceability  # Full traceability matrix
+uv run spec_cli.py show ready         # Tasks ready to work on
 ```
 
 ### Validate
 
 ```bash
-python spec_cli.py validate           # Check for issues
+uv run spec_cli.py validate           # Check for issues
 ```
 
 ### Sync to API
 
 ```bash
-python spec_cli.py projects                              # List projects
-python spec_cli.py sync diff --project-id <uuid>         # Preview changes
-python spec_cli.py sync push --project-id <uuid>         # Push to API
-python spec_cli.py project <uuid>                        # View project in API
-python spec_cli.py api-trace <uuid>                      # Full API traceability
+uv run spec_cli.py projects                              # List projects
+uv run spec_cli.py sync diff --project-id <uuid>         # Preview changes
+uv run spec_cli.py sync push --project-id <uuid>         # Push to API
+uv run spec_cli.py project <uuid>                        # View project in API
+uv run spec_cli.py api-trace <uuid>                      # Full API traceability
 ```
 
 ---
@@ -922,10 +926,10 @@ cat .omoi_os/requirements/*.md
 cat .omoi_os/designs/*.md
 
 # 2. View the full state
-python spec_cli.py show all
+uv run spec_cli.py show all
 
 # 3. Check what's in the API
-python spec_cli.py project <uuid>
+uv run spec_cli.py project <uuid>
 ```
 
 Then resume from where you left off based on what's complete and what's missing.

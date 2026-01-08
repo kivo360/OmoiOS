@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pyyaml>=6.0",
+# ]
+# ///
 """
 Parse .omoi_os/ spec files into structured data.
 
@@ -161,10 +167,16 @@ class SpecParser:
 
         if "created" not in frontmatter:
             # Parse from markdown if present
-            created_str = frontmatter.pop("created_date", None) or frontmatter.get("created")
+            created_str = frontmatter.pop("created_date", None) or frontmatter.get(
+                "created"
+            )
             if created_str:
                 try:
-                    frontmatter["created"] = date.fromisoformat(created_str) if isinstance(created_str, str) else created_str
+                    frontmatter["created"] = (
+                        date.fromisoformat(created_str)
+                        if isinstance(created_str, str)
+                        else created_str
+                    )
                 except (ValueError, TypeError):
                     frontmatter["created"] = date.today()
             else:
@@ -202,10 +214,10 @@ class SpecParser:
         for rich context in AI-assisted task execution.
         """
         # Remove the main title (# TKT-XXX: Title) if present
-        lines = body.strip().split('\n')
-        if lines and lines[0].startswith('# '):
+        lines = body.strip().split("\n")
+        if lines and lines[0].startswith("# "):
             lines = lines[1:]
-        return '\n'.join(lines).strip()
+        return "\n".join(lines).strip()
 
     def _extract_section(self, body: str, section_name: str) -> str:
         """Extract a named section from markdown body."""
@@ -222,10 +234,9 @@ class SpecParser:
         pattern = r"- \[([ xX])\] (.+?)(?=\n|$)"
         matches = re.findall(pattern, body)
         for check, text in matches:
-            criteria.append(AcceptanceCriterion(
-                text=text.strip(),
-                completed=check.lower() == "x"
-            ))
+            criteria.append(
+                AcceptanceCriterion(text=text.strip(), completed=check.lower() == "x")
+            )
         return criteria
 
     # ========================================================================
@@ -254,8 +265,12 @@ class SpecParser:
                 raise ValueError(f"Missing required field: {field_name}")
 
         # Extract EARS-style requirement from body
-        condition = self._extract_section(body, "Condition") or self._extract_section(body, "When")
-        action = self._extract_section(body, "Action") or self._extract_section(body, "The System Shall")
+        condition = self._extract_section(body, "Condition") or self._extract_section(
+            body, "When"
+        )
+        action = self._extract_section(body, "Action") or self._extract_section(
+            body, "The System Shall"
+        )
 
         # If not in sections, try to parse from structured format
         if not condition and not action:
@@ -316,25 +331,29 @@ class SpecParser:
         api_data = frontmatter.get("api_endpoints", []) or []
         for ep in api_data:
             if isinstance(ep, dict):
-                api_endpoints.append(ApiEndpoint(
-                    method=ep.get("method", "GET"),
-                    path=ep.get("path", ""),
-                    description=ep.get("description", ""),
-                    request_body=ep.get("request_body"),
-                    response=ep.get("response"),
-                ))
+                api_endpoints.append(
+                    ApiEndpoint(
+                        method=ep.get("method", "GET"),
+                        path=ep.get("path", ""),
+                        description=ep.get("description", ""),
+                        request_body=ep.get("request_body"),
+                        response=ep.get("response"),
+                    )
+                )
 
         # Parse data models from frontmatter
         data_models = []
         models_data = frontmatter.get("data_models", []) or []
         for model in models_data:
             if isinstance(model, dict):
-                data_models.append(DataModel(
-                    name=model.get("name", ""),
-                    description=model.get("description", ""),
-                    fields=model.get("fields", {}),
-                    relationships=model.get("relationships", []),
-                ))
+                data_models.append(
+                    DataModel(
+                        name=model.get("name", ""),
+                        description=model.get("description", ""),
+                        fields=model.get("fields", {}),
+                        relationships=model.get("relationships", []),
+                    )
+                )
 
         return ParsedDesign(
             id=frontmatter["id"],
@@ -345,14 +364,14 @@ class SpecParser:
             feature=frontmatter.get("feature", ""),
             requirements=frontmatter.get("requirements", []) or [],
             architecture=self._extract_section(body, "Architecture Overview")
-                or self._extract_section(body, "Architecture"),
+            or self._extract_section(body, "Architecture"),
             data_models=data_models,
             api_endpoints=api_endpoints,
             components=frontmatter.get("components", []) or [],
             error_handling=self._extract_section(body, "Error Handling"),
             security_considerations=self._extract_section(body, "Security"),
             implementation_notes=self._extract_section(body, "Implementation Notes")
-                or self._extract_section(body, "Notes"),
+            or self._extract_section(body, "Notes"),
             file_path=str(file_path),
         )
 
@@ -376,7 +395,15 @@ class SpecParser:
         frontmatter, body = self._parse_frontmatter(content)
 
         # Required fields
-        required = ["id", "title", "status", "priority", "estimate", "created", "updated"]
+        required = [
+            "id",
+            "title",
+            "status",
+            "priority",
+            "estimate",
+            "created",
+            "updated",
+        ]
         for field in required:
             if field not in frontmatter:
                 raise ValueError(f"Missing required field: {field}")
@@ -583,9 +610,15 @@ if __name__ == "__main__":
         stats = result.get_traceability_stats()
         print(f"\nTraceability Coverage:")
         if result.requirements:
-            print(f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)")
+            print(
+                f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)"
+            )
         if result.designs:
-            print(f"  Designs: {stats['designs']['linked']}/{stats['designs']['total']} linked ({stats['designs']['coverage']:.1f}%)")
+            print(
+                f"  Designs: {stats['designs']['linked']}/{stats['designs']['total']} linked ({stats['designs']['coverage']:.1f}%)"
+            )
         if result.tickets:
-            print(f"  Tickets: {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)")
+            print(
+                f"  Tickets: {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)"
+            )
         print(f"  Tasks: {stats['tasks']['done']}/{stats['tasks']['total']} done")
