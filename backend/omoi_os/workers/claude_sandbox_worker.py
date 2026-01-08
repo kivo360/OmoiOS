@@ -2383,7 +2383,7 @@ class SandboxWorker:
                 extra={
                     "tool_name": tool_name,
                     "tool_use_id": tool_use_id,
-                    "require_spec_skill": self.require_spec_skill,
+                    "require_spec_skill": self.config.require_spec_skill,
                 },
             )
 
@@ -2519,7 +2519,7 @@ class SandboxWorker:
             # ONLY runs when REQUIRE_SPEC_SKILL=true to avoid overhead on normal sandboxes
             # When we detect a successful `spec_cli.py validate` command,
             # inject a system message reminding the agent to sync to the API
-            if self.require_spec_skill and tool_name == "Bash":
+            if self.config.require_spec_skill and tool_name == "Bash":
                 command = tool_input.get("command", "")
                 # Detect spec_cli.py validate command
                 if "spec_cli.py" in command and "validate" in command:
