@@ -386,6 +386,14 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     """
     import re
 
+    # =================================================================
+    # COMPREHENSIVE LOGGING: Spec Output Validation
+    # =================================================================
+    logger.info("=" * 80)
+    logger.info("SPEC OUTPUT VALIDATION: check_spec_output() called")
+    logger.info("=" * 80)
+    logger.info(f"SPEC OUTPUT VALIDATION: cwd = '{cwd}'")
+
     result = {
         "has_omoi_dir": False,
         "files_found": [],
@@ -396,13 +404,18 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     }
 
     omoi_dir = Path(cwd) / ".omoi_os"
+    logger.info(f"SPEC OUTPUT VALIDATION: Checking for .omoi_os at '{omoi_dir}'")
 
     # Check if .omoi_os directory exists
     if not omoi_dir.exists():
+        logger.info("SPEC OUTPUT VALIDATION: ❌ .omoi_os directory does NOT exist")
         result["errors"].append(".omoi_os/ directory does not exist - no specs created")
+        logger.info(f"SPEC OUTPUT VALIDATION: Returning early with result = {result}")
+        logger.info("=" * 80)
         return result
 
     result["has_omoi_dir"] = True
+    logger.info("SPEC OUTPUT VALIDATION: ✅ .omoi_os directory exists")
 
     # Define spec directories and required frontmatter fields
     # Note: tasks use "parent_ticket" (not "ticket_id") per SKILL.md template
@@ -466,15 +479,35 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
 
     # Determine if valid
     # Valid if: has directory, has at least one file, all files have proper frontmatter
+    logger.info("SPEC OUTPUT VALIDATION: Determining final validation result...")
+    logger.info(f"SPEC OUTPUT VALIDATION: files_found = {result['files_found']}")
+    logger.info(f"SPEC OUTPUT VALIDATION: files_with_frontmatter = {result['files_with_frontmatter']}")
+    logger.info(f"SPEC OUTPUT VALIDATION: files_missing_frontmatter = {result['files_missing_frontmatter']}")
+
     if not result["files_found"]:
         result["errors"].append(
             "No spec files found in .omoi_os/ - create tickets and tasks"
         )
+        logger.info("SPEC OUTPUT VALIDATION: ❌ No spec files found")
     elif result["files_missing_frontmatter"]:
         # Some files are invalid
+        logger.info(f"SPEC OUTPUT VALIDATION: ❌ Some files missing frontmatter: {result['files_missing_frontmatter']}")
         pass
     else:
         result["is_valid"] = True
+        logger.info("SPEC OUTPUT VALIDATION: ✅ All validation checks passed!")
+
+    # Log final result
+    logger.info("=" * 60)
+    logger.info("SPEC OUTPUT VALIDATION: Final Result")
+    logger.info("=" * 60)
+    logger.info(f"SPEC OUTPUT VALIDATION: is_valid = {result['is_valid']}")
+    logger.info(f"SPEC OUTPUT VALIDATION: errors = {result['errors']}")
+    logger.info(f"SPEC OUTPUT VALIDATION: has_omoi_dir = {result['has_omoi_dir']}")
+    logger.info(f"SPEC OUTPUT VALIDATION: files_found count = {len(result['files_found'])}")
+    logger.info(f"SPEC OUTPUT VALIDATION: files_with_frontmatter count = {len(result['files_with_frontmatter'])}")
+    logger.info(f"SPEC OUTPUT VALIDATION: files_missing_frontmatter count = {len(result['files_missing_frontmatter'])}")
+    logger.info("=" * 80)
 
     return result
 
@@ -1288,8 +1321,9 @@ class WorkerConfig:
 
         # MCP spec workflow tools - only enable for exploration mode
         # Implementation agents should NOT be creating new specs/tickets
+        enable_spec_tools_env = os.environ.get("ENABLE_SPEC_TOOLS", "")
         self.enable_spec_tools = (
-            os.environ.get("ENABLE_SPEC_TOOLS", "").lower() == "true"
+            enable_spec_tools_env.lower() == "true"
             or self.execution_mode == "exploration"
         )
 
@@ -1298,9 +1332,29 @@ class WorkerConfig:
         # 1. Provide clear intent and reference to skill file (not content injection)
         # 2. Run spec output validation before task completion
         # This is NOT automatic for all exploration - only when explicitly requested
-        self.require_spec_skill = (
-            os.environ.get("REQUIRE_SPEC_SKILL", "").lower() == "true"
-        )
+        require_spec_skill_env = os.environ.get("REQUIRE_SPEC_SKILL", "")
+        self.require_spec_skill = require_spec_skill_env.lower() == "true"
+
+        # =================================================================
+        # COMPREHENSIVE LOGGING: Spec-Driven Development Configuration
+        # =================================================================
+        logger.info("=" * 80)
+        logger.info("SPEC-DRIVEN DEV: Configuration")
+        logger.info("=" * 80)
+        logger.info(f"SPEC-DRIVEN DEV: ENABLE_SPEC_TOOLS env var = '{enable_spec_tools_env}'")
+        logger.info(f"SPEC-DRIVEN DEV: REQUIRE_SPEC_SKILL env var = '{require_spec_skill_env}'")
+        logger.info(f"SPEC-DRIVEN DEV: execution_mode = '{self.execution_mode}'")
+        logger.info(f"SPEC-DRIVEN DEV: enable_spec_tools (computed) = {self.enable_spec_tools}")
+        logger.info(f"SPEC-DRIVEN DEV: require_spec_skill (computed) = {self.require_spec_skill}")
+        if self.require_spec_skill:
+            logger.info("SPEC-DRIVEN DEV: ✅ Spec-driven development is ENABLED")
+            logger.info("SPEC-DRIVEN DEV: Will inject spec-driven-dev skill instructions into system prompt")
+            logger.info("SPEC-DRIVEN DEV: Will run spec output validation before task completion")
+        elif self.enable_spec_tools:
+            logger.info("SPEC-DRIVEN DEV: Spec tools are enabled (exploration mode) but skill not enforced")
+        else:
+            logger.info("SPEC-DRIVEN DEV: Spec-driven development is DISABLED")
+        logger.info("=" * 80)
 
         # Add dependency management instructions (applies to all modes)
         append_parts.append("""
@@ -1435,9 +1489,25 @@ fi
         # Add execution mode-specific instructions to system prompt
         if self.execution_mode == "exploration":
             if self.require_spec_skill:
+                # =================================================================
+                # COMPREHENSIVE LOGGING: Spec-Driven Dev Prompt Injection
+                # =================================================================
+                logger.info("=" * 80)
+                logger.info("SPEC-DRIVEN DEV PROMPT: Injecting spec-driven-dev instructions")
+                logger.info("=" * 80)
+                logger.info("SPEC-DRIVEN DEV PROMPT: require_spec_skill=True, appending full spec-driven-dev skill instructions")
+                logger.info("SPEC-DRIVEN DEV PROMPT: This prompt enforces:")
+                logger.info("SPEC-DRIVEN DEV PROMPT:   1. Loading the /spec-driven-dev skill")
+                logger.info("SPEC-DRIVEN DEV PROMPT:   2. Discovery phase (5-15 questions)")
+                logger.info("SPEC-DRIVEN DEV PROMPT:   3. Creating specs in .omoi_os/")
+                logger.info("SPEC-DRIVEN DEV PROMPT:   4. Validating with spec_cli.py validate")
+                logger.info("SPEC-DRIVEN DEV PROMPT:   5. Syncing to API with spec_cli.py sync push")
+                logger.info("SPEC-DRIVEN DEV PROMPT:   6. Git commit and push")
+                logger.info("=" * 80)
+
                 # Use clear intent + skill reference instead of content injection
                 # This gives the agent explicit instructions to READ and FOLLOW the skill
-                append_parts.append("""
+                spec_driven_dev_prompt = """
 ## Execution Mode: EXPLORATION (Spec-Driven Development)
 
 You are in **exploration mode** with **spec-driven-dev skill MANDATORY**.
@@ -1587,7 +1657,19 @@ Your task is ONLY complete when:
 6. ✅ `spec_cli.py api-trace` shows items in the system
 7. ✅ Changes committed and pushed to git
 
-**DO NOT signal completion until ALL criteria are met.**""")
+**DO NOT signal completion until ALL criteria are met."""
+
+                # Log the full prompt content and append it
+                logger.info("SPEC-DRIVEN DEV PROMPT: Full injected prompt content:")
+                logger.info("-" * 60)
+                for line in spec_driven_dev_prompt.split('\n')[:50]:  # Log first 50 lines
+                    logger.info(f"SPEC-DRIVEN DEV PROMPT: {line}")
+                logger.info("SPEC-DRIVEN DEV PROMPT: ... (truncated, showing first 50 lines)")
+                logger.info("-" * 60)
+                logger.info(f"SPEC-DRIVEN DEV PROMPT: Total prompt length: {len(spec_driven_dev_prompt)} chars")
+
+                append_parts.append(spec_driven_dev_prompt)
+                logger.info("SPEC-DRIVEN DEV PROMPT: ✅ Spec-driven-dev instructions appended to system prompt")
             else:
                 # Normal exploration mode - no forced skill, just general guidance
                 append_parts.append("""
@@ -2955,13 +3037,34 @@ class SandboxWorker:
             # ONLY runs when REQUIRE_SPEC_SKILL=true to avoid overhead on normal sandboxes
             # When we detect a successful `spec_cli.py validate` command,
             # inject a system message reminding the agent to sync to the API
+            # =================================================================
+            # COMPREHENSIVE LOGGING: Spec Validation Hook
+            # =================================================================
+            logger.info("=" * 80)
+            logger.info("SPEC VALIDATION HOOK: PostToolUse check")
+            logger.info("=" * 80)
+            logger.info(f"SPEC VALIDATION HOOK: require_spec_skill = {self.config.require_spec_skill}")
+            logger.info(f"SPEC VALIDATION HOOK: tool_name = '{tool_name}'")
+
+            if not self.config.require_spec_skill:
+                logger.info("SPEC VALIDATION HOOK: Skipped - require_spec_skill is False")
+            elif tool_name != "Bash":
+                logger.info(f"SPEC VALIDATION HOOK: Skipped - tool is '{tool_name}', not 'Bash'")
+            logger.info("=" * 80)
+
             if self.config.require_spec_skill and tool_name == "Bash":
                 command = tool_input.get("command", "")
+                logger.info(f"SPEC VALIDATION HOOK: Bash command = '{command}'")
+                logger.info(f"SPEC VALIDATION HOOK: Checking if command contains 'spec_cli.py' and 'validate'")
+
                 # Detect spec_cli.py validate command
                 if "spec_cli.py" in command and "validate" in command:
                     response_str = serialized_response or ""
 
                     # Debug logging to diagnose detection issues
+                    logger.info("=" * 60)
+                    logger.info("SPEC VALIDATION HOOK: ✅ spec_cli.py validate DETECTED!")
+                    logger.info("=" * 60)
                     logger.info(
                         "PostToolUse: spec_cli.py validate detected",
                         extra={
@@ -2970,7 +3073,11 @@ class SandboxWorker:
                             "response_preview": response_str[:500] if response_str else "(empty)",
                         },
                     )
-
+                    logger.info(f"SPEC VALIDATION HOOK: Response length = {len(response_str)} chars")
+                    logger.info(f"SPEC VALIDATION HOOK: Response preview (first 500 chars):")
+                    logger.info("-" * 40)
+                    logger.info(response_str[:500] if response_str else "(empty)")
+                    logger.info("-" * 40)
                     # Check for successful validation
                     # The validate command outputs on success:
                     #   "========================================================================"
@@ -3036,6 +3143,22 @@ class SandboxWorker:
 
                     validation_passed = success_signals and not has_error
 
+                    # Enhanced logging for validation detection
+                    logger.info("=" * 60)
+                    logger.info("SPEC VALIDATION HOOK: Validation Detection Results")
+                    logger.info("=" * 60)
+                    logger.info(f"SPEC VALIDATION HOOK: has_checkmark = {has_checkmark}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_no_circular = {has_no_circular}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_task_refs_valid = {has_task_refs_valid}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_ticket_refs_valid = {has_ticket_refs_valid}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_validation_header = {has_validation_header}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_success_keyword = {has_success_keyword}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_exit_zero = {has_exit_zero}")
+                    logger.info(f"SPEC VALIDATION HOOK: has_error = {has_error}")
+                    logger.info(f"SPEC VALIDATION HOOK: success_signals = {success_signals}")
+                    logger.info(f"SPEC VALIDATION HOOK: *** validation_passed = {validation_passed} ***")
+                    logger.info("=" * 60)
+
                     logger.info(
                         "PostToolUse: validation detection result",
                         extra={
@@ -3053,6 +3176,10 @@ class SandboxWorker:
                     )
 
                     if validation_passed:
+                        logger.info("=" * 60)
+                        logger.info("SPEC VALIDATION HOOK: ✅✅✅ VALIDATION PASSED! ✅✅✅")
+                        logger.info("SPEC VALIDATION HOOK: Injecting sync reminder system message")
+                        logger.info("=" * 60)
                         logger.info(
                             "Spec validation successful - injecting sync reminder",
                             extra={"command": command},
@@ -3084,6 +3211,12 @@ python spec_cli.py api-trace
                                 "additionalContext": "Spec validation passed - auto-sync reminder injected",
                             },
                         }
+                    else:
+                        logger.info("=" * 60)
+                        logger.info("SPEC VALIDATION HOOK: ❌ VALIDATION NOT PASSED")
+                        logger.info("SPEC VALIDATION HOOK: Not injecting sync reminder")
+                        logger.info(f"SPEC VALIDATION HOOK: success_signals={success_signals}, has_error={has_error}")
+                        logger.info("=" * 60)
 
             return {}
 
@@ -3701,12 +3834,34 @@ python spec_cli.py api-trace
 
         # Additional validation for spec-driven-dev skill
         # When REQUIRE_SPEC_SKILL is set, validate spec output format
+        # =================================================================
+        # COMPREHENSIVE LOGGING: Spec Output Validation Call
+        # =================================================================
+        logger.info("=" * 80)
+        logger.info("SPEC OUTPUT VALIDATION CALL: Checking if spec validation needed")
+        logger.info("=" * 80)
+        logger.info(f"SPEC OUTPUT VALIDATION CALL: require_spec_skill = {config.require_spec_skill}")
+
         if config.require_spec_skill:
+            logger.info("SPEC OUTPUT VALIDATION CALL: ✅ REQUIRE_SPEC_SKILL=true, running validation...")
+            logger.info(f"SPEC OUTPUT VALIDATION CALL: cwd = '{config.cwd}'")
             logger.info("Running spec output validation (REQUIRE_SPEC_SKILL=true)...")
             spec_status = check_spec_output(config.cwd)
 
+            logger.info("=" * 60)
+            logger.info("SPEC OUTPUT VALIDATION CALL: Result received from check_spec_output()")
+            logger.info("=" * 60)
+            logger.info(f"SPEC OUTPUT VALIDATION CALL: is_valid = {spec_status['is_valid']}")
+            logger.info(f"SPEC OUTPUT VALIDATION CALL: has_omoi_dir = {spec_status['has_omoi_dir']}")
+            logger.info(f"SPEC OUTPUT VALIDATION CALL: files_found = {spec_status['files_found']}")
+            logger.info(f"SPEC OUTPUT VALIDATION CALL: errors = {spec_status['errors']}")
+
             if not spec_status["is_valid"]:
                 validation_errors.extend(spec_status["errors"])
+                logger.info("=" * 60)
+                logger.info("SPEC OUTPUT VALIDATION CALL: ❌ SPEC VALIDATION FAILED!")
+                logger.info("=" * 60)
+                logger.info(f"SPEC OUTPUT VALIDATION CALL: Adding {len(spec_status['errors'])} errors to validation_errors")
                 logger.info(
                     "Spec validation FAILED",
                     extra={
@@ -3719,6 +3874,9 @@ python spec_cli.py api-trace
                     },
                 )
             else:
+                logger.info("=" * 60)
+                logger.info("SPEC OUTPUT VALIDATION CALL: ✅ SPEC VALIDATION PASSED!")
+                logger.info("=" * 60)
                 logger.info(
                     "Spec validation PASSED",
                     extra={
@@ -3728,6 +3886,9 @@ python spec_cli.py api-trace
                         ),
                     },
                 )
+        else:
+            logger.info("SPEC OUTPUT VALIDATION CALL: ⏭️ Skipped - require_spec_skill is False")
+        logger.info("=" * 80)
 
         if not validation_errors:
             state.validation_passed = True
