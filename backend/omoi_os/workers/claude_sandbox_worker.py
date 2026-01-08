@@ -2329,240 +2329,234 @@ def setup_github_workspace(config: WorkerConfig) -> bool:
     return True
 
 
+def find_dependency_files(cwd: str) -> dict:
+    """Search for dependency files in common project directories.
+
+    Searches root and common subdirectories (backend/, frontend/, src/, app/)
+    for Python and Node.js dependency files.
+
+    Returns:
+        dict mapping file types to their full paths (or None if not found)
+    """
+    # Common subdirectories where dependency files might be
+    search_dirs = [
+        cwd,  # Root first
+        os.path.join(cwd, "backend"),
+        os.path.join(cwd, "frontend"),
+        os.path.join(cwd, "src"),
+        os.path.join(cwd, "app"),
+        os.path.join(cwd, "server"),
+        os.path.join(cwd, "api"),
+    ]
+
+    found = {
+        # Python
+        "uv_lock": None,
+        "poetry_lock": None,
+        "pyproject": None,
+        "requirements": None,
+        "setup_py": None,
+        # Node.js
+        "pnpm_lock": None,
+        "yarn_lock": None,
+        "npm_lock": None,
+        "package_json": None,
+    }
+
+    file_mappings = {
+        "uv_lock": "uv.lock",
+        "poetry_lock": "poetry.lock",
+        "pyproject": "pyproject.toml",
+        "requirements": "requirements.txt",
+        "setup_py": "setup.py",
+        "pnpm_lock": "pnpm-lock.yaml",
+        "yarn_lock": "yarn.lock",
+        "npm_lock": "package-lock.json",
+        "package_json": "package.json",
+    }
+
+    for search_dir in search_dirs:
+        if not os.path.isdir(search_dir):
+            continue
+
+        for key, filename in file_mappings.items():
+            if found[key] is None:  # Only find first occurrence
+                filepath = os.path.join(search_dir, filename)
+                if os.path.exists(filepath):
+                    found[key] = filepath
+                    logger.debug(f"Found {filename} at {filepath}")
+
+    return found
+
+
 def install_project_dependencies(cwd: str) -> dict:
     """Detect and install project dependencies automatically.
 
     Detects Python (UV, Poetry, pip) and Node.js (pnpm, yarn, npm) projects
-    and runs the appropriate install command.
+    and runs the appropriate install command. Searches both root and common
+    subdirectories (backend/, frontend/, src/, app/).
 
     Returns:
-        dict with keys: python_installed, node_installed, errors
+        dict with keys: python_installed, node_installed, errors, summary
     """
     result = {
         "python_installed": False,
         "python_manager": None,
+        "python_dir": None,
         "node_installed": False,
         "node_manager": None,
-        "errors": []
+        "node_dir": None,
+        "errors": [],
+        "summary": ""  # Human-readable summary for system prompt
     }
 
     logger.info("Detecting and installing project dependencies", extra={"cwd": cwd})
 
+    # Find dependency files (searches root + common subdirs)
+    found = find_dependency_files(cwd)
+
     # Python dependency detection and installation
-    pyproject_path = os.path.join(cwd, "pyproject.toml")
-    requirements_path = os.path.join(cwd, "requirements.txt")
-    setup_py_path = os.path.join(cwd, "setup.py")
-    uv_lock_path = os.path.join(cwd, "uv.lock")
-    poetry_lock_path = os.path.join(cwd, "poetry.lock")
+    # Priority: uv.lock > poetry.lock > pyproject.toml > requirements.txt > setup.py
 
-    # Check for UV first (uv.lock is the most reliable indicator)
-    if os.path.exists(uv_lock_path):
-        # UV project - uv.lock exists
-        logger.info("Detected UV project (uv.lock found), running uv sync")
-        proc = subprocess.run(
-            ["uv", "sync"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout
-        )
-        if proc.returncode == 0:
-            result["python_installed"] = True
-            result["python_manager"] = "uv"
-            logger.info("UV sync completed successfully")
-        else:
-            error = f"uv sync failed: {proc.stderr}"
+    # Helper to run install command and track result
+    def run_install(cmd: list, install_cwd: str, manager: str, lang: str) -> bool:
+        """Run install command and update result dict."""
+        logger.info(f"Running {' '.join(cmd)} in {install_cwd}")
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=install_cwd,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            if proc.returncode == 0:
+                if lang == "python":
+                    result["python_installed"] = True
+                    result["python_manager"] = manager
+                    result["python_dir"] = install_cwd
+                else:
+                    result["node_installed"] = True
+                    result["node_manager"] = manager
+                    result["node_dir"] = install_cwd
+                logger.info(f"{manager} install completed successfully in {install_cwd}")
+                return True
+            else:
+                error = f"{' '.join(cmd)} failed in {install_cwd}: {proc.stderr}"
+                result["errors"].append(error)
+                logger.warning(error)
+                return False
+        except subprocess.TimeoutExpired:
+            error = f"{' '.join(cmd)} timed out in {install_cwd}"
             result["errors"].append(error)
             logger.warning(error)
-
-    elif os.path.exists(poetry_lock_path):
-        # Poetry project - poetry.lock exists
-        logger.info("Detected Poetry project (poetry.lock found), running poetry install")
-        proc = subprocess.run(
-            ["poetry", "install"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=300
-        )
-        if proc.returncode == 0:
-            result["python_installed"] = True
-            result["python_manager"] = "poetry"
-            logger.info("Poetry install completed successfully")
-        else:
-            error = f"poetry install failed: {proc.stderr}"
+            return False
+        except Exception as e:
+            error = f"{' '.join(cmd)} error in {install_cwd}: {e}"
             result["errors"].append(error)
             logger.warning(error)
+            return False
 
-    elif os.path.exists(pyproject_path):
+    # Python dependency installation
+    # Priority: uv.lock > poetry.lock > pyproject.toml > requirements.txt > setup.py
+    python_installed = False
+
+    if found["uv_lock"]:
+        install_dir = os.path.dirname(found["uv_lock"])
+        logger.info(f"Detected UV project (uv.lock found at {found['uv_lock']})")
+        python_installed = run_install(["uv", "sync"], install_dir, "uv", "python")
+
+    elif found["poetry_lock"]:
+        install_dir = os.path.dirname(found["poetry_lock"])
+        logger.info(f"Detected Poetry project (poetry.lock found at {found['poetry_lock']})")
+        python_installed = run_install(["poetry", "install"], install_dir, "poetry", "python")
+
+    elif found["pyproject"]:
+        install_dir = os.path.dirname(found["pyproject"])
         # Read pyproject.toml to detect manager
         try:
-            with open(pyproject_path) as f:
+            with open(found["pyproject"]) as f:
                 content = f.read()
 
             if "[tool.uv]" in content:
-                # UV project (configured in pyproject.toml but no lock file yet)
-                logger.info("Detected UV project ([tool.uv] found), running uv sync")
-                proc = subprocess.run(
-                    ["uv", "sync"],
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout
-                )
-                if proc.returncode == 0:
-                    result["python_installed"] = True
-                    result["python_manager"] = "uv"
-                    logger.info("UV sync completed successfully")
-                else:
-                    error = f"uv sync failed: {proc.stderr}"
-                    result["errors"].append(error)
-                    logger.warning(error)
-
+                logger.info(f"Detected UV project ([tool.uv] in {found['pyproject']})")
+                python_installed = run_install(["uv", "sync"], install_dir, "uv", "python")
             elif "[tool.poetry]" in content:
-                # Poetry project
-                logger.info("Detected Poetry project, running poetry install")
-                proc = subprocess.run(
-                    ["poetry", "install"],
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                if proc.returncode == 0:
-                    result["python_installed"] = True
-                    result["python_manager"] = "poetry"
-                    logger.info("Poetry install completed successfully")
-                else:
-                    error = f"poetry install failed: {proc.stderr}"
-                    result["errors"].append(error)
-                    logger.warning(error)
+                logger.info(f"Detected Poetry project ([tool.poetry] in {found['pyproject']})")
+                python_installed = run_install(["poetry", "install"], install_dir, "poetry", "python")
             else:
-                # Generic pyproject.toml - try pip
-                logger.info("Detected pyproject.toml, running pip install -e .")
-                proc = subprocess.run(
-                    ["pip", "install", "-e", "."],
-                    cwd=cwd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300
-                )
-                if proc.returncode == 0:
-                    result["python_installed"] = True
-                    result["python_manager"] = "pip"
-                    logger.info("pip install completed successfully")
-                else:
-                    error = f"pip install failed: {proc.stderr}"
-                    result["errors"].append(error)
-                    logger.warning(error)
-
+                logger.info(f"Detected generic pyproject.toml at {found['pyproject']}")
+                python_installed = run_install(["pip", "install", "-e", "."], install_dir, "pip", "python")
         except Exception as e:
-            error = f"Error reading pyproject.toml: {e}"
+            error = f"Error reading {found['pyproject']}: {e}"
             result["errors"].append(error)
             logger.warning(error)
 
-    elif os.path.exists(requirements_path):
-        # requirements.txt project
-        logger.info("Detected requirements.txt, running pip install")
-        proc = subprocess.run(
-            ["pip", "install", "-r", "requirements.txt"],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=300
+    elif found["requirements"]:
+        install_dir = os.path.dirname(found["requirements"])
+        logger.info(f"Detected requirements.txt at {found['requirements']}")
+        python_installed = run_install(["pip", "install", "-r", "requirements.txt"], install_dir, "pip", "python")
+
+    elif found["setup_py"]:
+        install_dir = os.path.dirname(found["setup_py"])
+        logger.info(f"Detected setup.py at {found['setup_py']}")
+        python_installed = run_install(["pip", "install", "-e", "."], install_dir, "pip", "python")
+
+    # Node.js dependency installation
+    # Priority: pnpm-lock.yaml > yarn.lock > package-lock.json > package.json
+    node_installed = False
+
+    if found["package_json"]:
+        install_dir = os.path.dirname(found["package_json"])
+
+        if found["pnpm_lock"]:
+            logger.info(f"Detected pnpm project (pnpm-lock.yaml found)")
+            node_installed = run_install(["pnpm", "install"], install_dir, "pnpm", "node")
+        elif found["yarn_lock"]:
+            logger.info(f"Detected Yarn project (yarn.lock found)")
+            node_installed = run_install(["yarn", "install"], install_dir, "yarn", "node")
+        elif found["npm_lock"]:
+            logger.info(f"Detected npm project (package-lock.json found)")
+            node_installed = run_install(["npm", "install"], install_dir, "npm", "node")
+
+    # Build human-readable summary for system prompt
+    summary_parts = []
+
+    if result["python_installed"]:
+        rel_dir = os.path.relpath(result["python_dir"], cwd) if result["python_dir"] != cwd else "root"
+        summary_parts.append(
+            f"✅ Python dependencies installed via `{result['python_manager']}` in `{rel_dir}/`"
         )
-        if proc.returncode == 0:
-            result["python_installed"] = True
-            result["python_manager"] = "pip"
-            logger.info("pip install completed successfully")
-        else:
-            error = f"pip install failed: {proc.stderr}"
-            result["errors"].append(error)
-            logger.warning(error)
+        if result["python_manager"] == "uv":
+            summary_parts.append(f"   → Use `uv run <command>` to run Python tools (e.g., `uv run python script.py`)")
+        elif result["python_manager"] == "poetry":
+            summary_parts.append(f"   → Use `poetry run <command>` to run Python tools")
+    elif found["pyproject"] or found["requirements"] or found["setup_py"]:
+        summary_parts.append("⚠️ Python dependency files found but installation failed - check errors")
 
-    elif os.path.exists(setup_py_path):
-        # setup.py project
-        logger.info("Detected setup.py, running pip install -e .")
-        proc = subprocess.run(
-            ["pip", "install", "-e", "."],
-            cwd=cwd,
-            capture_output=True,
-            text=True,
-            timeout=300
+    if result["node_installed"]:
+        rel_dir = os.path.relpath(result["node_dir"], cwd) if result["node_dir"] != cwd else "root"
+        summary_parts.append(
+            f"✅ Node.js dependencies installed via `{result['node_manager']}` in `{rel_dir}/`"
         )
-        if proc.returncode == 0:
-            result["python_installed"] = True
-            result["python_manager"] = "pip"
-            logger.info("pip install completed successfully")
+        if result["node_manager"] == "pnpm":
+            summary_parts.append(f"   → Use `pnpm run <script>` or `pnpm exec <binary>`")
+        elif result["node_manager"] == "yarn":
+            summary_parts.append(f"   → Use `yarn <script>` or `yarn <binary>`")
         else:
-            error = f"pip install failed: {proc.stderr}"
-            result["errors"].append(error)
-            logger.warning(error)
+            summary_parts.append(f"   → Use `npm run <script>` or `npx <binary>`")
+    elif found["package_json"]:
+        summary_parts.append("⚠️ package.json found but installation failed - check errors")
 
-    # Node.js dependency detection and installation
-    package_json_path = os.path.join(cwd, "package.json")
+    if result["errors"]:
+        summary_parts.append(f"⚠️ Errors during dependency installation:")
+        for err in result["errors"][:3]:  # Limit to first 3 errors
+            summary_parts.append(f"   - {err[:200]}")  # Truncate long errors
 
-    if os.path.exists(package_json_path):
-        pnpm_lock = os.path.join(cwd, "pnpm-lock.yaml")
-        yarn_lock = os.path.join(cwd, "yarn.lock")
-        npm_lock = os.path.join(cwd, "package-lock.json")
+    if not summary_parts:
+        summary_parts.append("ℹ️ No dependency files detected in project root or common subdirectories")
 
-        if os.path.exists(pnpm_lock):
-            # pnpm project
-            logger.info("Detected pnpm project, running pnpm install")
-            proc = subprocess.run(
-                ["pnpm", "install"],
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            if proc.returncode == 0:
-                result["node_installed"] = True
-                result["node_manager"] = "pnpm"
-                logger.info("pnpm install completed successfully")
-            else:
-                error = f"pnpm install failed: {proc.stderr}"
-                result["errors"].append(error)
-                logger.warning(error)
-
-        elif os.path.exists(yarn_lock):
-            # Yarn project
-            logger.info("Detected Yarn project, running yarn install")
-            proc = subprocess.run(
-                ["yarn", "install"],
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            if proc.returncode == 0:
-                result["node_installed"] = True
-                result["node_manager"] = "yarn"
-                logger.info("yarn install completed successfully")
-            else:
-                error = f"yarn install failed: {proc.stderr}"
-                result["errors"].append(error)
-                logger.warning(error)
-
-        else:
-            # npm project (default for package.json without lock file)
-            logger.info("Detected npm project, running npm install")
-            proc = subprocess.run(
-                ["npm", "install"],
-                cwd=cwd,
-                capture_output=True,
-                text=True,
-                timeout=300
-            )
-            if proc.returncode == 0:
-                result["node_installed"] = True
-                result["node_manager"] = "npm"
-                logger.info("npm install completed successfully")
-            else:
-                error = f"npm install failed: {proc.stderr}"
-                result["errors"].append(error)
-                logger.warning(error)
+    result["summary"] = "\n".join(summary_parts)
 
     # Log summary
     if result["python_installed"] or result["node_installed"]:
@@ -2570,11 +2564,13 @@ def install_project_dependencies(cwd: str) -> dict:
             "Dependency installation complete",
             extra={
                 "python_manager": result["python_manager"],
+                "python_dir": result["python_dir"],
                 "node_manager": result["node_manager"],
+                "node_dir": result["node_dir"],
             }
         )
     elif not result["errors"]:
-        logger.info("No dependency files detected (no pyproject.toml, requirements.txt, setup.py, or package.json)")
+        logger.info("No dependency files detected (searched root and common subdirs)")
 
     return result
 
@@ -3714,6 +3710,20 @@ This is a continuation of your previous work. Please review the notes below and 
                 "Some dependency installation errors occurred",
                 extra={"errors": dep_result["errors"]}
             )
+
+        # Add dependency status to system prompt so agent knows what's installed
+        if dep_result["summary"]:
+            dep_prompt_section = f"""
+## Pre-Installed Dependencies
+
+The following dependencies were automatically installed before you started:
+
+{dep_result["summary"]}
+
+**Do NOT re-run dependency installation commands** unless you encounter errors or need to add new packages.
+"""
+            self.config.system_prompt = self.config.system_prompt + "\n" + dep_prompt_section
+            logger.info("Added dependency status to system prompt")
 
         # Import session transcript if provided (for cross-sandbox resumption)
         if self.config.session_transcript_b64 and self.config.resume_session_id:
