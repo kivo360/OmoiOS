@@ -7,6 +7,248 @@ description: Spec-driven development workflow for turning feature ideas into str
 
 A systematic workflow for turning feature ideas into actionable work items that AI agents can execute.
 
+---
+
+## 🔴 CRITICAL: Read This Skill Document Thoroughly
+
+**YOU MUST follow this skill document exactly.** This is not optional guidance—it is the required workflow.
+
+### Before Creating ANY Spec Files:
+
+1. **READ THIS ENTIRE SKILL DOCUMENT** - Don't skim. Read every section to understand the required formats.
+2. **CHECK EXISTING FILES** - Run `ls -la .omoi_os/` to see what already exists. Don't duplicate.
+3. **REFERENCE THE TEMPLATES** - Every file type has a specific format. Copy the exact structure.
+4. **USE THE CLI TOOLS** - Validate with `python spec_cli.py validate` before syncing.
+
+### During Spec Creation:
+
+1. **REFER BACK TO THIS DOCUMENT OFTEN** - When unsure about format, re-read the relevant section.
+2. **COPY FRONTMATTER EXACTLY** - Don't improvise. Use the exact field names shown in templates.
+3. **CHECK YOUR WORK** - After creating files, run validation to catch errors early.
+
+### Output Requirements:
+
+- **ALL files MUST have YAML frontmatter** - No exceptions
+- **ALL frontmatter fields MUST match the templates** - Use exact field names
+- **ALL specs MUST be synced** - Run `python spec_cli.py sync push` when done
+- **ALL IDs MUST follow conventions** - TKT-001, TSK-001, REQ-FEATURE-001, etc.
+
+### If You're Unsure:
+
+1. **Re-read this skill document** - The answer is here
+2. **Look at the Concrete Example section** - Full file contents are provided
+3. **Run validation** - `python spec_cli.py validate` will tell you what's wrong
+
+---
+
+## 🚨 MANDATORY: YAML Frontmatter on ALL Files
+
+**EVERY file you create in `.omoi_os/` MUST begin with YAML frontmatter.** This is NON-NEGOTIABLE.
+
+### Why Frontmatter is Required
+
+1. **Programmatic Parsing**: The CLI tools, API sync, and orchestrator all parse frontmatter to understand file structure
+2. **Traceability**: Frontmatter enables linking requirements → designs → tickets → tasks
+3. **Status Tracking**: Status, priority, and dependencies are tracked via frontmatter fields
+4. **API Integration**: When syncing to backend, frontmatter provides the structured data
+
+### Required Frontmatter by File Type
+
+**PRDs** (`.omoi_os/docs/prd-*.md`):
+```yaml
+---
+id: PRD-{FEATURE}-001
+title: {Feature Name} PRD
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft  # draft | review | approved
+author: Claude
+---
+```
+
+**Requirements** (`.omoi_os/requirements/*.md`):
+```yaml
+---
+id: REQ-{FEATURE}-001
+title: {Feature Name} Requirements
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft  # draft | review | approved
+category: functional  # functional | non-functional | constraint
+priority: HIGH  # CRITICAL | HIGH | MEDIUM | LOW
+prd_ref: docs/prd-{feature-name}.md
+design_ref: designs/{feature-name}.md
+---
+```
+
+**Designs** (`.omoi_os/designs/*.md`):
+```yaml
+---
+id: DESIGN-{FEATURE}-001
+title: {Feature Name} Design
+feature: {feature-name}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: draft  # draft | review | approved
+requirements:
+  - REQ-{FEATURE}-001
+---
+```
+
+**Tickets** (`.omoi_os/tickets/TKT-*.md`):
+```yaml
+---
+id: TKT-{NNN}
+title: {Ticket Title}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
+status: backlog  # backlog | analyzing | building | testing | done | blocked
+priority: HIGH  # CRITICAL | HIGH | MEDIUM | LOW
+estimate: M  # S | M | L | XL
+design_ref: designs/{feature-name}.md
+requirements:
+  - REQ-{FEATURE}-FUNC-001
+dependencies:
+  blocked_by: []
+  blocks: []
+---
+```
+
+**Tasks** (`.omoi_os/tasks/TSK-*.md`):
+```yaml
+---
+id: TSK-{NNN}
+title: {Task Title}
+created: {YYYY-MM-DD}
+status: pending  # pending | in_progress | review | done | blocked
+parent_ticket: TKT-{NNN}
+estimate: S  # S | M | L
+type: implementation  # implementation | refactor | test | documentation | research | bugfix
+dependencies:
+  depends_on: []
+  blocks: []
+---
+```
+
+### ❌ Files Without Frontmatter Will Fail
+
+Files missing frontmatter will:
+- Not appear in `spec_cli.py show` commands
+- Not sync to the API
+- Not be tracked in traceability reports
+- Not be picked up by the orchestrator
+
+### ✅ Always Start With Frontmatter
+
+When creating ANY file in `.omoi_os/`, your FIRST action should be writing the YAML frontmatter block, THEN the content.
+
+---
+
+## 🚨 MANDATORY: Use Spec CLI to Sync to Server
+
+**After creating files in `.omoi_os/`, you MUST sync them to the OmoiOS server using the spec CLI.** This is NON-NEGOTIABLE.
+
+### Why Sync is Required
+
+1. **Visibility**: Specs/tickets/tasks only appear in the dashboard after syncing
+2. **Orchestration**: The orchestrator only picks up tasks from the database, not from files
+3. **Traceability**: Server-side tracking enables dependency management and status updates
+4. **Persistence**: Local files can be lost; server data persists across sandbox restarts
+
+### Spec CLI Location
+
+The spec CLI is located at:
+```
+/root/.claude/skills/spec-driven-dev/scripts/spec_cli.py
+```
+
+### Required Workflow: Create → Validate → Sync
+
+**EVERY time you create or modify files in `.omoi_os/`, follow this workflow:**
+
+```bash
+# Step 1: Navigate to the spec CLI scripts directory
+cd /root/.claude/skills/spec-driven-dev/scripts
+
+# Step 2: Validate your specs (check for errors BEFORE syncing)
+python spec_cli.py validate
+
+# Step 3: Preview what will be synced (dry run)
+# Note: OMOIOS_PROJECT_ID and OMOIOS_API_URL are auto-injected - no need to specify!
+python spec_cli.py sync-specs diff
+
+# Step 4: Sync requirements and designs to create specs
+python spec_cli.py sync-specs push
+
+# Step 5: Preview ticket/task sync
+python spec_cli.py sync diff
+
+# Step 6: Sync tickets and tasks
+python spec_cli.py sync push
+
+# Step 7: Verify traceability
+python spec_cli.py api-trace
+```
+
+### Environment Variables (Auto-Injected by Sandbox)
+
+When the sandbox is created, the orchestrator **automatically injects** environment variables so that CLI tools and scripts work without manual configuration. This design means:
+
+1. **No manual URL configuration** - The API client knows where to connect
+2. **No credential passing** - Authentication is pre-configured
+3. **No project ID lookup** - The context is already set
+
+**Auto-injected variables:**
+| Variable | Description | Example Value |
+|----------|-------------|---------------|
+| `OMOIOS_API_URL` | API endpoint URL | `https://api.omoios.dev` |
+| `OMOIOS_API_KEY` | Authentication key | `sk-...` |
+| `OMOIOS_PROJECT_ID` | Current project ID | `proj-abc123` |
+| `TASK_ID` | Current task being executed | `task-xyz789` |
+| `AGENT_ID` | Agent executing the task | `agent-def456` |
+| `EXECUTION_MODE` | Skill loading mode | `implementation` or `exploration` |
+
+**Fallback behavior:** If running outside a sandbox (e.g., local development), the CLI falls back to `https://api.omoios.dev` as the default API URL. You can override any value by passing explicit arguments like `--api-url` or `--project-id` if needed.
+
+**Bottom line:** Just run the commands - no configuration required inside sandboxes.
+
+### Quick Reference Commands
+
+```bash
+# Show all local specs
+python spec_cli.py show all
+
+# Show only tickets
+python spec_cli.py show tickets
+
+# Show only tasks with blocking status
+python spec_cli.py show tasks
+
+# Show dependency graph
+python spec_cli.py show graph
+
+# Show ready tasks (not blocked)
+python spec_cli.py show ready
+
+# List projects from server (uses OMOIOS_API_URL automatically)
+python spec_cli.py projects
+
+# View project details (uses OMOIOS_PROJECT_ID and OMOIOS_API_URL automatically)
+python spec_cli.py project
+```
+
+### ❌ DO NOT Skip Syncing
+
+If you only create local files without syncing:
+- Tasks won't be picked up by agents
+- Tickets won't appear in the dashboard
+- Dependencies won't be tracked
+- Status updates won't propagate
+
+---
+
 ## The Core Flow
 
 ```
@@ -542,6 +784,8 @@ Check existing: `ls .omoi_os/tickets/`
 ---
 id: TKT-{NNN}
 title: {Ticket Title}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
 status: backlog
 priority: HIGH
 estimate: M
@@ -620,8 +864,9 @@ Check existing: `ls .omoi_os/tasks/`
 ---
 id: TSK-{NNN}
 title: {Task Title}
+created: {YYYY-MM-DD}
 status: pending
-ticket_id: TKT-{NNN}
+parent_ticket: TKT-{NNN}
 estimate: S
 type: implementation
 dependencies:
@@ -695,40 +940,29 @@ class FeatureService:
 
 ### Using spec_cli.py
 
-After creating all artifacts locally, sync them to the OmoiOS API.
-
-**IMPORTANT:** Always use `uv run` to execute the scripts. This automatically handles dependency installation via PEP 723 inline metadata.
+After creating all artifacts locally, sync them to the OmoiOS API:
 
 ```bash
 # Navigate to scripts directory
-cd .claude/skills/spec-driven-dev/scripts
+cd /root/.claude/skills/spec-driven-dev/scripts
 
 # 1. Validate local specs first
-uv run spec_cli.py validate
+python spec_cli.py validate
 
 # 2. Preview what you have
-uv run spec_cli.py show all
+python spec_cli.py show all
 
-# 3. Find your project ID
-uv run spec_cli.py projects --api-url http://0.0.0.0:18000
+# 3. Find your project ID (if not in env)
+python spec_cli.py projects
 
 # 4. Dry-run sync to see what would change
-uv run spec_cli.py sync diff --project-id <uuid> --api-url http://0.0.0.0:18000
+python spec_cli.py sync diff
 
 # 5. Push to API
-uv run spec_cli.py sync push --project-id <uuid> --api-url http://0.0.0.0:18000
+python spec_cli.py sync push
 
 # 6. Verify in API
-uv run spec_cli.py project <uuid> --api-url http://0.0.0.0:18000
-```
-
-### Environment Variables
-
-Set these to avoid passing flags every time:
-
-```bash
-export OMOIOS_API_URL="http://0.0.0.0:18000"
-export OMOIOS_API_KEY="your-api-key"
+python spec_cli.py project
 ```
 
 ### Sync Behavior
@@ -816,9 +1050,282 @@ For TKT-002:
 ### Step 8: Sync to API
 
 ```bash
-cd .claude/skills/spec-driven-dev/scripts
-uv run spec_cli.py validate
-uv run spec_cli.py sync push --project-id <uuid>
+cd /root/.claude/skills/spec-driven-dev/scripts
+python spec_cli.py validate
+python spec_cli.py sync push
+```
+
+---
+
+## Concrete Example: Full File Contents
+
+This section shows **exact file contents** you should create. Copy these patterns for your specs.
+
+### Example Ticket File
+
+**File: `.omoi_os/tickets/TKT-001.md`**
+
+```markdown
+---
+id: TKT-001
+title: Webhook Infrastructure Setup
+created: 2025-01-15
+updated: 2025-01-15
+status: backlog
+priority: HIGH
+type: feature
+feature: webhook-notifications
+estimate: 3d
+requirements:
+  - REQ-WEBHOOK-FUNC-001
+  - REQ-WEBHOOK-FUNC-002
+dependencies:
+  blocked_by: []
+  blocks:
+    - TKT-002
+---
+
+# TKT-001: Webhook Infrastructure Setup
+
+## Objective
+
+Set up the core webhook infrastructure including database models, delivery service with retry logic, and API endpoints for webhook management.
+
+## Scope
+
+### In Scope
+- WebhookSubscription database model
+- WebhookDelivery model for tracking delivery attempts
+- WebhookDeliveryService with exponential backoff retry
+- CRUD API endpoints for webhook subscriptions
+- HMAC signature generation for payload verification
+
+### Out of Scope
+- Platform-specific formatters (Slack, Discord) - covered in TKT-002
+- UI for webhook management - future ticket
+
+## Acceptance Criteria
+
+- [ ] WebhookSubscription model with url, secret, events[], active fields
+- [ ] WebhookDelivery model tracks each delivery attempt with status
+- [ ] Service delivers webhooks with 3 retries and exponential backoff
+- [ ] All endpoints require authentication
+- [ ] Webhook payloads include HMAC-SHA256 signature header
+- [ ] Unit tests cover delivery retry logic
+- [ ] Integration tests verify end-to-end webhook delivery
+
+## Technical Notes
+
+- Integrate with existing EventBusService to subscribe to events
+- Use background task for async delivery (don't block event processing)
+- Store webhook secret encrypted at rest
+
+## Tasks
+
+- TSK-001: Add webhook models to database
+- TSK-002: Create database migration
+- TSK-003: Implement WebhookDeliveryService
+- TSK-004: Implement WebhookNotificationService
+- TSK-005: Add API routes for webhook CRUD
+- TSK-006: Write comprehensive tests
+```
+
+### Example Task File
+
+**File: `.omoi_os/tasks/TSK-003.md`**
+
+```markdown
+---
+id: TSK-003
+title: Implement WebhookDeliveryService
+created: 2025-01-15
+status: pending
+priority: HIGH
+type: implementation
+parent_ticket: TKT-001
+estimate: 4h
+dependencies:
+  depends_on:
+    - TSK-001
+    - TSK-002
+  blocks:
+    - TSK-004
+---
+
+# TSK-003: Implement WebhookDeliveryService
+
+## Objective
+
+Create a service that handles the actual HTTP delivery of webhook payloads with retry logic, signature generation, and delivery tracking.
+
+## Implementation Details
+
+### File Location
+`omoi_os/services/webhook_delivery.py`
+
+### Class Structure
+```python
+class WebhookDeliveryService:
+    def __init__(self, db: DatabaseService):
+        self.db = db
+        self.http_client = httpx.AsyncClient(timeout=30.0)
+
+    async def deliver(
+        self,
+        subscription: WebhookSubscription,
+        event_type: str,
+        payload: dict,
+    ) -> WebhookDelivery:
+        """Deliver webhook with retry logic."""
+        ...
+
+    def _generate_signature(self, payload: bytes, secret: str) -> str:
+        """Generate HMAC-SHA256 signature."""
+        ...
+
+    async def _attempt_delivery(
+        self,
+        url: str,
+        payload: dict,
+        headers: dict,
+    ) -> tuple[bool, int, str]:
+        """Single delivery attempt. Returns (success, status_code, response)."""
+        ...
+```
+
+### Retry Configuration
+- Max retries: 3
+- Backoff: exponential with jitter
+- Delays: 1s, 2s, 4s (base)
+- Timeout per request: 30 seconds
+
+### Headers to Include
+```
+X-OmoiOS-Event: {event_type}
+X-OmoiOS-Delivery: {delivery_id}
+X-OmoiOS-Signature: sha256={signature}
+Content-Type: application/json
+```
+
+## Verification
+
+```bash
+# Run unit tests
+uv run pytest tests/unit/services/test_webhook_delivery.py -v
+
+# Test signature generation
+uv run python -c "
+from omoi_os.services.webhook_delivery import WebhookDeliveryService
+svc = WebhookDeliveryService(None)
+sig = svc._generate_signature(b'{\"test\": true}', 'secret')
+print(f'Signature: {sig}')
+"
+```
+
+## Done When
+
+- [ ] WebhookDeliveryService class implemented
+- [ ] Signature generation matches standard HMAC-SHA256
+- [ ] Retry logic uses exponential backoff with jitter
+- [ ] Each delivery attempt is recorded in WebhookDelivery table
+- [ ] Unit tests pass with 100% coverage of retry scenarios
+```
+
+### Running the Complete Flow
+
+After creating your spec files, run these commands:
+
+```bash
+# Navigate to the scripts directory
+cd /root/.claude/skills/spec-driven-dev/scripts
+
+# Step 1: Validate all specs (checks frontmatter, references, structure)
+python spec_cli.py validate
+
+# Expected output:
+# ✓ Validation passed!
+# - 2 tickets validated
+# - 6 tasks validated
+# - All dependencies resolved
+# - All references valid
+
+# Step 2: Preview what will be synced (dry run)
+python spec_cli.py sync diff
+
+# Expected output:
+# Connecting to https://api.omoios.dev...
+# Connected!
+#
+# Sync Results:
+# ------------------------------------------------------------
+# [CREATE] ticket TKT-001
+#          Would create: Webhook Infrastructure Setup
+# [CREATE] ticket TKT-002
+#          Would create: Platform-Specific Formatters
+# [CREATE] task TSK-001
+#          Would create: Add webhook models to database
+# ... (more tasks)
+# ------------------------------------------------------------
+# Summary: 8 would be created, 0 updated, 0 skipped
+
+# Step 3: Actually sync to the API
+python spec_cli.py sync push
+
+# Expected output:
+# Connecting to https://api.omoios.dev...
+# Connected!
+# Syncing to API...
+#
+# Sync Results:
+# ------------------------------------------------------------
+# [CREATE] ticket TKT-001
+#          Created with API ID: 550e8400-e29b-41d4-a716-446655440000
+# [CREATE] task TSK-001
+#          Created with API ID: 550e8400-e29b-41d4-a716-446655440001
+# ... (more items)
+# ------------------------------------------------------------
+# Summary: 8 created, 0 updated, 0 skipped, 0 failed
+
+# Step 4: Verify what's in the project
+python spec_cli.py project
+
+# Expected output:
+# ══════════════════════════════════════════════════════════════
+# PROJECT: My Project
+# ══════════════════════════════════════════════════════════════
+#
+# TICKETS (2 total)
+# ──────────────────────────────────────────────────────────────
+# • TKT-001: Webhook Infrastructure Setup [backlog]
+#   └── 6 tasks
+# • TKT-002: Platform-Specific Formatters [backlog]
+#   └── 2 tasks
+```
+
+### Common Issues & Solutions
+
+**Issue: "Validation failed - missing frontmatter"**
+```bash
+# Check which files are missing frontmatter
+python spec_cli.py validate
+
+# Solution: Add YAML frontmatter block at the top of each file
+# Every file MUST start with --- and end the frontmatter with ---
+```
+
+**Issue: "Dependency not found: TSK-099"**
+```bash
+# Your task references a dependency that doesn't exist
+# Solution: Either create TSK-099.md or remove it from depends_on
+```
+
+**Issue: "Connection refused" or timeout**
+```bash
+# Check if API URL is correct
+echo $OMOIOS_API_URL
+
+# In sandbox, this should be auto-injected
+# If empty, the CLI falls back to https://api.omoios.dev
 ```
 
 ---
@@ -846,36 +1353,34 @@ uv run spec_cli.py sync push --project-id <uuid>
 
 ## CLI Reference
 
-**IMPORTANT:** Always use `uv run` to execute the scripts. This handles dependency installation automatically.
-
 ### View Local Specs
 
 ```bash
-uv run spec_cli.py show all           # Everything
-uv run spec_cli.py show requirements  # Just requirements
-uv run spec_cli.py show designs       # Just designs
-uv run spec_cli.py show tickets       # Just tickets
-uv run spec_cli.py show tasks         # Just tasks
-uv run spec_cli.py show graph         # Task dependency graph
-uv run spec_cli.py show ticket-graph  # Ticket dependency graph
-uv run spec_cli.py show traceability  # Full traceability matrix
-uv run spec_cli.py show ready         # Tasks ready to work on
+python spec_cli.py show all           # Everything
+python spec_cli.py show requirements  # Just requirements
+python spec_cli.py show designs       # Just designs
+python spec_cli.py show tickets       # Just tickets
+python spec_cli.py show tasks         # Just tasks
+python spec_cli.py show graph         # Task dependency graph
+python spec_cli.py show ticket-graph  # Ticket dependency graph
+python spec_cli.py show traceability  # Full traceability matrix
+python spec_cli.py show ready         # Tasks ready to work on
 ```
 
 ### Validate
 
 ```bash
-uv run spec_cli.py validate           # Check for issues
+python spec_cli.py validate           # Check for issues
 ```
 
 ### Sync to API
 
 ```bash
-uv run spec_cli.py projects                              # List projects
-uv run spec_cli.py sync diff --project-id <uuid>         # Preview changes
-uv run spec_cli.py sync push --project-id <uuid>         # Push to API
-uv run spec_cli.py project <uuid>                        # View project in API
-uv run spec_cli.py api-trace <uuid>                      # Full API traceability
+python spec_cli.py projects                              # List projects
+python spec_cli.py sync diff --project-id <uuid>         # Preview changes
+python spec_cli.py sync push --project-id <uuid>         # Push to API
+python spec_cli.py project <uuid>                        # View project in API
+python spec_cli.py api-trace <uuid>                      # Full API traceability
 ```
 
 ---
@@ -926,10 +1431,10 @@ cat .omoi_os/requirements/*.md
 cat .omoi_os/designs/*.md
 
 # 2. View the full state
-uv run spec_cli.py show all
+python spec_cli.py show all
 
 # 3. Check what's in the API
-uv run spec_cli.py project <uuid>
+python spec_cli.py project
 ```
 
 Then resume from where you left off based on what's complete and what's missing.

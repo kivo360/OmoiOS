@@ -102,6 +102,8 @@ requirements:
 ---
 id: TKT-{NNN}
 title: {Ticket Title}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
 status: backlog  # backlog | analyzing | building | testing | done | blocked
 priority: HIGH  # CRITICAL | HIGH | MEDIUM | LOW
 estimate: M  # S | M | L | XL
@@ -119,8 +121,9 @@ dependencies:
 ---
 id: TSK-{NNN}
 title: {Task Title}
+created: {YYYY-MM-DD}
 status: pending  # pending | in_progress | review | done | blocked
-ticket_id: TKT-{NNN}
+parent_ticket: TKT-{NNN}
 estimate: S  # S | M | L
 type: implementation  # implementation | refactor | test | documentation | research | bugfix
 dependencies:
@@ -781,6 +784,8 @@ Check existing: `ls .omoi_os/tickets/`
 ---
 id: TKT-{NNN}
 title: {Ticket Title}
+created: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
 status: backlog
 priority: HIGH
 estimate: M
@@ -859,8 +864,9 @@ Check existing: `ls .omoi_os/tasks/`
 ---
 id: TSK-{NNN}
 title: {Task Title}
+created: {YYYY-MM-DD}
 status: pending
-ticket_id: TKT-{NNN}
+parent_ticket: TKT-{NNN}
 estimate: S
 type: implementation
 dependencies:
@@ -1063,6 +1069,8 @@ This section shows **exact file contents** you should create. Copy these pattern
 ---
 id: TKT-001
 title: Webhook Infrastructure Setup
+created: 2025-01-15
+updated: 2025-01-15
 status: backlog
 priority: HIGH
 type: feature
@@ -1130,10 +1138,11 @@ Set up the core webhook infrastructure including database models, delivery servi
 ---
 id: TSK-003
 title: Implement WebhookDeliveryService
+created: 2025-01-15
 status: pending
 priority: HIGH
 type: implementation
-ticket: TKT-001
+parent_ticket: TKT-001
 estimate: 4h
 dependencies:
   depends_on:
