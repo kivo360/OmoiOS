@@ -3838,6 +3838,23 @@ When you have completed the task, you MUST:
 
 **When all work is done and pushed, include the phrase `{config.completion_signal}` in your response.**
 """
+            # =================================================================
+            # COMPREHENSIVE LOGGING: First Iteration Prompt
+            # =================================================================
+            logger.info("=" * 80)
+            logger.info("CONTINUOUS MODE: Building First Iteration Prompt")
+            logger.info("=" * 80)
+            logger.info(f"CONTINUOUS MODE: Iteration Number = {state.iteration_num}")
+            logger.info(f"CONTINUOUS MODE: Completion Signal = '{config.completion_signal}'")
+            logger.info(f"CONTINUOUS MODE: Base Task Length = {len(base_task)} chars")
+            logger.info(f"CONTINUOUS MODE: Final Prompt Length = {len(prompt)} chars")
+            logger.info("-" * 80)
+            logger.info("CONTINUOUS MODE: First Iteration Prompt Content:")
+            logger.info("=" * 40 + " BEGIN ITERATION PROMPT " + "=" * 40)
+            for line in prompt.split('\n'):
+                logger.info(f"  {line}")
+            logger.info("=" * 40 + " END ITERATION PROMPT " + "=" * 40)
+            logger.info("=" * 80)
             return prompt
 
         # Subsequent iterations - include notes file and previous context
@@ -3864,6 +3881,40 @@ This is a continuation of your previous work. Please review the notes below and 
 3. Ensure all work is committed, pushed, and a PR exists
 4. Include `{config.completion_signal}` when truly done
 """
+        # =================================================================
+        # COMPREHENSIVE LOGGING: Subsequent Iteration Prompt
+        # =================================================================
+        logger.info("=" * 80)
+        logger.info(f"CONTINUOUS MODE: Building Iteration {state.iteration_num} Prompt")
+        logger.info("=" * 80)
+        logger.info(f"CONTINUOUS MODE: Iteration Number = {state.iteration_num}")
+        logger.info(f"CONTINUOUS MODE: Completion Signal = '{config.completion_signal}'")
+        logger.info(f"CONTINUOUS MODE: Notes File = {notes_path}")
+        logger.info(f"CONTINUOUS MODE: Notes Content Length = {len(notes_content)} chars")
+        logger.info("-" * 80)
+        logger.info("CONTINUOUS MODE: Iteration State:")
+        logger.info(f"  - successful_iterations: {state.successful_iterations}")
+        logger.info(f"  - validation_passed: {state.validation_passed}")
+        logger.info(f"  - code_committed: {state.code_committed}")
+        logger.info(f"  - code_pushed: {state.code_pushed}")
+        logger.info(f"  - pr_created: {state.pr_created}")
+        logger.info(f"  - total_cost: ${state.total_cost:.4f}")
+        logger.info(f"  - consecutive_errors: {state.consecutive_errors}")
+        logger.info("-" * 80)
+        if notes_content:
+            logger.info("CONTINUOUS MODE: Notes File Content:")
+            logger.info("=" * 40 + " BEGIN NOTES " + "=" * 40)
+            for line in notes_content.split('\n'):
+                logger.info(f"  {line}")
+            logger.info("=" * 40 + " END NOTES " + "=" * 40)
+        logger.info("-" * 80)
+        logger.info(f"CONTINUOUS MODE: Final Prompt Length = {len(prompt)} chars")
+        logger.info("CONTINUOUS MODE: Iteration Prompt Content:")
+        logger.info("=" * 40 + " BEGIN ITERATION PROMPT " + "=" * 40)
+        for line in prompt.split('\n'):
+            logger.info(f"  {line}")
+        logger.info("=" * 40 + " END ITERATION PROMPT " + "=" * 40)
+        logger.info("=" * 80)
         return prompt
 
     async def run(self):
