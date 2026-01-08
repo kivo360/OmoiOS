@@ -1295,13 +1295,17 @@ class WorkerConfig:
             os.environ.get("REQUIRE_SPEC_SKILL", "").lower() == "true"
         )
 
-        # Add Python dependency management instructions (applies to all modes)
+        # Add dependency management instructions (applies to all modes)
         append_parts.append("""
-## Python Dependency Management (CRITICAL - Do This First!)
+## Dependency Management (CRITICAL - Do This First!)
 
-**BEFORE running ANY Python code**, you MUST install dependencies based on the project type.
+**BEFORE running ANY code**, you MUST install dependencies based on the project type.
 
-### Step 1: Detect the dependency manager
+---
+
+### Python Projects
+
+**Step 1: Detect the Python dependency manager**
 Check which files exist in the project root:
 - `pyproject.toml` with `[tool.uv]` section → **UV** (preferred)
 - `pyproject.toml` with `[tool.poetry]` section → **Poetry**
@@ -1309,60 +1313,87 @@ Check which files exist in the project root:
 - `requirements.txt` → **pip**
 - `setup.py` → **pip**
 
-### Step 2: Install dependencies based on detected manager
+**Step 2: Install and run based on detected manager**
 
-**UV (Modern, Fastest):**
+| Manager | Install | Run Script | Run Module |
+|---------|---------|------------|------------|
+| **UV** | `uv sync` | `uv run python script.py` | `uv run python -m module` |
+| **Poetry** | `poetry install` | `poetry run python script.py` | `poetry run python -m module` |
+| **pip** | `pip install -r requirements.txt` | `python script.py` (after venv activation) | `python -m module` |
+
+**For pip projects**, create/activate venv first:
 ```bash
-# Install dependencies
-uv sync
-
-# Run Python scripts
-uv run python script.py
-
-# Run modules
-uv run python -m module_name
-```
-
-**Poetry:**
-```bash
-# Install dependencies
-poetry install
-
-# Run Python scripts
-poetry run python script.py
-
-# Run modules
-poetry run python -m module_name
-```
-
-**pip (with requirements.txt or setup.py):**
-```bash
-# Create virtual environment if not exists
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# OR: .venv\\Scripts\\activate  # Windows
-
-# Install dependencies
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-# OR: pip install -e .
-
-# Run Python scripts (venv must be activated)
-python script.py
 ```
 
-### Step 3: Running Python code
-
-**ALWAYS use the correct runner for the project:**
-- UV project: `uv run python ...`
-- Poetry project: `poetry run python ...`
-- pip/venv project: Activate venv first, then `python ...`
-
-**NEVER run `python script.py` directly without installing dependencies first!**
+**NEVER run `python script.py` directly without installing dependencies!**
 If you see "ModuleNotFoundError", you forgot to install dependencies.
 
-### Quick Detection Script
+---
+
+### Node.js Projects
+
+**Step 1: Detect the Node.js package manager**
+Check which lock files exist in the project root:
+- `pnpm-lock.yaml` → **pnpm** (fastest, most efficient)
+- `yarn.lock` → **Yarn**
+- `package-lock.json` → **npm**
+- `package.json` only (no lock file) → **npm** (default)
+
+**Step 2: Install and run based on detected manager**
+
+| Manager | Install | Run Script | Run Binary |
+|---------|---------|------------|------------|
+| **pnpm** | `pnpm install` | `pnpm run <script>` | `pnpm exec <binary>` or `pnpm <binary>` |
+| **Yarn** | `yarn install` | `yarn <script>` | `yarn <binary>` |
+| **npm** | `npm install` | `npm run <script>` | `npx <binary>` |
+
+**Common scripts** (defined in package.json):
 ```bash
-if [ -f "pyproject.toml" ] && grep -q "tool.uv" pyproject.toml 2>/dev/null; then
+# Development server
+pnpm dev  # or: yarn dev, npm run dev
+
+# Build for production
+pnpm build  # or: yarn build, npm run build
+
+# Run tests
+pnpm test  # or: yarn test, npm run test
+
+# Linting
+pnpm lint  # or: yarn lint, npm run lint
+```
+
+**Running binaries from node_modules:**
+```bash
+# pnpm
+pnpm exec tsc --version
+pnpm exec eslint .
+
+# yarn
+yarn tsc --version
+yarn eslint .
+
+# npm
+npx tsc --version
+npx eslint .
+```
+
+**NEVER run `node script.js` with imports without installing dependencies!**
+If you see "Cannot find module", you forgot to run install.
+
+---
+
+### Quick Project Detection
+```bash
+# Detect project type and show correct commands
+if [ -f "pnpm-lock.yaml" ]; then
+    echo "pnpm project - use: pnpm install && pnpm run <script>"
+elif [ -f "yarn.lock" ]; then
+    echo "Yarn project - use: yarn install && yarn <script>"
+elif [ -f "package-lock.json" ] || [ -f "package.json" ]; then
+    echo "npm project - use: npm install && npm run <script>"
+elif [ -f "pyproject.toml" ] && grep -q "tool.uv" pyproject.toml 2>/dev/null; then
     echo "UV project - use: uv sync && uv run python ..."
 elif [ -f "pyproject.toml" ] && grep -q "tool.poetry" pyproject.toml 2>/dev/null; then
     echo "Poetry project - use: poetry install && poetry run python ..."
