@@ -184,6 +184,26 @@ class DaytonaSpawnerService:
         Raises:
             RuntimeError: If sandbox creation fails
         """
+        # Log ALL incoming parameters at the start for full traceability
+        logger.info(
+            "[SPAWNER] spawn_for_task called",
+            extra={
+                "task_id": task_id,
+                "agent_id": agent_id,
+                "phase_id": phase_id,
+                "agent_type": agent_type,
+                "runtime": runtime,
+                "execution_mode": execution_mode,
+                "continuous_mode": continuous_mode,
+                "require_spec_skill": require_spec_skill,
+                "project_id": project_id,
+                "has_omoios_api_key": omoios_api_key is not None,
+                "has_extra_env": extra_env is not None,
+                "has_labels": labels is not None,
+                "has_task_requirements": task_requirements is not None,
+            }
+        )
+
         if not self.daytona_api_key:
             raise RuntimeError("Daytona API key not configured")
 
@@ -220,27 +240,66 @@ class DaytonaSpawnerService:
         }
 
         # Add spec skill enforcement if requested (from frontend dropdown)
+        # This is the critical path for spec-driven development mode
         if require_spec_skill:
             env_vars["REQUIRE_SPEC_SKILL"] = "true"
             logger.info(
-                "Spec skill enforcement enabled",
-                extra={"task_id": task_id, "execution_mode": execution_mode}
+                "[SPEC-SKILL] ✅ Spec skill enforcement ENABLED for sandbox",
+                extra={
+                    "task_id": task_id,
+                    "agent_id": agent_id,
+                    "execution_mode": execution_mode,
+                    "sandbox_id": sandbox_id,
+                    "project_id": project_id,
+                }
+            )
+        else:
+            logger.info(
+                "[SPEC-SKILL] ❌ Spec skill enforcement DISABLED (require_spec_skill=False)",
+                extra={
+                    "task_id": task_id,
+                    "execution_mode": execution_mode,
+                }
             )
 
         # Add spec CLI env vars for syncing specs/tickets/tasks
         # These are needed for the spec-driven-dev skill to work properly
         if project_id:
             env_vars["OMOIOS_PROJECT_ID"] = project_id
+            logger.info(
+                "[SPEC-SKILL] Project ID set for spec CLI",
+                extra={"project_id": project_id, "task_id": task_id}
+            )
+        elif require_spec_skill:
+            # Warn if spec skill is enabled but no project_id
+            logger.warning(
+                "[SPEC-SKILL] ⚠️ require_spec_skill=true but NO project_id provided! "
+                "Spec sync will fail without project_id.",
+                extra={"task_id": task_id}
+            )
 
         # Get API key from parameter or fall back to LLM settings
+        api_key_source = None
         if omoios_api_key:
             env_vars["OMOIOS_API_KEY"] = omoios_api_key
+            api_key_source = "parameter"
         else:
             # Fall back to LLM API key from settings
             from omoi_os.config import get_app_settings
             app_settings = get_app_settings()
             if app_settings.llm.api_key:
                 env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
+                api_key_source = "llm_settings"
+
+        if require_spec_skill:
+            logger.info(
+                "[SPEC-SKILL] API key configured for spec CLI",
+                extra={
+                    "api_key_source": api_key_source or "NOT_SET",
+                    "has_api_key": api_key_source is not None,
+                    "task_id": task_id,
+                }
+            )
 
         # Determine continuous mode:
         # - None (default): Auto-enable for implementation/validation modes with Claude runtime
@@ -607,7 +666,31 @@ class DaytonaSpawnerService:
                     )
                 )
 
-            logger.info(f"Sandbox {sandbox_id} created and running")
+            # Log comprehensive sandbox creation summary with ALL spec-skill related variables
+            logger.info(
+                f"Sandbox {sandbox_id} created and running",
+                extra={
+                    "sandbox_id": sandbox_id,
+                    "task_id": task_id,
+                    "agent_id": agent_id,
+                    "phase_id": phase_id,
+                    "runtime": runtime,
+                    "execution_mode": execution_mode,
+                    "continuous_mode": effective_continuous_mode,
+                    # Spec-skill specific variables
+                    "require_spec_skill": require_spec_skill,
+                    "project_id": project_id,
+                    "has_omoios_api_key": "OMOIOS_API_KEY" in env_vars,
+                    "omoios_api_url": env_vars.get("OMOIOS_API_URL"),
+                    # Key env vars being passed
+                    "env_vars_summary": {
+                        "REQUIRE_SPEC_SKILL": env_vars.get("REQUIRE_SPEC_SKILL", "not_set"),
+                        "OMOIOS_PROJECT_ID": env_vars.get("OMOIOS_PROJECT_ID", "not_set"),
+                        "EXECUTION_MODE": env_vars.get("EXECUTION_MODE"),
+                        "CONTINUOUS_MODE": env_vars.get("CONTINUOUS_MODE", "not_set"),
+                    },
+                }
+            )
             return sandbox_id
 
         except Exception as e:
