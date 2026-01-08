@@ -408,7 +408,8 @@ class DaytonaSpawnerService:
         if agent_type:
             env_vars["AGENT_TYPE"] = agent_type
 
-        # Add LLM configuration from settings
+        # Add LLM configuration from settings (for OpenHands SDK compatibility)
+        # Note: Claude Agent SDK uses ANTHROPIC_* env vars and CLAUDE_CODE_OAUTH_TOKEN
         app_settings = get_app_settings()
         if hasattr(app_settings, "llm") and app_settings.llm:
             if app_settings.llm.api_key:
@@ -443,6 +444,7 @@ class DaytonaSpawnerService:
 
             creds = AnthropicCredentials(
                 api_key=settings.get_api_key() or "",
+                oauth_token=settings.get_oauth_token(),  # Include OAuth token!
                 base_url=settings.base_url,
                 model=settings.model,
                 default_model=settings.default_model,
@@ -455,15 +457,24 @@ class DaytonaSpawnerService:
         # Prefer OAuth token for Claude Agent SDK, fallback to API key
         if creds.oauth_token:
             env_vars["CLAUDE_CODE_OAUTH_TOKEN"] = creds.oauth_token
-            logger.debug("Using OAuth token for Claude Agent SDK authentication")
+            logger.info(f"Using OAuth token for Claude Agent SDK (prefix: {creds.oauth_token[:15]}...)")
         elif creds.api_key:
             env_vars["ANTHROPIC_API_KEY"] = creds.api_key
             logger.debug("Using API key for authentication (OAuth token not available)")
 
+        # Only set ANTHROPIC_BASE_URL if a custom endpoint is specified
+        # If base_url is None or empty, use default Anthropic API (no env var needed)
         if creds.base_url:
             env_vars["ANTHROPIC_BASE_URL"] = creds.base_url
+            logger.info(f"Using custom API endpoint: {creds.base_url}")
+        else:
+            logger.info("Using default Anthropic API (no custom base_url)")
+
+        # Set model for both MODEL and ANTHROPIC_MODEL
+        # Worker reads MODEL first, falls back to ANTHROPIC_MODEL
         if creds.model:
-            env_vars["ANTHROPIC_MODEL"] = creds.model
+            env_vars["MODEL"] = creds.model  # Primary env var for worker
+            env_vars["ANTHROPIC_MODEL"] = creds.model  # Fallback / compatibility
         # Model aliases for Claude SDK compatibility
         if creds.default_model:
             env_vars["ANTHROPIC_DEFAULT_MODEL"] = creds.default_model
