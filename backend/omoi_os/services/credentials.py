@@ -123,12 +123,14 @@ class CredentialsService:
     # Default model configuration (Claude via Claude Agent SDK)
     DEFAULT_BASE_URL = None  # Use default Anthropic API
     DEFAULT_MODEL = "claude-opus-4-5-20251101"
-    DEFAULT_MAX_TOKENS = 16384  # Max output tokens per response
-    DEFAULT_CONTEXT_LENGTH = 200000  # Claude Opus 4.5 context window (200k)
+    DEFAULT_MAX_TOKENS = (
+        64000  # Max output tokens per response (Claude 4.5 supports 64K)
+    )
+    DEFAULT_CONTEXT_LENGTH = 200000  # Claude context window (200k)
     DEFAULT_MODELS = {
-        "default": "claude-opus-4-5-20251101",
-        "haiku": "claude-haiku-4-20250514",  # Fast/cheap
-        "sonnet": "claude-sonnet-4-20250514",  # Balanced
+        "default": "claude-sonnet-4-5-20250929",
+        "haiku": "claude-haiku-4-5-20251001",  # Fast/cheap
+        "sonnet": "claude-sonnet-4-5-20250929",  # Balanced
         "opus": "claude-opus-4-5-20251101",  # Most capable
     }
 
