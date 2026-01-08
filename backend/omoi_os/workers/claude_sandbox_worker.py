@@ -1327,7 +1327,28 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**NEVER run `python script.py` directly without installing dependencies!**
+**Common Python tool examples** (always prefix with runner!):
+```bash
+# UV examples
+uv run uvicorn main:app --reload          # Run FastAPI/Starlette server
+uv run pytest tests/                       # Run tests
+uv run alembic upgrade head                # Run database migrations
+uv run flask run                           # Run Flask server
+uv run celery worker                       # Run Celery worker
+uv run python -m http.server 8000          # Simple HTTP server
+
+# Poetry examples
+poetry run uvicorn main:app --reload
+poetry run pytest tests/
+poetry run alembic upgrade head
+
+# pip (after venv activation)
+uvicorn main:app --reload
+pytest tests/
+alembic upgrade head
+```
+
+**NEVER run `python script.py` or `uvicorn` directly without installing dependencies!**
 If you see "ModuleNotFoundError", you forgot to install dependencies.
 
 ---
