@@ -2360,9 +2360,10 @@ class SandboxWorker:
                 await reporter.report("agent.tool_completed", event_data)
 
             # Spec-driven workflow auto-sync reminder
+            # ONLY runs when REQUIRE_SPEC_SKILL=true to avoid overhead on normal sandboxes
             # When we detect a successful `spec_cli.py validate` command,
             # inject a system message reminding the agent to sync to the API
-            if tool_name == "Bash":
+            if self.require_spec_skill and tool_name == "Bash":
                 command = tool_input.get("command", "")
                 # Detect spec_cli.py validate command
                 if "spec_cli.py" in command and "validate" in command:
