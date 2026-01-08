@@ -1291,59 +1291,119 @@ class WorkerConfig:
 
 You are in **exploration mode** with **spec-driven-dev skill MANDATORY**.
 
-### 🔴 FIRST STEP - LOAD THE SKILL
+## ⚠️ YOUR JOB IS NOT COMPLETE UNTIL SPECS ARE SYNCED TO THE API ⚠️
 
-**BEFORE doing anything else, you MUST load and follow the spec-driven-dev skill.**
+**CRITICAL**: Your task is to CREATE specs (requirements, designs, tickets, tasks) and SYNC them to the OmoiOS API. Confirming the CLI works is just a prerequisite - NOT the goal.
 
-**Option A: If you have Claude Code Agent's skill system available:**
+**You MUST complete ALL of these steps:**
+1. Load the skill (prerequisite)
+2. Ask discovery questions
+3. **CREATE** requirements, designs, tickets, and tasks in `.omoi_os/`
+4. **VALIDATE** the specs
+5. **SYNC** the specs to the API
+6. **COMMIT** and push to git
 
-Use the Skill tool to invoke the spec-driven-dev skill:
+**If you stop after confirming spec_cli.py works, YOU HAVE NOT DONE YOUR JOB.**
+
+---
+
+### Step 1: Load the Skill (Prerequisite Only)
+
+**Option A: If you have Claude Code Agent's skill system:**
 ```
 /spec-driven-dev
 ```
-This will load the skill directly into your capabilities.
 
-**Option B: If you don't have the Skill tool available:**
-
-Read the skill file and act out the skill as if it is a capability you have:
+**Option B: If you don't have the Skill tool:**
 ```bash
 cat /root/.claude/skills/spec-driven-dev/SKILL.md
 ```
-After reading, follow ALL instructions in the skill file exactly as written.
 
-The skill file contains:
-- YAML frontmatter templates you MUST copy exactly
-- Directory structure for `.omoi_os/`
-- CLI commands for validation and syncing
-- Complete workflow from discovery to sync
+**After loading the skill, PROCEED IMMEDIATELY to discovery questions - do NOT stop here.**
 
-**DO NOT proceed without loading/reading this skill first.**
+---
 
-### 🔴 MANDATORY WORKFLOW
+### Step 2: Discovery Phase (5-15 Questions)
 
-After reading the skill, follow this exact workflow:
+Ask the user clarifying questions about:
+- Problem & value (what pain does this solve?)
+- Users & journeys (who uses this? what's the flow?)
+- Scope & boundaries (what's in/out of scope?)
+- Technical context (integrations, constraints, performance?)
+- Trade-offs & risks
 
-1. **DISCOVER** - Ask 5-15 discovery questions before designing
-2. **CREATE SPECS** - Create files in `.omoi_os/` with proper YAML frontmatter:
-   - `.omoi_os/docs/prd-*.md` - Product Requirements Documents
-   - `.omoi_os/requirements/*.md` - Functional requirements (EARS format)
-   - `.omoi_os/designs/*.md` - Technical designs
-   - `.omoi_os/tickets/TKT-*.md` - Work tickets
-   - `.omoi_os/tasks/TSK-*.md` - Individual tasks
-3. **VALIDATE** - Run `python /root/.claude/skills/spec-driven-dev/scripts/spec_cli.py validate`
-4. **SYNC** - Run `python /root/.claude/skills/spec-driven-dev/scripts/spec_cli.py sync push`
-5. **GIT** - Commit and push: `git add -A && git commit -m "docs(scope): ..." && git push`
+---
 
-### 🔴 VALIDATION WILL BE ENFORCED
+### Step 3: CREATE THE SPECS (This is the actual work!)
+
+After discovery, you MUST create these files in `.omoi_os/`:
+
+```
+.omoi_os/
+├── docs/prd-{feature}.md           # Product Requirements Document
+├── requirements/{feature}.md        # EARS-format requirements
+├── designs/{feature}.md             # Technical design
+├── tickets/TKT-001.md, TKT-002.md   # Work tickets
+└── tasks/TSK-001.md, TSK-002.md...  # Individual tasks
+```
+
+**EVERY file MUST have YAML frontmatter.** Copy the exact templates from the skill file.
+
+---
+
+### Step 4: VALIDATE the Specs
+
+```bash
+cd /root/.claude/skills/spec-driven-dev/scripts
+python spec_cli.py validate
+```
+
+Fix any errors before proceeding.
+
+---
+
+### Step 5: SYNC TO THE API (Critical!)
+
+```bash
+# Preview what will be synced
+python spec_cli.py sync-specs diff
+python spec_cli.py sync diff
+
+# Push specs (requirements & designs) to create specs in the system
+python spec_cli.py sync-specs push
+
+# Push tickets and tasks
+python spec_cli.py sync push
+
+# Verify it worked
+python spec_cli.py api-trace
+```
+
+**If you skip this step, your work is INVISIBLE to the system.**
+
+---
+
+### Step 6: Commit and Push to Git
+
+```bash
+git add -A
+git commit -m "docs(feature): add spec for {feature-name}"
+git push
+```
+
+---
+
+## 🔴 AUTOMATIC VALIDATION
 
 **Your output WILL BE AUTOMATICALLY VALIDATED before task completion.**
-The validation checks:
-1. `.omoi_os/` directory exists
-2. At least one ticket or task file was created
-3. ALL files have valid YAML frontmatter (starting with `---`)
-4. ALL required fields are present in frontmatter
 
-**If validation fails, you must fix the issues before the task can complete.**
+Validation checks:
+1. `.omoi_os/` directory exists with files
+2. At least one ticket or task file was created
+3. ALL files have valid YAML frontmatter
+4. ALL required fields are present
+
+**If validation fails, your task is NOT complete.**
 
 ### Required Frontmatter Fields
 
@@ -1351,16 +1411,32 @@ The validation checks:
 - **requirements**: id, title, status, category
 - **designs**: id, title, status
 - **tickets**: id, title, status, priority
-- **tasks**: id, title, status, parent_ticket (NOT ticket_id!)
+- **tasks**: id, title, status, parent_ticket
 
-### ❌ FORBIDDEN
+---
 
-- DO NOT write implementation code in this mode
-- DO NOT create files without YAML frontmatter
-- DO NOT skip the validation step
-- DO NOT ignore the skill file instructions
+## ❌ COMMON MISTAKES TO AVOID
 
-**Focus on planning and documentation only.**""")
+- ❌ Stopping after confirming spec_cli.py works
+- ❌ Creating plain markdown without YAML frontmatter
+- ❌ Skipping the sync step (specs stay local-only)
+- ❌ Writing implementation code instead of specs
+- ❌ Not validating before syncing
+
+---
+
+## ✅ SUCCESS CRITERIA
+
+Your task is ONLY complete when:
+1. ✅ Discovery questions were asked and answered
+2. ✅ `.omoi_os/` contains requirements, designs, tickets, AND tasks
+3. ✅ All files have valid YAML frontmatter
+4. ✅ `spec_cli.py validate` passes
+5. ✅ `spec_cli.py sync push` successfully synced to API
+6. ✅ `spec_cli.py api-trace` shows items in the system
+7. ✅ Changes committed and pushed to git
+
+**DO NOT signal completion until ALL criteria are met.**""")
             else:
                 # Normal exploration mode - no forced skill, just general guidance
                 append_parts.append("""
