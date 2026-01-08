@@ -2359,6 +2359,52 @@ class SandboxWorker:
             else:
                 await reporter.report("agent.tool_completed", event_data)
 
+            # Spec-driven workflow auto-sync reminder
+            # When we detect a successful `spec_cli.py validate` command,
+            # inject a system message reminding the agent to sync to the API
+            if tool_name == "Bash":
+                command = tool_input.get("command", "")
+                # Detect spec_cli.py validate command
+                if "spec_cli.py" in command and "validate" in command:
+                    response_str = serialized_response or ""
+                    # Check for successful validation (no errors)
+                    if (
+                        "validation passed" in response_str.lower()
+                        or "✓" in response_str
+                        or ("validated" in response_str.lower() and "error" not in response_str.lower())
+                    ):
+                        logger.info(
+                            "Spec validation successful - injecting sync reminder",
+                            extra={"command": command},
+                        )
+                        return {
+                            "systemMessage": """
+🔔 SPEC VALIDATION PASSED - SYNC REQUIRED!
+
+Your specs validated successfully. Now you MUST sync them to the API to make them visible.
+
+Run these commands IN ORDER:
+```bash
+cd /root/.claude/skills/spec-driven-dev/scripts
+
+# Sync requirements & designs to create specs in the API
+python spec_cli.py sync-specs push
+
+# Sync tickets and tasks
+python spec_cli.py sync push
+
+# Verify everything synced correctly
+python spec_cli.py api-trace
+```
+
+⚠️ Your work is NOT complete until all sync commands succeed.
+""",
+                            "hookSpecificOutput": {
+                                "hookEventName": "PostToolUse",
+                                "additionalContext": "Spec validation passed - auto-sync reminder injected",
+                            },
+                        }
+
             return {}
 
         return track_tool_use
