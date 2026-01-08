@@ -2330,24 +2330,45 @@ def setup_github_workspace(config: WorkerConfig) -> bool:
 
 
 def find_dependency_files(cwd: str) -> dict:
-    """Search for dependency files in common project directories.
+    """Search for dependency files recursively using glob.
 
-    Searches root and common subdirectories (backend/, frontend/, src/, app/)
-    for Python and Node.js dependency files.
+    Uses pathlib.rglob to find dependency files anywhere in the workspace,
+    excluding common vendor/cache directories like node_modules, .venv, etc.
 
     Returns:
-        dict mapping file types to their full paths (or None if not found)
+        dict mapping file types to their full paths (or None if not found).
+        Prefers files closer to root (shallowest depth).
     """
-    # Common subdirectories where dependency files might be
-    search_dirs = [
-        cwd,  # Root first
-        os.path.join(cwd, "backend"),
-        os.path.join(cwd, "frontend"),
-        os.path.join(cwd, "src"),
-        os.path.join(cwd, "app"),
-        os.path.join(cwd, "server"),
-        os.path.join(cwd, "api"),
-    ]
+    from pathlib import Path
+
+    # Directories to exclude from search (vendor dirs, caches, etc.)
+    EXCLUDE_DIRS = {
+        "node_modules",
+        ".venv",
+        "venv",
+        "__pycache__",
+        ".git",
+        ".tox",
+        ".nox",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        "dist",
+        "build",
+        ".eggs",
+        "site-packages",
+        ".cache",
+        ".uv",
+        ".npm",
+        ".yarn",
+        ".pnpm-store",
+        ".next",
+        ".nuxt",
+        "vendor",
+        "vendors",
+        "third_party",
+        "external",
+    }
 
     found = {
         # Python
@@ -2375,16 +2396,48 @@ def find_dependency_files(cwd: str) -> dict:
         "package_json": "package.json",
     }
 
-    for search_dir in search_dirs:
-        if not os.path.isdir(search_dir):
-            continue
+    root = Path(cwd)
 
-        for key, filename in file_mappings.items():
-            if found[key] is None:  # Only find first occurrence
-                filepath = os.path.join(search_dir, filename)
-                if os.path.exists(filepath):
-                    found[key] = filepath
-                    logger.debug(f"Found {filename} at {filepath}")
+    def is_excluded(path: Path) -> bool:
+        """Check if any parent directory is in the exclude list."""
+        try:
+            rel_path = path.relative_to(root)
+            for part in rel_path.parts:
+                if part in EXCLUDE_DIRS or part.endswith(".egg-info"):
+                    return True
+        except ValueError:
+            return True  # Path not relative to root
+        return False
+
+    def find_closest(filename: str) -> Optional[str]:
+        """Find the closest (shallowest) match for a filename.
+
+        Prefers files closer to root to avoid finding files in nested
+        example projects or test fixtures.
+        """
+        matches = []
+        try:
+            for match in root.rglob(filename):
+                if match.is_file() and not is_excluded(match):
+                    # Calculate depth (number of directories from root)
+                    depth = len(match.relative_to(root).parts) - 1
+                    matches.append((depth, str(match)))
+        except (OSError, PermissionError) as e:
+            logger.debug(f"Error searching for {filename}: {e}")
+            return None
+
+        if matches:
+            # Sort by depth (shallowest first), then by path (alphabetical)
+            matches.sort(key=lambda x: (x[0], x[1]))
+            return matches[0][1]
+        return None
+
+    # Find each dependency file
+    for key, filename in file_mappings.items():
+        filepath = find_closest(filename)
+        if filepath:
+            found[key] = filepath
+            logger.debug(f"Found {filename} at {filepath}")
 
     return found
 
@@ -2393,8 +2446,12 @@ def install_project_dependencies(cwd: str) -> dict:
     """Detect and install project dependencies automatically.
 
     Detects Python (UV, Poetry, pip) and Node.js (pnpm, yarn, npm) projects
-    and runs the appropriate install command. Searches both root and common
-    subdirectories (backend/, frontend/, src/, app/).
+    and runs the appropriate install command. Uses recursive glob search to
+    find dependency files anywhere in the workspace, excluding vendor/cache
+    directories (node_modules, .venv, __pycache__, etc.).
+
+    Prefers files closest to the workspace root to avoid installing from
+    nested example projects or test fixtures.
 
     Returns:
         dict with keys: python_installed, node_installed, errors, summary
