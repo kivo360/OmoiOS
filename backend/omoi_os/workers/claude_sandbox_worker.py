@@ -1295,6 +1295,84 @@ class WorkerConfig:
             os.environ.get("REQUIRE_SPEC_SKILL", "").lower() == "true"
         )
 
+        # Add Python dependency management instructions (applies to all modes)
+        append_parts.append("""
+## Python Dependency Management (CRITICAL - Do This First!)
+
+**BEFORE running ANY Python code**, you MUST install dependencies based on the project type.
+
+### Step 1: Detect the dependency manager
+Check which files exist in the project root:
+- `pyproject.toml` with `[tool.uv]` section → **UV** (preferred)
+- `pyproject.toml` with `[tool.poetry]` section → **Poetry**
+- `pyproject.toml` (generic) → **pip with pyproject.toml**
+- `requirements.txt` → **pip**
+- `setup.py` → **pip**
+
+### Step 2: Install dependencies based on detected manager
+
+**UV (Modern, Fastest):**
+```bash
+# Install dependencies
+uv sync
+
+# Run Python scripts
+uv run python script.py
+
+# Run modules
+uv run python -m module_name
+```
+
+**Poetry:**
+```bash
+# Install dependencies
+poetry install
+
+# Run Python scripts
+poetry run python script.py
+
+# Run modules
+poetry run python -m module_name
+```
+
+**pip (with requirements.txt or setup.py):**
+```bash
+# Create virtual environment if not exists
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# OR: .venv\\Scripts\\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+# OR: pip install -e .
+
+# Run Python scripts (venv must be activated)
+python script.py
+```
+
+### Step 3: Running Python code
+
+**ALWAYS use the correct runner for the project:**
+- UV project: `uv run python ...`
+- Poetry project: `poetry run python ...`
+- pip/venv project: Activate venv first, then `python ...`
+
+**NEVER run `python script.py` directly without installing dependencies first!**
+If you see "ModuleNotFoundError", you forgot to install dependencies.
+
+### Quick Detection Script
+```bash
+if [ -f "pyproject.toml" ] && grep -q "tool.uv" pyproject.toml 2>/dev/null; then
+    echo "UV project - use: uv sync && uv run python ..."
+elif [ -f "pyproject.toml" ] && grep -q "tool.poetry" pyproject.toml 2>/dev/null; then
+    echo "Poetry project - use: poetry install && poetry run python ..."
+elif [ -f "requirements.txt" ]; then
+    echo "pip project - use: pip install -r requirements.txt && python ..."
+elif [ -f "setup.py" ]; then
+    echo "pip project - use: pip install -e . && python ..."
+fi
+```""")
+
         # Add execution mode-specific instructions to system prompt
         if self.execution_mode == "exploration":
             if self.require_spec_skill:
