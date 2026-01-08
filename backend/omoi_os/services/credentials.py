@@ -30,12 +30,17 @@ logger = get_logger(__name__)
 class AnthropicCredentials:
     """Container for Anthropic API credentials.
 
+    Authentication:
+    - oauth_token: Claude Code OAuth token (from `claude setup-token`) - PREFERRED
+    - api_key: Traditional API key - fallback for backwards compatibility
+
     Token Configuration:
     - max_tokens: Maximum output tokens per response (default: 16384)
     - context_length: Model's context window size (GLM-4.6v: 128k)
     """
 
     api_key: str
+    oauth_token: Optional[str] = None  # Claude Code OAuth token (preferred auth method)
     base_url: Optional[str] = None
     model: Optional[str] = None
     default_model: Optional[str] = None
@@ -45,6 +50,11 @@ class AnthropicCredentials:
     max_tokens: int = 16384  # Max output tokens per response
     context_length: int = 128000  # Model context window (GLM-4.6v = 128k)
     source: str = "config"  # "config" or "user"
+
+    @property
+    def has_valid_auth(self) -> bool:
+        """Check if either OAuth token or API key is available."""
+        return bool(self.oauth_token or self.api_key)
 
 
 @dataclass
@@ -94,12 +104,13 @@ class CredentialsService:
     """
 
     # Environment variable mappings for system defaults
-    # Note: Default LLM is Z.AI with GLM-4.6v (configured in AnthropicSettings)
+    # Note: Default LLM is Claude Opus 4.5 via Claude Agent SDK
     DEFAULT_ENV_VARS = {
         "anthropic": {
             "api_key": "ANTHROPIC_API_KEY",  # or ANTHROPIC_AUTH_TOKEN
-            "base_url": "ANTHROPIC_BASE_URL",  # Default: https://api.z.ai/api/anthropic
-            "model": "ANTHROPIC_MODEL",  # Default: glm-4.6v
+            "oauth_token": "CLAUDE_CODE_OAUTH_TOKEN",  # Preferred for Claude Agent SDK
+            "base_url": "ANTHROPIC_BASE_URL",  # Optional custom endpoint
+            "model": "ANTHROPIC_MODEL",  # Default: claude-opus-4-5-20251101
         },
         "openai": {
             "api_key": "OPENAI_API_KEY",
@@ -107,24 +118,18 @@ class CredentialsService:
             "model": "OPENAI_MODEL",
         },
         # GitHub intentionally excluded - must come from user OAuth, no system fallback
-        "z_ai": {
-            # Z.AI uses Anthropic-compatible endpoint, so ANTHROPIC_* vars work
-            "api_key": "ANTHROPIC_API_KEY",
-            "base_url": "ANTHROPIC_BASE_URL",
-            "model": "ANTHROPIC_MODEL",
-        },
     }
 
-    # Default model configuration (Z.AI / GLM)
-    DEFAULT_BASE_URL = "https://api.z.ai/api/anthropic"
-    DEFAULT_MODEL = "glm-4.6v"
+    # Default model configuration (Claude via Claude Agent SDK)
+    DEFAULT_BASE_URL = None  # Use default Anthropic API
+    DEFAULT_MODEL = "claude-opus-4-5-20251101"
     DEFAULT_MAX_TOKENS = 16384  # Max output tokens per response
-    DEFAULT_CONTEXT_LENGTH = 128000  # GLM-4.6v context window (128k)
+    DEFAULT_CONTEXT_LENGTH = 200000  # Claude Opus 4.5 context window (200k)
     DEFAULT_MODELS = {
-        "default": "glm-4.6v",
-        "haiku": "glm-4.6v-flash",  # Fast/cheap
-        "sonnet": "glm-4.6v",  # Balanced
-        "opus": "glm-4.6v",  # Most capable
+        "default": "claude-opus-4-5-20251101",
+        "haiku": "claude-haiku-4-20250514",  # Fast/cheap
+        "sonnet": "claude-sonnet-4-20250514",  # Balanced
+        "opus": "claude-opus-4-5-20251101",  # Most capable
     }
 
     def __init__(self, db: DatabaseService):
@@ -132,13 +137,13 @@ class CredentialsService:
 
     @classmethod
     def get_default_llm_config(cls) -> Dict[str, Any]:
-        """Get the default LLM configuration (Z.AI / GLM).
+        """Get the default LLM configuration (Claude via Claude Agent SDK).
 
         Returns:
             Dict with base_url, model, model variants, and token limits
         """
         return {
-            "base_url": cls.DEFAULT_BASE_URL,
+            "base_url": cls.DEFAULT_BASE_URL,  # None = use default Anthropic API
             "model": cls.DEFAULT_MODEL,
             "haiku_model": cls.DEFAULT_MODELS["haiku"],
             "sonnet_model": cls.DEFAULT_MODELS["sonnet"],
@@ -214,12 +219,16 @@ class CredentialsService:
         1. If user_id is provided, check for user-specific credentials
         2. If no user credentials, fall back to global config
 
+        Authentication priority:
+        - OAuth token (CLAUDE_CODE_OAUTH_TOKEN) is preferred for Claude Agent SDK
+        - API key is fallback for backwards compatibility
+
         Args:
             user_id: Optional user ID to check for custom credentials
             session: Optional existing database session
 
         Returns:
-            AnthropicCredentials with the API key and configuration
+            AnthropicCredentials with the API key/OAuth token and configuration
         """
         # Try user-specific credentials first
         if user_id:
@@ -230,8 +239,12 @@ class CredentialsService:
                 # Extract model configuration from config_data
                 config = user_cred.config_data or {}
 
+                # User credentials may have OAuth token stored in config_data
+                oauth_token = config.get("oauth_token")
+
                 return AnthropicCredentials(
                     api_key=user_cred.api_key,
+                    oauth_token=oauth_token,
                     base_url=user_cred.base_url,
                     model=user_cred.model or config.get("model"),
                     default_model=config.get("default_model"),
@@ -251,6 +264,7 @@ class CredentialsService:
 
         return AnthropicCredentials(
             api_key=settings.get_api_key() or "",
+            oauth_token=settings.get_oauth_token(),  # Read from CLAUDE_CODE_OAUTH_TOKEN
             base_url=settings.base_url,
             model=settings.model,
             default_model=settings.default_model,

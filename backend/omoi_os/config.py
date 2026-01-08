@@ -176,7 +176,12 @@ class AnthropicSettings(OmoiBaseSettings):
     """
     Anthropic / Z.AI API configuration for Claude Agent SDK.
 
-    Loads ANTHROPIC_* environment variables:
+    Authentication (in order of preference):
+      - CLAUDE_CODE_OAUTH_TOKEN: OAuth token from `claude setup-token` (PREFERRED for Claude Agent SDK)
+      - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN): Traditional API key
+
+    Loads environment variables:
+      - CLAUDE_CODE_OAUTH_TOKEN (preferred auth for Claude Agent SDK)
       - ANTHROPIC_API_KEY (or ANTHROPIC_AUTH_TOKEN)
       - ANTHROPIC_BASE_URL (custom API endpoint, e.g., Z.AI)
       - ANTHROPIC_MODEL (default model to use)
@@ -201,15 +206,15 @@ class AnthropicSettings(OmoiBaseSettings):
 
     # API credentials
     api_key: Optional[str] = None
-    auth_token: Optional[str] = None  # Alternative to api_key (Z.AI uses this)
-    base_url: str = "https://api.z.ai/api/anthropic"  # Default to Z.AI
+    auth_token: Optional[str] = None  # Alternative to api_key
+    base_url: Optional[str] = None  # Use default Anthropic API (no custom endpoint)
 
-    # Model configuration
-    model: str = "glm-4.6v"  # Default model
-    default_model: str = "glm-4.6v"
-    default_haiku_model: str = "glm-4.6v-flash"
-    default_sonnet_model: str = "glm-4.6v"
-    default_opus_model: str = "glm-4.6v"
+    # Model configuration - default to Claude Opus 4.5 for Claude Agent SDK
+    model: str = "claude-opus-4-5-20251101"  # Default model (Claude Opus 4.5)
+    default_model: str = "claude-opus-4-5-20251101"
+    default_haiku_model: str = "claude-haiku-4-20250514"
+    default_sonnet_model: str = "claude-sonnet-4-20250514"
+    default_opus_model: str = "claude-opus-4-5-20251101"
 
     # Token limits
     max_tokens: int = 16384  # Max output tokens per response
@@ -218,6 +223,14 @@ class AnthropicSettings(OmoiBaseSettings):
     def get_api_key(self) -> Optional[str]:
         """Get API key, preferring api_key over auth_token."""
         return self.api_key or self.auth_token
+
+    def get_oauth_token(self) -> Optional[str]:
+        """Get Claude Code OAuth token from environment.
+
+        The OAuth token is read directly from CLAUDE_CODE_OAUTH_TOKEN
+        since it doesn't follow the ANTHROPIC_ prefix pattern.
+        """
+        return os.environ.get("CLAUDE_CODE_OAUTH_TOKEN")
 
 
 class DatabaseSettings(OmoiBaseSettings):

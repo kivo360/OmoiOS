@@ -1188,12 +1188,19 @@ class WorkerConfig:
 
         # Server connection
         self.callback_url = os.environ.get("CALLBACK_URL", "http://localhost:8000")
+
+        # Authentication: Prefer OAuth token (from `claude setup-token`), fallback to API key
+        # CLAUDE_CODE_OAUTH_TOKEN is the recommended auth method for Claude Agent SDK
+        self.oauth_token = os.environ.get("CLAUDE_CODE_OAUTH_TOKEN", "")
         self.api_key = os.environ.get("ANTHROPIC_API_KEY") or os.environ.get(
             "ANTHROPIC_AUTH_TOKEN", ""
         )
 
-        # Model settings (for GLM or other models)
-        self.model = os.environ.get("MODEL") or os.environ.get("ANTHROPIC_MODEL")
+        # Model settings - default to Claude Opus 4.5 (latest)
+        # Model ID format: claude-opus-4-5-20251101 or alias "opus"
+        self.model = os.environ.get("MODEL") or os.environ.get(
+            "ANTHROPIC_MODEL", "claude-opus-4-5-20251101"
+        )
         self.api_base_url = os.environ.get("ANTHROPIC_BASE_URL")
 
         # Task and prompts
@@ -1967,7 +1974,15 @@ Systematically investigate issues:
                              If not provided, stderr is logged at DEBUG level.
         """
         # Build environment variables for the CLI subprocess
-        env = {"ANTHROPIC_API_KEY": self.api_key}
+        # Prefer OAuth token (CLAUDE_CODE_OAUTH_TOKEN) over API key for authentication
+        env = {}
+        if self.oauth_token:
+            # OAuth token from `claude setup-token` - recommended auth method
+            env["CLAUDE_CODE_OAUTH_TOKEN"] = self.oauth_token
+        elif self.api_key:
+            # Fallback to API key for backwards compatibility
+            env["ANTHROPIC_API_KEY"] = self.api_key
+
         if self.api_base_url:
             env["ANTHROPIC_BASE_URL"] = self.api_base_url
 
