@@ -663,13 +663,17 @@ export interface GraphNode {
   phase_id?: string
   description?: string
   ticket_id?: string
+  is_blocked?: boolean
+  blocks_count?: number
+  blocked_by?: string[]  // For ticket nodes: list of blocking ticket IDs
+  task_count?: number    // For ticket nodes: count of child tasks
   data?: Record<string, unknown>
 }
 
 export interface GraphEdge {
   source: string
   target: string
-  type?: string
+  type?: "depends_on" | "parent_child" | "ticket_contains" | "ticket_blocks" | "spawned_from" | string
   label?: string
 }
 

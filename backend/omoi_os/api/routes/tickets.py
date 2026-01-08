@@ -151,6 +151,10 @@ class TicketCreate(BaseModel):
     # - "spec_driven": Spec-driven development with structured output
     workflow_mode: str | None = None  # "quick" or "spec_driven"
 
+    # Ticket dependencies for spec-driven workflows
+    # Format: {"blocked_by": ["TKT-001"], "blocks": ["TKT-003"]}
+    dependencies: dict | None = None
+
 
 class DuplicateCandidateResponse(BaseModel):
     """Response model for duplicate candidate."""
@@ -396,6 +400,7 @@ async def create_ticket(
             priority=ticket_data.priority,
             project_id=ticket_data.project_id,  # Associate ticket with project
             user_id=current_user.id,  # Associate ticket with user for filtering (UUID)
+            dependencies=ticket_data.dependencies,  # Ticket-to-ticket dependencies (blocked_by/blocks)
         )
 
         # Store embedding if we generated one during dedup check
