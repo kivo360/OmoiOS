@@ -12,6 +12,7 @@ const PUBLIC_ROUTES = [
   "/reset-password",
   "/verify-email",
   "/callback",
+  "/onboarding",
 ]
 
 // Cookie name that indicates auth state (set by client after login)
