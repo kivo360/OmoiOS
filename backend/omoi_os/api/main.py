@@ -51,6 +51,7 @@ from omoi_os.api.routes import (
     memory,
     mcp,
     oauth,
+    onboarding,
     organizations,
     phases,
     projects,
@@ -1076,6 +1077,9 @@ app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 
 # OAuth routes
 app.include_router(oauth.router, prefix="/api/v1/auth", tags=["OAuth"])
+
+# Onboarding routes
+app.include_router(onboarding.router, prefix="/api/v1/onboarding", tags=["onboarding"])
 
 # GitHub Repository routes (authenticated)
 app.include_router(github_repos.router, prefix="/api/v1/github", tags=["GitHub Repos"])

@@ -76,27 +76,32 @@ export function OnboardingChecklist({
 }: OnboardingChecklistProps) {
   const { currentStep, completedSteps, completedChecklistItems, data } = useOnboarding()
 
+  // Ensure arrays and objects have defaults to prevent undefined errors
+  const safeCompletedSteps = completedSteps || []
+  const safeCompletedChecklistItems = completedChecklistItems || []
+  const safeData = data || {}
+
   const getItemStatus = (item: ChecklistItem): "completed" | "current" | "locked" | "pending" => {
     // Check if explicitly completed via completedChecklistItems
-    if (completedChecklistItems.includes(item.id as ChecklistItemId)) {
+    if (safeCompletedChecklistItems.includes(item.id as ChecklistItemId)) {
       return "completed"
     }
 
     // Post-onboarding items
     if (item.isPostOnboarding) {
-      if (item.id === "watch-agent" && data.firstSpecId) {
+      if (item.id === "watch-agent" && safeData.firstSpecId) {
         // Available once spec is submitted, check if it's running
-        if (data.firstSpecStatus === "running") {
+        if (safeData.firstSpecStatus === "running") {
           return "current"
         }
-        if (data.firstSpecStatus === "completed") {
+        if (safeData.firstSpecStatus === "completed") {
           return "completed"
         }
         return "pending"
       }
       if (item.id === "review-pr") {
         // Available after agent completes
-        if (data.firstSpecStatus === "completed") {
+        if (safeData.firstSpecStatus === "completed") {
           return "pending"
         }
         return "locked"
@@ -114,7 +119,7 @@ export function OnboardingChecklist({
     // Onboarding steps
     if (!item.step) return "pending"
 
-    if (completedSteps.includes(item.step)) {
+    if (safeCompletedSteps.includes(item.step)) {
       return "completed"
     }
     if (currentStep === item.step) {

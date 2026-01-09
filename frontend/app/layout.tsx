@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/providers/ThemeProvider"
 import { AuthProvider } from "@/providers/AuthProvider"
 import { PostHogProvider } from "@/providers/PostHogProvider"
 import { Toaster } from "@/components/ui/sonner"
+import { OnboardingDebugInit } from "@/components/OnboardingDebugInit"
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" })
 const jetbrainsMono = JetBrains_Mono({ 
@@ -96,6 +97,7 @@ export default function RootLayout({
                   <StoreProvider>
                     {children}
                     <Toaster />
+                    <OnboardingDebugInit />
                   </StoreProvider>
                 </WebSocketProvider>
               </AuthProvider>

@@ -16,6 +16,11 @@ import {
 } from "@/lib/api/client"
 import { setUserContext, clearUserContext, addNavigationBreadcrumb } from "@/lib/sentry/context"
 import { identifyUser, resetUser, clearOrganization, track, ANALYTICS_EVENTS } from "@/lib/analytics"
+import {
+  initialSync as syncOnboarding,
+  setOnboardingCookie,
+  checkOnboardingNeeded,
+} from "@/lib/onboarding"
 
 // ============================================================================
 // Auth Store (Zustand)
@@ -225,6 +230,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearOrganization()
       resetUser()
       reset()
+      // Clear onboarding cookie
+      setOnboardingCookie(false)
       router.push("/login")
     }
   }, [reset, router])
@@ -311,6 +318,43 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     return () => clearInterval(interval)
   }, [isAuthenticated, validateInBackground])
+
+  // Onboarding sync and enforcement
+  // This syncs onboarding state from server and sets the cookie for middleware
+  const hasCheckedOnboardingRef = useRef(false)
+  useEffect(() => {
+    // Only check onboarding when authenticated and not loading
+    if (!isAuthenticated || isLoading || hasCheckedOnboardingRef.current) return
+
+    const checkOnboarding = async () => {
+      try {
+        hasCheckedOnboardingRef.current = true
+
+        // Sync onboarding state from server
+        const syncResult = await syncOnboarding()
+
+        // If sync healed inconsistencies, the cookie is already set by syncOnboarding
+        if (syncResult.status === "synced" || syncResult.status === "healed") {
+          // Check if onboarding is needed and redirect if on protected route
+          const needsOnboarding = await checkOnboardingNeeded()
+
+          // Skip onboarding routes and other exempt routes
+          const isOnboardingRoute = pathname?.startsWith("/onboarding")
+          const isCallbackRoute = pathname?.startsWith("/callback")
+          const isSettingsRoute = pathname?.startsWith("/settings")
+
+          if (needsOnboarding && !isOnboardingRoute && !isCallbackRoute && !isSettingsRoute && !isPublicRoute) {
+            router.replace("/onboarding")
+          }
+        }
+      } catch (err) {
+        // Onboarding sync failed - continue without blocking
+        console.log("Failed to sync onboarding:", err)
+      }
+    }
+
+    checkOnboarding()
+  }, [isAuthenticated, isLoading, pathname, isPublicRoute, router])
 
   // Track navigation changes for Sentry breadcrumbs
   const previousPathnameRef = useRef<string | null>(null)
