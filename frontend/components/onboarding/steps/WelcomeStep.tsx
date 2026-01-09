@@ -12,6 +12,12 @@ export function WelcomeStep() {
 
   const firstName = user?.full_name?.split(" ")[0] || "there"
 
+  const handleGetStarted = () => {
+    console.log("Get Started clicked, calling nextStep...")
+    nextStep()
+    console.log("nextStep called")
+  }
+
   return (
     <div className="space-y-8 text-center">
       {/* Welcome header */}
@@ -59,7 +65,7 @@ export function WelcomeStep() {
       </div>
 
       {/* CTA */}
-      <Button size="lg" onClick={nextStep} className="w-full">
+      <Button size="lg" onClick={handleGetStarted} className="w-full">
         Let&apos;s Get Started
         <ArrowRight className="ml-2 h-5 w-5" />
       </Button>
