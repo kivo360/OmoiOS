@@ -9,13 +9,13 @@ export default function OnboardingLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center bg-background p-4">
+    <div className="flex min-h-screen flex-col items-center bg-background px-4 py-8">
       {/* Logo */}
-      <Link href="/" className="my-8">
+      <Link href="/" className="mb-8">
         <OmoiOSLogo size="xl" />
       </Link>
 
-      {/* Onboarding Content - wider than auth pages */}
+      {/* Main content - wider than auth layout */}
       <div className="w-full max-w-4xl flex-1">
         {children}
       </div>
