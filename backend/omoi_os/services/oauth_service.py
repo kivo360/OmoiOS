@@ -62,15 +62,19 @@ class OAuthService:
 
     def _build_redirect_uri(self, provider_name: str) -> str:
         """Build the OAuth callback redirect URI for a provider."""
-        # Parse the base redirect URI to construct the callback URL
-        base_uri = self.settings.oauth_redirect_uri
-
-        # The redirect_uri sent to OAuth providers must point to the BACKEND callback endpoint
-        # The base_uri is the frontend callback URL (e.g., http://localhost:3000/auth/callback)
-        # We need to convert it to the backend callback URL (e.g., http://localhost:18000/api/v1/auth/oauth/{provider}/callback)
-
         from urllib.parse import urlparse
 
+        # If oauth_backend_url is explicitly set, use it directly
+        if self.settings.oauth_backend_url:
+            redirect_uri = f"{self.settings.oauth_backend_url.rstrip('/')}/api/v1/auth/oauth/{provider_name}/callback"
+            logger.info(
+                f"OAuth redirect URI for {provider_name}: {redirect_uri} "
+                f"(using oauth_backend_url: {self.settings.oauth_backend_url})"
+            )
+            return redirect_uri
+
+        # Fallback: derive backend URL from frontend URL (for backwards compatibility)
+        base_uri = self.settings.oauth_redirect_uri
         parsed = urlparse(base_uri)
 
         # Extract the origin (scheme + netloc)
@@ -78,7 +82,7 @@ class OAuthService:
             # Development: frontend on 3000, backend on 18000
             backend_netloc = parsed.netloc.replace("localhost:3000", "localhost:18000")
         else:
-            # Production: use same origin (backend and frontend on same domain)
+            # Production without oauth_backend_url: use same origin
             backend_netloc = parsed.netloc
 
         # Build the backend callback URL
@@ -87,7 +91,7 @@ class OAuthService:
         # Log the redirect URI for debugging OAuth configuration issues
         logger.info(
             f"OAuth redirect URI for {provider_name}: {redirect_uri} "
-            f"(base_uri: {base_uri})"
+            f"(derived from base_uri: {base_uri})"
         )
 
         return redirect_uri

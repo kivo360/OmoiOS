@@ -413,8 +413,13 @@ class AuthSettings(OmoiBaseSettings):
     gitlab_client_secret: Optional[str] = None
     gitlab_base_url: str = "https://gitlab.com"
 
-    # OAuth redirect URI
+    # OAuth redirect URI (frontend callback - where user is sent after OAuth)
     oauth_redirect_uri: str = "http://localhost:3000/callback"
+
+    # Backend API URL (for building OAuth callback URLs sent to providers)
+    # In development: http://localhost:18000
+    # In production: https://api.omoios.dev
+    oauth_backend_url: Optional[str] = None
 
     def get_provider_config(self, provider: str) -> Optional[Dict[str, Any]]:
         """Get OAuth config for a provider."""
