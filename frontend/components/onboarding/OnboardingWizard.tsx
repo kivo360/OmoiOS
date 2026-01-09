@@ -62,56 +62,59 @@ export function OnboardingWizard() {
   const StepComponent = STEP_COMPONENTS[currentStep]
 
   return (
-    <div className="flex gap-6 w-full max-w-4xl mx-auto">
+    <div className="flex gap-8 w-full">
       {/* Main content area */}
       <div className={cn(
-        "flex-1 space-y-6 transition-all duration-300",
-        checklistExpanded ? "max-w-lg" : "max-w-2xl mx-auto"
+        "flex-1 transition-all duration-300",
+        checklistExpanded ? "max-w-xl" : "max-w-2xl mx-auto"
       )}>
-        {/* Header with progress */}
-        <div className="space-y-4">
-          {/* Back button */}
-          {canGoBack && currentStep !== "complete" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={prevStep}
-              className="text-muted-foreground hover:text-foreground -ml-2"
-            >
-              <ArrowLeft className="h-4 w-4 mr-1" />
-              Back
-            </Button>
-          )}
+        {/* Card wrapper for main content */}
+        <div className="rounded-xl border bg-card p-8 shadow-sm">
+          {/* Header with progress */}
+          <div className="space-y-4 mb-6">
+            {/* Back button */}
+            {canGoBack && currentStep !== "complete" && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={prevStep}
+                className="text-muted-foreground hover:text-foreground -ml-2"
+              >
+                <ArrowLeft className="h-4 w-4 mr-1" />
+                Back
+              </Button>
+            )}
 
-          {/* Progress bar */}
-          {currentStep !== "complete" && (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm text-muted-foreground">
-                <span>{STEP_TITLES[currentStep]}</span>
-                <span>{progress}% complete</span>
+            {/* Progress bar */}
+            {currentStep !== "complete" && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm text-muted-foreground">
+                  <span>{STEP_TITLES[currentStep]}</span>
+                  <span>{progress}% complete</span>
+                </div>
+                <Progress value={progress} className="h-2" />
               </div>
-              <Progress value={progress} className="h-2" />
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Step content */}
-        <div className="min-h-[400px]">
-          <StepComponent />
+          {/* Step content */}
+          <div className="min-h-[400px]">
+            <StepComponent />
+          </div>
         </div>
       </div>
 
       {/* Sidebar checklist */}
       <div className={cn(
-        "relative transition-all duration-300",
-        checklistExpanded ? "w-64" : "w-0"
+        "relative transition-all duration-300 shrink-0",
+        checklistExpanded ? "w-72" : "w-8"
       )}>
         {/* Toggle button */}
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setChecklistExpanded(!checklistExpanded)}
-          className="absolute -left-4 top-0 h-8 w-8 rounded-full border bg-background shadow-sm z-10"
+          className="absolute -left-4 top-4 h-8 w-8 rounded-full border bg-background shadow-sm z-10"
         >
           {checklistExpanded ? (
             <ChevronRight className="h-4 w-4" />
@@ -122,10 +125,10 @@ export function OnboardingWizard() {
 
         {/* Checklist content */}
         <div className={cn(
-          "overflow-hidden transition-all duration-300",
+          "transition-all duration-300",
           checklistExpanded ? "opacity-100" : "opacity-0 pointer-events-none"
         )}>
-          <div className="p-4 rounded-lg border bg-card">
+          <div className="p-5 rounded-xl border bg-card shadow-sm sticky top-4">
             <OnboardingChecklist showPostOnboarding={currentStep === "complete"} />
           </div>
         </div>
