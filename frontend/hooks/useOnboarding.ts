@@ -1,10 +1,20 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { create } from "zustand"
+import { persist } from "zustand/middleware"
 import { useAuth } from "@/hooks/useAuth"
 import { api } from "@/lib/api/client"
 import { track, trackEvent as analyticsTrackEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
+import {
+  fetchOnboardingStatus,
+  detectOnboardingState,
+  updateOnboardingStep,
+  completeOnboardingServer,
+  setOnboardingCookie,
+  type OnboardingDetectedState,
+} from "@/lib/onboarding"
 
 export type OnboardingStep =
   | "welcome"
@@ -25,28 +35,56 @@ export type ChecklistItemId =
   | "review-pr"
   | "invite-team"
 
+export interface OnboardingData {
+  role?: string
+  githubConnected: boolean
+  githubUsername?: string
+  selectedRepo?: {
+    owner: string
+    name: string
+    fullName: string
+    language?: string
+  }
+  projectId?: string
+  organizationId?: string
+  firstSpecId?: string
+  firstSpecText?: string
+  firstSpecStatus?: "pending" | "running" | "completed" | "failed"
+  selectedPlan?: string
+}
+
 export interface OnboardingState {
   currentStep: OnboardingStep
   completedSteps: OnboardingStep[]
   completedChecklistItems: ChecklistItemId[]
   isOnboardingComplete: boolean
-  data: {
-    role?: string
-    githubConnected: boolean
-    githubUsername?: string
-    selectedRepo?: {
-      owner: string
-      name: string
-      fullName: string
-      language?: string
-    }
-    projectId?: string
-    organizationId?: string
-    firstSpecId?: string
-    firstSpecText?: string
-    firstSpecStatus?: "pending" | "running" | "completed" | "failed"
-    selectedPlan?: string
-  }
+  syncVersion: number
+  data: OnboardingData
+  detectedState: OnboardingDetectedState | null
+  isLoading: boolean
+  error: string | null
+
+  // Actions
+  setCurrentStep: (step: OnboardingStep) => void
+  setCompletedSteps: (steps: OnboardingStep[]) => void
+  addCompletedStep: (step: OnboardingStep) => void
+  setCompletedChecklistItems: (items: ChecklistItemId[]) => void
+  addCompletedChecklistItem: (item: ChecklistItemId) => void
+  setIsOnboardingComplete: (complete: boolean) => void
+  setSyncVersion: (version: number) => void
+  setData: (data: Partial<OnboardingData>) => void
+  setDetectedState: (state: OnboardingDetectedState | null) => void
+  setIsLoading: (loading: boolean) => void
+  setError: (error: string | null) => void
+  reset: () => void
+  syncFromServer: (serverState: {
+    current_step: string
+    completed_steps: string[]
+    completed_checklist_items: string[]
+    is_completed: boolean
+    sync_version: number
+    data: Record<string, unknown>
+  }) => void
 }
 
 const STEPS_ORDER: OnboardingStep[] = [
@@ -58,202 +96,282 @@ const STEPS_ORDER: OnboardingStep[] = [
   "complete",
 ]
 
-const STORAGE_KEY = "omoios_onboarding_state"
+const initialData: OnboardingData = {
+  githubConnected: false,
+}
 
-export function useOnboarding() {
-  const router = useRouter()
-  const { user, isLoading: authLoading } = useAuth()
-
-  const [state, setState] = useState<OnboardingState>(() => {
-    // Try to restore from localStorage on client
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem(STORAGE_KEY)
-      if (saved) {
-        try {
-          return JSON.parse(saved)
-        } catch {
-          // Invalid JSON, start fresh
-        }
-      }
-    }
-    return {
+// Zustand store for shared state across all components
+export const useOnboardingStore = create<OnboardingState>()(
+  persist(
+    (set, get) => ({
       currentStep: "welcome",
       completedSteps: [],
       completedChecklistItems: [],
       isOnboardingComplete: false,
-      data: {
-        githubConnected: false,
-      },
+      syncVersion: 0,
+      data: initialData,
+      detectedState: null,
+      isLoading: false,
+      error: null,
+
+      setCurrentStep: (step) => set({ currentStep: step }),
+
+      setCompletedSteps: (steps) => set({ completedSteps: steps }),
+
+      addCompletedStep: (step) => set((state) => ({
+        completedSteps: state.completedSteps.includes(step)
+          ? state.completedSteps
+          : [...state.completedSteps, step],
+      })),
+
+      setCompletedChecklistItems: (items) => set({ completedChecklistItems: items }),
+
+      addCompletedChecklistItem: (item) => set((state) => ({
+        completedChecklistItems: state.completedChecklistItems.includes(item)
+          ? state.completedChecklistItems
+          : [...state.completedChecklistItems, item],
+      })),
+
+      setIsOnboardingComplete: (complete) => set({ isOnboardingComplete: complete }),
+
+      setSyncVersion: (version) => set({ syncVersion: version }),
+
+      setData: (data) => set((state) => ({
+        data: { ...state.data, ...data },
+      })),
+
+      setDetectedState: (detectedState) => set({ detectedState }),
+
+      setIsLoading: (isLoading) => set({ isLoading }),
+
+      setError: (error) => set({ error }),
+
+      reset: () => set({
+        currentStep: "welcome",
+        completedSteps: [],
+        completedChecklistItems: [],
+        isOnboardingComplete: false,
+        syncVersion: 0,
+        data: initialData,
+        detectedState: null,
+        isLoading: false,
+        error: null,
+      }),
+
+      syncFromServer: (serverState) => set({
+        currentStep: serverState.current_step as OnboardingStep,
+        completedSteps: serverState.completed_steps as OnboardingStep[],
+        completedChecklistItems: serverState.completed_checklist_items as ChecklistItemId[],
+        isOnboardingComplete: serverState.is_completed,
+        syncVersion: serverState.sync_version,
+        data: {
+          ...get().data,
+          ...(serverState.data as Partial<OnboardingData>),
+        },
+      }),
+    }),
+    {
+      name: "omoios_onboarding_state",
+      partialize: (state) => ({
+        currentStep: state.currentStep,
+        completedSteps: state.completedSteps,
+        completedChecklistItems: state.completedChecklistItems,
+        isOnboardingComplete: state.isOnboardingComplete,
+        syncVersion: state.syncVersion,
+        data: state.data,
+      }),
     }
-  })
+  )
+)
 
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+// Hook that provides onboarding functionality
+export function useOnboarding() {
+  const router = useRouter()
+  const { user, isLoading: authLoading } = useAuth()
+  const hasSynced = useRef(false)
+  const hasCheckedGitHub = useRef(false)
 
-  // Persist state changes
+  // Get state from store
+  const {
+    currentStep,
+    completedSteps,
+    completedChecklistItems,
+    isOnboardingComplete,
+    syncVersion,
+    data,
+    detectedState,
+    isLoading: storeLoading,
+    error,
+    setCurrentStep,
+    addCompletedStep,
+    addCompletedChecklistItem,
+    setIsOnboardingComplete,
+    setSyncVersion,
+    setData,
+    setDetectedState,
+    setIsLoading,
+    setError,
+    syncFromServer,
+  } = useOnboardingStore()
+
+  // Sync with server on mount (only once)
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    }
-  }, [state])
+    if (!user || hasSynced.current || authLoading) return
 
-  // Check if GitHub is already connected on mount
-  useEffect(() => {
-    if (user && !state.data.githubConnected) {
-      checkGitHubConnection()
-    }
-  }, [user])
+    const syncWithServer = async () => {
+      try {
+        const serverState = await fetchOnboardingStatus()
 
-  const checkGitHubConnection = async () => {
-    try {
-      // Use the correct backend endpoint for GitHub connection status
-      const response = await api.get<{ connected: boolean; username?: string }>(
-        "/api/v1/github/connection-status"
-      )
-      if (response.connected) {
-        updateData({
-          githubConnected: true,
-          githubUsername: response.username,
-        })
-        // If we're on GitHub step, auto-advance
-        if (state.currentStep === "github") {
-          goToStep("repo")
+        // If server version is newer, update local state
+        if (serverState.sync_version > syncVersion) {
+          syncFromServer(serverState)
         }
+
+        // Update cookie based on server state
+        setOnboardingCookie(serverState.is_completed)
+
+        hasSynced.current = true
+      } catch (err) {
+        console.log("Failed to sync onboarding with server:", err)
       }
-    } catch {
-      // Not connected, that's fine
     }
-  }
 
-  const updateData = useCallback((updates: Partial<OnboardingState["data"]>) => {
-    setState(prev => ({
-      ...prev,
-      data: { ...prev.data, ...updates },
-    }))
-  }, [])
+    syncWithServer()
+  }, [user, authLoading, syncVersion, syncFromServer])
 
-  const goToStep = useCallback((step: OnboardingStep) => {
-    setState(prev => ({
-      ...prev,
-      currentStep: step,
-    }))
+  // Detect completed steps on mount
+  useEffect(() => {
+    if (!user || authLoading) return
 
-    // Track analytics
+    const detect = async () => {
+      try {
+        const detected = await detectOnboardingState()
+        setDetectedState(detected)
+      } catch {
+        // Detection failed, continue without it
+      }
+    }
+
+    detect()
+  }, [user, authLoading, setDetectedState])
+
+  // Check GitHub connection on mount
+  useEffect(() => {
+    if (!user || hasCheckedGitHub.current || data.githubConnected) return
+
+    const checkConnection = async () => {
+      hasCheckedGitHub.current = true
+      try {
+        const response = await api.get<{ connected: boolean; username?: string }>(
+          "/api/v1/github/connection-status"
+        )
+        if (response.connected) {
+          setData({
+            githubConnected: true,
+            githubUsername: response.username,
+          })
+        }
+      } catch {
+        // Not connected, that's fine
+      }
+    }
+
+    checkConnection()
+  }, [user, data.githubConnected, setData])
+
+  // Poll for first spec completion status
+  useEffect(() => {
+    if (!data.firstSpecId || data.firstSpecStatus === "completed" || data.firstSpecStatus === "failed") {
+      return
+    }
+
+    const checkSpecStatus = async () => {
+      try {
+        const response = await api.get<{ status: string }>(`/api/v1/sandboxes/${data.firstSpecId}`)
+        const status = response.status?.toLowerCase()
+
+        if (status === "completed" || status === "success") {
+          setData({ firstSpecStatus: "completed" })
+          addCompletedChecklistItem("watch-agent")
+          setIsOnboardingComplete(true)
+          analyticsTrackEvent("onboarding_fully_completed", { firstSpecId: data.firstSpecId })
+        } else if (status === "failed" || status === "error") {
+          setData({ firstSpecStatus: "failed" })
+        }
+      } catch {
+        // Silently ignore polling errors
+      }
+    }
+
+    const interval = setInterval(checkSpecStatus, 10000)
+    checkSpecStatus()
+
+    return () => clearInterval(interval)
+  }, [data.firstSpecId, data.firstSpecStatus, setData, addCompletedChecklistItem, setIsOnboardingComplete])
+
+  // Navigation actions
+  const goToStep = useCallback(async (step: OnboardingStep) => {
+    setCurrentStep(step)
     analyticsTrackEvent("onboarding_step_viewed", { step })
-  }, [])
+
+    // Sync step change to server
+    try {
+      const response = await updateOnboardingStep(step, { ...data })
+      setSyncVersion(response.sync_version)
+    } catch {
+      // Sync failed, continue anyway
+    }
+  }, [data, setCurrentStep, setSyncVersion])
 
   const completeStep = useCallback((step: OnboardingStep) => {
-    setState(prev => {
-      const newCompletedSteps = prev.completedSteps.includes(step)
-        ? prev.completedSteps
-        : [...prev.completedSteps, step]
-
-      // Also mark the corresponding checklist item as complete
-      const checklistItemId = step as ChecklistItemId
-      const newCompletedChecklistItems = prev.completedChecklistItems.includes(checklistItemId)
-        ? prev.completedChecklistItems
-        : [...prev.completedChecklistItems, checklistItemId]
-
-      return {
-        ...prev,
-        completedSteps: newCompletedSteps,
-        completedChecklistItems: newCompletedChecklistItems,
-      }
-    })
-
-    // Track analytics
+    addCompletedStep(step)
+    // Also mark as checklist item
+    addCompletedChecklistItem(step as ChecklistItemId)
     analyticsTrackEvent("onboarding_step_completed", { step })
-  }, [])
-
-  // Complete a checklist item (for post-onboarding tasks)
-  const completeChecklistItem = useCallback((itemId: ChecklistItemId) => {
-    setState(prev => {
-      if (prev.completedChecklistItems.includes(itemId)) {
-        return prev
-      }
-      return {
-        ...prev,
-        completedChecklistItems: [...prev.completedChecklistItems, itemId],
-      }
-    })
-    analyticsTrackEvent("checklist_item_completed", { itemId })
-  }, [])
-
-  // Mark onboarding as fully complete (when first spec finishes running)
-  const markOnboardingComplete = useCallback(() => {
-    setState(prev => ({
-      ...prev,
-      isOnboardingComplete: true,
-    }))
-    analyticsTrackEvent("onboarding_fully_completed", {
-      completedItems: state.completedChecklistItems,
-    })
-  }, [state.completedChecklistItems])
+  }, [addCompletedStep, addCompletedChecklistItem])
 
   const nextStep = useCallback(() => {
-    const currentIndex = STEPS_ORDER.indexOf(state.currentStep)
+    const currentIndex = STEPS_ORDER.indexOf(currentStep)
     if (currentIndex < STEPS_ORDER.length - 1) {
       const nextStepName = STEPS_ORDER[currentIndex + 1]
-      completeStep(state.currentStep)
+      completeStep(currentStep)
       goToStep(nextStepName)
     }
-  }, [state.currentStep, completeStep, goToStep])
+  }, [currentStep, completeStep, goToStep])
 
   const prevStep = useCallback(() => {
-    const currentIndex = STEPS_ORDER.indexOf(state.currentStep)
+    const currentIndex = STEPS_ORDER.indexOf(currentStep)
     if (currentIndex > 0) {
       goToStep(STEPS_ORDER[currentIndex - 1])
     }
-  }, [state.currentStep, goToStep])
+  }, [currentStep, goToStep])
 
   const skipToStep = useCallback((targetStep: OnboardingStep) => {
-    // Mark all steps up to (but not including) target as completed
     const targetIndex = STEPS_ORDER.indexOf(targetStep)
     const stepsToComplete = STEPS_ORDER.slice(0, targetIndex)
 
-    setState(prev => ({
-      ...prev,
-      currentStep: targetStep,
-      completedSteps: [...new Set([...prev.completedSteps, ...stepsToComplete])],
-    }))
-  }, [])
+    stepsToComplete.forEach((step) => {
+      addCompletedStep(step)
+      addCompletedChecklistItem(step as ChecklistItemId)
+    })
+    setCurrentStep(targetStep)
+  }, [setCurrentStep, addCompletedStep, addCompletedChecklistItem])
 
-  const completeOnboarding = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
+  const completeChecklistItem = useCallback((itemId: ChecklistItemId) => {
+    addCompletedChecklistItem(itemId)
+    analyticsTrackEvent("checklist_item_completed", { itemId })
+  }, [addCompletedChecklistItem])
 
-    try {
-      // Save onboarding completion to backend
-      await api.post("/api/v1/users/onboarding/complete", {
-        data: state.data,
-      }).catch(() => {
-        // Endpoint may not exist yet, continue anyway
-        console.log("Onboarding endpoint not available, continuing...")
-      })
+  const markOnboardingComplete = useCallback(() => {
+    setIsOnboardingComplete(true)
+    analyticsTrackEvent("onboarding_fully_completed", {
+      completedItems: completedChecklistItems,
+    })
+  }, [completedChecklistItems, setIsOnboardingComplete])
 
-      // Clear localStorage
-      localStorage.removeItem(STORAGE_KEY)
-
-      // Track completion
-      analyticsTrackEvent("onboarding_completed", {
-        selectedPlan: state.data.selectedPlan,
-        hasFirstSpec: !!state.data.firstSpecId,
-      })
-
-      // Redirect based on whether spec was submitted
-      if (state.data.firstSpecId) {
-        // Redirect to board to watch agent progress in real-time
-        const projectId = state.data.projectId || "all"
-        router.push(`/board/${projectId}`)
-      } else {
-        router.push("/command")
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to complete onboarding")
-    } finally {
-      setIsLoading(false)
-    }
-  }, [state.data, router])
+  const updateData = useCallback((updates: Partial<OnboardingData>) => {
+    setData(updates)
+  }, [setData])
 
   const connectGitHub = useCallback(() => {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
@@ -261,50 +379,65 @@ export function useOnboarding() {
     window.location.href = `${apiUrl}/api/v1/auth/oauth/github?onboarding=true&return_url=${encodeURIComponent(returnUrl)}`
   }, [])
 
+  const checkGitHubConnection = useCallback(async () => {
+    try {
+      const response = await api.get<{ connected: boolean; username?: string }>(
+        "/api/v1/github/connection-status"
+      )
+      if (response.connected) {
+        setData({
+          githubConnected: true,
+          githubUsername: response.username,
+        })
+        // If we're on GitHub step, auto-advance
+        if (currentStep === "github") {
+          goToStep("repo")
+        }
+      }
+    } catch {
+      // Not connected, that's fine
+    }
+  }, [currentStep, setData, goToStep])
+
   const submitFirstSpec = useCallback(async (specText: string) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      // Create project if not exists
-      let projectId = state.data.projectId
-      let organizationId = state.data.organizationId
+      let projectId = data.projectId
+      let organizationId = data.organizationId
 
-      if (!projectId && state.data.selectedRepo) {
-        // First ensure we have an organization
+      if (!projectId && data.selectedRepo) {
         if (!organizationId) {
           const orgResponse = await api.post<{ id: string }>("/api/v1/organizations", {
             name: `${user?.full_name || "My"}'s Workspace`,
             slug: user?.email?.split("@")[0] || "workspace",
           }).catch(async () => {
-            // Org might already exist, try to get it
             const orgs = await api.get<Array<{ id: string }>>("/api/v1/organizations")
             return orgs[0]
           })
           organizationId = orgResponse.id
-          updateData({ organizationId })
+          setData({ organizationId })
         }
 
-        // Create project
         const projectResponse = await api.post<{ id: string }>("/api/v1/projects", {
-          name: state.data.selectedRepo.name,
-          description: `Project for ${state.data.selectedRepo.fullName}`,
-          github_owner: state.data.selectedRepo.owner,
-          github_repo: state.data.selectedRepo.name,
+          name: data.selectedRepo.name,
+          description: `Project for ${data.selectedRepo.fullName}`,
+          github_owner: data.selectedRepo.owner,
+          github_repo: data.selectedRepo.name,
           organization_id: organizationId,
         })
         projectId = projectResponse.id
-        updateData({ projectId })
+        setData({ projectId })
       }
 
-      // Submit spec/start sandbox
       const sandboxResponse = await api.post<{ id: string; sandbox_id: string }>("/api/v1/sandboxes", {
         project_id: projectId,
         prompt: specText,
         name: specText.slice(0, 50),
       })
 
-      updateData({
+      setData({
         firstSpecId: sandboxResponse.sandbox_id || sandboxResponse.id,
         firstSpecText: specText,
         firstSpecStatus: "running",
@@ -321,64 +454,56 @@ export function useOnboarding() {
     } finally {
       setIsLoading(false)
     }
-  }, [state.data, user, updateData, nextStep])
+  }, [data, user, setData, setIsLoading, setError, nextStep])
 
-  const progress = Math.round(
-    ((STEPS_ORDER.indexOf(state.currentStep) + 1) / STEPS_ORDER.length) * 100
-  )
+  const completeOnboarding = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
-  const canGoBack = STEPS_ORDER.indexOf(state.currentStep) > 0
-  const canSkip = state.currentStep === "plan" // Only plan step is skippable
+    try {
+      const response = await completeOnboardingServer({ ...data })
 
-  // Poll for first spec completion status (placed after all function definitions)
-  useEffect(() => {
-    if (!state.data.firstSpecId || state.data.firstSpecStatus === "completed" || state.data.firstSpecStatus === "failed") {
-      return
-    }
+      setIsOnboardingComplete(true)
+      setCurrentStep("complete")
+      setSyncVersion(response.sync_version)
+      setOnboardingCookie(true)
 
-    const checkSpecStatus = async () => {
-      try {
-        const response = await api.get<{ status: string }>(`/api/v1/sandboxes/${state.data.firstSpecId}`)
-        const status = response.status?.toLowerCase()
+      analyticsTrackEvent("onboarding_completed", {
+        selectedPlan: data.selectedPlan,
+        hasFirstSpec: !!data.firstSpecId,
+      })
 
-        if (status === "completed" || status === "success") {
-          setState(prev => ({
-            ...prev,
-            isOnboardingComplete: true,
-            completedChecklistItems: prev.completedChecklistItems.includes("watch-agent")
-              ? prev.completedChecklistItems
-              : [...prev.completedChecklistItems, "watch-agent"],
-            data: { ...prev.data, firstSpecStatus: "completed" },
-          }))
-          analyticsTrackEvent("onboarding_fully_completed", { firstSpecId: state.data.firstSpecId })
-        } else if (status === "failed" || status === "error") {
-          setState(prev => ({
-            ...prev,
-            data: { ...prev.data, firstSpecStatus: "failed" },
-          }))
-        }
-      } catch {
-        // Silently ignore polling errors
+      if (data.firstSpecId) {
+        const projectId = data.projectId || "all"
+        router.push(`/board/${projectId}`)
+      } else {
+        router.push("/command")
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to complete onboarding")
+    } finally {
+      setIsLoading(false)
     }
+  }, [data, router, setIsLoading, setError, setIsOnboardingComplete, setCurrentStep, setSyncVersion])
 
-    // Poll every 10 seconds
-    const interval = setInterval(checkSpecStatus, 10000)
-    // Also check immediately
-    checkSpecStatus()
-
-    return () => clearInterval(interval)
-  }, [state.data.firstSpecId, state.data.firstSpecStatus])
+  // Computed values
+  const progress = Math.round(
+    ((STEPS_ORDER.indexOf(currentStep) + 1) / STEPS_ORDER.length) * 100
+  )
+  const canGoBack = STEPS_ORDER.indexOf(currentStep) > 0
+  const canSkip = currentStep === "plan"
 
   return {
     // State
-    currentStep: state.currentStep,
-    completedSteps: state.completedSteps,
-    completedChecklistItems: state.completedChecklistItems,
-    isOnboardingComplete: state.isOnboardingComplete,
-    data: state.data,
+    currentStep,
+    completedSteps: completedSteps || [],
+    completedChecklistItems: completedChecklistItems || [],
+    isOnboardingComplete,
+    syncVersion,
+    data: data || initialData,
+    detectedState,
     progress,
-    isLoading: isLoading || authLoading,
+    isLoading: storeLoading || authLoading,
     error,
 
     // Navigation
@@ -405,5 +530,4 @@ export function useOnboarding() {
 }
 
 // Re-export trackEvent from analytics module for backwards compatibility
-// Prefer using track(ANALYTICS_EVENTS.XXX, {...}) directly for type safety
 export { analyticsTrackEvent as trackEvent }
