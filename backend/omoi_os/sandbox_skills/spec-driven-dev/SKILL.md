@@ -94,6 +94,38 @@ updated: {YYYY-MM-DD}
 status: draft  # draft | review | approved
 requirements:
   - REQ-{FEATURE}-001
+# API endpoints (synced to Design panel)
+api_endpoints:
+  - method: POST
+    path: /api/v1/{resource}
+    description: Create a new resource
+    auth_required: true
+    request_body: '{"field": "value"}'
+    response: '{"id": "uuid", "field": "value"}'
+  - method: GET
+    path: /api/v1/{resource}/{id}
+    description: Get resource by ID
+    auth_required: true
+    path_params: [id]
+# Data models (synced to Design panel)
+data_models:
+  - name: ResourceModel
+    description: Main resource entity
+    table_name: resources
+    typed_fields:
+      - name: id
+        type: uuid
+        description: Unique identifier
+        constraints: [primary_key]
+      - name: name
+        type: string
+        description: Resource name
+      - name: created_at
+        type: timestamp
+        default: now()
+    relationships:
+      - belongs_to User
+      - has_many Items
 ---
 ```
 
@@ -588,6 +620,75 @@ updated: {date}
 status: draft
 requirements:
   - REQ-{FEATURE}-001
+# API Endpoints - These sync to the Design panel's "API Specification" section
+api_endpoints:
+  - method: POST
+    path: /api/v1/{resource}
+    description: Create a new resource
+    auth_required: true
+    request_body: '{"name": "string", "config": {}}'
+    response: '{"id": "uuid", "name": "string", "created_at": "timestamp"}'
+    error_responses:
+      400: Validation error
+      401: Unauthorized
+      409: Resource already exists
+  - method: GET
+    path: /api/v1/{resource}/{id}
+    description: Get resource by ID
+    auth_required: true
+    path_params: [id]
+    response: '{"id": "uuid", "name": "string", "status": "string"}'
+    error_responses:
+      404: Resource not found
+  - method: GET
+    path: /api/v1/{resource}
+    description: List all resources
+    auth_required: true
+    query_params:
+      limit: Maximum number of results
+      offset: Pagination offset
+      status: Filter by status
+  - method: PUT
+    path: /api/v1/{resource}/{id}
+    description: Update resource
+    auth_required: true
+    path_params: [id]
+  - method: DELETE
+    path: /api/v1/{resource}/{id}
+    description: Delete resource
+    auth_required: true
+    path_params: [id]
+# Data Models - These sync to the Design panel's "Data Model" section
+data_models:
+  - name: {ResourceName}
+    description: Main entity for this feature
+    table_name: {table_name}
+    typed_fields:
+      - name: id
+        type: uuid
+        description: Unique identifier
+        constraints: [primary_key]
+      - name: name
+        type: string
+        description: Display name
+        nullable: false
+      - name: status
+        type: string
+        description: Current status
+        default: "'pending'"
+      - name: config
+        type: jsonb
+        description: Configuration data
+        nullable: true
+      - name: created_at
+        type: timestamp
+        default: now()
+      - name: updated_at
+        type: timestamp
+        default: now()
+    relationships:
+      - belongs_to Project (project_id)
+      - has_many Tasks
 ---
 
 # {Feature Name} Design
@@ -596,9 +697,7 @@ requirements:
 
 [Brief description of the technical approach]
 
-## Architecture
-
-### System Context
+## Architecture Overview
 
 ```mermaid
 flowchart TB
@@ -629,6 +728,9 @@ flowchart TB
 
 ## Data Model
 
+The data models are defined in the frontmatter above and will sync to the Design panel.
+Additional SQL details can be added here:
+
 ### Database Schema
 
 ```sql
@@ -658,12 +760,8 @@ class {ModelName}(BaseModel):
 
 ## API Specification
 
-### Endpoints
-
-| Method | Path | Description | Auth |
-|--------|------|-------------|------|
-| POST | /api/v1/{resource} | Create resource | Required |
-| GET | /api/v1/{resource}/{id} | Get resource | Required |
+The API endpoints are defined in the frontmatter above and will sync to the Design panel.
+Additional request/response examples can be documented here:
 
 ### Request/Response Examples
 
@@ -672,15 +770,17 @@ class {ModelName}(BaseModel):
 **Request:**
 ```json
 {
-  "field": "value"
+  "name": "My Resource",
+  "config": {}
 }
 ```
 
 **Response (201):**
 ```json
 {
-  "id": "uuid",
-  "field": "value",
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "name": "My Resource",
+  "status": "pending",
   "created_at": "2025-01-01T00:00:00Z"
 }
 ```
@@ -689,7 +789,7 @@ class {ModelName}(BaseModel):
 ```json
 {
   "error": "validation_error",
-  "message": "Field X is required"
+  "message": "Field 'name' is required"
 }
 ```
 
