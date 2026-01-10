@@ -438,54 +438,68 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                       const taskStatus = task.status?.toLowerCase() || "pending"
                       const config = statusConfig[taskStatus as keyof typeof statusConfig] || statusConfig.pending
                       const TaskIcon = config.icon
+                      const hasSandbox = !!task.sandbox_id
 
-                      return (
-                        <Card key={task.id}>
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4">
-                              <div
-                                className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                                  taskStatus === "completed"
-                                    ? "bg-primary text-primary-foreground"
-                                    : taskStatus === "running" || taskStatus === "in_progress"
-                                    ? "bg-blue-100 text-blue-600"
-                                    : "border-2"
+                      const cardContent = (
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-4">
+                            <div
+                              className={`flex h-6 w-6 items-center justify-center rounded-full ${
+                                taskStatus === "completed"
+                                  ? "bg-primary text-primary-foreground"
+                                  : taskStatus === "running" || taskStatus === "in_progress"
+                                  ? "bg-blue-100 text-blue-600"
+                                  : "border-2"
+                              }`}
+                            >
+                              <TaskIcon
+                                className={`h-3 w-3 ${
+                                  taskStatus === "running" || taskStatus === "in_progress" ? "animate-spin" : ""
                                 }`}
-                              >
-                                <TaskIcon
-                                  className={`h-3 w-3 ${
-                                    taskStatus === "running" || taskStatus === "in_progress" ? "animate-spin" : ""
-                                  }`}
-                                />
-                              </div>
-                              <div className="flex-1">
-                                <p
-                                  className={
-                                    taskStatus === "completed"
-                                      ? "text-muted-foreground line-through"
-                                      : "font-medium"
-                                  }
-                                >
-                                  {task.description || task.task_type}
-                                </p>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span className="font-mono">{task.id.slice(0, 8)}</span>
-                                  {task.assigned_agent_id && (
-                                    <>
-                                      <span>•</span>
-                                      <span className="flex items-center gap-1">
-                                        <Bot className="h-3 w-3" />
-                                        {task.assigned_agent_id.slice(0, 8)}
-                                      </span>
-                                    </>
-                                  )}
-                                  <span>•</span>
-                                  <span>{task.task_type}</span>
-                                </div>
-                              </div>
-                              <Badge variant={config.color as any}>{config.label}</Badge>
+                              />
                             </div>
-                          </CardContent>
+                            <div className="flex-1">
+                              <p
+                                className={
+                                  taskStatus === "completed"
+                                    ? "text-muted-foreground line-through"
+                                    : "font-medium"
+                                }
+                              >
+                                {task.description || task.task_type}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span className="font-mono">{task.id.slice(0, 8)}</span>
+                                {task.assigned_agent_id && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="flex items-center gap-1">
+                                      <Bot className="h-3 w-3" />
+                                      {task.assigned_agent_id.slice(0, 8)}
+                                    </span>
+                                  </>
+                                )}
+                                <span>•</span>
+                                <span>{task.task_type}</span>
+                              </div>
+                            </div>
+                            <Badge variant={config.color as any}>{config.label}</Badge>
+                            {hasSandbox && (
+                              <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                        </CardContent>
+                      )
+
+                      return hasSandbox ? (
+                        <Link key={task.id} href={`/sandbox/${task.sandbox_id}`}>
+                          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+                            {cardContent}
+                          </Card>
+                        </Link>
+                      ) : (
+                        <Card key={task.id} className="opacity-75">
+                          {cardContent}
                         </Card>
                       )
                     })}
