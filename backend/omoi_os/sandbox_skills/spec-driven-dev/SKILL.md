@@ -1,11 +1,13 @@
 ---
 name: spec-driven-dev
-description: Spec-driven development workflow for turning feature ideas into structured PRDs, requirements, designs, tickets, and tasks. Uses local files in .omoi_os/ and spec_cli.py for syncing to the API. Focus on deep reasoning, discovery questions, and systematic artifact generation.
+description: Spec-driven development workflow for turning feature ideas into structured PRDs, requirements, designs, tickets, and tasks. Uses a state machine approach with EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC phases. Each phase has validation gates, checkpointing, and session transcript support for cross-sandbox resumption.
 ---
 
 # Spec-Driven Development
 
 A systematic workflow for turning feature ideas into actionable work items that AI agents can execute.
+
+> **Architecture Note:** This skill is designed to work with a **state machine orchestrator** that executes each phase as a separate Claude SDK session. Each phase saves checkpoints to the database and can resume from any point after failure. See `docs/spec-execution-stability.md` for the full architecture.
 
 ---
 
@@ -38,6 +40,122 @@ A systematic workflow for turning feature ideas into actionable work items that 
 1. **Re-read this skill document** - The answer is here
 2. **Look at the Concrete Example section** - Full file contents are provided
 3. **Run validation** - `python spec_cli.py validate` will tell you what's wrong
+
+---
+
+## 🔄 State Machine Architecture
+
+### Overview
+
+Spec generation runs as a **state machine** with discrete phases. Each phase:
+1. Receives context from previous phases
+2. Executes a focused, time-boxed Claude SDK session
+3. Validates output with evaluators
+4. Saves checkpoint to database and file system
+5. Stores session transcript for potential resumption
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   EXPLORE   │───▶│ REQUIREMENTS│───▶│   DESIGN    │───▶│   TASKS     │───▶│    SYNC     │
+│  (codebase) │    │  (EARS fmt) │    │ (arch+data) │    │  (atomic)   │    │  (to API)   │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+       │                  │                  │                  │                  │
+       ▼                  ▼                  ▼                  ▼                  ▼
+   CHECKPOINT         CHECKPOINT         CHECKPOINT         CHECKPOINT         COMPLETE
+```
+
+### Phase Definitions
+
+| Phase | Purpose | Output | Timeout | Max Turns |
+|-------|---------|--------|---------|-----------|
+| **EXPLORE** | Analyze codebase structure, patterns, conventions | `explore.json` | 3 min | 25 |
+| **REQUIREMENTS** | Generate EARS-format requirements | `requirements.json` + `.omoi_os/requirements/*.md` | 5 min | 20 |
+| **DESIGN** | Create architecture, data models, APIs | `design.json` + `.omoi_os/designs/*.md` | 5 min | 25 |
+| **TASKS** | Break down into tickets and tasks | `tasks.json` + `.omoi_os/tickets/*.md` + `.omoi_os/tasks/*.md` | 3 min | 15 |
+| **SYNC** | Push all artifacts to OmoiOS API | API sync complete | 2 min | 10 |
+
+### Phase Context Flow
+
+Each phase receives accumulated context from all previous phases:
+
+```python
+# REQUIREMENTS phase receives:
+{
+    "exploration_context": {
+        "project_type": "Next.js + FastAPI",
+        "existing_models": [...],
+        "conventions": {...},
+        "related_to_feature": [...]
+    },
+    "feature_request": "User's original request"
+}
+
+# DESIGN phase receives:
+{
+    "exploration_context": {...},
+    "requirements": [...],  # From REQUIREMENTS phase
+    "feature_name": "feature-name"
+}
+
+# TASKS phase receives:
+{
+    "exploration_context": {...},
+    "requirements": [...],
+    "design": {...},  # From DESIGN phase
+    "feature_name": "feature-name"
+}
+```
+
+### Evaluator Criteria
+
+Each phase output is validated before proceeding:
+
+| Phase | Evaluator | Pass Criteria |
+|-------|-----------|---------------|
+| EXPLORE | ExplorationEvaluator | Has `project_type`, `structure`, `conventions`, `related_to_feature` |
+| REQUIREMENTS | RequirementEvaluator | EARS format, 2+ acceptance criteria per requirement, testable |
+| DESIGN | DesignEvaluator | Has `architecture`, `data_model`, `api_endpoints` |
+| TASKS | TaskEvaluator | Valid priorities, phases, no circular dependencies, no orphan tasks |
+
+### Retry Logic
+
+If validation fails:
+1. Evaluator returns failure reasons
+2. State machine retries the phase (max 3 attempts)
+3. Retry prompt includes previous attempt and failure reasons
+4. If all retries fail, phase is marked as failed with error details
+
+### Session Transcript Persistence
+
+Session transcripts are stored for cross-sandbox resumption:
+
+```
+.omoi_os/
+├── phase_data/
+│   ├── explore.json           # EXPLORE phase output
+│   ├── requirements.json      # REQUIREMENTS phase output
+│   ├── design.json            # DESIGN phase output
+│   └── tasks.json             # TASKS phase output
+├── session_transcripts/
+│   ├── explore.jsonl          # EXPLORE session transcript
+│   ├── requirements.jsonl     # REQUIREMENTS session transcript
+│   └── ...
+└── checkpoints/
+    └── state.json             # Current state checkpoint
+```
+
+### Environment Variables
+
+When running in a sandbox, these environment variables control execution:
+
+| Variable | Purpose |
+|----------|---------|
+| `SPEC_ID` | Spec being generated |
+| `SPEC_PHASE` | Current phase (explore/requirements/design/tasks/sync) |
+| `PHASE_DATA_B64` | Base64-encoded previous phase outputs |
+| `RESUME_SESSION_ID` | Session ID to resume |
+| `SESSION_TRANSCRIPT_B64` | Transcript for cross-sandbox resumption |
+| `FORK_SESSION` | "true" to fork instead of modify |
 
 ---
 
@@ -283,28 +401,37 @@ If you only create local files without syncing:
 
 ## The Core Flow
 
+The workflow maps to the state machine phases:
+
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
+│                        STATE MACHINE PHASES                                  │
 │                                                                             │
-│   IDEA → DISCOVER → PRD → REQUIREMENTS → DESIGN → TICKETS → TASKS → SYNC   │
+│   EXPLORE ──────▶ REQUIREMENTS ──────▶ DESIGN ──────▶ TASKS ──────▶ SYNC   │
+│     │                  │                 │              │            │      │
+│   Analyze          Define WHAT       Define HOW     Break into    Push to  │
+│   codebase         must happen       to build it    work items    API      │
+│   context                                                                    │
 │                                                                             │
-│   Ask questions   Write the   Define WHAT    Define HOW    Break into      │
-│   Understand      vision      must happen    to build it   work items      │
-│   the problem                                                               │
-│                                                                             │
+│   explore.json   requirements/*.md  designs/*.md   tickets/*.md   API      │
+│                                                    tasks/*.md     synced   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Output Directory:** All artifacts go in `.omoi_os/`
 **Sync Tool:** Use `spec_cli.py` to push to the API
+**State Machine:** Each phase is a separate SDK session with checkpointing
 
 ---
 
-## Phase 1: DISCOVER (Most Important!)
+## Phase 1: EXPLORE (Most Important!)
+
+> **State Machine Phase:** `EXPLORE` - Timeout: 3 min, Max Turns: 25
+> **Output:** `.omoi_os/phase_data/explore.json`
 
 ### Why This Phase Matters
 
-The quality of everything downstream depends on deeply understanding the problem first. **Never skip discovery.** Rushing to create specs without understanding leads to wasted work.
+The quality of everything downstream depends on deeply understanding the problem AND the existing codebase first. **Never skip exploration.** Rushing to create specs without understanding leads to wasted work and specs that don't align with existing patterns.
 
 ### Step 1.1: Explore Existing Context
 
@@ -394,6 +521,49 @@ After questions are answered, write a summary:
 ```
 
 **Get user confirmation before proceeding!**
+
+### Step 1.4: Save Exploration Output (State Machine)
+
+When running in the state machine, save the exploration context as JSON:
+
+```python
+# .omoi_os/phase_data/explore.json
+{
+    "project_type": "Next.js 15 + FastAPI backend",
+    "structure": {
+        "frontend": "frontend/src/",
+        "backend": "backend/omoi_os/",
+        "api_routes": "backend/omoi_os/api/routes/",
+        "models": "backend/omoi_os/models/",
+        "services": "backend/omoi_os/services/"
+    },
+    "existing_models": [
+        {"name": "Spec", "file": "backend/omoi_os/models/spec.py", "fields": ["id", "title", "description"]},
+        {"name": "Ticket", "file": "backend/omoi_os/models/ticket.py", "fields": ["id", "title", "status"]}
+    ],
+    "conventions": {
+        "naming": "snake_case for backend, camelCase for frontend",
+        "testing": "pytest for backend, vitest for frontend",
+        "patterns": ["Repository pattern", "Service layer", "Pydantic schemas"]
+    },
+    "related_to_feature": [
+        {"name": "EventBusService", "file": "services/event_bus.py", "relevance": "Publish events for webhooks"},
+        {"name": "TaskQueue", "file": "services/task_queue.py", "relevance": "Background processing"}
+    ],
+    "feature_summary": {
+        "name": "webhook-notifications",
+        "problem": "External systems cannot subscribe to OmoiOS events",
+        "scope_in": ["Webhook subscriptions", "HMAC signing", "Retry logic"],
+        "scope_out": ["UI management", "Rate limiting (future)"]
+    }
+}
+```
+
+**Evaluator Criteria:**
+- ✓ Has `project_type` (non-empty string)
+- ✓ Has `structure` (object with at least one key)
+- ✓ Has `conventions` (object with naming patterns)
+- ✓ Has `related_to_feature` (list, can be empty for greenfield)
 
 ---
 
@@ -504,6 +674,10 @@ author: Claude
 
 ## Phase 3: REQUIREMENTS
 
+> **State Machine Phase**: `REQUIREMENTS` (Timeout: 5 min / 20 turns)
+> **Transition**: `EXPLORE` → `REQUIREMENTS` (requires ExplorationEvaluator pass)
+> **Next Phase**: `DESIGN` (requires RequirementEvaluator pass)
+
 ### Purpose
 
 Requirements define the specific, testable behaviors the system must have. Use EARS format (Easy Approach to Requirements Syntax).
@@ -596,9 +770,48 @@ THE SYSTEM SHALL {security requirement}.
 | REQ-{FEATURE}-FUNC-001 | User Stories #1 | Component A | TKT-001 |
 ```
 
+### Step 3.1: Save Requirements Output (State Machine)
+
+After completing requirements, save to `.omoi_os/phase_data/requirements.json`:
+
+```json
+{
+    "requirements": [
+        {
+            "id": "REQ-{FEATURE}-FUNC-001",
+            "category": "functional",
+            "priority": "HIGH",
+            "condition": "WHEN user submits form",
+            "action": "THE SYSTEM SHALL validate and persist data",
+            "acceptance_criteria": ["Criterion 1", "Criterion 2"]
+        }
+    ],
+    "total_count": 15,
+    "categories": {
+        "functional": 10,
+        "performance": 3,
+        "security": 2
+    }
+}
+```
+
+### RequirementEvaluator Criteria
+
+| Criterion | Threshold | Description |
+|-----------|-----------|-------------|
+| EARS format compliance | 100% | All requirements use WHEN/SHALL format |
+| Acceptance criteria | All present | Every requirement has testable criteria |
+| Traceability | Complete | Links to PRD sections documented |
+| Priority distribution | Reasonable | Not all HIGH priority |
+| Requirement count | 5-50 | Reasonable scope for feature |
+
 ---
 
 ## Phase 4: DESIGN
+
+> **State Machine Phase**: `DESIGN` (Timeout: 5 min / 25 turns)
+> **Transition**: `REQUIREMENTS` → `DESIGN` (requires RequirementEvaluator pass)
+> **Next Phase**: `TASKS` (requires DesignEvaluator pass)
 
 ### Purpose
 
@@ -860,9 +1073,56 @@ stateDiagram-v2
 - [ ] {Technical question that needs resolution}
 ```
 
+### Step 4.1: Save Design Output (State Machine)
+
+After completing design, save to `.omoi_os/phase_data/design.json`:
+
+```json
+{
+    "api_endpoints": [
+        {
+            "method": "POST",
+            "path": "/api/v1/resource",
+            "description": "Create resource",
+            "request_schema": "ResourceCreate",
+            "response_schema": "Resource"
+        }
+    ],
+    "data_models": [
+        {
+            "name": "Resource",
+            "table_name": "resources",
+            "fields": [
+                {"name": "id", "type": "uuid", "primary_key": true},
+                {"name": "name", "type": "string", "nullable": false}
+            ]
+        }
+    ],
+    "components": [
+        {
+            "name": "ResourceService",
+            "layer": "service",
+            "responsibilities": ["CRUD operations", "Validation"]
+        }
+    ]
+}
+```
+
+### DesignEvaluator Criteria
+
+| Criterion | Threshold | Description |
+|-----------|-----------|-------------|
+| API endpoints defined | All from requirements | Every requirement has implementation path |
+| Data models complete | All entities covered | Schema for each data entity |
+| Architecture diagram | Present | High-level system overview |
+| Component responsibilities | Clear | Each component has defined role |
+| Security considerations | Documented | Auth, validation, etc. addressed |
+
 ---
 
-## Phase 5: TICKETS
+## Phase 5: TICKETS (Combined with Tasks in State Machine)
+
+> **Note**: In the state machine, TICKETS and TASKS are combined into a single `TASKS` phase for generation efficiency. The evaluator validates both ticket and task structures together.
 
 ### Purpose
 
@@ -943,6 +1203,10 @@ dependencies:
 ---
 
 ## Phase 6: TASKS
+
+> **State Machine Phase**: `TASKS` (Timeout: 3 min / 15 turns)
+> **Transition**: `DESIGN` → `TASKS` (requires DesignEvaluator pass)
+> **Next Phase**: `SYNC` (requires TaskEvaluator pass)
 
 ### Purpose
 
@@ -1034,9 +1298,59 @@ class FeatureService:
 - `research` - Investigate options
 - `bugfix` - Fix a specific bug
 
+### Step 6.1: Save Tasks Output (State Machine)
+
+After completing tasks, save to `.omoi_os/phase_data/tasks.json`:
+
+```json
+{
+    "tickets": [
+        {
+            "id": "TKT-001",
+            "title": "Implement Resource API",
+            "priority": "HIGH",
+            "estimate": "M",
+            "tasks": ["TSK-001", "TSK-002", "TSK-003"],
+            "dependencies": {"blocked_by": [], "blocks": ["TKT-002"]}
+        }
+    ],
+    "tasks": [
+        {
+            "id": "TSK-001",
+            "title": "Create ResourceService",
+            "parent_ticket": "TKT-001",
+            "type": "implementation",
+            "estimate": "M",
+            "deliverables": ["omoi_os/services/resource_service.py"],
+            "dependencies": {"depends_on": [], "blocks": ["TSK-002"]}
+        }
+    ],
+    "dependency_graph": {
+        "TSK-001": [],
+        "TSK-002": ["TSK-001"],
+        "TSK-003": ["TSK-002"]
+    }
+}
+```
+
+### TaskEvaluator Criteria
+
+| Criterion | Threshold | Description |
+|-----------|-----------|-------------|
+| Ticket coverage | All design components | Every component has a ticket |
+| Task atomicity | 1-4 hours each | Tasks completable in single session |
+| Dependency graph | Valid DAG | No circular dependencies |
+| Deliverables specified | All tasks | Every task has file deliverables |
+| Acceptance criteria | All tasks | Testable criteria for each task |
+| Ticket-task ratio | 2-5 tasks/ticket | Reasonable task grouping |
+
 ---
 
 ## Phase 7: SYNC TO API
+
+> **State Machine Phase**: `SYNC` (Timeout: 2 min / 10 turns)
+> **Transition**: `TASKS` → `SYNC` (requires TaskEvaluator pass)
+> **Final State**: `COMPLETE` (spec ready for execution)
 
 ### Using spec_cli.py
 
@@ -1482,6 +1796,93 @@ python spec_cli.py sync push --project-id <uuid>         # Push to API
 python spec_cli.py project <uuid>                        # View project in API
 python spec_cli.py api-trace <uuid>                      # Full API traceability
 ```
+
+---
+
+## 🔒 Sandbox Requirements
+
+### Environment Variables
+
+The orchestrator injects these environment variables into each sandbox session:
+
+| Variable | Purpose | Example |
+|----------|---------|---------|
+| `SPEC_ID` | Current spec being generated | `550e8400-...` |
+| `SPEC_PHASE` | Current phase name | `EXPLORE`, `REQUIREMENTS`, etc. |
+| `PHASE_DATA_B64` | Base64-encoded prior phase outputs | `eyJwcm9qZWN0X3R5cGUi...` |
+| `RESUME_SESSION_ID` | Session ID for resumption | `session-123-abc` |
+| `SESSION_TRANSCRIPT_B64` | Base64-encoded conversation history | `W3sicm9sZSI6InVz...` |
+| `FORK_SESSION` | Whether to fork from existing session | `true` or `false` |
+| `OMOIOS_API_URL` | API endpoint for sync | `https://api.omoios.dev` |
+
+### Required Imports
+
+Each sandbox MUST have access to:
+
+```python
+# Core imports for spec generation
+from omoi_os.schemas.spec_generation import (
+    SpecPhase,
+    ExplorationContext,
+    RequirementsOutput,
+    DesignOutput,
+    TasksOutput,
+)
+from omoi_os.services.spec_state_machine import SpecStateMachine
+from omoi_os.evaluators import (
+    ExplorationEvaluator,
+    RequirementEvaluator,
+    DesignEvaluator,
+    TaskEvaluator,
+)
+```
+
+### File System Access
+
+Sandboxes need read/write access to:
+
+```
+./                           # Project root
+./.omoi_os/                  # Spec artifacts directory
+./.omoi_os/phase_data/       # JSON outputs from each phase
+./.omoi_os/docs/             # PRD documents
+./.omoi_os/requirements/     # Requirement documents
+./.omoi_os/designs/          # Design documents
+./.omoi_os/tickets/          # Ticket markdown files
+./.omoi_os/tasks/            # Task markdown files
+```
+
+### Session Transcript Persistence
+
+For cross-sandbox resumption, transcripts are saved:
+
+```json
+{
+    "session_id": "session-123-abc",
+    "spec_id": "550e8400-...",
+    "phase": "REQUIREMENTS",
+    "turn_count": 15,
+    "messages": [
+        {"role": "user", "content": "..."},
+        {"role": "assistant", "content": "..."}
+    ],
+    "phase_data": {
+        "explore": {...},
+        "requirements": {...}
+    },
+    "created_at": "2025-01-10T...",
+    "updated_at": "2025-01-10T..."
+}
+```
+
+### Phase Timeout Handling
+
+If a phase times out:
+
+1. **Save current progress** to `.omoi_os/phase_data/{phase}.partial.json`
+2. **Set resumption flag** in session transcript
+3. **Return control** to orchestrator for retry or manual intervention
+4. **On resume**: Load partial data and continue from last checkpoint
 
 ---
 
