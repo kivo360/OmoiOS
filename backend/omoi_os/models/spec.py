@@ -81,6 +81,43 @@ class Spec(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # State machine phase tracking
+    current_phase: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="explore",
+        index=True,
+        comment="State machine phase: explore, requirements, design, tasks, sync, complete",
+    )
+    phase_data: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Accumulated phase outputs: {explore: {...}, requirements: {...}, ...}",
+    )
+    session_transcripts: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Base64-encoded transcripts per phase for session resumption",
+    )
+    last_checkpoint_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the last checkpoint was saved",
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Last error message from phase execution",
+    )
+    phase_attempts: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Retry attempts per phase: {explore: 1, requirements: 2, ...}",
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
