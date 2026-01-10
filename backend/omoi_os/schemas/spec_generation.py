@@ -280,7 +280,14 @@ class RequirementsOutput(BaseModel):
 
 
 class ApiEndpoint(BaseModel):
-    """An API endpoint specification."""
+    """An API endpoint specification.
+
+    Enhanced to support richer API documentation including:
+    - Request/response schemas
+    - Authentication requirements
+    - Path and query parameters
+    - Error responses
+    """
 
     method: str = Field(..., description="HTTP method (GET, POST, PUT, DELETE, PATCH)")
     path: str = Field(..., description="Endpoint path (e.g., /api/v1/webhooks)")
@@ -292,16 +299,35 @@ class ApiEndpoint(BaseModel):
         default=None, description="Response schema/description"
     )
     auth_required: bool = Field(default=True, description="Requires authentication")
+    path_params: list[str] = Field(
+        default_factory=list, description="Path parameters (e.g., ['id', 'project_id'])"
+    )
+    query_params: dict[str, str] = Field(
+        default_factory=dict, description="Query parameters with descriptions"
+    )
+    error_responses: dict[str, str] = Field(
+        default_factory=dict, description="Error status codes with descriptions"
+    )
 
 
 class DataModelField(BaseModel):
-    """A field in a data model."""
+    """A field in a data model.
+
+    Enhanced to support richer data model documentation including:
+    - Type information
+    - Nullable flags
+    - Default values
+    - Constraints (primary_key, unique, indexed, etc.)
+    """
 
     name: str = Field(..., description="Field name")
-    type: str = Field(..., description="Field type (e.g., 'UUID', 'str', 'int')")
-    description: str = Field(..., description="Field description")
+    type: str = Field(..., description="Field type (e.g., 'uuid', 'string', 'int', 'timestamp', 'jsonb')")
+    description: str = Field(default="", description="Field description")
     nullable: bool = Field(default=False)
     default: Optional[str] = Field(default=None, description="Default value if any")
+    constraints: list[str] = Field(
+        default_factory=list, description="Constraints (e.g., ['primary_key', 'unique', 'indexed'])"
+    )
 
 
 class DataModel(BaseModel):
