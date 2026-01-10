@@ -747,6 +747,200 @@ class DaytonaSpawnerService:
 
             raise RuntimeError(f"Failed to spawn sandbox: {e}") from e
 
+    async def spawn_for_phase(
+        self,
+        spec_id: str,
+        phase: str,
+        project_id: str,
+        phase_context: Optional[Dict[str, Any]] = None,
+        resume_transcript: Optional[str] = None,
+        extra_env: Optional[Dict[str, str]] = None,
+    ) -> str:
+        """Spawn a Daytona sandbox for executing a spec phase.
+
+        This is optimized for the spec-driven state machine workflow, where
+        each phase (explore, requirements, design, tasks, sync) runs in
+        focused short sessions with checkpointing.
+
+        Args:
+            spec_id: ID of the spec being processed
+            phase: Current phase (explore, requirements, design, tasks, sync)
+            project_id: Project ID for the spec
+            phase_context: Accumulated context from previous phases (phase_data JSONB)
+            resume_transcript: Base64-encoded session transcript for resumption
+            extra_env: Additional environment variables
+
+        Returns:
+            Sandbox ID
+
+        Raises:
+            RuntimeError: If sandbox creation fails
+        """
+        import base64
+        import json
+
+        logger.info(
+            "[SPAWNER] spawn_for_phase called",
+            extra={
+                "spec_id": spec_id,
+                "phase": phase,
+                "project_id": project_id,
+                "has_phase_context": phase_context is not None,
+                "has_resume_transcript": resume_transcript is not None,
+            },
+        )
+
+        if not self.daytona_api_key:
+            raise RuntimeError("Daytona API key not configured")
+
+        # Generate unique sandbox ID for this phase execution
+        sandbox_id = f"spec-{spec_id[:8]}-{phase[:4]}-{uuid4().hex[:6]}"
+
+        # Map phase to execution mode
+        phase_to_mode = {
+            "explore": "exploration",
+            "requirements": "exploration",
+            "design": "exploration",
+            "tasks": "exploration",
+            "sync": "implementation",
+        }
+        execution_mode = phase_to_mode.get(phase, "exploration")
+
+        # Build base environment variables
+        base_url = self.mcp_server_url.replace("/mcp", "").rstrip("/")
+
+        env_vars = {
+            "SPEC_ID": spec_id,
+            "SPEC_PHASE": phase,
+            "PROJECT_ID": project_id,
+            "EXECUTION_MODE": execution_mode,
+            "MCP_SERVER_URL": self.mcp_server_url,
+            "CALLBACK_URL": base_url,
+            "SANDBOX_ID": sandbox_id,
+            "IS_SANDBOX": "1",
+            "OMOIOS_API_URL": base_url,
+            "OMOIOS_PROJECT_ID": project_id,
+            # Enable spec skill for state machine phases
+            "REQUIRE_SPEC_SKILL": "true",
+        }
+
+        # Add API key for spec sync
+        from omoi_os.config import get_app_settings
+        app_settings = get_app_settings()
+        if app_settings.llm.api_key:
+            env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
+
+        # Add phase context as base64-encoded JSON
+        if phase_context:
+            context_json = json.dumps(phase_context)
+            env_vars["PHASE_CONTEXT_B64"] = base64.b64encode(
+                context_json.encode()
+            ).decode()
+            logger.debug(
+                f"Encoded phase context ({len(context_json)} bytes) for phase {phase}"
+            )
+
+        # Add session transcript for resumption if provided
+        if resume_transcript:
+            env_vars["SESSION_TRANSCRIPT_B64"] = resume_transcript
+            logger.info(
+                f"Phase {phase} will resume from previous session transcript"
+            )
+
+        # Add extra env vars (can override defaults)
+        if extra_env:
+            env_vars.update(extra_env)
+
+        # Build labels
+        sandbox_labels = {
+            "project": "omoios",
+            "type": "spec_phase",
+            "spec_id": spec_id,
+            "phase": phase,
+            "project_id": project_id,
+        }
+
+        # Create sandbox info - use spec_id as task_id equivalent
+        info = SandboxInfo(
+            sandbox_id=sandbox_id,
+            agent_id=f"spec-{phase}",  # Virtual agent ID for phase
+            task_id=f"{spec_id}-{phase}",  # Composite task ID
+            phase_id=phase,
+            status="creating",
+        )
+        info.extra_data["spec_id"] = spec_id
+        info.extra_data["spec_phase"] = phase
+        info.extra_data["runtime"] = "claude"
+
+        self._sandboxes[sandbox_id] = info
+        self._task_to_sandbox[f"{spec_id}-{phase}"] = sandbox_id
+
+        try:
+            logger.info(
+                f"Creating Daytona sandbox {sandbox_id} for spec phase {phase}"
+            )
+
+            await self._create_daytona_sandbox(
+                sandbox_id=sandbox_id,
+                env_vars=env_vars,
+                labels=sandbox_labels,
+                runtime="claude",  # Always use Claude for spec phases
+                execution_mode=execution_mode,
+                continuous_mode=False,  # State machine handles iteration
+            )
+
+            info.status = "running"
+            info.started_at = utc_now()
+
+            if self.event_bus:
+                self.event_bus.publish(
+                    SystemEvent(
+                        event_type="sandbox.spawned",
+                        entity_type="sandbox",
+                        entity_id=sandbox_id,
+                        payload={
+                            "sandbox_id": sandbox_id,
+                            "spec_id": spec_id,
+                            "phase": phase,
+                            "project_id": project_id,
+                            "type": "spec_phase",
+                        },
+                    )
+                )
+
+            logger.info(
+                f"Sandbox {sandbox_id} created for spec phase {phase}",
+                extra={
+                    "sandbox_id": sandbox_id,
+                    "spec_id": spec_id,
+                    "phase": phase,
+                    "execution_mode": execution_mode,
+                },
+            )
+
+            return sandbox_id
+
+        except Exception as e:
+            logger.error(f"Failed to create sandbox for spec phase: {e}")
+            info.status = "failed"
+            info.error = str(e)
+
+            if self.event_bus:
+                self.event_bus.publish(
+                    SystemEvent(
+                        event_type="sandbox.failed",
+                        entity_type="sandbox",
+                        entity_id=sandbox_id,
+                        payload={
+                            "error": str(e),
+                            "spec_id": spec_id,
+                            "phase": phase,
+                        },
+                    )
+                )
+
+            raise RuntimeError(f"Failed to spawn sandbox for phase {phase}: {e}") from e
+
     async def _create_daytona_sandbox(
         self,
         sandbox_id: str,
