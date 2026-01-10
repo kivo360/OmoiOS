@@ -64,23 +64,98 @@ class ParsedRequirement:
 
 @dataclass
 class ApiEndpoint:
-    """API endpoint specification."""
+    """API endpoint specification.
+
+    Enhanced to support richer API documentation including:
+    - Request/response schemas
+    - Authentication requirements
+    - Path parameters
+    - Query parameters
+    - Error responses
+    """
 
     method: str  # GET, POST, PUT, DELETE, PATCH
     path: str  # /api/v1/resource
     description: str = ""
     request_body: Optional[str] = None  # JSON schema or description
     response: Optional[str] = None  # JSON schema or description
+    auth_required: bool = True  # Whether authentication is required
+    path_params: list[str] = field(default_factory=list)  # e.g., ["id", "project_id"]
+    query_params: dict[str, str] = field(default_factory=dict)  # param_name -> description
+    error_responses: dict[str, str] = field(default_factory=dict)  # status_code -> description
+
+    def to_api_dict(self) -> dict:
+        """Convert to API sync format."""
+        return {
+            "method": self.method,
+            "endpoint": self.path,
+            "description": self.description,
+            "request_body": self.request_body,
+            "response": self.response,
+            "auth_required": self.auth_required,
+            "path_params": self.path_params,
+            "query_params": self.query_params,
+            "error_responses": self.error_responses,
+        }
+
+
+@dataclass
+class DataModelField:
+    """A single field in a data model."""
+
+    name: str
+    type: str  # e.g., "string", "uuid", "timestamp", "int", "boolean", "jsonb"
+    description: str = ""
+    nullable: bool = False
+    default: Optional[str] = None
+    constraints: list[str] = field(default_factory=list)  # e.g., ["unique", "indexed"]
 
 
 @dataclass
 class DataModel:
-    """Data model/entity specification."""
+    """Data model/entity specification.
+
+    Enhanced to support richer data model documentation including:
+    - Typed fields with constraints
+    - Table names
+    - Relationships with cardinality
+    """
 
     name: str
     description: str = ""
-    fields: dict[str, str] = field(default_factory=dict)  # field_name -> type/description
+    fields: dict[str, str] = field(default_factory=dict)  # Legacy: field_name -> type/description
+    typed_fields: list[DataModelField] = field(default_factory=list)  # Enhanced field specs
     relationships: list[str] = field(default_factory=list)
+    table_name: Optional[str] = None  # Database table name if different from model name
+
+    def to_markdown(self) -> str:
+        """Convert to markdown representation for data_model sync."""
+        parts = [f"### {self.name}"]
+        if self.description:
+            parts.append(self.description)
+        parts.append("")
+
+        # Use typed_fields if available, otherwise fall back to legacy fields
+        if self.typed_fields:
+            parts.append("**Fields:**")
+            for f in self.typed_fields:
+                nullable_str = " (nullable)" if f.nullable else ""
+                default_str = f" = {f.default}" if f.default else ""
+                constraints_str = f" [{', '.join(f.constraints)}]" if f.constraints else ""
+                desc_str = f" - {f.description}" if f.description else ""
+                parts.append(f"- `{f.name}`: {f.type}{nullable_str}{default_str}{constraints_str}{desc_str}")
+        elif self.fields:
+            parts.append("**Fields:**")
+            for field_name, field_type in self.fields.items():
+                parts.append(f"- `{field_name}`: {field_type}")
+
+        if self.relationships:
+            parts.append("")
+            parts.append("**Relationships:**")
+            for rel in self.relationships:
+                parts.append(f"- {rel}")
+
+        return "\n".join(parts)
 
 
 @dataclass

@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "httpx>=0.25",
+#     "pyyaml>=6.0",
+# ]
+# ///
 """
 Direct API client for OmoiOS backend (bypasses MCP server).
 
@@ -30,9 +37,8 @@ from typing import Optional
 
 import httpx
 
-# Default API URL - production URL, can be overridden via OMOIOS_API_URL env var
-# In sandbox environments, OMOIOS_API_URL is auto-injected by the spawner
-DEFAULT_API_URL = "https://api.omoios.dev"
+# Default API URL - can be overridden via environment variable
+DEFAULT_API_URL = "http://localhost:18000"
 
 from models import (
     ParseResult,
@@ -93,38 +99,53 @@ class OmoiOSClient:
         timeout: float = 30.0,
         token: Optional[str] = None,
         api_key: Optional[str] = None,
+        max_retries: int = 3,
     ):
         """Initialize client.
 
         Args:
             base_url: Base URL of OmoiOS API. If not provided, uses
                       OMOIOS_API_URL environment variable, or falls back
-                      to DEFAULT_API_URL (https://api.omoios.dev)
+                      to DEFAULT_API_URL (http://localhost:18000)
             timeout: Request timeout in seconds
             token: JWT access token for authentication. If not provided,
                    uses OMOIOS_TOKEN environment variable.
             api_key: API key for authentication (alternative to JWT).
                      If not provided, uses OMOIOS_API_KEY environment variable.
-
-        Note:
-            In sandbox environments, these environment variables are auto-injected:
-            - OMOIOS_API_URL: API endpoint URL
-            - OMOIOS_API_KEY: Authentication key
-            - OMOIOS_PROJECT_ID: Current project ID
-
-            You typically don't need to pass any arguments when running inside a sandbox.
+            max_retries: Maximum number of retries for failed requests
         """
         # Resolve base URL: explicit > env var > default
         if base_url:
             self.base_url = base_url.rstrip("/")
         else:
-            self.base_url = os.environ.get("OMOIOS_API_URL", DEFAULT_API_URL).rstrip("/")
+            self.base_url = os.environ.get("OMOIOS_API_URL", DEFAULT_API_URL).rstrip(
+                "/"
+            )
 
         self.timeout = timeout
+        self.max_retries = max_retries
 
         # Resolve auth: explicit > env var
         self.token = token or os.environ.get("OMOIOS_TOKEN")
         self.api_key = api_key or os.environ.get("OMOIOS_API_KEY")
+
+        # Persistent client for connection pooling
+        self._client: Optional[httpx.AsyncClient] = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """Get or create the persistent HTTP client."""
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=self.timeout,
+                limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+            )
+        return self._client
+
+    async def close(self):
+        """Close the HTTP client."""
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def _request(
         self,
@@ -132,7 +153,7 @@ class OmoiOSClient:
         endpoint: str,
         json: Optional[dict] = None,
     ) -> tuple[int, Optional[dict]]:
-        """Make HTTP request to API.
+        """Make HTTP request to API with retry logic.
 
         Returns:
             Tuple of (status_code, response_json or None)
@@ -145,7 +166,10 @@ class OmoiOSClient:
         elif self.token:
             headers["Authorization"] = f"Bearer {self.token}"
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        client = await self._get_client()
+        last_error = None
+
+        for attempt in range(self.max_retries):
             try:
                 response = await client.request(method, url, json=json, headers=headers)
                 try:
@@ -154,7 +178,14 @@ class OmoiOSClient:
                     data = None
                 return response.status_code, data
             except httpx.RequestError as e:
-                return 0, {"error": str(e)}
+                last_error = e
+                # Wait before retry (exponential backoff)
+                if attempt < self.max_retries - 1:
+                    await asyncio.sleep(0.5 * (2**attempt))
+                continue
+
+        # All retries failed
+        return 0, {"error": str(last_error) if last_error else "Unknown error"}
 
     # ========================================================================
     # Ticket Operations
@@ -167,7 +198,9 @@ class OmoiOSClient:
             return data
         return None
 
-    async def create_ticket(self, ticket: ParsedTicket, project_id: Optional[str] = None) -> tuple[bool, str]:
+    async def create_ticket(
+        self, ticket: ParsedTicket, project_id: Optional[str] = None
+    ) -> tuple[bool, str]:
         """Create a new ticket.
 
         Returns:
@@ -184,16 +217,6 @@ class OmoiOSClient:
         if project_id:
             payload["project_id"] = project_id
 
-        # Convert ticket dependencies to backend format
-        # Format: {"blocked_by": ["TKT-001"], "blocks": ["TKT-003"]}
-        if ticket.dependencies.blocked_by or ticket.dependencies.blocks:
-            dependencies = {}
-            if ticket.dependencies.blocked_by:
-                dependencies["blocked_by"] = ticket.dependencies.blocked_by
-            if ticket.dependencies.blocks:
-                dependencies["blocks"] = ticket.dependencies.blocks
-            payload["dependencies"] = dependencies
-
         status, data = await self._request("POST", "/api/v1/tickets", json=payload)
 
         if status in (200, 201):
@@ -202,14 +225,18 @@ class OmoiOSClient:
             error = data.get("detail", str(data)) if data else f"HTTP {status}"
             return False, f"Failed to create: {error}"
 
-    async def update_ticket_description(self, api_id: str, description: str) -> tuple[bool, str]:
+    async def update_ticket_description(
+        self, api_id: str, description: str
+    ) -> tuple[bool, str]:
         """Update ticket description.
 
         Returns:
             Tuple of (success, message/error)
         """
         payload = {"description": description}
-        status, data = await self._request("PATCH", f"/api/v1/tickets/{api_id}", json=payload)
+        status, data = await self._request(
+            "PATCH", f"/api/v1/tickets/{api_id}", json=payload
+        )
 
         if status == 200:
             return True, "Description updated"
@@ -239,7 +266,9 @@ class OmoiOSClient:
             return data
         return None
 
-    async def create_task(self, task: ParsedTask, ticket_api_id: str) -> tuple[bool, str]:
+    async def create_task(
+        self, task: ParsedTask, ticket_api_id: str
+    ) -> tuple[bool, str]:
         """Create a new task.
 
         Returns:
@@ -271,14 +300,18 @@ class OmoiOSClient:
             error = data.get("detail", str(data)) if data else f"HTTP {status}"
             return False, f"Failed to create: {error}"
 
-    async def update_task_description(self, api_id: str, description: str) -> tuple[bool, str]:
+    async def update_task_description(
+        self, api_id: str, description: str
+    ) -> tuple[bool, str]:
         """Update task description.
 
         Returns:
             Tuple of (success, message/error)
         """
         payload = {"description": description}
-        status, data = await self._request("PATCH", f"/api/v1/tasks/{api_id}", json=payload)
+        status, data = await self._request(
+            "PATCH", f"/api/v1/tasks/{api_id}", json=payload
+        )
 
         if status == 200:
             return True, "Description updated"
@@ -301,7 +334,9 @@ class OmoiOSClient:
     async def get_project_with_tickets(self, project_id: str) -> dict:
         """Get project details with all tickets and their tasks."""
         # Get project info
-        status, project_data = await self._request("GET", f"/api/v1/projects/{project_id}")
+        status, project_data = await self._request(
+            "GET", f"/api/v1/projects/{project_id}"
+        )
         if status != 200:
             return {"error": f"Project not found: {project_id}"}
 
@@ -663,39 +698,67 @@ class OmoiOSClient:
         Returns:
             SyncResult indicating action taken
         """
-        # Convert parsed API endpoints to API format
+        # Convert parsed API endpoints to API format (enhanced)
         api_spec = []
         for ep in design.api_endpoints:
-            api_spec.append({
-                "method": ep.method,
-                "endpoint": ep.path,
-                "description": ep.description,
-            })
+            # Use to_api_dict() if available, otherwise build manually
+            if hasattr(ep, "to_api_dict"):
+                api_spec.append(ep.to_api_dict())
+            else:
+                api_spec.append(
+                    {
+                        "method": ep.method,
+                        "endpoint": ep.path,
+                        "description": ep.description,
+                        "request_body": getattr(ep, "request_body", None),
+                        "response": getattr(ep, "response", None),
+                        "auth_required": getattr(ep, "auth_required", True),
+                        "path_params": getattr(ep, "path_params", []),
+                        "query_params": getattr(ep, "query_params", {}),
+                        "error_responses": getattr(ep, "error_responses", {}),
+                    }
+                )
 
-        # Build data model description from parsed data models
+        # Build data model description from parsed data models (enhanced)
         data_model_parts = []
         for dm in design.data_models:
-            model_desc = f"### {dm.name}\n{dm.description}\n\n"
-            if dm.fields:
-                model_desc += "**Fields:**\n"
-                for field_name, field_type in dm.fields.items():
-                    model_desc += f"- `{field_name}`: {field_type}\n"
-            if dm.relationships:
-                model_desc += "\n**Relationships:**\n"
-                for rel in dm.relationships:
-                    model_desc += f"- {rel}\n"
-            data_model_parts.append(model_desc)
+            # Use to_markdown() if available, otherwise build manually
+            if hasattr(dm, "to_markdown"):
+                data_model_parts.append(dm.to_markdown())
+            else:
+                model_desc = f"### {dm.name}\n{dm.description}\n\n"
+                if dm.fields:
+                    model_desc += "**Fields:**\n"
+                    for field_name, field_type in dm.fields.items():
+                        model_desc += f"- `{field_name}`: {field_type}\n"
+                if dm.relationships:
+                    model_desc += "\n**Relationships:**\n"
+                    for rel in dm.relationships:
+                        model_desc += f"- {rel}\n"
+                data_model_parts.append(model_desc)
 
-        data_model = "\n".join(data_model_parts) if data_model_parts else None
+        data_model = "\n\n".join(data_model_parts) if data_model_parts else None
 
         # Check if needs update
         if existing_design:
             existing_arch = existing_design.get("architecture", "") or ""
             existing_dm = existing_design.get("data_model", "") or ""
+            existing_api = existing_design.get("api_spec", []) or []
             new_arch = design.architecture or ""
             new_dm = data_model or ""
 
-            if existing_arch.strip() == new_arch.strip() and existing_dm.strip() == new_dm.strip():
+            # Compare architecture and data model text
+            arch_same = existing_arch.strip() == new_arch.strip()
+            dm_same = existing_dm.strip() == new_dm.strip()
+
+            # Compare API spec (simplified comparison by length and methods)
+            api_same = len(existing_api) == len(api_spec)
+            if api_same and existing_api:
+                existing_methods = {(e.get("method"), e.get("endpoint")) for e in existing_api}
+                new_methods = {(e.get("method"), e.get("endpoint")) for e in api_spec}
+                api_same = existing_methods == new_methods
+
+            if arch_same and dm_same and api_same:
                 return SyncResult(
                     item_id=design.id,
                     item_type="design",
@@ -799,7 +862,9 @@ class OmoiOSClient:
                 ticket_api_ids[ticket.id] = existing["id"]
 
                 # Check if description needs update (use full_body for rich context)
-                description_text = ticket.full_body if ticket.full_body else ticket.description
+                description_text = (
+                    ticket.full_body if ticket.full_body else ticket.description
+                )
                 existing_desc = existing.get("description", "") or ""
                 if existing_desc.strip() != description_text.strip():
                     if dry_run:
@@ -819,7 +884,9 @@ class OmoiOSClient:
                             SyncResult(
                                 item_id=ticket.id,
                                 item_type="ticket",
-                                action=SyncAction.UPDATED if success else SyncAction.FAILED,
+                                action=SyncAction.UPDATED
+                                if success
+                                else SyncAction.FAILED,
                                 message=msg,
                             )
                         )
@@ -888,7 +955,9 @@ class OmoiOSClient:
                             SyncResult(
                                 item_id=task.id,
                                 item_type="task",
-                                action=SyncAction.UPDATED if success else SyncAction.FAILED,
+                                action=SyncAction.UPDATED
+                                if success
+                                else SyncAction.FAILED,
                                 message=msg,
                             )
                         )
@@ -937,7 +1006,9 @@ class OmoiOSClient:
 
         return summary
 
-    async def diff(self, result: ParseResult, project_id: Optional[str] = None) -> SyncSummary:
+    async def diff(
+        self, result: ParseResult, project_id: Optional[str] = None
+    ) -> SyncSummary:
         """Show what would change without making changes.
 
         This is equivalent to sync with dry_run=True.
@@ -979,12 +1050,14 @@ class OmoiOSClient:
             elif result.requirements:
                 spec_title = f"Spec for {result.requirements[0].title}"
             else:
-                summary.add(SyncResult(
-                    item_id="unknown",
-                    item_type="spec",
-                    action=SyncAction.FAILED,
-                    message="No requirements or designs found to sync",
-                ))
+                summary.add(
+                    SyncResult(
+                        item_id="unknown",
+                        item_type="spec",
+                        action=SyncAction.FAILED,
+                        message="No requirements or designs found to sync",
+                    )
+                )
                 return summary
 
         # Get existing specs for this project
@@ -996,21 +1069,25 @@ class OmoiOSClient:
         if spec_title in spec_by_title:
             spec_id = spec_by_title[spec_title]["id"]
             existing_spec = spec_by_title[spec_title]
-            summary.add(SyncResult(
-                item_id=spec_id,
-                item_type="spec",
-                action=SyncAction.SKIPPED,
-                message=f"Using existing spec: {spec_title}",
-            ))
+            summary.add(
+                SyncResult(
+                    item_id=spec_id,
+                    item_type="spec",
+                    action=SyncAction.SKIPPED,
+                    message=f"Using existing spec: {spec_title}",
+                )
+            )
         else:
             if dry_run:
                 spec_id = f"dry-run-spec-{spec_title}"
-                summary.add(SyncResult(
-                    item_id=spec_id,
-                    item_type="spec",
-                    action=SyncAction.CREATED,
-                    message=f"Would create spec: {spec_title} (dry run)",
-                ))
+                summary.add(
+                    SyncResult(
+                        item_id=spec_id,
+                        item_type="spec",
+                        action=SyncAction.CREATED,
+                        message=f"Would create spec: {spec_title} (dry run)",
+                    )
+                )
                 existing_spec = {"requirements": [], "design": None}
             else:
                 # Build description from requirements
@@ -1028,20 +1105,24 @@ class OmoiOSClient:
                 )
                 if success and created_id:
                     spec_id = created_id
-                    summary.add(SyncResult(
-                        item_id=spec_id,
-                        item_type="spec",
-                        action=SyncAction.CREATED,
-                        message=msg,
-                    ))
+                    summary.add(
+                        SyncResult(
+                            item_id=spec_id,
+                            item_type="spec",
+                            action=SyncAction.CREATED,
+                            message=msg,
+                        )
+                    )
                     existing_spec = {"requirements": [], "design": None}
                 else:
-                    summary.add(SyncResult(
-                        item_id="unknown",
-                        item_type="spec",
-                        action=SyncAction.FAILED,
-                        message=msg,
-                    ))
+                    summary.add(
+                        SyncResult(
+                            item_id="unknown",
+                            item_type="spec",
+                            action=SyncAction.FAILED,
+                            message=msg,
+                        )
+                    )
                     return summary
 
         # Sync requirements
@@ -1057,12 +1138,14 @@ class OmoiOSClient:
                 summary.add(req_result)
         elif dry_run:
             for requirement in result.requirements:
-                summary.add(SyncResult(
-                    item_id=requirement.id,
-                    item_type="requirement",
-                    action=SyncAction.CREATED,
-                    message=f"Would create requirement: {requirement.title} (dry run)",
-                ))
+                summary.add(
+                    SyncResult(
+                        item_id=requirement.id,
+                        item_type="requirement",
+                        action=SyncAction.CREATED,
+                        message=f"Would create requirement: {requirement.title} (dry run)",
+                    )
+                )
 
         # Sync designs
         if spec_id and not dry_run:
@@ -1077,12 +1160,14 @@ class OmoiOSClient:
                 summary.add(design_result)
         elif dry_run:
             for design in result.designs:
-                summary.add(SyncResult(
-                    item_id=design.id,
-                    item_type="design",
-                    action=SyncAction.UPDATED,
-                    message=f"Would update design: {design.title} (dry run)",
-                ))
+                summary.add(
+                    SyncResult(
+                        item_id=design.id,
+                        item_type="design",
+                        action=SyncAction.UPDATED,
+                        message=f"Would update design: {design.title} (dry run)",
+                    )
+                )
 
         return summary
 
@@ -1161,7 +1246,9 @@ class OmoiOSClient:
                     req_title_lower = req["title"].lower()
 
                     # Simple heuristic: ticket title contains requirement keywords
-                    if any(word in ticket_title_lower for word in req_title_lower.split()):
+                    if any(
+                        word in ticket_title_lower for word in req_title_lower.split()
+                    ):
                         req_entry["linked_tickets"].append(ticket["id"])
                         spec_entry["linked_tickets"].append(ticket["id"])
 
@@ -1276,7 +1363,9 @@ async def run_sync(
                 print("Authenticated!\n")
             else:
                 print("Warning: No authentication provided. API calls may fail.")
-                print("Set OMOIOS_API_KEY, OMOIOS_TOKEN, or OMOIOS_EMAIL/OMOIOS_PASSWORD env vars.\n")
+                print(
+                    "Set OMOIOS_API_KEY, OMOIOS_TOKEN, or OMOIOS_EMAIL/OMOIOS_PASSWORD env vars.\n"
+                )
 
     # Parse specs
     result = parser.parse_all()
@@ -1295,15 +1384,19 @@ async def run_sync(
     print("Validation passed!\n")
 
     # Run sync
-    if action == "diff":
-        print("Checking what would change (dry run)...")
-        summary = await client.diff(result, project_id)
-    else:  # push
-        print("Syncing to API...")
-        summary = await client.sync(result, project_id)
+    try:
+        if action == "diff":
+            print("Checking what would change (dry run)...")
+            summary = await client.diff(result, project_id)
+        else:  # push
+            print("Syncing to API...")
+            summary = await client.sync(result, project_id)
 
-    print_sync_summary(summary)
-    return summary.failed == 0
+        print_sync_summary(summary)
+        return summary.failed == 0
+    finally:
+        # Clean up client connection
+        await client.close()
 
 
 if __name__ == "__main__":

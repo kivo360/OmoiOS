@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pyyaml>=6.0",
+# ]
+# ///
 """
 Parse .omoi_os/ spec files into structured data.
 
@@ -38,6 +44,7 @@ from models import (
     AcceptanceCriterion,
     ApiEndpoint,
     DataModel,
+    DataModelField,
     ParsedDesign,
     ParsedRequirement,
     ParsedTask,
@@ -161,10 +168,16 @@ class SpecParser:
 
         if "created" not in frontmatter:
             # Parse from markdown if present
-            created_str = frontmatter.pop("created_date", None) or frontmatter.get("created")
+            created_str = frontmatter.pop("created_date", None) or frontmatter.get(
+                "created"
+            )
             if created_str:
                 try:
-                    frontmatter["created"] = date.fromisoformat(created_str) if isinstance(created_str, str) else created_str
+                    frontmatter["created"] = (
+                        date.fromisoformat(created_str)
+                        if isinstance(created_str, str)
+                        else created_str
+                    )
                 except (ValueError, TypeError):
                     frontmatter["created"] = date.today()
             else:
@@ -202,10 +215,10 @@ class SpecParser:
         for rich context in AI-assisted task execution.
         """
         # Remove the main title (# TKT-XXX: Title) if present
-        lines = body.strip().split('\n')
-        if lines and lines[0].startswith('# '):
+        lines = body.strip().split("\n")
+        if lines and lines[0].startswith("# "):
             lines = lines[1:]
-        return '\n'.join(lines).strip()
+        return "\n".join(lines).strip()
 
     def _extract_section(self, body: str, section_name: str) -> str:
         """Extract a named section from markdown body."""
@@ -222,10 +235,9 @@ class SpecParser:
         pattern = r"- \[([ xX])\] (.+?)(?=\n|$)"
         matches = re.findall(pattern, body)
         for check, text in matches:
-            criteria.append(AcceptanceCriterion(
-                text=text.strip(),
-                completed=check.lower() == "x"
-            ))
+            criteria.append(
+                AcceptanceCriterion(text=text.strip(), completed=check.lower() == "x")
+            )
         return criteria
 
     # ========================================================================
@@ -254,8 +266,12 @@ class SpecParser:
                 raise ValueError(f"Missing required field: {field_name}")
 
         # Extract EARS-style requirement from body
-        condition = self._extract_section(body, "Condition") or self._extract_section(body, "When")
-        action = self._extract_section(body, "Action") or self._extract_section(body, "The System Shall")
+        condition = self._extract_section(body, "Condition") or self._extract_section(
+            body, "When"
+        )
+        action = self._extract_section(body, "Action") or self._extract_section(
+            body, "The System Shall"
+        )
 
         # If not in sections, try to parse from structured format
         if not condition and not action:
@@ -311,30 +327,11 @@ class SpecParser:
             if field_name not in frontmatter:
                 raise ValueError(f"Missing required field: {field_name}")
 
-        # Parse API endpoints from frontmatter or body
-        api_endpoints = []
-        api_data = frontmatter.get("api_endpoints", []) or []
-        for ep in api_data:
-            if isinstance(ep, dict):
-                api_endpoints.append(ApiEndpoint(
-                    method=ep.get("method", "GET"),
-                    path=ep.get("path", ""),
-                    description=ep.get("description", ""),
-                    request_body=ep.get("request_body"),
-                    response=ep.get("response"),
-                ))
+        # Parse API endpoints from frontmatter
+        api_endpoints = self._parse_api_endpoints(frontmatter, body)
 
         # Parse data models from frontmatter
-        data_models = []
-        models_data = frontmatter.get("data_models", []) or []
-        for model in models_data:
-            if isinstance(model, dict):
-                data_models.append(DataModel(
-                    name=model.get("name", ""),
-                    description=model.get("description", ""),
-                    fields=model.get("fields", {}),
-                    relationships=model.get("relationships", []),
-                ))
+        data_models = self._parse_data_models(frontmatter, body)
 
         return ParsedDesign(
             id=frontmatter["id"],
@@ -345,16 +342,265 @@ class SpecParser:
             feature=frontmatter.get("feature", ""),
             requirements=frontmatter.get("requirements", []) or [],
             architecture=self._extract_section(body, "Architecture Overview")
-                or self._extract_section(body, "Architecture"),
+            or self._extract_section(body, "Architecture"),
             data_models=data_models,
             api_endpoints=api_endpoints,
             components=frontmatter.get("components", []) or [],
             error_handling=self._extract_section(body, "Error Handling"),
             security_considerations=self._extract_section(body, "Security"),
             implementation_notes=self._extract_section(body, "Implementation Notes")
-                or self._extract_section(body, "Notes"),
+            or self._extract_section(body, "Notes"),
             file_path=str(file_path),
         )
+
+    def _parse_api_endpoints(self, frontmatter: dict, body: str) -> list[ApiEndpoint]:
+        """Parse API endpoints from frontmatter or markdown body.
+
+        Supports both:
+        1. YAML frontmatter format (preferred)
+        2. Markdown table format (fallback)
+        """
+        api_endpoints = []
+
+        # Try frontmatter first
+        api_data = frontmatter.get("api_endpoints", []) or []
+        for ep in api_data:
+            if isinstance(ep, dict):
+                # Parse query params - can be dict or list of dicts
+                query_params = {}
+                raw_query = ep.get("query_params", {})
+                if isinstance(raw_query, dict):
+                    query_params = raw_query
+                elif isinstance(raw_query, list):
+                    for param in raw_query:
+                        if isinstance(param, dict) and "name" in param:
+                            query_params[param["name"]] = param.get("description", "")
+
+                # Parse error responses
+                error_responses = {}
+                raw_errors = ep.get("error_responses", {})
+                if isinstance(raw_errors, dict):
+                    error_responses = {str(k): v for k, v in raw_errors.items()}
+                elif isinstance(raw_errors, list):
+                    for err in raw_errors:
+                        if isinstance(err, dict) and "status" in err:
+                            error_responses[str(err["status"])] = err.get("description", "")
+
+                api_endpoints.append(
+                    ApiEndpoint(
+                        method=ep.get("method", "GET"),
+                        path=ep.get("path", ep.get("endpoint", "")),
+                        description=ep.get("description", ""),
+                        request_body=ep.get("request_body"),
+                        response=ep.get("response"),
+                        auth_required=ep.get("auth_required", True),
+                        path_params=ep.get("path_params", []),
+                        query_params=query_params,
+                        error_responses=error_responses,
+                    )
+                )
+
+        # If no frontmatter endpoints, try to parse from markdown table
+        if not api_endpoints:
+            api_endpoints = self._parse_api_from_markdown(body)
+
+        return api_endpoints
+
+    def _parse_api_from_markdown(self, body: str) -> list[ApiEndpoint]:
+        """Parse API endpoints from markdown table format.
+
+        Looks for tables like:
+        | Method | Path | Description | Auth |
+        |--------|------|-------------|------|
+        | POST | /api/v1/resource | Create resource | Required |
+        """
+        endpoints = []
+        api_section = self._extract_section(body, "API Specification") or self._extract_section(body, "Endpoints")
+
+        if not api_section:
+            return endpoints
+
+        # Find table rows (skip header and separator)
+        lines = api_section.strip().split("\n")
+        in_table = False
+        header_cols = []
+
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Detect table start
+            if line.startswith("|") and "Method" in line:
+                in_table = True
+                header_cols = [col.strip().lower() for col in line.split("|") if col.strip()]
+                continue
+
+            # Skip separator row
+            if in_table and re.match(r"^\|[\s-|]+\|$", line):
+                continue
+
+            # Parse data row
+            if in_table and line.startswith("|"):
+                cols = [col.strip() for col in line.split("|") if col.strip()]
+                if len(cols) >= 3:
+                    method = cols[0].upper() if cols else "GET"
+                    path = cols[1] if len(cols) > 1 else ""
+                    description = cols[2] if len(cols) > 2 else ""
+                    auth = cols[3] if len(cols) > 3 else "Required"
+
+                    endpoints.append(
+                        ApiEndpoint(
+                            method=method,
+                            path=path,
+                            description=description,
+                            auth_required="required" in auth.lower() if auth else True,
+                        )
+                    )
+
+        return endpoints
+
+    def _parse_data_models(self, frontmatter: dict, body: str) -> list[DataModel]:
+        """Parse data models from frontmatter or markdown body.
+
+        Supports both:
+        1. YAML frontmatter format (preferred)
+        2. Markdown SQL/Pydantic format (fallback)
+        """
+        data_models = []
+
+        # Try frontmatter first
+        models_data = frontmatter.get("data_models", []) or []
+        for model in models_data:
+            if isinstance(model, dict):
+                # Parse typed fields if available
+                typed_fields = []
+                raw_fields = model.get("typed_fields", []) or model.get("fields_detailed", [])
+                if isinstance(raw_fields, list):
+                    for f in raw_fields:
+                        if isinstance(f, dict) and "name" in f:
+                            typed_fields.append(
+                                DataModelField(
+                                    name=f.get("name", ""),
+                                    type=f.get("type", "string"),
+                                    description=f.get("description", ""),
+                                    nullable=f.get("nullable", False),
+                                    default=f.get("default"),
+                                    constraints=f.get("constraints", []),
+                                )
+                            )
+
+                # Legacy fields dict format
+                legacy_fields = {}
+                raw_legacy = model.get("fields", {})
+                if isinstance(raw_legacy, dict):
+                    legacy_fields = raw_legacy
+                elif isinstance(raw_legacy, list):
+                    # Convert list of {name, type} to dict
+                    for f in raw_legacy:
+                        if isinstance(f, dict) and "name" in f:
+                            legacy_fields[f["name"]] = f.get("type", "unknown")
+
+                data_models.append(
+                    DataModel(
+                        name=model.get("name", ""),
+                        description=model.get("description", ""),
+                        fields=legacy_fields,
+                        typed_fields=typed_fields,
+                        relationships=model.get("relationships", []),
+                        table_name=model.get("table_name"),
+                    )
+                )
+
+        # If no frontmatter models, try to parse from markdown
+        if not data_models:
+            data_models = self._parse_data_models_from_markdown(body)
+
+        return data_models
+
+    def _parse_data_models_from_markdown(self, body: str) -> list[DataModel]:
+        """Parse data models from SQL or Pydantic code blocks in markdown.
+
+        Looks for patterns like:
+        ```sql
+        CREATE TABLE table_name (...)
+        ```
+
+        Or:
+        ```python
+        class ModelName(BaseModel):
+            field: type
+        ```
+        """
+        models = []
+        data_section = self._extract_section(body, "Data Model") or self._extract_section(body, "Database Schema")
+
+        if not data_section:
+            return models
+
+        # Find SQL CREATE TABLE statements
+        sql_pattern = r"```sql\s*\n(.*?)```"
+        sql_matches = re.findall(sql_pattern, data_section, re.DOTALL)
+
+        for sql_block in sql_matches:
+            table_match = re.search(
+                r"CREATE TABLE\s+(\w+)\s*\((.*?)\);",
+                sql_block,
+                re.DOTALL | re.IGNORECASE,
+            )
+            if table_match:
+                table_name = table_match.group(1)
+                columns_str = table_match.group(2)
+
+                fields = {}
+                for line in columns_str.split(","):
+                    line = line.strip()
+                    if not line or line.upper().startswith(("PRIMARY", "FOREIGN", "CONSTRAINT", "INDEX")):
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2:
+                        col_name = parts[0]
+                        col_type = " ".join(parts[1:])
+                        fields[col_name] = col_type
+
+                models.append(
+                    DataModel(
+                        name=table_name.title().replace("_", ""),
+                        description=f"Data model from {table_name} table",
+                        fields=fields,
+                        table_name=table_name,
+                    )
+                )
+
+        # Find Pydantic model definitions
+        pydantic_pattern = r"```python\s*\n(.*?)```"
+        py_matches = re.findall(pydantic_pattern, data_section, re.DOTALL)
+
+        for py_block in py_matches:
+            class_match = re.search(
+                r"class\s+(\w+)\s*\([^)]*(?:BaseModel|Base)[^)]*\):",
+                py_block,
+            )
+            if class_match:
+                model_name = class_match.group(1)
+                fields = {}
+
+                # Extract field definitions
+                field_pattern = r"(\w+):\s*(\w+(?:\[.*?\])?)"
+                field_matches = re.findall(field_pattern, py_block)
+                for field_name, field_type in field_matches:
+                    if field_name not in ("class", "def", "self"):
+                        fields[field_name] = field_type
+
+                models.append(
+                    DataModel(
+                        name=model_name,
+                        description=f"Pydantic model {model_name}",
+                        fields=fields,
+                    )
+                )
+
+        return models
 
     # ========================================================================
     # Ticket Parsing
@@ -376,7 +622,15 @@ class SpecParser:
         frontmatter, body = self._parse_frontmatter(content)
 
         # Required fields
-        required = ["id", "title", "status", "priority", "estimate", "created", "updated"]
+        required = [
+            "id",
+            "title",
+            "status",
+            "priority",
+            "estimate",
+            "created",
+            "updated",
+        ]
         for field in required:
             if field not in frontmatter:
                 raise ValueError(f"Missing required field: {field}")
@@ -583,9 +837,15 @@ if __name__ == "__main__":
         stats = result.get_traceability_stats()
         print(f"\nTraceability Coverage:")
         if result.requirements:
-            print(f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)")
+            print(
+                f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)"
+            )
         if result.designs:
-            print(f"  Designs: {stats['designs']['linked']}/{stats['designs']['total']} linked ({stats['designs']['coverage']:.1f}%)")
+            print(
+                f"  Designs: {stats['designs']['linked']}/{stats['designs']['total']} linked ({stats['designs']['coverage']:.1f}%)"
+            )
         if result.tickets:
-            print(f"  Tickets: {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)")
+            print(
+                f"  Tickets: {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)"
+            )
         print(f"  Tasks: {stats['tasks']['done']}/{stats['tasks']['total']} done")
