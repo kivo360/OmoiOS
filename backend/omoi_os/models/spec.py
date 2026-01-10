@@ -106,6 +106,12 @@ class Spec(Base):
         cascade="all, delete-orphan",
         order_by="SpecTask.created_at",
     )
+    versions: Mapped[list["SpecVersion"]] = relationship(
+        "SpecVersion",
+        back_populates="spec",
+        cascade="all, delete-orphan",
+        order_by="SpecVersion.created_at.desc()",
+    )
 
 
 class SpecRequirement(Base):
@@ -240,3 +246,47 @@ class SpecTask(Base):
 
     # Relationships
     spec: Mapped["Spec"] = relationship("Spec", back_populates="tasks")
+
+
+class SpecVersion(Base):
+    """Version history entry for a specification."""
+
+    __tablename__ = "spec_versions"
+
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: f"spec-ver-{uuid4()}"
+    )
+    spec_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("specs.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    change_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="created, updated, requirements_approved, design_approved, phase_changed",
+    )
+    change_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    change_details: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Detailed change information: {field: {old, new}}",
+    )
+    created_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+    # Snapshot of key fields at this version
+    snapshot: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Snapshot of spec state at this version",
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utc_now
+    )
+
+    # Relationships
+    spec: Mapped["Spec"] = relationship("Spec", back_populates="versions")

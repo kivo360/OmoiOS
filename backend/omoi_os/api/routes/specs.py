@@ -22,6 +22,7 @@ from omoi_os.models.spec import (
     SpecRequirement as SpecRequirementModel,
     SpecAcceptanceCriterion as SpecCriterionModel,
     SpecTask as SpecTaskModel,
+    SpecVersion as SpecVersionModel,
 )
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
@@ -329,6 +330,28 @@ async def _update_criterion_async(
         return criterion
 
 
+async def _delete_criterion_async(
+    db: DatabaseService,
+    criterion_id: str,
+    req_id: str,
+) -> bool:
+    """Delete a criterion (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecCriterionModel).filter(
+                SpecCriterionModel.id == criterion_id,
+                SpecCriterionModel.requirement_id == req_id,
+            )
+        )
+        criterion = result.scalar_one_or_none()
+        if not criterion:
+            return False
+
+        await session.delete(criterion)
+        await session.commit()
+        return True
+
+
 async def _update_design_async(
     db: DatabaseService, spec_id: str, design: Dict[str, Any]
 ) -> Optional[SpecModel]:
@@ -394,6 +417,67 @@ async def _list_spec_tasks_async(
         return spec.tasks
 
 
+async def _update_task_async(
+    db: DatabaseService,
+    spec_id: str,
+    task_id: str,
+    title: Optional[str] = None,
+    description: Optional[str] = None,
+    phase: Optional[str] = None,
+    priority: Optional[str] = None,
+    status: Optional[str] = None,
+    assigned_agent: Optional[str] = None,
+) -> Optional[SpecTaskModel]:
+    """Update a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecTaskModel).filter(
+                SpecTaskModel.id == task_id,
+                SpecTaskModel.spec_id == spec_id,
+            )
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            return None
+
+        if title is not None:
+            task.title = title
+        if description is not None:
+            task.description = description
+        if phase is not None:
+            task.phase = phase
+        if priority is not None:
+            task.priority = priority
+        if status is not None:
+            task.status = status
+        if assigned_agent is not None:
+            task.assigned_agent = assigned_agent
+
+        await session.commit()
+        await session.refresh(task)
+        return task
+
+
+async def _delete_task_async(
+    db: DatabaseService, spec_id: str, task_id: str
+) -> bool:
+    """Delete a task (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecTaskModel).filter(
+                SpecTaskModel.id == task_id,
+                SpecTaskModel.spec_id == spec_id,
+            )
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            return False
+
+        await session.delete(task)
+        await session.commit()
+        return True
+
+
 async def _approve_requirements_async(db: DatabaseService, spec_id: str) -> bool:
     """Approve requirements (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
@@ -428,6 +512,77 @@ async def _approve_design_async(db: DatabaseService, spec_id: str) -> bool:
         spec.phase = "Implementation"
         await session.commit()
         return True
+
+
+async def _create_spec_version_async(
+    db: DatabaseService,
+    spec_id: str,
+    change_type: str,
+    change_summary: str,
+    change_details: Optional[Dict[str, Any]] = None,
+    created_by: Optional[str] = None,
+) -> Optional[SpecVersionModel]:
+    """Create a version history entry for a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        # Get the spec to create a snapshot
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        # Get the next version number
+        version_result = await session.execute(
+            select(SpecVersionModel)
+            .filter(SpecVersionModel.spec_id == spec_id)
+            .order_by(SpecVersionModel.version_number.desc())
+            .limit(1)
+        )
+        latest_version = version_result.scalar_one_or_none()
+        next_version = (latest_version.version_number + 1) if latest_version else 1
+
+        # Create snapshot of current state
+        snapshot = {
+            "title": spec.title,
+            "description": spec.description,
+            "status": spec.status,
+            "phase": spec.phase,
+            "progress": spec.progress,
+            "requirements_approved": spec.requirements_approved,
+            "design_approved": spec.design_approved,
+        }
+
+        new_version = SpecVersionModel(
+            spec_id=spec_id,
+            version_number=next_version,
+            change_type=change_type,
+            change_summary=change_summary,
+            change_details=change_details,
+            created_by=created_by,
+            snapshot=snapshot,
+        )
+        session.add(new_version)
+        await session.commit()
+        await session.refresh(new_version)
+        return new_version
+
+
+async def _list_spec_versions_async(
+    db: DatabaseService,
+    spec_id: str,
+    limit: int = 20,
+) -> List[SpecVersionModel]:
+    """List version history for a spec (ASYNC - non-blocking)."""
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecVersionModel)
+            .filter(SpecVersionModel.spec_id == spec_id)
+            .order_by(SpecVersionModel.created_at.desc())
+            .limit(limit)
+        )
+        versions = result.scalars().all()
+        return list(versions)
 
 
 # ============================================================================
@@ -563,6 +718,34 @@ class TaskCreate(BaseModel):
     priority: str = "medium"
 
 
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    phase: Optional[str] = None
+    priority: Optional[str] = None
+    status: Optional[str] = None
+    assigned_agent: Optional[str] = None
+
+
+class SpecVersionResponse(BaseModel):
+    id: str
+    spec_id: str
+    version_number: int
+    change_type: str
+    change_summary: str
+    change_details: Optional[dict] = None
+    created_by: Optional[str] = None
+    snapshot: Optional[dict] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SpecVersionListResponse(BaseModel):
+    versions: list[SpecVersionResponse]
+    total: int
+
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -670,6 +853,15 @@ async def create_spec(
     new_spec = await _create_spec_async(
         db, spec.project_id, spec.title, spec.description
     )
+
+    # Create initial version history entry
+    await _create_spec_version_async(
+        db,
+        new_spec.id,
+        change_type="created",
+        change_summary=f"Specification '{spec.title}' created",
+    )
+
     return _spec_to_response(new_spec)
 
 
@@ -693,12 +885,46 @@ async def update_spec(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Update a spec."""
+    # Get current state before update for change tracking
+    old_spec = await _get_spec_async(db, spec_id)
+    if not old_spec:
+        raise HTTPException(status_code=404, detail="Spec not found")
+
     # Use async database operations (non-blocking)
     spec = await _update_spec_async(
         db, spec_id, updates.title, updates.description, updates.status, updates.phase
     )
     if not spec:
         raise HTTPException(status_code=404, detail="Spec not found")
+
+    # Build change details
+    change_details: Dict[str, Any] = {}
+    change_parts = []
+    if updates.title is not None and updates.title != old_spec.title:
+        change_details["title"] = {"old": old_spec.title, "new": updates.title}
+        change_parts.append("title")
+    if updates.description is not None and updates.description != old_spec.description:
+        change_details["description"] = {"old": old_spec.description, "new": updates.description}
+        change_parts.append("description")
+    if updates.status is not None and updates.status != old_spec.status:
+        change_details["status"] = {"old": old_spec.status, "new": updates.status}
+        change_parts.append("status")
+    if updates.phase is not None and updates.phase != old_spec.phase:
+        change_details["phase"] = {"old": old_spec.phase, "new": updates.phase}
+        change_parts.append("phase")
+
+    # Create version history entry if there were changes
+    if change_parts:
+        change_type = "phase_changed" if "phase" in change_parts else "updated"
+        change_summary = f"Updated {', '.join(change_parts)}"
+        await _create_spec_version_async(
+            db,
+            spec_id,
+            change_type=change_type,
+            change_summary=change_summary,
+            change_details=change_details,
+        )
+
     return _spec_to_response(spec)
 
 
@@ -841,6 +1067,21 @@ async def update_criterion(
     )
 
 
+@router.delete("/{spec_id}/requirements/{req_id}/criteria/{criterion_id}")
+async def delete_criterion(
+    spec_id: str,
+    req_id: str,
+    criterion_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """Delete an acceptance criterion."""
+    # Use async database operations (non-blocking)
+    deleted = await _delete_criterion_async(db, criterion_id, req_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Criterion not found")
+    return {"message": "Criterion deleted successfully"}
+
+
 # ============================================================================
 # Design Routes
 # ============================================================================
@@ -921,6 +1162,57 @@ async def list_spec_tasks(
     ]
 
 
+@router.patch("/{spec_id}/tasks/{task_id}", response_model=SpecTask)
+async def update_task(
+    spec_id: str,
+    task_id: str,
+    updates: TaskUpdate,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """Update a task."""
+    # Use async database operations (non-blocking)
+    task = await _update_task_async(
+        db,
+        spec_id,
+        task_id,
+        title=updates.title,
+        description=updates.description,
+        phase=updates.phase,
+        priority=updates.priority,
+        status=updates.status,
+        assigned_agent=updates.assigned_agent,
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return SpecTask(
+        id=task.id,
+        title=task.title,
+        description=task.description,
+        phase=task.phase,
+        priority=task.priority,
+        status=task.status,
+        assigned_agent=task.assigned_agent,
+        dependencies=task.dependencies or [],
+        estimated_hours=task.estimated_hours,
+        actual_hours=task.actual_hours,
+    )
+
+
+@router.delete("/{spec_id}/tasks/{task_id}")
+async def delete_task(
+    spec_id: str,
+    task_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """Delete a task."""
+    # Use async database operations (non-blocking)
+    deleted = await _delete_task_async(db, spec_id, task_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return {"message": "Task deleted successfully"}
+
+
 # ============================================================================
 # Approval Routes
 # ============================================================================
@@ -936,6 +1228,15 @@ async def approve_requirements(
     approved = await _approve_requirements_async(db, spec_id)
     if not approved:
         raise HTTPException(status_code=404, detail="Spec not found")
+
+    # Create version history entry for requirements approval
+    await _create_spec_version_async(
+        db,
+        spec_id,
+        change_type="requirements_approved",
+        change_summary="Requirements approved, moved to Design phase",
+    )
+
     return {"message": "Requirements approved, moved to Design phase"}
 
 
@@ -949,4 +1250,46 @@ async def approve_design(
     approved = await _approve_design_async(db, spec_id)
     if not approved:
         raise HTTPException(status_code=404, detail="Spec not found")
+
+    # Create version history entry for design approval
+    await _create_spec_version_async(
+        db,
+        spec_id,
+        change_type="design_approved",
+        change_summary="Design approved, moved to Implementation phase",
+    )
+
     return {"message": "Design approved, moved to Implementation phase"}
+
+
+# ============================================================================
+# Version History Routes
+# ============================================================================
+
+
+@router.get("/{spec_id}/versions", response_model=SpecVersionListResponse)
+async def list_spec_versions(
+    spec_id: str,
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of versions to return"),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """List version history for a spec."""
+    versions = await _list_spec_versions_async(db, spec_id, limit)
+
+    return SpecVersionListResponse(
+        versions=[
+            SpecVersionResponse(
+                id=v.id,
+                spec_id=v.spec_id,
+                version_number=v.version_number,
+                change_type=v.change_type,
+                change_summary=v.change_summary,
+                change_details=v.change_details,
+                created_by=v.created_by,
+                snapshot=v.snapshot,
+                created_at=v.created_at,
+            )
+            for v in versions
+        ],
+        total=len(versions),
+    )
