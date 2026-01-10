@@ -191,8 +191,11 @@ async def _get_project_stats_async(
 ) -> Optional[Dict[str, Any]]:
     """Get project stats (ASYNC - non-blocking)."""
     from omoi_os.ticketing.models import TicketCommit
+    from omoi_os.models.agent import Agent
+    from omoi_os.models.task import Task
 
     async with db.get_async_session() as session:
+        # Verify project exists
         result = await session.execute(
             select(Project).filter(Project.id == project_id)
         )
@@ -200,20 +203,58 @@ async def _get_project_stats_async(
         if not project:
             return None
 
-        # Count commits
+        # Count total tickets for this project
+        ticket_count_result = await session.execute(
+            select(func.count(Ticket.id)).where(Ticket.project_id == project_id)
+        )
+        total_tickets = ticket_count_result.scalar() or 0
+
+        # Count tickets by status
+        status_result = await session.execute(
+            select(Ticket.status, func.count(Ticket.id))
+            .where(Ticket.project_id == project_id)
+            .group_by(Ticket.status)
+        )
+        tickets_by_status = {row[0]: row[1] for row in status_result.fetchall()}
+
+        # Count tickets by phase
+        phase_result = await session.execute(
+            select(Ticket.phase_id, func.count(Ticket.id))
+            .where(Ticket.project_id == project_id)
+            .group_by(Ticket.phase_id)
+        )
+        tickets_by_phase = {row[0]: row[1] for row in phase_result.fetchall()}
+
+        # Count active agents working on this project's tasks
+        # An agent is "active" for a project if they have a task assigned from a ticket in this project
+        # Task statuses: pending, assigned, running, completed, failed
+        active_agents_result = await session.execute(
+            select(func.count(func.distinct(Task.assigned_agent_id)))
+            .select_from(Task)
+            .join(Ticket, Task.ticket_id == Ticket.id)
+            .where(
+                Ticket.project_id == project_id,
+                Task.assigned_agent_id.isnot(None),
+                Task.status.in_(["assigned", "running"]),
+            )
+        )
+        active_agents = active_agents_result.scalar() or 0
+
+        # Count commits linked to tickets in this project
         commit_result = await session.execute(
             select(func.count(TicketCommit.id))
             .select_from(TicketCommit)
             .join(Ticket, TicketCommit.ticket_id == Ticket.id)
+            .where(Ticket.project_id == project_id)
         )
         total_commits = commit_result.scalar() or 0
 
         return {
             "project_id": project_id,
-            "total_tickets": 0,  # Placeholder
-            "tickets_by_status": {},  # Placeholder
-            "tickets_by_phase": {},  # Placeholder
-            "active_agents": 0,  # Placeholder
+            "total_tickets": total_tickets,
+            "tickets_by_status": tickets_by_status,
+            "tickets_by_phase": tickets_by_phase,
+            "active_agents": active_agents,
             "total_commits": total_commits,
         }
 
