@@ -698,44 +698,67 @@ class OmoiOSClient:
         Returns:
             SyncResult indicating action taken
         """
-        # Convert parsed API endpoints to API format
+        # Convert parsed API endpoints to API format (enhanced)
         api_spec = []
         for ep in design.api_endpoints:
-            api_spec.append(
-                {
-                    "method": ep.method,
-                    "endpoint": ep.path,
-                    "description": ep.description,
-                }
-            )
+            # Use to_api_dict() if available, otherwise build manually
+            if hasattr(ep, "to_api_dict"):
+                api_spec.append(ep.to_api_dict())
+            else:
+                api_spec.append(
+                    {
+                        "method": ep.method,
+                        "endpoint": ep.path,
+                        "description": ep.description,
+                        "request_body": getattr(ep, "request_body", None),
+                        "response": getattr(ep, "response", None),
+                        "auth_required": getattr(ep, "auth_required", True),
+                        "path_params": getattr(ep, "path_params", []),
+                        "query_params": getattr(ep, "query_params", {}),
+                        "error_responses": getattr(ep, "error_responses", {}),
+                    }
+                )
 
-        # Build data model description from parsed data models
+        # Build data model description from parsed data models (enhanced)
         data_model_parts = []
         for dm in design.data_models:
-            model_desc = f"### {dm.name}\n{dm.description}\n\n"
-            if dm.fields:
-                model_desc += "**Fields:**\n"
-                for field_name, field_type in dm.fields.items():
-                    model_desc += f"- `{field_name}`: {field_type}\n"
-            if dm.relationships:
-                model_desc += "\n**Relationships:**\n"
-                for rel in dm.relationships:
-                    model_desc += f"- {rel}\n"
-            data_model_parts.append(model_desc)
+            # Use to_markdown() if available, otherwise build manually
+            if hasattr(dm, "to_markdown"):
+                data_model_parts.append(dm.to_markdown())
+            else:
+                model_desc = f"### {dm.name}\n{dm.description}\n\n"
+                if dm.fields:
+                    model_desc += "**Fields:**\n"
+                    for field_name, field_type in dm.fields.items():
+                        model_desc += f"- `{field_name}`: {field_type}\n"
+                if dm.relationships:
+                    model_desc += "\n**Relationships:**\n"
+                    for rel in dm.relationships:
+                        model_desc += f"- {rel}\n"
+                data_model_parts.append(model_desc)
 
-        data_model = "\n".join(data_model_parts) if data_model_parts else None
+        data_model = "\n\n".join(data_model_parts) if data_model_parts else None
 
         # Check if needs update
         if existing_design:
             existing_arch = existing_design.get("architecture", "") or ""
             existing_dm = existing_design.get("data_model", "") or ""
+            existing_api = existing_design.get("api_spec", []) or []
             new_arch = design.architecture or ""
             new_dm = data_model or ""
 
-            if (
-                existing_arch.strip() == new_arch.strip()
-                and existing_dm.strip() == new_dm.strip()
-            ):
+            # Compare architecture and data model text
+            arch_same = existing_arch.strip() == new_arch.strip()
+            dm_same = existing_dm.strip() == new_dm.strip()
+
+            # Compare API spec (simplified comparison by length and methods)
+            api_same = len(existing_api) == len(api_spec)
+            if api_same and existing_api:
+                existing_methods = {(e.get("method"), e.get("endpoint")) for e in existing_api}
+                new_methods = {(e.get("method"), e.get("endpoint")) for e in api_spec}
+                api_same = existing_methods == new_methods
+
+            if arch_same and dm_same and api_same:
                 return SyncResult(
                     item_id=design.id,
                     item_type="design",
