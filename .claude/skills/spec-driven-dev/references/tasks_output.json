@@ -1,0 +1,272 @@
+{
+    "$schema": "Phase output for TASKS phase - save to .omoi_os/phase_data/tasks.json",
+    "$description": "This JSON captures tickets and tasks with their dependencies for execution",
+
+    "tickets": [
+        {
+            "id": "TKT-001",
+            "title": "Webhook Infrastructure Setup",
+            "description": "Create the core webhook infrastructure including database models, services, and API endpoints",
+            "priority": "HIGH",
+            "estimate": "L",
+            "status": "backlog",
+            "requirements": [
+                "REQ-WEBHOOK-FUNC-001",
+                "REQ-WEBHOOK-FUNC-002",
+                "REQ-WEBHOOK-FUNC-003",
+                "REQ-WEBHOOK-SEC-001"
+            ],
+            "design_components": [
+                "WebhookSubscription",
+                "WebhookDelivery",
+                "WebhookSubscriptionService",
+                "WebhookDeliveryService"
+            ],
+            "tasks": ["TSK-001", "TSK-002", "TSK-003", "TSK-004", "TSK-005"],
+            "dependencies": {
+                "blocked_by": [],
+                "blocks": ["TKT-002"]
+            },
+            "acceptance_criteria": [
+                "Webhook subscriptions can be created via API",
+                "Events trigger webhook deliveries",
+                "Failed deliveries are retried with backoff",
+                "HMAC signatures are generated correctly"
+            ]
+        },
+        {
+            "id": "TKT-002",
+            "title": "Platform-Specific Formatters",
+            "description": "Implement formatters for Slack and Discord webhook formats",
+            "priority": "MEDIUM",
+            "estimate": "M",
+            "status": "backlog",
+            "requirements": [],
+            "design_components": [
+                "SlackFormatter",
+                "DiscordFormatter"
+            ],
+            "tasks": ["TSK-006", "TSK-007"],
+            "dependencies": {
+                "blocked_by": ["TKT-001"],
+                "blocks": []
+            },
+            "acceptance_criteria": [
+                "Slack webhooks render correctly in Slack",
+                "Discord webhooks render correctly in Discord",
+                "Formatters are configurable per subscription"
+            ]
+        }
+    ],
+
+    "tasks": [
+        {
+            "id": "TSK-001",
+            "title": "Add webhook database models",
+            "parent_ticket": "TKT-001",
+            "type": "implementation",
+            "priority": "HIGH",
+            "estimate": "M",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/models/webhook.py",
+                "alembic/versions/xxx_add_webhook_tables.py",
+                "tests/unit/models/test_webhook.py"
+            ],
+            "dependencies": {
+                "depends_on": [],
+                "blocks": ["TSK-002", "TSK-003"]
+            },
+            "acceptance_criteria": [
+                "WebhookSubscription and WebhookDelivery models created",
+                "Migration runs successfully",
+                "Model unit tests pass"
+            ]
+        },
+        {
+            "id": "TSK-002",
+            "title": "Implement WebhookSubscriptionService",
+            "parent_ticket": "TKT-001",
+            "type": "implementation",
+            "priority": "HIGH",
+            "estimate": "M",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/services/webhook_subscription.py",
+                "tests/unit/services/test_webhook_subscription.py"
+            ],
+            "dependencies": {
+                "depends_on": ["TSK-001"],
+                "blocks": ["TSK-004"]
+            },
+            "acceptance_criteria": [
+                "CRUD operations for subscriptions work",
+                "URL validation rejects invalid URLs",
+                "Secret generation uses secure random",
+                "Unit tests pass with 90%+ coverage"
+            ]
+        },
+        {
+            "id": "TSK-003",
+            "title": "Implement WebhookDeliveryService",
+            "parent_ticket": "TKT-001",
+            "type": "implementation",
+            "priority": "HIGH",
+            "estimate": "L",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/services/webhook_delivery.py",
+                "tests/unit/services/test_webhook_delivery.py"
+            ],
+            "dependencies": {
+                "depends_on": ["TSK-001"],
+                "blocks": ["TSK-004", "TSK-005"]
+            },
+            "acceptance_criteria": [
+                "HTTP delivery works with proper headers",
+                "HMAC-SHA256 signature is correct",
+                "Exponential backoff with jitter works",
+                "Delivery attempts are recorded",
+                "Unit tests cover retry scenarios"
+            ]
+        },
+        {
+            "id": "TSK-004",
+            "title": "Create webhook API endpoints",
+            "parent_ticket": "TKT-001",
+            "type": "implementation",
+            "priority": "HIGH",
+            "estimate": "M",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/api/routes/webhooks.py",
+                "omoi_os/api/schemas/webhook.py",
+                "tests/integration/api/test_webhooks.py"
+            ],
+            "dependencies": {
+                "depends_on": ["TSK-002", "TSK-003"],
+                "blocks": ["TSK-005"]
+            },
+            "acceptance_criteria": [
+                "All 6 endpoints implemented",
+                "Request validation works",
+                "Auth middleware applied",
+                "Integration tests pass"
+            ]
+        },
+        {
+            "id": "TSK-005",
+            "title": "Integrate with EventBusService",
+            "parent_ticket": "TKT-001",
+            "type": "implementation",
+            "priority": "HIGH",
+            "estimate": "M",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/services/webhook_event_handler.py",
+                "tests/integration/services/test_webhook_integration.py"
+            ],
+            "dependencies": {
+                "depends_on": ["TSK-003", "TSK-004"],
+                "blocks": ["TSK-006", "TSK-007"]
+            },
+            "acceptance_criteria": [
+                "Handler subscribes to EventBusService",
+                "Events trigger webhook deliveries",
+                "Integration test with mock external endpoint passes"
+            ]
+        },
+        {
+            "id": "TSK-006",
+            "title": "Implement Slack formatter",
+            "parent_ticket": "TKT-002",
+            "type": "implementation",
+            "priority": "MEDIUM",
+            "estimate": "S",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/services/formatters/slack.py",
+                "tests/unit/services/formatters/test_slack.py"
+            ],
+            "dependencies": {
+                "depends_on": ["TSK-005"],
+                "blocks": []
+            },
+            "acceptance_criteria": [
+                "Formats match Slack Block Kit spec",
+                "Event types have appropriate formatting",
+                "Unit tests verify output structure"
+            ]
+        },
+        {
+            "id": "TSK-007",
+            "title": "Implement Discord formatter",
+            "parent_ticket": "TKT-002",
+            "type": "implementation",
+            "priority": "MEDIUM",
+            "estimate": "S",
+            "status": "pending",
+            "deliverables": [
+                "omoi_os/services/formatters/discord.py",
+                "tests/unit/services/formatters/test_discord.py"
+            ],
+            "dependencies": {
+                "depends_on": ["TSK-005"],
+                "blocks": []
+            },
+            "acceptance_criteria": [
+                "Formats match Discord embed spec",
+                "Event types have appropriate formatting",
+                "Unit tests verify output structure"
+            ]
+        }
+    ],
+
+    "dependency_graph": {
+        "TSK-001": [],
+        "TSK-002": ["TSK-001"],
+        "TSK-003": ["TSK-001"],
+        "TSK-004": ["TSK-002", "TSK-003"],
+        "TSK-005": ["TSK-003", "TSK-004"],
+        "TSK-006": ["TSK-005"],
+        "TSK-007": ["TSK-005"]
+    },
+
+    "execution_order": [
+        {"phase": 1, "tasks": ["TSK-001"], "parallel": false},
+        {"phase": 2, "tasks": ["TSK-002", "TSK-003"], "parallel": true},
+        {"phase": 3, "tasks": ["TSK-004"], "parallel": false},
+        {"phase": 4, "tasks": ["TSK-005"], "parallel": false},
+        {"phase": 5, "tasks": ["TSK-006", "TSK-007"], "parallel": true}
+    ],
+
+    "summary": {
+        "total_tickets": 2,
+        "total_tasks": 7,
+        "estimated_effort": {
+            "S": 2,
+            "M": 4,
+            "L": 1
+        },
+        "ready_to_start": ["TSK-001"],
+        "blocked": ["TSK-002", "TSK-003", "TSK-004", "TSK-005", "TSK-006", "TSK-007"]
+    },
+
+    "_metadata": {
+        "phase": "TASKS",
+        "spec_id": "550e8400-e29b-41d4-a716-446655440000",
+        "generated_at": "2025-01-10T12:45:00Z",
+        "evaluator_passed": true,
+        "validation": {
+            "circular_dependencies": false,
+            "orphan_tasks": false,
+            "all_tasks_have_deliverables": true,
+            "all_tasks_have_acceptance_criteria": true
+        },
+        "prior_phases": {
+            "explore": ".omoi_os/phase_data/explore.json",
+            "requirements": ".omoi_os/phase_data/requirements.json",
+            "design": ".omoi_os/phase_data/design.json"
+        }
+    }
+}

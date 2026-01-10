@@ -1,0 +1,109 @@
+{
+    "$schema": "Phase output for EXPLORE phase - save to .omoi_os/phase_data/explore.json",
+    "$description": "This JSON captures the codebase exploration context needed for subsequent phases",
+
+    "project_type": "Next.js 15 + FastAPI backend with PostgreSQL",
+
+    "structure": {
+        "frontend": {
+            "framework": "Next.js 15 (App Router)",
+            "ui_library": "ShadCN UI + Tailwind CSS",
+            "state_management": "Zustand + React Query",
+            "key_directories": [
+                "frontend/src/app/",
+                "frontend/src/components/",
+                "frontend/src/hooks/",
+                "frontend/src/lib/"
+            ]
+        },
+        "backend": {
+            "framework": "FastAPI",
+            "database": "PostgreSQL with SQLAlchemy",
+            "key_directories": [
+                "backend/omoi_os/api/",
+                "backend/omoi_os/services/",
+                "backend/omoi_os/models/",
+                "backend/omoi_os/schemas/"
+            ]
+        }
+    },
+
+    "existing_models": [
+        {
+            "name": "Task",
+            "file": "backend/omoi_os/models/task.py",
+            "fields": ["id", "title", "status", "priority", "created_at"]
+        },
+        {
+            "name": "Ticket",
+            "file": "backend/omoi_os/models/ticket.py",
+            "fields": ["id", "title", "status", "tasks", "created_at"]
+        },
+        {
+            "name": "Agent",
+            "file": "backend/omoi_os/models/agent.py",
+            "fields": ["id", "agent_type", "status", "last_heartbeat"]
+        }
+    ],
+
+    "conventions": {
+        "naming": {
+            "files": "snake_case",
+            "classes": "PascalCase",
+            "functions": "snake_case",
+            "constants": "UPPER_SNAKE_CASE"
+        },
+        "patterns": {
+            "services": "Service suffix (e.g., TaskQueueService)",
+            "models": "SQLAlchemy declarative base",
+            "schemas": "Pydantic BaseModel",
+            "api": "FastAPI routers with dependency injection"
+        },
+        "testing": {
+            "framework": "pytest",
+            "markers": ["unit", "integration", "e2e"],
+            "location": "tests/{type}/"
+        }
+    },
+
+    "related_to_feature": [
+        {
+            "file": "backend/omoi_os/services/event_bus.py",
+            "relevance": "Existing pub/sub system - may integrate with new feature"
+        },
+        {
+            "file": "backend/omoi_os/api/routes/webhooks.py",
+            "relevance": "Existing webhook endpoint - reference for patterns"
+        }
+    ],
+
+    "feature_summary": {
+        "name": "Webhook Notifications",
+        "goal": "Allow external systems to subscribe to OmoiOS events",
+        "scope": {
+            "in_scope": [
+                "Webhook subscription CRUD",
+                "Event delivery with retries",
+                "HMAC signature verification",
+                "Slack and Discord formatters"
+            ],
+            "out_of_scope": [
+                "Real-time WebSocket streaming",
+                "Custom webhook UI builder"
+            ]
+        },
+        "constraints": [
+            "Must integrate with existing EventBusService",
+            "Max 3 retries with exponential backoff",
+            "30 second timeout per delivery"
+        ],
+        "open_questions": []
+    },
+
+    "_metadata": {
+        "phase": "EXPLORE",
+        "spec_id": "550e8400-e29b-41d4-a716-446655440000",
+        "generated_at": "2025-01-10T12:00:00Z",
+        "evaluator_passed": true
+    }
+}
