@@ -57,219 +57,39 @@ import {
   Link as LinkIcon,
   FolderGit2,
 } from "lucide-react"
-import { useSpec, useProjectSpecs, useApproveRequirements, useApproveDesign } from "@/hooks/useSpecs"
+import {
+  useSpec,
+  useProjectSpecs,
+  useApproveRequirements,
+  useApproveDesign,
+  useAddRequirement,
+  useAddTask,
+  useUpdateTask,
+  useDeleteTask,
+  useDeleteRequirement,
+  useAddCriterion,
+  useSpecVersions,
+} from "@/hooks/useSpecs"
 import { useProject } from "@/hooks/useProjects"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Markdown } from "@/components/ui/markdown"
 
 interface SpecPageProps {
   params: Promise<{ id: string; specId: string }>
 }
 
-// Mock requirements (EARS-style)
-const mockRequirements = [
-  {
-    id: "REQ-001",
-    title: "OAuth2 Support",
-    condition: "User requests authentication via OAuth2 provider",
-    action: "Provide OAuth2 authentication flow with Google and GitHub providers",
-    criteria: [
-      { id: "AC-001", text: "Support Google OAuth", completed: true },
-      { id: "AC-002", text: "Support GitHub OAuth", completed: true },
-      { id: "AC-003", text: "Token refresh mechanism", completed: false },
-      { id: "AC-004", text: "Secure token storage", completed: false },
-    ],
-    linkedDesign: "DESIGN-001",
-    status: "in_progress",
-  },
-  {
-    id: "REQ-002",
-    title: "JWT Token Management",
-    condition: "User successfully authenticates",
-    action: "Create JWT token and return to client with secure storage guidelines",
-    criteria: [
-      { id: "AC-005", text: "Token includes user ID", completed: true },
-      { id: "AC-006", text: "Token expires after 24h", completed: true },
-      { id: "AC-007", text: "Token signed with secret", completed: true },
-    ],
-    linkedDesign: "DESIGN-002",
-    status: "completed",
-  },
-  {
-    id: "REQ-003",
-    title: "Session Management",
-    condition: "User is authenticated",
-    action: "Maintain active session with automatic refresh and secure logout",
-    criteria: [
-      { id: "AC-008", text: "Session persists across page reloads", completed: false },
-      { id: "AC-009", text: "Logout invalidates all tokens", completed: false },
-      { id: "AC-010", text: "Multi-device session support", completed: false },
-    ],
-    linkedDesign: null,
-    status: "pending",
-  },
-]
-
-// Mock design elements
-const mockDesign = {
-  architecture: `
-┌─────────────────────────────────────────┐
-│           Authentication Service         │
-├─────────────────────────────────────────┤
-│  ┌───────────┐  ┌───────────┐          │
-│  │  OAuth2   │  │    JWT    │          │
-│  │  Handler  │  │ Generator │          │
-│  └─────┬─────┘  └─────┬─────┘          │
-│        │              │                 │
-│        └──────┬───────┘                 │
-│               │                         │
-│        ┌──────▼──────┐                  │
-│        │   Token     │                  │
-│        │  Validator  │                  │
-│        └─────────────┘                  │
-└─────────────────────────────────────────┘
-  `,
-  dataModel: `
-User {
-  id: UUID
-  email: string
-  password_hash: string
-  oauth_providers: OAuthProvider[]
-  created_at: timestamp
-  updated_at: timestamp
-}
-
-OAuthProvider {
-  provider: "google" | "github"
-  provider_user_id: string
-  access_token: string
-  refresh_token: string
-}
-
-Session {
-  id: UUID
-  user_id: UUID
-  token: string
-  expires_at: timestamp
-  created_at: timestamp
-}
-  `,
-  apiSpec: [
-    { method: "POST", endpoint: "/auth/login", description: "Email/password login" },
-    { method: "POST", endpoint: "/auth/register", description: "New user registration" },
-    { method: "POST", endpoint: "/auth/oauth/:provider", description: "OAuth authentication" },
-    { method: "POST", endpoint: "/auth/refresh", description: "Refresh JWT token" },
-    { method: "POST", endpoint: "/auth/logout", description: "Logout and invalidate tokens" },
-    { method: "GET", endpoint: "/auth/me", description: "Get current user" },
-  ],
-}
-
-// Mock tasks
-const mockTasks = [
-  {
-    id: "TASK-001",
-    title: "Setup OAuth2 Configuration",
-    description: "Configure OAuth2 providers (Google, GitHub) with client IDs and secrets",
-    phase: "IMPLEMENTATION",
-    priority: "HIGH",
-    status: "completed",
-    assignedAgent: "worker-1",
-    dependencies: [],
-    estimatedHours: 2,
-    actualHours: 1.5,
-  },
-  {
-    id: "TASK-002",
-    title: "Implement JWT Generator",
-    description: "Create JWT token generation service with proper signing",
-    phase: "IMPLEMENTATION",
-    priority: "HIGH",
-    status: "completed",
-    assignedAgent: "worker-1",
-    dependencies: ["TASK-001"],
-    estimatedHours: 4,
-    actualHours: 3,
-  },
-  {
-    id: "TASK-003",
-    title: "Build Token Validator",
-    description: "Implement token validation middleware",
-    phase: "IMPLEMENTATION",
-    priority: "HIGH",
-    status: "in_progress",
-    assignedAgent: "worker-2",
-    dependencies: ["TASK-002"],
-    estimatedHours: 3,
-    actualHours: null,
-  },
-  {
-    id: "TASK-004",
-    title: "Write Integration Tests",
-    description: "Create comprehensive tests for auth flows",
-    phase: "INTEGRATION",
-    priority: "MEDIUM",
-    status: "pending",
-    assignedAgent: null,
-    dependencies: ["TASK-002", "TASK-003"],
-    estimatedHours: 6,
-    actualHours: null,
-  },
-  {
-    id: "TASK-005",
-    title: "API Documentation",
-    description: "Document all authentication endpoints",
-    phase: "DOCUMENTATION",
-    priority: "LOW",
-    status: "pending",
-    assignedAgent: null,
-    dependencies: ["TASK-003"],
-    estimatedHours: 2,
-    actualHours: null,
-  },
-]
-
-// Mock execution data
-const mockExecution = {
-  overallProgress: 65,
-  testCoverage: 78,
-  testsTotal: 50,
-  testsPassing: 32,
-  activeAgents: 2,
-  commits: 12,
-  linesChanged: { added: 2450, removed: 120 },
-  runningTasks: [
-    {
-      id: "TASK-003",
-      title: "Build Token Validator",
-      agent: "worker-2",
-      progress: 60,
-      startedAt: new Date(Date.now() - 45 * 60 * 1000),
-    },
-  ],
-  recentCommits: [
-    {
-      sha: "a1b2c3d",
-      message: "Implement JWT token generation",
-      author: "worker-1",
-      timestamp: new Date(Date.now() - 30 * 60 * 1000),
-      changes: { added: 450, removed: 12 },
-    },
-    {
-      sha: "e5f6g7h",
-      message: "Add OAuth2 provider configuration",
-      author: "worker-1",
-      timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000),
-      changes: { added: 280, removed: 0 },
-    },
-  ],
-  pullRequests: [
-    {
-      number: 42,
-      title: "feat: Add OAuth2 authentication",
-      status: "open",
-      author: "worker-1",
-      reviewStatus: "pending",
-    },
-  ],
-}
+// Empty default data (no mock data - show real data or empty states)
 
 const statusConfig = {
   pending: { label: "Pending", color: "secondary", icon: Clock },
@@ -278,9 +98,9 @@ const statusConfig = {
 }
 
 const priorityConfig = {
-  HIGH: { label: "High", color: "destructive" },
-  MEDIUM: { label: "Medium", color: "warning" },
-  LOW: { label: "Low", color: "secondary" },
+  high: { label: "High", color: "destructive" },
+  medium: { label: "Medium", color: "warning" },
+  low: { label: "Low", color: "secondary" },
 }
 
 export default function SpecWorkspacePage({ params }: SpecPageProps) {
@@ -288,15 +108,46 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const [activeTab, setActiveTab] = useState("requirements")
   const [expandedRequirements, setExpandedRequirements] = useState<string[]>(["REQ-001"])
 
+  // Dialog states
+  const [addRequirementOpen, setAddRequirementOpen] = useState(false)
+  const [addTaskOpen, setAddTaskOpen] = useState(false)
+  const [addCriterionOpen, setAddCriterionOpen] = useState<string | null>(null) // reqId or null
+  const [editTaskOpen, setEditTaskOpen] = useState(false)
+  const [viewTaskOpen, setViewTaskOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<{
+    id: string
+    title: string
+    description: string
+    phase: string
+    priority: string
+    status: string
+    assigned_agent: string | null
+  } | null>(null)
+
+  // Form states
+  const [newRequirement, setNewRequirement] = useState({ title: "", condition: "", action: "" })
+  const [newTask, setNewTask] = useState({ title: "", description: "", phase: "Implementation", priority: "medium" })
+  const [newCriterionText, setNewCriterionText] = useState("")
+  const [editTask, setEditTask] = useState({ title: "", description: "", phase: "", priority: "", status: "" })
+
   // Fetch project and spec data
   const { data: project } = useProject(projectId)
   const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId)
   const { data: allSpecs } = useProjectSpecs(projectId)
+  const { data: versionsData } = useSpecVersions(specId, 10)
+
+  // Mutations
   const approveReqMutation = useApproveRequirements(specId)
   const approveDesignMutation = useApproveDesign(specId)
+  const addRequirementMutation = useAddRequirement(specId)
+  const addTaskMutation = useAddTask(specId)
+  const updateTaskMutation = useUpdateTask(specId)
+  const deleteTaskMutation = useDeleteTask(specId)
+  const deleteRequirementMutation = useDeleteRequirement(specId)
+  const addCriterionMutation = useAddCriterion(specId, addCriterionOpen || "")
 
-  // Use API data or fallback to mock data for missing fields
-  const mockSpec = useMemo(() => ({
+  // Derive spec display data from API response with safe defaults
+  const specData = useMemo(() => ({
     id: spec?.id || specId,
     title: spec?.title || "Loading...",
     description: spec?.description || "",
@@ -344,6 +195,106 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     }
   }
 
+  const handleAddRequirement = async () => {
+    if (!newRequirement.title || !newRequirement.condition || !newRequirement.action) {
+      toast.error("Please fill in all required fields")
+      return
+    }
+    try {
+      await addRequirementMutation.mutateAsync(newRequirement)
+      toast.success("Requirement added!")
+      setAddRequirementOpen(false)
+      setNewRequirement({ title: "", condition: "", action: "" })
+    } catch {
+      toast.error("Failed to add requirement")
+    }
+  }
+
+  const handleAddTask = async () => {
+    if (!newTask.title) {
+      toast.error("Please enter a task title")
+      return
+    }
+    try {
+      await addTaskMutation.mutateAsync(newTask)
+      toast.success("Task added!")
+      setAddTaskOpen(false)
+      setNewTask({ title: "", description: "", phase: "Implementation", priority: "medium" })
+    } catch {
+      toast.error("Failed to add task")
+    }
+  }
+
+  const handleAddCriterion = async () => {
+    if (!newCriterionText || !addCriterionOpen) {
+      toast.error("Please enter criterion text")
+      return
+    }
+    try {
+      await addCriterionMutation.mutateAsync({ text: newCriterionText })
+      toast.success("Criterion added!")
+      setAddCriterionOpen(null)
+      setNewCriterionText("")
+    } catch {
+      toast.error("Failed to add criterion")
+    }
+  }
+
+  const handleDeleteRequirement = async (reqId: string) => {
+    try {
+      await deleteRequirementMutation.mutateAsync(reqId)
+      toast.success("Requirement deleted!")
+    } catch {
+      toast.error("Failed to delete requirement")
+    }
+  }
+
+  const handleViewTask = (task: typeof selectedTask) => {
+    setSelectedTask(task)
+    setViewTaskOpen(true)
+  }
+
+  const handleEditTaskOpen = (task: typeof selectedTask) => {
+    if (!task) return
+    setSelectedTask(task)
+    setEditTask({
+      title: task.title,
+      description: task.description || "",
+      phase: task.phase,
+      priority: task.priority,
+      status: task.status,
+    })
+    setEditTaskOpen(true)
+  }
+
+  const handleUpdateTask = async () => {
+    if (!selectedTask || !editTask.title) {
+      toast.error("Please enter a task title")
+      return
+    }
+    try {
+      await updateTaskMutation.mutateAsync({
+        taskId: selectedTask.id,
+        data: editTask,
+      })
+      toast.success("Task updated!")
+      setEditTaskOpen(false)
+      setSelectedTask(null)
+      setEditTask({ title: "", description: "", phase: "", priority: "", status: "" })
+    } catch {
+      toast.error("Failed to update task")
+    }
+  }
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteTaskMutation.mutateAsync(taskId)
+      toast.success("Task deleted!")
+    } catch {
+      toast.error("Failed to delete task")
+    }
+  }
+
   if (specLoading) {
     return (
       <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
@@ -370,11 +321,11 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     )
   }
 
-  // Use API requirements if available, otherwise use mock
-  const requirements = spec?.requirements?.length ? spec.requirements : mockRequirements
-  const design = spec?.design || mockDesign
-  const tasks = spec?.tasks?.length ? spec.tasks : mockTasks
-  const execution = spec?.execution || mockExecution
+  // Use real API data only - no mock fallbacks
+  const requirements = spec?.requirements || []
+  const design = spec?.design || null
+  const tasks = spec?.tasks || []
+  const execution = spec?.execution || null
   const id = projectId
 
   return (
@@ -383,14 +334,16 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
       <div className="hidden w-56 flex-shrink-0 border-r bg-muted/30 lg:block">
         <div className="flex h-full flex-col">
           <div className="border-b p-4">
-            <Select defaultValue={specId}>
+            <Select value={specId}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select spec" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="spec-001">User Authentication</SelectItem>
-                <SelectItem value="spec-002">Payment Processing</SelectItem>
-                <SelectItem value="spec-003">API Rate Limiting</SelectItem>
+                {(allSpecs?.specs || []).map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.title}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -454,21 +407,21 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                   Specifications
                 </Link>
                 <span className="text-muted-foreground">/</span>
-                <span className="text-muted-foreground truncate max-w-[200px]">{mockSpec.title}</span>
+                <span className="text-muted-foreground truncate max-w-[200px]">{specData.title}</span>
               </div>
               <div className="flex items-center gap-3">
-                <h1 className="text-xl font-semibold">{mockSpec.title}</h1>
+                <h1 className="text-xl font-semibold">{specData.title}</h1>
                 <Badge
                   variant={
-                    mockSpec.status === "executing"
+                    specData.status === "executing"
                       ? "default"
                       : "secondary"
                   }
                 >
-                  {mockSpec.phase}
+                  {specData.phase}
                 </Badge>
               </div>
-              <p className="text-sm text-muted-foreground">{mockSpec.description}</p>
+              <p className="text-sm text-muted-foreground">{specData.description}</p>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm">
@@ -552,17 +505,75 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                       EARS-style structured requirements
                     </p>
                   </div>
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Requirement
-                  </Button>
+                  <Dialog open={addRequirementOpen} onOpenChange={setAddRequirementOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Requirement
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader>
+                        <DialogTitle>Add Requirement</DialogTitle>
+                        <DialogDescription>
+                          Create a new EARS-style requirement with condition and action.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="req-title">Title</Label>
+                          <Input
+                            id="req-title"
+                            placeholder="e.g., User Authentication"
+                            value={newRequirement.title}
+                            onChange={(e) => setNewRequirement({ ...newRequirement, title: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="req-condition">WHEN (Condition)</Label>
+                          <Textarea
+                            id="req-condition"
+                            placeholder="e.g., a user submits login credentials"
+                            value={newRequirement.condition}
+                            onChange={(e) => setNewRequirement({ ...newRequirement, condition: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="req-action">THE SYSTEM SHALL (Action)</Label>
+                          <Textarea
+                            id="req-action"
+                            placeholder="e.g., validate the credentials and create a session"
+                            value={newRequirement.action}
+                            onChange={(e) => setNewRequirement({ ...newRequirement, action: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setAddRequirementOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleAddRequirement} disabled={addRequirementMutation.isPending}>
+                          {addRequirementMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Add Requirement
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
                 <div className="space-y-4">
-                  {mockRequirements.map((req) => {
+                  {requirements.length === 0 ? (
+                    <Card>
+                      <CardContent className="p-6 text-center text-muted-foreground">
+                        <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                        <p>No requirements defined yet</p>
+                        <p className="text-sm mt-2">Add your first requirement to start defining what the system should do.</p>
+                      </CardContent>
+                    </Card>
+                  ) : requirements.map((req) => {
                     const isExpanded = expandedRequirements.includes(req.id)
-                    const completedCriteria = req.criteria.filter((c) => c.completed).length
-                    const config = statusConfig[req.status as keyof typeof statusConfig]
+                    const completedCriteria = req.criteria.filter((c: any) => c.completed).length
+                    const config = statusConfig[req.status as keyof typeof statusConfig] || statusConfig.pending
 
                     return (
                       <Collapsible
@@ -595,10 +606,10 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                                     <span>
                                       {completedCriteria}/{req.criteria.length} criteria met
                                     </span>
-                                    {req.linkedDesign && (
+                                    {req.linked_design && (
                                       <span className="flex items-center gap-1">
                                         <LinkIcon className="h-3 w-3" />
-                                        {req.linkedDesign}
+                                        {req.linked_design}
                                       </span>
                                     )}
                                   </div>
@@ -608,68 +619,141 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                           </CollapsibleTrigger>
                           <CollapsibleContent>
                             <CardContent className="border-t pt-4">
-                              {/* EARS Format */}
+                              {/* EARS Format - Improved visual hierarchy */}
                               <div className="space-y-4">
-                                <div className="rounded-lg bg-muted/50 p-4 font-mono text-sm">
-                                  <p>
-                                    <span className="font-semibold text-primary">WHEN</span>{" "}
-                                    {req.condition}
-                                  </p>
-                                  <p className="mt-2">
-                                    <span className="font-semibold text-primary">THE SYSTEM SHALL</span>{" "}
-                                    {req.action}
-                                  </p>
+                                <div className="space-y-3">
+                                  <div className="rounded-lg border bg-muted/30 p-4">
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex-shrink-0 mt-0.5">
+                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-primary/10 text-primary">
+                                          When
+                                        </span>
+                                      </div>
+                                      <p className="text-sm leading-relaxed">{req.condition}</p>
+                                    </div>
+                                  </div>
+                                  <div className="rounded-lg border bg-muted/30 p-4">
+                                    <div className="flex items-start gap-3">
+                                      <div className="flex-shrink-0 mt-0.5">
+                                        <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-green-500/10 text-green-600 dark:text-green-400">
+                                          Then
+                                        </span>
+                                      </div>
+                                      <p className="text-sm leading-relaxed">{req.action}</p>
+                                    </div>
+                                  </div>
                                 </div>
 
                                 {/* Acceptance Criteria */}
                                 <div>
-                                  <h4 className="text-sm font-medium mb-3">Acceptance Criteria</h4>
-                                  <div className="space-y-2">
-                                    {req.criteria.map((criterion) => (
-                                      <div
-                                        key={criterion.id}
-                                        className="flex items-center gap-3 rounded-md border p-3"
-                                      >
-                                        <div
-                                          className={`flex h-5 w-5 items-center justify-center rounded-full ${
-                                            criterion.completed
-                                              ? "bg-primary text-primary-foreground"
-                                              : "border-2"
+                                  <div className="flex items-center justify-between mb-3">
+                                    <h4 className="text-sm font-medium">Acceptance Criteria</h4>
+                                    <Dialog open={addCriterionOpen === req.id} onOpenChange={(open) => {
+                                      if (open) {
+                                        setAddCriterionOpen(req.id)
+                                      } else {
+                                        setAddCriterionOpen(null)
+                                        setNewCriterionText("")
+                                      }
+                                    }}>
+                                      <DialogTrigger asChild>
+                                        <Button variant="ghost" size="sm" className="h-7 text-xs">
+                                          <Plus className="mr-1 h-3 w-3" />
+                                          Add
+                                        </Button>
+                                      </DialogTrigger>
+                                      <DialogContent>
+                                        <DialogHeader>
+                                          <DialogTitle>Add Acceptance Criterion</DialogTitle>
+                                          <DialogDescription>
+                                            Add a testable acceptance criterion for this requirement.
+                                          </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="grid gap-4 py-4">
+                                          <div className="grid gap-2">
+                                            <Label htmlFor="criterion-text">Criterion</Label>
+                                            <Textarea
+                                              id="criterion-text"
+                                              placeholder="e.g., User receives confirmation email within 5 seconds"
+                                              value={newCriterionText}
+                                              onChange={(e) => setNewCriterionText(e.target.value)}
+                                            />
+                                          </div>
+                                        </div>
+                                        <DialogFooter>
+                                          <Button variant="outline" onClick={() => setAddCriterionOpen(null)}>
+                                            Cancel
+                                          </Button>
+                                          <Button onClick={handleAddCriterion} disabled={addCriterionMutation.isPending}>
+                                            {addCriterionMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                            Add Criterion
+                                          </Button>
+                                        </DialogFooter>
+                                      </DialogContent>
+                                    </Dialog>
+                                  </div>
+                                  {req.criteria.length === 0 ? (
+                                    <p className="text-sm text-muted-foreground italic">No criteria defined yet</p>
+                                  ) : (
+                                    <div className="space-y-1">
+                                      {req.criteria.map((criterion, idx) => (
+                                        <label
+                                          key={criterion.id}
+                                          className={`flex items-start gap-3 rounded-md p-2 cursor-pointer transition-colors hover:bg-muted/50 ${
+                                            criterion.completed ? "bg-muted/30" : ""
                                           }`}
                                         >
-                                          {criterion.completed && <Check className="h-3 w-3" />}
-                                        </div>
-                                        <span
-                                          className={
-                                            criterion.completed ? "text-muted-foreground line-through" : ""
-                                          }
-                                        >
-                                          {criterion.text}
-                                        </span>
-                                        <Badge variant="outline" className="ml-auto font-mono text-xs">
-                                          {criterion.id}
-                                        </Badge>
-                                      </div>
-                                    ))}
-                                  </div>
+                                          <div className="mt-0.5 flex-shrink-0">
+                                            <div
+                                              className={`flex h-4 w-4 items-center justify-center rounded border ${
+                                                criterion.completed
+                                                  ? "bg-primary border-primary text-primary-foreground"
+                                                  : "border-muted-foreground/40"
+                                              }`}
+                                            >
+                                              {criterion.completed && <Check className="h-2.5 w-2.5" />}
+                                            </div>
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <span
+                                              className={`text-sm leading-tight ${
+                                                criterion.completed ? "text-muted-foreground line-through" : ""
+                                              }`}
+                                            >
+                                              {criterion.text}
+                                            </span>
+                                          </div>
+                                          <span className="flex-shrink-0 text-[10px] text-muted-foreground/60 tabular-nums">
+                                            #{idx + 1}
+                                          </span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
 
-                                {/* Actions */}
-                                <div className="flex items-center gap-2 pt-2">
-                                  <Button variant="outline" size="sm">
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </Button>
-                                  <Button variant="outline" size="sm">
-                                    <Plus className="mr-2 h-4 w-4" />
-                                    Add Criterion
-                                  </Button>
-                                  {!req.linkedDesign && (
-                                    <Button variant="outline" size="sm">
-                                      <LinkIcon className="mr-2 h-4 w-4" />
-                                      Link Design
+                                {/* Actions - Cleaner layout */}
+                                <div className="flex items-center justify-between pt-3 border-t">
+                                  <div className="flex items-center gap-2">
+                                    <Button variant="ghost" size="sm" className="h-8">
+                                      <Edit className="mr-1.5 h-3.5 w-3.5" />
+                                      Edit
                                     </Button>
-                                  )}
+                                    {!req.linked_design && (
+                                      <Button variant="ghost" size="sm" className="h-8">
+                                        <LinkIcon className="mr-1.5 h-3.5 w-3.5" />
+                                        Link Design
+                                      </Button>
+                                    )}
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                    onClick={() => handleDeleteRequirement(req.id)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
                                 </div>
                               </div>
                             </CardContent>
@@ -707,68 +791,92 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                   </Button>
                 </div>
 
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {/* Architecture Diagram */}
+                {!design ? (
                   <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Architecture Overview</CardTitle>
-                      <CardDescription>Component diagram</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-xs">
-                        {mockDesign.architecture}
-                      </pre>
+                    <CardContent className="p-6 text-center text-muted-foreground">
+                      <Palette className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No design defined yet</p>
+                      <p className="text-sm mt-2">Create architecture diagrams, data models, and API specifications.</p>
                     </CardContent>
                   </Card>
+                ) : (
+                  <>
+                    <div className="grid gap-6 lg:grid-cols-2">
+                      {/* Architecture Diagram */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Architecture Overview</CardTitle>
+                          <CardDescription>Component diagram</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {design.architecture ? (
+                            <div className="overflow-x-auto">
+                              <Markdown content={design.architecture} />
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No architecture diagram defined</p>
+                          )}
+                        </CardContent>
+                      </Card>
 
-                  {/* Data Model */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Data Model</CardTitle>
-                      <CardDescription>Entity definitions</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <pre className="overflow-x-auto rounded-lg bg-muted p-4 font-mono text-xs whitespace-pre-wrap">
-                        {mockDesign.dataModel}
-                      </pre>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* API Specification */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">API Specification</CardTitle>
-                    <CardDescription>Endpoint definitions</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2">
-                      {mockDesign.apiSpec.map((endpoint, idx) => (
-                        <div
-                          key={idx}
-                          className="flex items-center gap-4 rounded-md border p-3"
-                        >
-                          <Badge
-                            variant={
-                              endpoint.method === "GET"
-                                ? "secondary"
-                                : endpoint.method === "POST"
-                                ? "default"
-                                : "outline"
-                            }
-                            className="w-16 justify-center font-mono"
-                          >
-                            {endpoint.method}
-                          </Badge>
-                          <code className="flex-1 font-mono text-sm">{endpoint.endpoint}</code>
-                          <span className="text-sm text-muted-foreground">
-                            {endpoint.description}
-                          </span>
-                        </div>
-                      ))}
+                      {/* Data Model */}
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Data Model</CardTitle>
+                          <CardDescription>Entity definitions</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {design.data_model ? (
+                            <div className="overflow-x-auto">
+                              <Markdown content={design.data_model} />
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No data model defined</p>
+                          )}
+                        </CardContent>
+                      </Card>
                     </div>
-                  </CardContent>
-                </Card>
+
+                    {/* API Specification */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">API Specification</CardTitle>
+                        <CardDescription>Endpoint definitions</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {design.api_spec && design.api_spec.length > 0 ? (
+                          <div className="space-y-2">
+                            {design.api_spec.map((endpoint: any, idx: number) => (
+                              <div
+                                key={idx}
+                                className="flex items-center gap-4 rounded-md border p-3"
+                              >
+                                <Badge
+                                  variant={
+                                    endpoint.method === "GET"
+                                      ? "secondary"
+                                      : endpoint.method === "POST"
+                                      ? "default"
+                                      : "outline"
+                                  }
+                                  className="w-16 justify-center font-mono"
+                                >
+                                  {endpoint.method}
+                                </Badge>
+                                <code className="flex-1 font-mono text-sm">{endpoint.endpoint}</code>
+                                <span className="text-sm text-muted-foreground">
+                                  {endpoint.description}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No API endpoints defined</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
 
                 {/* Approval Actions */}
                 <div className="flex items-center justify-end gap-2 pt-4 border-t">
@@ -791,122 +899,392 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                       Implementation tasks with dependencies
                     </p>
                   </div>
-                  <Button>
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Task
-                  </Button>
+                  <Dialog open={addTaskOpen} onOpenChange={setAddTaskOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Task
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[500px]">
+                      <DialogHeader>
+                        <DialogTitle>Add Task</DialogTitle>
+                        <DialogDescription>
+                          Create a new implementation task.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="task-title">Title</Label>
+                          <Input
+                            id="task-title"
+                            placeholder="e.g., Implement user login API"
+                            value={newTask.title}
+                            onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="task-description">Description</Label>
+                          <Textarea
+                            id="task-description"
+                            placeholder="Describe what this task involves..."
+                            value={newTask.description}
+                            onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="task-phase">Phase</Label>
+                            <Select
+                              value={newTask.phase}
+                              onValueChange={(value) => setNewTask({ ...newTask, phase: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Implementation">Implementation</SelectItem>
+                                <SelectItem value="Testing">Testing</SelectItem>
+                                <SelectItem value="Documentation">Documentation</SelectItem>
+                                <SelectItem value="Review">Review</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid gap-2">
+                            <Label htmlFor="task-priority">Priority</Label>
+                            <Select
+                              value={newTask.priority}
+                              onValueChange={(value) => setNewTask({ ...newTask, priority: value })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="high">High</SelectItem>
+                                <SelectItem value="medium">Medium</SelectItem>
+                                <SelectItem value="low">Low</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="outline" onClick={() => setAddTaskOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button onClick={handleAddTask} disabled={addTaskMutation.isPending}>
+                          {addTaskMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                          Add Task
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
 
                 {/* Tasks Table */}
-                <Card>
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b bg-muted/50">
-                          <th className="px-4 py-3 text-left text-sm font-medium">Task</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium">Phase</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium">Priority</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium">Agent</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium">Dependencies</th>
-                          <th className="px-4 py-3 text-left text-sm font-medium">Est.</th>
-                          <th className="px-4 py-3 text-right text-sm font-medium">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockTasks.map((task) => {
-                          const status = statusConfig[task.status as keyof typeof statusConfig]
-                          const priority = priorityConfig[task.priority as keyof typeof priorityConfig]
-                          const StatusIcon = status.icon
+                {tasks.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-6 text-center text-muted-foreground">
+                      <ListTodo className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No tasks defined yet</p>
+                      <p className="text-sm mt-2">Break down the implementation into discrete tasks with dependencies.</p>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="px-4 py-3 text-left text-sm font-medium">Task</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">Phase</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">Priority</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">Status</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">Agent</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">Dependencies</th>
+                            <th className="px-4 py-3 text-left text-sm font-medium">Est.</th>
+                            <th className="px-4 py-3 text-right text-sm font-medium">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {tasks.map((task) => {
+                            const status = statusConfig[task.status as keyof typeof statusConfig] || statusConfig.pending
+                            const priority = priorityConfig[task.priority?.toLowerCase() as keyof typeof priorityConfig] || priorityConfig.medium
+                            const StatusIcon = status.icon
 
-                          return (
-                            <tr key={task.id} className="border-b last:border-0">
-                              <td className="px-4 py-3">
-                                <div>
-                                  <Badge variant="outline" className="font-mono text-xs mb-1">
-                                    {task.id}
+                            return (
+                              <tr key={task.id} className="border-b last:border-0">
+                                <td className="px-4 py-3">
+                                  <div>
+                                    <Badge variant="outline" className="font-mono text-xs mb-1">
+                                      {task.id.slice(0, 8)}
+                                    </Badge>
+                                    <p className="font-medium">{task.title}</p>
+                                    <p className="text-xs text-muted-foreground line-clamp-1">
+                                      {task.description}
+                                    </p>
+                                  </div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge variant="outline">{task.phase}</Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge variant={priority.color as any}>{priority.label}</Badge>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <Badge variant={status.color as any} className="gap-1">
+                                    <StatusIcon
+                                      className={`h-3 w-3 ${
+                                        task.status === "in_progress" ? "animate-spin" : ""
+                                      }`}
+                                    />
+                                    {status.label}
                                   </Badge>
-                                  <p className="font-medium">{task.title}</p>
-                                  <p className="text-xs text-muted-foreground line-clamp-1">
-                                    {task.description}
-                                  </p>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3">
-                                <Badge variant="outline">{task.phase}</Badge>
-                              </td>
-                              <td className="px-4 py-3">
-                                <Badge variant={priority.color as any}>{priority.label}</Badge>
-                              </td>
-                              <td className="px-4 py-3">
-                                <Badge variant={status.color as any} className="gap-1">
-                                  <StatusIcon
-                                    className={`h-3 w-3 ${
-                                      task.status === "in_progress" ? "animate-spin" : ""
-                                    }`}
-                                  />
-                                  {status.label}
-                                </Badge>
-                              </td>
-                              <td className="px-4 py-3">
-                                {task.assignedAgent ? (
-                                  <div className="flex items-center gap-2">
-                                    <Bot className="h-4 w-4 text-muted-foreground" />
-                                    <span className="text-sm">{task.assignedAgent}</span>
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">Unassigned</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3">
-                                {task.dependencies.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1">
-                                    {task.dependencies.map((dep) => (
-                                      <Badge key={dep} variant="outline" className="font-mono text-xs">
-                                        {dep}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">None</span>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-sm">
-                                {task.actualHours
-                                  ? `${task.actualHours}h / ${task.estimatedHours}h`
-                                  : `${task.estimatedHours}h`}
-                              </td>
-                              <td className="px-4 py-3 text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>View Details</DropdownMenuItem>
-                                    <DropdownMenuItem>Edit Task</DropdownMenuItem>
-                                    <DropdownMenuItem>Assign Agent</DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem className="text-destructive">
-                                      Delete
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </Card>
+                                </td>
+                                <td className="px-4 py-3">
+                                  {task.assigned_agent ? (
+                                    <div className="flex items-center gap-2">
+                                      <Bot className="h-4 w-4 text-muted-foreground" />
+                                      <span className="text-sm">{task.assigned_agent.slice(0, 8)}</span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">Unassigned</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3">
+                                  {task.dependencies && task.dependencies.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {task.dependencies.map((dep: string) => (
+                                        <Badge key={dep} variant="outline" className="font-mono text-xs">
+                                          {dep.slice(0, 8)}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">None</span>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-sm">
+                                  {task.actual_hours
+                                    ? `${task.actual_hours}h / ${task.estimated_hours || 0}h`
+                                    : task.estimated_hours ? `${task.estimated_hours}h` : '-'}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" size="icon">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem onClick={() => handleViewTask({
+                                        id: task.id,
+                                        title: task.title,
+                                        description: task.description,
+                                        phase: task.phase,
+                                        priority: task.priority,
+                                        status: task.status,
+                                        assigned_agent: task.assigned_agent,
+                                      })}>
+                                        View Details
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleEditTaskOpen({
+                                        id: task.id,
+                                        title: task.title,
+                                        description: task.description,
+                                        phase: task.phase,
+                                        priority: task.priority,
+                                        status: task.status,
+                                        assigned_agent: task.assigned_agent,
+                                      })}>
+                                        Edit Task
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={() => handleEditTaskOpen({
+                                        id: task.id,
+                                        title: task.title,
+                                        description: task.description,
+                                        phase: task.phase,
+                                        priority: task.priority,
+                                        status: task.status,
+                                        assigned_agent: task.assigned_agent,
+                                      })}>
+                                        Assign Agent
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator />
+                                      <DropdownMenuItem
+                                        className="text-destructive"
+                                        onClick={() => handleDeleteTask(task.id)}
+                                      >
+                                        Delete
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </Card>
+                )}
 
                 {/* Approval Actions */}
                 <div className="flex items-center justify-end gap-2 pt-4 border-t">
                   <Button variant="outline">Edit Tasks</Button>
                   <Button>Approve Plan</Button>
                 </div>
+
+                {/* View Task Dialog */}
+                <Dialog open={viewTaskOpen} onOpenChange={setViewTaskOpen}>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle>Task Details</DialogTitle>
+                      <DialogDescription>
+                        View task information
+                      </DialogDescription>
+                    </DialogHeader>
+                    {selectedTask && (
+                      <div className="space-y-4 py-4">
+                        <div>
+                          <Label className="text-muted-foreground">ID</Label>
+                          <p className="font-mono text-sm">{selectedTask.id}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Title</Label>
+                          <p className="font-medium">{selectedTask.title}</p>
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground">Description</Label>
+                          <p className="text-sm">{selectedTask.description || "No description"}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-muted-foreground">Phase</Label>
+                            <p>{selectedTask.phase}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground">Priority</Label>
+                            <p className="capitalize">{selectedTask.priority}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-muted-foreground">Status</Label>
+                            <p className="capitalize">{selectedTask.status?.replace("_", " ")}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground">Assigned Agent</Label>
+                            <p>{selectedTask.assigned_agent || "Unassigned"}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setViewTaskOpen(false)}>
+                        Close
+                      </Button>
+                      <Button onClick={() => {
+                        setViewTaskOpen(false)
+                        handleEditTaskOpen(selectedTask)
+                      }}>
+                        Edit Task
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Edit Task Dialog */}
+                <Dialog open={editTaskOpen} onOpenChange={setEditTaskOpen}>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle>Edit Task</DialogTitle>
+                      <DialogDescription>
+                        Update task details
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-task-title">Title</Label>
+                        <Input
+                          id="edit-task-title"
+                          placeholder="Task title"
+                          value={editTask.title}
+                          onChange={(e) => setEditTask({ ...editTask, title: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-task-description">Description</Label>
+                        <Textarea
+                          id="edit-task-description"
+                          placeholder="Task description"
+                          value={editTask.description}
+                          onChange={(e) => setEditTask({ ...editTask, description: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-task-phase">Phase</Label>
+                          <Select
+                            value={editTask.phase}
+                            onValueChange={(value) => setEditTask({ ...editTask, phase: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Implementation">Implementation</SelectItem>
+                              <SelectItem value="Testing">Testing</SelectItem>
+                              <SelectItem value="Documentation">Documentation</SelectItem>
+                              <SelectItem value="Review">Review</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="edit-task-priority">Priority</Label>
+                          <Select
+                            value={editTask.priority}
+                            onValueChange={(value) => setEditTask({ ...editTask, priority: value })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="low">Low</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="edit-task-status">Status</Label>
+                        <Select
+                          value={editTask.status}
+                          onValueChange={(value) => setEditTask({ ...editTask, status: value })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="in_progress">In Progress</SelectItem>
+                            <SelectItem value="completed">Completed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setEditTaskOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button onClick={handleUpdateTask} disabled={updateTaskMutation.isPending}>
+                        {updateTaskMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        Save Changes
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             </TabsContent>
 
@@ -920,182 +1298,77 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                   </p>
                 </div>
 
-                {/* Progress Overview */}
-                <div className="grid gap-4 md:grid-cols-4">
+                {!execution ? (
                   <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Overall Progress</p>
-                        <p className="text-2xl font-bold">{mockExecution.overallProgress}%</p>
-                        <Progress value={mockExecution.overallProgress} />
-                      </div>
+                    <CardContent className="p-6 text-center text-muted-foreground">
+                      <Play className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                      <p>No execution data yet</p>
+                      <p className="text-sm mt-2">Execution metrics will appear once agents start working on tasks.</p>
                     </CardContent>
                   </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Test Coverage</p>
-                        <p className="text-2xl font-bold">{mockExecution.testCoverage}%</p>
-                        <p className="text-xs text-muted-foreground">
-                          {mockExecution.testsPassing}/{mockExecution.testsTotal} passing
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Active Agents</p>
-                        <p className="text-2xl font-bold">{mockExecution.activeAgents}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {mockExecution.commits} commits
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardContent className="p-4">
-                      <div className="space-y-2">
-                        <p className="text-sm text-muted-foreground">Lines Changed</p>
-                        <p className="text-2xl font-bold font-mono">
-                          <span className="text-green-600">+{mockExecution.linesChanged.added}</span>
-                          {" / "}
-                          <span className="text-red-600">-{mockExecution.linesChanged.removed}</span>
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* Running Tasks */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Running Tasks</CardTitle>
-                    <CardDescription>Currently executing tasks</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {mockExecution.runningTasks.map((task) => (
-                        <div key={task.id} className="rounded-lg border p-4">
-                          <div className="flex items-start justify-between">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="font-mono text-xs">
-                                  {task.id}
-                                </Badge>
-                                <span className="font-medium">{task.title}</span>
-                              </div>
-                              <div className="mt-1 flex items-center gap-4 text-sm text-muted-foreground">
-                                <span className="flex items-center gap-1">
-                                  <Bot className="h-3 w-3" />
-                                  {task.agent}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  Started {formatTimeAgo(task.startedAt)}
-                                </span>
-                              </div>
-                            </div>
-                            <Button variant="outline" size="sm">
-                              View Logs
-                            </Button>
+                ) : (
+                  <>
+                    {/* Progress Overview */}
+                    <div className="grid gap-4 md:grid-cols-4">
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">Overall Progress</p>
+                            <p className="text-2xl font-bold">{execution.overall_progress || 0}%</p>
+                            <Progress value={execution.overall_progress || 0} />
                           </div>
-                          <div className="mt-3 space-y-1">
-                            <div className="flex items-center justify-between text-sm">
-                              <span className="text-muted-foreground">Progress</span>
-                              <span>{task.progress}%</span>
-                            </div>
-                            <Progress value={task.progress} className="h-2" />
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">Test Coverage</p>
+                            <p className="text-2xl font-bold">{execution.test_coverage || 0}%</p>
+                            <p className="text-xs text-muted-foreground">
+                              {execution.tests_passing || 0}/{execution.tests_total || 0} passing
+                            </p>
                           </div>
-                        </div>
-                      ))}
-                      {mockExecution.runningTasks.length === 0 && (
-                        <p className="text-center text-sm text-muted-foreground py-4">
-                          No tasks currently running
-                        </p>
-                      )}
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">Active Agents</p>
+                            <p className="text-2xl font-bold">{execution.active_agents || 0}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {execution.commits || 0} commits
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card>
+                        <CardContent className="p-4">
+                          <div className="space-y-2">
+                            <p className="text-sm text-muted-foreground">Lines Changed</p>
+                            <p className="text-2xl font-bold font-mono">
+                              <span className="text-green-600">+{execution.lines_added || 0}</span>
+                              {" / "}
+                              <span className="text-red-600">-{execution.lines_removed || 0}</span>
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
                     </div>
-                  </CardContent>
-                </Card>
 
-                {/* Recent Commits & PRs */}
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {/* Recent Commits */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Recent Commits</CardTitle>
-                      <CardDescription>Latest code changes</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {mockExecution.recentCommits.map((commit) => (
-                          <div
-                            key={commit.sha}
-                            className="flex items-start gap-3 rounded-md border p-3"
-                          >
-                            <GitBranch className="mt-0.5 h-4 w-4 text-muted-foreground" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium truncate">{commit.message}</p>
-                              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                                <code className="font-mono">{commit.sha}</code>
-                                <span>{commit.author}</span>
-                                <span>{formatTimeAgo(commit.timestamp)}</span>
-                              </div>
-                            </div>
-                            <span className="flex-shrink-0 font-mono text-xs">
-                              <span className="text-green-600">+{commit.changes.added}</span>
-                              {" "}
-                              <span className="text-red-600">-{commit.changes.removed}</span>
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Pull Requests */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-base">Pull Requests</CardTitle>
-                      <CardDescription>Open PRs from execution</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {mockExecution.pullRequests.map((pr) => (
-                          <div
-                            key={pr.number}
-                            className="flex items-start gap-3 rounded-md border p-3"
-                          >
-                            <div
-                              className={`mt-0.5 flex h-5 w-5 items-center justify-center rounded-full ${
-                                pr.status === "open"
-                                  ? "bg-green-100 text-green-600"
-                                  : "bg-purple-100 text-purple-600"
-                              }`}
-                            >
-                              <GitBranch className="h-3 w-3" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium">
-                                #{pr.number} {pr.title}
-                              </p>
-                              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                                <span>{pr.author}</span>
-                                <Badge variant="outline" className="text-xs">
-                                  {pr.reviewStatus}
-                                </Badge>
-                              </div>
-                            </div>
-                            <Button variant="outline" size="sm">
-                              <ExternalLink className="mr-2 h-3 w-3" />
-                              View
-                            </Button>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                    {/* Running Tasks info */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-base">Running Tasks</CardTitle>
+                        <CardDescription>Currently executing tasks</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-center text-sm text-muted-foreground py-4">
+                          Task progress details will show here when agents are working.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
 
                 {/* Quick Actions */}
                 <div className="flex items-center gap-2 pt-4 border-t">
@@ -1115,68 +1388,148 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
       {/* Right Sidebar - Metadata */}
       <div className="hidden w-64 flex-shrink-0 border-l bg-muted/30 xl:block">
         <ScrollArea className="h-full">
-          <div className="p-4 space-y-6">
+          <div className="p-4 space-y-5">
+            {/* Quick Stats Cards */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-background border p-3 text-center">
+                <p className="text-2xl font-bold text-primary">{specData.progress}%</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Progress</p>
+              </div>
+              <div className="rounded-lg bg-background border p-3 text-center">
+                <p className="text-2xl font-bold">{requirements.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Requirements</p>
+              </div>
+              <div className="rounded-lg bg-background border p-3 text-center">
+                <p className="text-2xl font-bold">{tasks.length}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tasks</p>
+              </div>
+              <div className="rounded-lg bg-background border p-3 text-center">
+                <p className="text-2xl font-bold">{specData.activeAgents}</p>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Agents</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Spec Details */}
             <div>
-              <h3 className="text-sm font-medium mb-3">Spec Details</h3>
-              <div className="space-y-3 text-sm">
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Phase</span>
+                  <Badge variant="outline" className="font-normal">{specData.phase}</Badge>
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Status</span>
-                  <Badge>{mockSpec.phase}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Progress</span>
-                  <span className="font-medium">{mockSpec.progress}%</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Active Agents</span>
-                  <span className="font-medium">{mockSpec.activeAgents}</span>
+                  <Badge
+                    variant={specData.status === "executing" ? "default" : "secondary"}
+                    className="font-normal capitalize"
+                  >
+                    {specData.status}
+                  </Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Linked Tickets</span>
-                  <span className="font-medium">{mockSpec.linkedTickets}</span>
+                  <span className="font-medium">{specData.linkedTickets}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Updated</span>
-                  <span className="text-muted-foreground">{formatTimeAgo(mockSpec.updatedAt)}</span>
+                  <span className="text-xs text-muted-foreground">{formatTimeAgo(specData.updatedAt)}</span>
                 </div>
               </div>
             </div>
 
             <Separator />
 
+            {/* Test Coverage */}
             <div>
-              <h3 className="text-sm font-medium mb-3">Test Coverage</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Test Coverage</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Coverage</span>
-                  <span className="font-medium">{mockSpec.testCoverage}%</span>
+                  <span className="font-medium tabular-nums">{specData.testCoverage}%</span>
                 </div>
-                <Progress value={mockSpec.testCoverage} className="h-2" />
+                <Progress value={specData.testCoverage} className="h-1.5" />
+                {execution && (
+                  <p className="text-xs text-muted-foreground">
+                    {execution.tests_passing}/{execution.tests_total} tests passing
+                  </p>
+                )}
               </div>
             </div>
 
             <Separator />
 
+            {/* Quick Actions */}
             <div>
-              <h3 className="text-sm font-medium mb-3">Version History</h3>
-              <div className="space-y-2">
-                {[
-                  { version: "v1.3", date: "2h ago", author: "AI" },
-                  { version: "v1.2", date: "1d ago", author: "AI" },
-                  { version: "v1.1", date: "2d ago", author: "You" },
-                  { version: "v1.0", date: "3d ago", author: "You" },
-                ].map((v, idx) => (
-                  <div
-                    key={idx}
-                    className="flex items-center justify-between text-sm py-1"
-                  >
-                    <span className="font-mono">{v.version}</span>
-                    <span className="text-muted-foreground">
-                      {v.date} • {v.author}
-                    </span>
-                  </div>
-                ))}
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Quick Actions</h3>
+              <div className="space-y-1.5">
+                <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
+                  <GitBranch className="mr-2 h-3.5 w-3.5" />
+                  View Git Branch
+                </Button>
+                <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
+                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                  Open in Editor
+                </Button>
+                <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
+                  <Bot className="mr-2 h-3.5 w-3.5" />
+                  Run AI Analysis
+                </Button>
               </div>
+            </div>
+
+            <Separator />
+
+            {/* Version History */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Activity</h3>
+                {versionsData?.versions && versionsData.versions.length > 0 && (
+                  <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2">
+                    View All
+                  </Button>
+                )}
+              </div>
+              {versionsData?.versions && versionsData.versions.length > 0 ? (
+                <div className="relative">
+                  {/* Timeline line */}
+                  <div className="absolute left-[7px] top-2 bottom-2 w-px bg-border" />
+                  <div className="space-y-3">
+                    {versionsData.versions.slice(0, 5).map((version, idx) => (
+                      <div
+                        key={version.id}
+                        className="relative pl-6"
+                      >
+                        {/* Timeline dot */}
+                        <div className={`absolute left-0 top-1.5 w-[15px] h-[15px] rounded-full border-2 ${
+                          idx === 0 ? "bg-primary border-primary" : "bg-background border-muted-foreground/30"
+                        }`}>
+                          {idx === 0 && <div className="absolute inset-1 rounded-full bg-primary-foreground" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium capitalize">
+                            {version.change_type.replace(/_/g, " ")}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">
+                            {version.change_summary}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/70 mt-1">
+                            {formatTimeAgo(new Date(version.created_at))}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <History className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">
+                    No activity yet
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </ScrollArea>

@@ -260,6 +260,79 @@ export async function updateDesign(
   })
 }
 
+// Tasks
+
+export interface TaskCreate {
+  title: string
+  description?: string
+  phase?: string
+  priority?: string
+}
+
+export interface TaskUpdate {
+  title?: string
+  description?: string
+  phase?: string
+  priority?: string
+  status?: string
+  assigned_agent?: string | null
+}
+
+/**
+ * Add a task to a spec
+ */
+export async function addTask(
+  specId: string,
+  data: TaskCreate
+): Promise<SpecTask> {
+  return apiRequest<SpecTask>(`/api/v1/specs/${specId}/tasks`, {
+    method: "POST",
+    body: data,
+  })
+}
+
+/**
+ * Update a task
+ */
+export async function updateTask(
+  specId: string,
+  taskId: string,
+  data: TaskUpdate
+): Promise<SpecTask> {
+  return apiRequest<SpecTask>(`/api/v1/specs/${specId}/tasks/${taskId}`, {
+    method: "PATCH",
+    body: data,
+  })
+}
+
+/**
+ * Delete a task
+ */
+export async function deleteTask(
+  specId: string,
+  taskId: string
+): Promise<void> {
+  return apiRequest<void>(`/api/v1/specs/${specId}/tasks/${taskId}`, {
+    method: "DELETE",
+  })
+}
+
+/**
+ * Delete a criterion from a requirement
+ */
+export async function deleteCriterion(
+  specId: string,
+  reqId: string,
+  criterionId: string
+): Promise<void> {
+  return apiRequest<void>(
+    `/api/v1/specs/${specId}/requirements/${reqId}/criteria/${criterionId}`,
+    {
+      method: "DELETE",
+    }
+  )
+}
+
 // Approvals
 
 /**
@@ -278,4 +351,42 @@ export async function approveDesign(specId: string): Promise<{ message: string }
   return apiRequest<{ message: string }>(`/api/v1/specs/${specId}/approve-design`, {
     method: "POST",
   })
+}
+
+// Version History
+
+export interface SpecVersion {
+  id: string
+  spec_id: string
+  version_number: number
+  change_type: string
+  change_summary: string
+  change_details: Record<string, { old: unknown; new: unknown }> | null
+  created_by: string | null
+  snapshot: {
+    title: string
+    description: string | null
+    status: string
+    phase: string
+    progress: number
+    requirements_approved: boolean
+    design_approved: boolean
+  } | null
+  created_at: string
+}
+
+export interface SpecVersionListResponse {
+  versions: SpecVersion[]
+  total: number
+}
+
+/**
+ * List version history for a spec
+ */
+export async function listSpecVersions(
+  specId: string,
+  limit?: number
+): Promise<SpecVersionListResponse> {
+  const params = limit ? `?limit=${limit}` : ""
+  return apiRequest<SpecVersionListResponse>(`/api/v1/specs/${specId}/versions${params}`)
 }
