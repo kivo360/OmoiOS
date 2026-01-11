@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import uuid4
 
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -118,6 +119,19 @@ class Spec(Base):
         comment="Retry attempts per phase: {explore: 1, requirements: 2, ...}",
     )
 
+    # Deduplication support (pgvector for efficient similarity search)
+    embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
+        Vector(1536),  # pgvector native type for cosine similarity
+        nullable=True,
+        comment="Embedding vector (1536 dims) for semantic deduplication within project",
+    )
+    content_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="SHA256 hash of normalized title+description for exact match dedup",
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -183,6 +197,19 @@ class SpecRequirement(Base):
         String(100), nullable=True, comment="Reference to design component"
     )
 
+    # Deduplication support (pgvector for efficient similarity search)
+    embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
+        Vector(1536),  # pgvector native type for cosine similarity
+        nullable=True,
+        comment="Embedding vector (1536 dims) for semantic deduplication within spec",
+    )
+    content_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="SHA256 hash of normalized condition+action for exact match dedup",
+    )
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
@@ -220,6 +247,14 @@ class SpecAcceptanceCriterion(Base):
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     completed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # Deduplication support (hash only - criteria are short)
+    content_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="SHA256 hash of normalized text for exact match dedup within requirement",
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -269,6 +304,19 @@ class SpecTask(Base):
     )
     estimated_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     actual_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # Deduplication support (pgvector for efficient similarity search)
+    embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
+        Vector(1536),  # pgvector native type for cosine similarity
+        nullable=True,
+        comment="Embedding vector (1536 dims) for semantic deduplication within spec",
+    )
+    content_hash: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        nullable=True,
+        index=True,
+        comment="SHA256 hash of normalized title+description for exact match dedup",
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
