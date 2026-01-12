@@ -234,7 +234,7 @@ def init_feature(feature_name: str) -> None:
     omoi_dir = root / ".omoi_os"
 
     # Create directories if they don't exist
-    dirs = ["requirements", "designs", "tickets", "tasks"]
+    dirs: list[str] = ["requirements", "designs", "tickets", "tasks"]
     for d in dirs:
         (omoi_dir / d).mkdir(parents=True, exist_ok=True)
 
@@ -256,7 +256,7 @@ def init_feature(feature_name: str) -> None:
     print("\nNext steps:")
     print(f"  1. Edit requirements: {req_path}")
     print(f"  2. Edit design: {design_path}")
-    print(f"  3. Create tickets with generate_ids.py")
+    print("  3. Create tickets with generate_ids.py")
 
 
 def main():
@@ -265,7 +265,7 @@ def main():
     )
     parser.add_argument(
         "feature_name",
-        help="Name of the feature (kebab-case, e.g., 'collaboration-system')"
+        help="Name of the feature (kebab-case, e.g., 'collaboration-system')",
     )
 
     args = parser.parse_args()

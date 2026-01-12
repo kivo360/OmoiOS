@@ -183,7 +183,7 @@ class AuthService:
         if not is_valid:
             raise ValueError(error_msg)
 
-        # Create user - new users go on waitlist by default
+        # Create user - directly approved (no waitlist)
         user = User(
             email=email,
             hashed_password=self.hash_password(password),
@@ -192,7 +192,7 @@ class AuthService:
             is_verified=False,
             is_active=True,
             is_super_admin=False,
-            waitlist_status="pending",
+            waitlist_status="approved",  # Direct access, no waitlist
             waitlist_metadata=waitlist_metadata,
         )
 

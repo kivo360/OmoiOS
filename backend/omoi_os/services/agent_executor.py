@@ -1,6 +1,42 @@
-"""Agent executor service wrapping OpenHands SDK for task execution."""
+"""Agent executor service wrapping OpenHands SDK for task execution.
+
+.. deprecated:: 2025-01
+    This module is DEPRECATED and should not be used for new development.
+
+    **Why deprecated:**
+    The AgentExecutor was designed for local in-process execution using the
+    OpenHands SDK. This approach requires long-running worker processes that
+    maintain agent state locally.
+
+    **Current architecture (use instead):**
+    Task execution now uses Daytona sandboxes via the orchestrator_worker.py:
+
+    1. OrchestratorWorker polls TaskQueueService for pending tasks
+    2. DaytonaSpawner creates isolated sandbox environments per task
+    3. Sandboxes run the Claude Agent SDK worker (senior_sandbox)
+    4. Results are reported back via API callbacks
+
+    This sandbox-based approach is more scalable, provides better isolation,
+    and doesn't require maintaining stateful worker processes.
+
+    **Migration path:**
+    - Use TaskQueueService to enqueue tasks
+    - Let OrchestratorWorker spawn sandboxes automatically
+    - Monitor via event bus (TASK_COMPLETED, TASK_FAILED events)
+
+    **Files using this (may need migration):**
+    - omoi_os/worker.py (legacy worker - deprecated)
+    - scripts/demo_flow.py (demo script - may need update)
+    - tests/test_04_agent_executor.py (test file - keep for legacy testing)
+    - tests/test_05_e2e_minimal.py (e2e test - may need update)
+    - examples/openhands_daytona_example.py (example - informational)
+
+    See: omoi_os/workers/orchestrator_worker.py for current execution model
+    See: omoi_os/services/daytona_spawner.py for sandbox spawning
+"""
 
 import asyncio
+import warnings
 from typing import Dict, Any, Optional
 
 # Ensure an event loop exists for libraries that expect one at import time
@@ -67,6 +103,10 @@ _tools_registered = False
 class AgentExecutor:
     """Wraps OpenHands Agent for task execution.
 
+    .. deprecated:: 2025-01
+        Use Daytona sandboxes via orchestrator_worker.py instead.
+        See module docstring for migration details.
+
     Supports two modes:
     - **Planning Mode**: Read-only agent that analyzes tasks and creates plans
     - **Execution Mode**: Full agent that implements plans with editing capabilities
@@ -95,6 +135,14 @@ class AgentExecutor:
             project_id: Optional project ID for project-scoped workspace isolation
             task_id: Optional task ID for task-specific workspace subdirectory
         """
+        # Emit deprecation warning at runtime
+        warnings.warn(
+            "AgentExecutor is deprecated. Use Daytona sandboxes via "
+            "orchestrator_worker.py instead. See module docstring for details.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         self.phase_id = phase_id
         self.workspace_dir = workspace_dir
         self.db = db

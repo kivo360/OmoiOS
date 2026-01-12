@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { CardDescription, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Github, Mail, Loader2, CheckCircle2, XCircle, Sparkles } from "lucide-react"
-import { register as apiRegister, joinWaitlist } from "@/lib/api/auth"
+import { Github, Mail, Loader2, CheckCircle2, XCircle } from "lucide-react"
+import { register as apiRegister } from "@/lib/api/auth"
 import { ApiError } from "@/lib/api/client"
 import { startOAuthFlow } from "@/lib/api/oauth"
 
@@ -25,8 +25,6 @@ function RegisterForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // Check if coming from waitlist
-  const isWaitlist = searchParams.get("source") === "waitlist"
   const prefillEmail = searchParams.get("email") || ""
 
   // Check for plan selection from pricing page
@@ -41,7 +39,6 @@ function RegisterForm() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false)
-  const [waitlistSuccess, setWaitlistSuccess] = useState(false)
 
   // Update email if prefill changes (e.g., on navigation)
   useEffect(() => {
@@ -78,30 +75,18 @@ function RegisterForm() {
     }
 
     try {
-      if (isWaitlist) {
-        // Use waitlist-specific registration with referral tracking
-        await joinWaitlist({
-          email: formData.email,
-          password: formData.password,
-          full_name: formData.full_name || undefined,
-          referral_source: "landing_page",
-        })
-        setWaitlistSuccess(true)
-      } else {
-        // Standard registration
-        await apiRegister({
-          email: formData.email,
-          password: formData.password,
-          full_name: formData.full_name || undefined,
-        })
+      await apiRegister({
+        email: formData.email,
+        password: formData.password,
+        full_name: formData.full_name || undefined,
+      })
 
-        // Store selected plan for after org creation (if selected from pricing page)
-        if (selectedPlan && (selectedPlan === "pro" || selectedPlan === "team")) {
-          localStorage.setItem("pending_plan", selectedPlan)
-        }
-
-        router.push("/verify-email?email=" + encodeURIComponent(formData.email))
+      // Store selected plan for after org creation (if selected from pricing page)
+      if (selectedPlan && (selectedPlan === "pro" || selectedPlan === "team")) {
+        localStorage.setItem("pending_plan", selectedPlan)
       }
+
+      router.push("/verify-email?email=" + encodeURIComponent(formData.email))
     } catch (err) {
       if (err instanceof ApiError) {
         setError(err.message)
@@ -126,45 +111,10 @@ function RegisterForm() {
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  // Waitlist success state
-  if (waitlistSuccess) {
-    return (
-      <div className="space-y-6 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-          <Sparkles className="h-8 w-8 text-primary" />
-        </div>
-        <div>
-          <CardTitle className="text-2xl">You&apos;re on the list!</CardTitle>
-          <CardDescription className="mt-2">
-            We&apos;ll notify <strong>{formData.email}</strong> when your account is approved and ready to use.
-          </CardDescription>
-        </div>
-        <div className="rounded-lg border border-border bg-muted/50 p-4 text-sm text-muted-foreground">
-          <p className="font-medium text-foreground">What happens next?</p>
-          <ul className="mt-2 space-y-1 text-left">
-            <li>• Your spot on the waitlist is secured</li>
-            <li>• We&apos;ll email you when your account is approved</li>
-            <li>• Early waitlist members get priority access</li>
-          </ul>
-        </div>
-        <Button variant="outline" asChild>
-          <Link href="/">Back to home</Link>
-        </Button>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6">
       <div className="text-center">
-        {isWaitlist ? (
-          <>
-            <CardTitle className="text-2xl">Complete your registration</CardTitle>
-            <CardDescription>
-              One more step to join the waitlist for <strong>{prefillEmail}</strong>
-            </CardDescription>
-          </>
-        ) : selectedPlan ? (
+        {selectedPlan ? (
           <>
             <CardTitle className="text-2xl">Create your account</CardTitle>
             <CardDescription>
@@ -209,15 +159,9 @@ function RegisterForm() {
             value={formData.email}
             onChange={(e) => updateFormData("email", e.target.value)}
             required
-            disabled={isLoading || (isWaitlist && !!prefillEmail)}
+            disabled={isLoading}
             autoComplete="email"
-            className={isWaitlist && prefillEmail ? "bg-muted" : ""}
           />
-          {isWaitlist && prefillEmail && (
-            <p className="text-xs text-muted-foreground">
-              Email pre-filled from waitlist signup
-            </p>
-          )}
         </div>
 
         <div className="space-y-2">
@@ -279,10 +223,7 @@ function RegisterForm() {
           disabled={isLoading || !allPasswordRequirementsMet}
         >
           {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {isLoading
-            ? (isWaitlist ? "Joining waitlist..." : "Creating account...")
-            : (isWaitlist ? "Join Waitlist" : "Create account")
-          }
+          {isLoading ? "Creating account..." : "Create account"}
         </Button>
       </form>
 

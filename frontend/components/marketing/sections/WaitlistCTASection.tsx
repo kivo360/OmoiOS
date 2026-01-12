@@ -1,25 +1,26 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowRight, CheckCircle2, Sparkles, Star, Zap, Clock } from "lucide-react"
+import { ArrowRight, CheckCircle2, Sparkles, Zap, Shield, Rocket } from "lucide-react"
 import { SparklesCore } from "@/components/ui/sparkles"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
-const foundingBenefits = [
-  {
-    icon: Star,
-    text: "Lifetime access—pay once, use forever",
-  },
+const benefits = [
   {
     icon: Zap,
-    text: "50 workflows/month included",
+    text: "Start building in minutes",
   },
   {
-    icon: Clock,
-    text: "Early access before public launch",
+    icon: Shield,
+    text: "No credit card required",
+  },
+  {
+    icon: Rocket,
+    text: "Free tier included",
   },
 ]
 
@@ -28,19 +29,19 @@ interface WaitlistCTASectionProps {
 }
 
 export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [isSubmitted, setIsSubmitted] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) return
 
     setIsSubmitting(true)
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSubmitting(false)
-    setIsSubmitted(true)
+    // Small delay for visual feedback before redirect
+    setTimeout(() => {
+      router.push(`/register?email=${encodeURIComponent(email)}`)
+    }, 300)
   }
 
   return (
@@ -77,7 +78,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
           >
             <span className="inline-flex items-center gap-2 rounded-full bg-landing-accent/20 px-4 py-1.5 text-sm font-medium uppercase tracking-wider text-landing-accent">
               <Sparkles className="h-4 w-4" />
-              Founding Member Access
+              Now Open
             </span>
           </motion.div>
 
@@ -89,7 +90,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.1 }}
             className="text-3xl font-bold tracking-tight text-white md:text-4xl lg:text-5xl"
           >
-            Reserve Your Spot as a Founding Member
+            Ready to Ship Faster?
           </motion.h2>
 
           {/* Subheadline */}
@@ -100,10 +101,10 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.2 }}
             className="mt-4 text-lg text-gray-400"
           >
-            First 100 members get lifetime access at a one-time price. Lock in your spot before we switch to monthly pricing.
+            Create your free account and start building with AI agents today. No credit card required.
           </motion.p>
 
-          {/* Founding Member Benefits */}
+          {/* Benefits */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
@@ -111,7 +112,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.25 }}
             className="mx-auto mt-8 flex max-w-lg flex-col gap-3 sm:flex-row sm:justify-center"
           >
-            {foundingBenefits.map((benefit, index) => (
+            {benefits.map((benefit, index) => (
               <div
                 key={index}
                 className="flex items-center gap-2 rounded-lg bg-white/5 px-4 py-2 text-sm text-gray-300"
@@ -130,49 +131,37 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
             transition={{ delay: 0.3 }}
             className="mt-10"
           >
-            {!isSubmitted ? (
-              <>
-                <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-3">
-                  <Input
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 flex-1 border-gray-700 bg-gray-900 text-white placeholder:text-gray-500"
-                    required
-                  />
-                  <Button
-                    type="submit"
-                    size="lg"
-                    disabled={isSubmitting}
-                    className="h-12 bg-landing-accent px-6 text-white hover:bg-landing-accent-dark"
-                  >
-                    {isSubmitting ? (
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                    ) : (
-                      <>
-                        Reserve Early Access
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </>
-                    )}
-                  </Button>
-                </form>
-
-                {/* Scarcity */}
-                <p className="mt-4 text-sm text-gray-400">
-                  <span className="font-semibold text-landing-accent">73 spots</span> remaining at founding member pricing
-                </p>
-              </>
-            ) : (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="inline-flex items-center gap-2 rounded-lg bg-green-900/50 px-6 py-3 text-green-400"
+            <form onSubmit={handleSubmit} className="mx-auto flex max-w-md gap-3">
+              <Input
+                type="email"
+                placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-12 flex-1 border-gray-700 bg-gray-900 text-white placeholder:text-gray-500"
+                required
+                disabled={isSubmitting}
+              />
+              <Button
+                type="submit"
+                size="lg"
+                disabled={isSubmitting}
+                className="h-12 bg-landing-accent px-6 text-white hover:bg-landing-accent-dark"
               >
-                <CheckCircle2 className="h-5 w-5" />
-                <span className="font-medium">You&apos;re in! Check your email for next steps.</span>
-              </motion.div>
-            )}
+                {isSubmitting ? (
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    Get Started Free
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+
+            {/* Trust note */}
+            <p className="mt-4 text-sm text-gray-400">
+              Join <span className="font-semibold text-landing-accent">500+</span> engineers already building with OmoiOS
+            </p>
           </motion.div>
 
           {/* Trust Elements */}
@@ -185,11 +174,11 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
           >
             <span className="flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-green-500" />
-              30-day money-back guarantee
+              Free tier forever
             </span>
             <span className="flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-green-500" />
-              No credit card to reserve
+              No credit card required
             </span>
             <span className="flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-green-500" />

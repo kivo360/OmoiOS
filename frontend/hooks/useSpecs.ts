@@ -18,6 +18,9 @@ import {
   approveRequirements,
   approveDesign,
   listSpecVersions,
+  executeSpecTasks,
+  getExecutionStatus,
+  getCriteriaStatus,
 } from "@/lib/api/specs"
 import type {
   Spec,
@@ -35,6 +38,10 @@ import type {
   TaskCreate,
   TaskUpdate,
   SpecVersionListResponse,
+  ExecuteTasksRequest,
+  ExecuteTasksResponse,
+  ExecutionStatusResponse,
+  CriteriaStatusResponse,
 } from "@/lib/api/specs"
 
 export const specsKeys = {
@@ -42,6 +49,8 @@ export const specsKeys = {
   project: (projectId: string) => [...specsKeys.all, "project", projectId] as const,
   detail: (specId: string) => [...specsKeys.all, "detail", specId] as const,
   versions: (specId: string) => [...specsKeys.all, "versions", specId] as const,
+  executionStatus: (specId: string) => [...specsKeys.all, "execution", specId] as const,
+  criteriaStatus: (specId: string) => [...specsKeys.all, "criteria", specId] as const,
 }
 
 /**
@@ -288,5 +297,73 @@ export function useSpecVersions(specId: string | undefined, limit?: number) {
     queryKey: specsKeys.versions(specId!),
     queryFn: () => listSpecVersions(specId!, limit),
     enabled: !!specId,
+  })
+}
+
+// ============================================================================
+// Spec Execution Hooks
+// ============================================================================
+
+/**
+ * Hook to execute spec tasks via sandbox system.
+ * Converts pending SpecTasks to executable Tasks and queues them for Daytona sandboxes.
+ */
+export function useExecuteSpecTasks(specId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<ExecuteTasksResponse, Error, ExecuteTasksRequest | undefined>({
+    mutationFn: (request) => executeSpecTasks(specId, request),
+    onSuccess: () => {
+      // Invalidate spec detail to refresh task statuses
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      // Invalidate execution status
+      queryClient.invalidateQueries({ queryKey: specsKeys.executionStatus(specId) })
+    },
+  })
+}
+
+/**
+ * Hook to get execution status for a spec's tasks.
+ * Returns task counts by status and overall progress percentage.
+ *
+ * @param specId - The spec ID to get execution status for
+ * @param options.enabled - Whether to enable the query (default: true if specId provided)
+ * @param options.refetchInterval - Polling interval in ms (default: disabled)
+ */
+export function useExecutionStatus(
+  specId: string | undefined,
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number | false
+  }
+) {
+  return useQuery<ExecutionStatusResponse>({
+    queryKey: specsKeys.executionStatus(specId!),
+    queryFn: () => getExecutionStatus(specId!),
+    enabled: options?.enabled ?? !!specId,
+    refetchInterval: options?.refetchInterval,
+  })
+}
+
+/**
+ * Hook to get acceptance criteria status for a spec.
+ * Returns completion status for all criteria organized by requirement.
+ *
+ * @param specId - The spec ID to get criteria status for
+ * @param options.enabled - Whether to enable the query (default: true if specId provided)
+ * @param options.refetchInterval - Polling interval in ms (default: disabled)
+ */
+export function useCriteriaStatus(
+  specId: string | undefined,
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number | false
+  }
+) {
+  return useQuery<CriteriaStatusResponse>({
+    queryKey: specsKeys.criteriaStatus(specId!),
+    queryFn: () => getCriteriaStatus(specId!),
+    enabled: options?.enabled ?? !!specId,
+    refetchInterval: options?.refetchInterval,
   })
 }
