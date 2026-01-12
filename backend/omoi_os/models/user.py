@@ -50,9 +50,9 @@ class User(Base):
     )
     attributes: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
-    # Waitlist
+    # Waitlist (default "approved" - billing/promo codes are the gate now, not waitlist)
     waitlist_status: Mapped[str] = mapped_column(
-        String(20), default="pending", nullable=False, index=True
+        String(20), default="approved", nullable=False, index=True
     )  # 'pending', 'approved', 'none'
     waitlist_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
