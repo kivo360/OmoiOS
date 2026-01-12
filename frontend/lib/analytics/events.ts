@@ -63,6 +63,8 @@ export const ANALYTICS_EVENTS = {
   PLAN_UPGRADED: 'plan_upgraded',
   PLAN_DOWNGRADED: 'plan_downgraded',
   BILLING_PORTAL_OPENED: 'billing_portal_opened',
+  PROMO_CODE_REDEEMED: 'promo_code_redeemed',
+  PROMO_CODE_FAILED: 'promo_code_failed',
 
   // Feature usage events
   FEATURE_USED: 'feature_used',
@@ -268,6 +270,17 @@ export interface OrganizationEventProperties extends BaseEventProperties {
   action?: string
 }
 
+/**
+ * Promo code event properties
+ */
+export interface PromoCodeEventProperties extends BaseEventProperties {
+  organization_id?: string
+  code?: string
+  discount_type?: string
+  tier_granted?: string | null
+  error_message?: string
+}
+
 // ============================================================================
 // Event Properties Union Type
 // ============================================================================
@@ -332,6 +345,8 @@ export interface EventPropertiesMap {
   [ANALYTICS_EVENTS.ORGANIZATION_UPDATED]: OrganizationEventProperties
   [ANALYTICS_EVENTS.TEAM_MEMBER_INVITED]: OrganizationEventProperties
   [ANALYTICS_EVENTS.TEAM_MEMBER_REMOVED]: OrganizationEventProperties
+  [ANALYTICS_EVENTS.PROMO_CODE_REDEEMED]: PromoCodeEventProperties
+  [ANALYTICS_EVENTS.PROMO_CODE_FAILED]: PromoCodeEventProperties
 }
 
 /**

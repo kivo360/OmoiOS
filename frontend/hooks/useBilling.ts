@@ -23,6 +23,8 @@ import {
   reactivateSubscription,
   createLifetimeCheckout,
   createSubscriptionCheckout,
+  validatePromoCode,
+  redeemPromoCode,
   type SubscriptionCheckoutRequest,
 } from "@/lib/api/billing"
 import type {
@@ -38,6 +40,10 @@ import type {
   PaymentMethodRequest,
   Subscription,
   LifetimePurchaseRequest,
+  PromoCodeValidateRequest,
+  PromoCodeValidateResponse,
+  PromoCodeRedeemRequest,
+  PromoCodeRedeemResponse,
 } from "@/lib/api/types"
 
 // UUID validation regex - prevents API calls with invalid IDs
@@ -438,6 +444,49 @@ export function useCreateSubscriptionCheckout() {
       track(ANALYTICS_EVENTS.CHECKOUT_FAILED, {
         plan_type: data.tier,
         organization_id: orgId,
+        error_message: error.message,
+      })
+    },
+  })
+}
+
+// ============================================================================
+// Promo Codes
+// ============================================================================
+
+/**
+ * Hook to validate a promo code without redeeming it
+ */
+export function useValidatePromoCode() {
+  return useMutation<PromoCodeValidateResponse, Error, PromoCodeValidateRequest>({
+    mutationFn: (request) => validatePromoCode(request),
+  })
+}
+
+/**
+ * Hook to redeem a promo code for an organization
+ * This applies the promo code benefits (free tier, discount, etc.)
+ */
+export function useRedeemPromoCode() {
+  const queryClient = useQueryClient()
+
+  return useMutation<PromoCodeRedeemResponse, Error, { orgId: string; data: PromoCodeRedeemRequest }>({
+    mutationFn: ({ orgId, data }) => redeemPromoCode(orgId, data),
+    onSuccess: (response, { orgId, data }) => {
+      // Invalidate subscription and account queries to reflect the new tier
+      queryClient.invalidateQueries({ queryKey: billingKeys.subscription(orgId) })
+      queryClient.invalidateQueries({ queryKey: billingKeys.account(orgId) })
+
+      track(ANALYTICS_EVENTS.PROMO_CODE_REDEEMED, {
+        organization_id: orgId,
+        discount_type: response.discount_type,
+        tier_granted: response.tier_granted,
+      })
+    },
+    onError: (error, { orgId, data }) => {
+      track(ANALYTICS_EVENTS.PROMO_CODE_FAILED, {
+        organization_id: orgId,
+        code: data.code,
         error_message: error.message,
       })
     },

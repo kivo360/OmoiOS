@@ -17,6 +17,10 @@ import type {
   Payment,
   Subscription,
   LifetimePurchaseRequest,
+  PromoCodeValidateRequest,
+  PromoCodeValidateResponse,
+  PromoCodeRedeemRequest,
+  PromoCodeRedeemResponse,
 } from "./types"
 
 // ============================================================================
@@ -280,6 +284,33 @@ export async function createSubscriptionCheckout(
 ): Promise<CheckoutResponse> {
   return api.post<CheckoutResponse>(
     `/api/v1/billing/account/${organizationId}/subscription/checkout`,
+    request
+  )
+}
+
+// ============================================================================
+// Promo Codes
+// ============================================================================
+
+/**
+ * Validate a promo code without redeeming it
+ */
+export async function validatePromoCode(
+  request: PromoCodeValidateRequest
+): Promise<PromoCodeValidateResponse> {
+  return api.post<PromoCodeValidateResponse>("/api/v1/billing/promo-codes/validate", request)
+}
+
+/**
+ * Redeem a promo code for an organization
+ * This will apply the promo code benefits (discount, free tier, etc.)
+ */
+export async function redeemPromoCode(
+  organizationId: string,
+  request: PromoCodeRedeemRequest
+): Promise<PromoCodeRedeemResponse> {
+  return api.post<PromoCodeRedeemResponse>(
+    `/api/v1/billing/account/${organizationId}/promo-codes/redeem`,
     request
   )
 }
