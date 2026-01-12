@@ -1298,6 +1298,61 @@ export const TIER_CONFIGS: Record<SubscriptionTier, TierConfig> = {
 }
 
 // ============================================================================
+// Promo Code Types
+// ============================================================================
+
+export type PromoCodeType =
+  | "percentage"
+  | "fixed_amount"
+  | "full_bypass"
+  | "trial_extension"
+
+export interface PromoCode {
+  id: string
+  code: string
+  description: string | null
+  discount_type: PromoCodeType
+  discount_value: number
+  trial_days: number | null
+  max_uses: number | null
+  current_uses: number
+  uses_remaining: number | null
+  valid_from: string | null
+  valid_until: string | null
+  applicable_tiers: string[] | null
+  grant_tier: SubscriptionTier | null
+  grant_duration_months: number | null
+  is_active: boolean
+  is_valid: boolean
+  created_at: string | null
+}
+
+export interface PromoCodeValidateRequest {
+  code: string
+  tier?: string
+}
+
+export interface PromoCodeValidateResponse {
+  valid: boolean
+  message: string
+  promo_code: PromoCode | null
+}
+
+export interface PromoCodeRedeemRequest {
+  code: string
+}
+
+export interface PromoCodeRedeemResponse {
+  success: boolean
+  message: string
+  discount_type: PromoCodeType
+  discount_value: number
+  tier_granted: SubscriptionTier | null
+  duration_months: number | null
+  subscription_id: string | null
+}
+
+// ============================================================================
 // Generic Response Types
 // ============================================================================
 

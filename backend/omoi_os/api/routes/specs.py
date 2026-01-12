@@ -8,8 +8,10 @@ Provides endpoints for managing project specifications including:
 - Linked tasks
 """
 
+import logging
 from datetime import datetime
 from typing import Optional, List, Any, Dict
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, ConfigDict, Field
@@ -17,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from omoi_os.api.dependencies import get_db_service
+from omoi_os.models.project import Project
 from omoi_os.models.spec import (
     Spec as SpecModel,
     SpecRequirement as SpecRequirementModel,
@@ -24,8 +27,11 @@ from omoi_os.models.spec import (
     SpecTask as SpecTaskModel,
     SpecVersion as SpecVersionModel,
 )
+from omoi_os.services.billing_service import BillingService, get_billing_service
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/specs", tags=["specs"])
@@ -583,6 +589,67 @@ async def _list_spec_versions_async(
         )
         versions = result.scalars().all()
         return list(versions)
+
+
+# ============================================================================
+# Billing Enforcement Helpers
+# ============================================================================
+
+
+async def _get_organization_id_for_spec(
+    db: DatabaseService, spec_id: str
+) -> Optional[UUID]:
+    """Get the organization ID for a spec via its project.
+
+    Returns None if spec or project not found, or if project has no organization.
+    """
+    async with db.get_async_session() as session:
+        # Get spec with project
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        # Get project to find organization
+        project_result = await session.execute(
+            select(Project).filter(Project.id == spec.project_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project or not project.organization_id:
+            return None
+
+        return project.organization_id
+
+
+async def _check_billing_for_spec_execution(
+    db: DatabaseService, spec_id: str
+) -> tuple[bool, str]:
+    """Check if spec execution is allowed based on billing status.
+
+    Returns:
+        Tuple of (can_execute, reason/error_message)
+    """
+    # Get organization ID for this spec
+    org_id = await _get_organization_id_for_spec(db, spec_id)
+
+    if not org_id:
+        # No organization linked - block execution for safety
+        # This prevents specs without proper org setup from consuming resources
+        logger.warning(f"Spec {spec_id} has no linked organization - blocking execution")
+        return False, "Spec is not linked to an organization. Please ensure your project is properly set up."
+
+    # Check billing status
+    billing_service = get_billing_service(db)
+    can_execute, reason = billing_service.can_execute_workflow(org_id)
+
+    if not can_execute:
+        logger.warning(
+            f"Billing check failed for spec {spec_id} (org: {org_id}): {reason}"
+        )
+
+    return can_execute, reason
 
 
 # ============================================================================
@@ -1385,6 +1452,14 @@ async def execute_spec(
     if not spec:
         raise HTTPException(status_code=404, detail="Spec not found")
 
+    # BILLING GATE: Check if organization can execute workflows
+    can_execute, billing_reason = await _check_billing_for_spec_execution(db, spec_id)
+    if not can_execute:
+        raise HTTPException(
+            status_code=402,  # Payment Required
+            detail=f"Execution blocked: {billing_reason}",
+        )
+
     # Check if spec is already executing
     if spec.status == "executing":
         return SpecExecuteResponse(
@@ -1627,6 +1702,14 @@ async def execute_spec_tasks(
     """
     from omoi_os.services.spec_task_execution import SpecTaskExecutionService
     from omoi_os.services.event_bus import get_event_bus
+
+    # BILLING GATE: Check if organization can execute workflows
+    can_execute, billing_reason = await _check_billing_for_spec_execution(db, spec_id)
+    if not can_execute:
+        raise HTTPException(
+            status_code=402,  # Payment Required
+            detail=f"Task execution blocked: {billing_reason}",
+        )
 
     # Initialize service with event bus for completion tracking
     event_bus = None

@@ -40,6 +40,7 @@ from omoi_os.models.organization import Organization, OrganizationMembership, Ro
 from omoi_os.models.phase import PhaseModel
 from omoi_os.models.playbook_entry import PlaybookEntry
 from omoi_os.models.playbook_change import PlaybookChange
+from omoi_os.models.promo_code import PromoCode, PromoCodeRedemption, PromoCodeType
 from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.project import Project
 from omoi_os.models.spec import Spec, SpecAcceptanceCriterion, SpecRequirement, SpecTask, SpecVersion
@@ -128,6 +129,9 @@ __all__ = [
     "PlaybookChange",
     "PlaybookEntry",
     "Project",
+    "PromoCode",
+    "PromoCodeRedemption",
+    "PromoCodeType",
     "QualityGate",
     "QualityMetric",
     "ReasoningEvent",
