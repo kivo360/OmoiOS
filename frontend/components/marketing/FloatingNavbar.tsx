@@ -87,7 +87,7 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
                     asChild
                   >
                     <Link href="/register" onClick={() => setMobileMenuOpen(false)}>
-                      Get Early Access
+                      Get Started Free
                       <ArrowRight className="ml-2 h-4 w-4" />
                     </Link>
                   </Button>

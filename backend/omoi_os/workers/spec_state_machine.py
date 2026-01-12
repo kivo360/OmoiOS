@@ -11,6 +11,11 @@ Each phase:
 - Can be resumed from any checkpoint
 - Has validation gates with retry
 
+The SYNC phase uses SpecSyncService to:
+- Persist requirements, tasks, and acceptance criteria to the database
+- Deduplicate entities to prevent duplicates during retries
+- Update spec's embedding and content hash for semantic deduplication
+
 Usage:
     from omoi_os.workers.spec_state_machine import SpecStateMachine
 
@@ -44,6 +49,8 @@ from omoi_os.evals import (
     TaskEvaluator,
 )
 from omoi_os.schemas.spec_generation import SpecPhase
+from omoi_os.services.embedding import EmbeddingService
+from omoi_os.services.spec_sync import SpecSyncService, SyncResult
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +139,8 @@ class SpecStateMachine:
         working_directory: str = "/workspace",
         max_retries: int = 3,
         model: str = "claude-sonnet-4-20250514",
+        embedding_service: Optional[EmbeddingService] = None,
+        sync_service: Optional[SpecSyncService] = None,
     ):
         """
         Initialize the state machine.
@@ -142,12 +151,19 @@ class SpecStateMachine:
             working_directory: Working directory for file operations
             max_retries: Maximum retry attempts per phase
             model: Claude model to use
+            embedding_service: Optional embedding service for semantic deduplication
+            sync_service: Optional sync service (created automatically if not provided)
         """
         self.spec_id = spec_id
         self.db = db_session
         self.working_directory = working_directory
         self.max_retries = max_retries
         self.model = model
+        self.embedding_service = embedding_service
+
+        # Initialize sync service for SYNC phase
+        # The sync service handles persisting phase data to database with deduplication
+        self.sync_service = sync_service
 
         # Initialize evaluators
         self.evaluators = {
@@ -218,6 +234,10 @@ class SpecStateMachine:
 
     async def execute_phase(self, phase: SpecPhase, spec: Any) -> PhaseResult:
         """Execute a single phase with eval-driven retry loop."""
+        # SYNC phase is special - it uses SpecSyncService instead of agent query
+        if phase == SpecPhase.SYNC:
+            return await self._execute_sync_phase(spec)
+
         evaluator = self.evaluators.get(phase)
         prompt = await self.get_phase_prompt(phase, spec)
 
@@ -229,7 +249,7 @@ class SpecStateMachine:
                 response, session_id = await self._execute_agent_query(phase, prompt)
                 result = self.extract_structured_output(response)
 
-                # Skip eval for phases without evaluators (sync)
+                # Skip eval for phases without evaluators
                 if evaluator is None:
                     return PhaseResult(
                         phase=phase,
@@ -267,6 +287,90 @@ class SpecStateMachine:
         raise Exception(
             f"Phase {phase.value} failed after {self.max_retries} attempts"
         )
+
+    async def _execute_sync_phase(self, spec: Any) -> PhaseResult:
+        """Execute the SYNC phase using SpecSyncService.
+
+        The SYNC phase persists requirements, tasks, and acceptance criteria
+        from phase_data to the database with deduplication to prevent duplicates
+        during retries.
+
+        Args:
+            spec: The spec being processed.
+
+        Returns:
+            PhaseResult with sync statistics.
+        """
+        logger.info(f"Executing SYNC phase for spec {self.spec_id}")
+
+        # Check if we're using a mock spec (sandbox mode without database)
+        if getattr(spec, 'is_mock', False):
+            logger.info("Skipping database sync for mock spec (sandbox mode)")
+            return PhaseResult(
+                phase=SpecPhase.SYNC,
+                data={
+                    "status": "skipped",
+                    "reason": "mock_spec_sandbox_mode",
+                    "message": "Database sync skipped in sandbox mode",
+                },
+                attempts=1,
+            )
+
+        # Create sync service if not provided
+        if self.sync_service is None:
+            from omoi_os.services.database import DatabaseService
+
+            # Create a DatabaseService wrapper for the session
+            # Note: In production, the sync_service should be passed in
+            db_service = DatabaseService()
+            self.sync_service = SpecSyncService(
+                db=db_service,
+                embedding_service=self.embedding_service,
+            )
+            logger.debug("Created SpecSyncService for SYNC phase")
+
+        try:
+            # Call the sync service to persist phase data with deduplication
+            sync_result = await self.sync_service.sync_spec(
+                spec_id=self.spec_id,
+                session=self.db,
+            )
+
+            if sync_result.success:
+                logger.info(
+                    f"SYNC phase complete: {sync_result.message}",
+                    extra={"stats": sync_result.stats.to_dict()},
+                )
+                return PhaseResult(
+                    phase=SpecPhase.SYNC,
+                    data={
+                        "status": "success",
+                        "message": sync_result.message,
+                        "stats": sync_result.stats.to_dict(),
+                    },
+                    attempts=1,
+                )
+            else:
+                logger.error(f"SYNC phase failed: {sync_result.message}")
+                return PhaseResult(
+                    phase=SpecPhase.SYNC,
+                    data={
+                        "status": "failed",
+                        "message": sync_result.message,
+                        "errors": sync_result.stats.errors,
+                    },
+                    error=sync_result.message,
+                    attempts=1,
+                )
+
+        except Exception as e:
+            logger.error(f"SYNC phase error: {e}")
+            return PhaseResult(
+                phase=SpecPhase.SYNC,
+                data={"status": "error", "message": str(e)},
+                error=str(e),
+                attempts=1,
+            )
 
     async def _execute_agent_query(
         self, phase: SpecPhase, prompt: str
@@ -898,21 +1002,55 @@ Try again now.
 # =========================================================================
 
 
-async def run_spec_state_machine(spec_id: str) -> bool:
+async def run_spec_state_machine(
+    spec_id: str,
+    working_directory: Optional[str] = None,
+    enable_embeddings: bool = True,
+) -> bool:
     """
     Entry point for running the state machine.
 
     This is called by the orchestrator worker or can be run directly.
+
+    Args:
+        spec_id: ID of the spec to process.
+        working_directory: Working directory for file operations.
+        enable_embeddings: Whether to enable embedding service for semantic
+                          deduplication. Set to False in testing or when
+                          embedding service is unavailable.
+
+    Returns:
+        True if completed successfully, False if failed.
     """
     from omoi_os.services.database import DatabaseService
+    from omoi_os.services.embedding import get_embedding_service
+    from omoi_os.services.spec_sync import get_spec_sync_service
 
     db_service = DatabaseService()
+
+    # Initialize embedding service if enabled
+    embedding_service = None
+    if enable_embeddings:
+        try:
+            embedding_service = get_embedding_service()
+            logger.info("Embedding service initialized for semantic deduplication")
+        except Exception as e:
+            logger.warning(f"Failed to initialize embedding service: {e}")
+            logger.warning("Proceeding with hash-only deduplication")
+
+    # Initialize sync service with embedding support
+    sync_service = get_spec_sync_service(
+        db=db_service,
+        embedding_service=embedding_service,
+    )
 
     async with db_service.async_session() as session:
         machine = SpecStateMachine(
             spec_id=spec_id,
             db_session=session,
-            working_directory=os.getcwd(),
+            working_directory=working_directory or os.getcwd(),
+            embedding_service=embedding_service,
+            sync_service=sync_service,
         )
         return await machine.run()
 
@@ -921,9 +1059,10 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python spec_state_machine.py <spec_id>")
+        print("Usage: python spec_state_machine.py <spec_id> [working_directory]")
         sys.exit(1)
 
     spec_id = sys.argv[1]
-    success = asyncio.run(run_spec_state_machine(spec_id))
+    working_dir = sys.argv[2] if len(sys.argv) > 2 else None
+    success = asyncio.run(run_spec_state_machine(spec_id, working_dir))
     sys.exit(0 if success else 1)
