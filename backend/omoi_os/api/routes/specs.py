@@ -746,6 +746,51 @@ class SpecVersionListResponse(BaseModel):
     total: int
 
 
+class SpecExecuteRequest(BaseModel):
+    """Request body for spec execution."""
+
+    working_directory: Optional[str] = Field(
+        None,
+        description="Working directory for file operations. Defaults to current directory.",
+    )
+    enable_embeddings: bool = Field(
+        True,
+        description="Whether to enable embedding service for semantic deduplication.",
+    )
+
+
+class SpecExecuteResponse(BaseModel):
+    """Response for spec execution."""
+
+    spec_id: str
+    status: str  # started, failed
+    message: str
+    current_phase: Optional[str] = None
+
+
+class SpecPhaseDataResponse(BaseModel):
+    """Response containing spec phase data."""
+
+    spec_id: str
+    current_phase: str
+    phase_data: Dict[str, Any] = {}
+    phase_attempts: Dict[str, int] = {}
+    last_checkpoint_at: Optional[datetime] = None
+    last_error: Optional[str] = None
+
+
+class SpecSyncStatsResponse(BaseModel):
+    """Response containing sync statistics."""
+
+    requirements_created: int = 0
+    requirements_skipped: int = 0
+    criteria_created: int = 0
+    criteria_skipped: int = 0
+    tasks_created: int = 0
+    tasks_skipped: int = 0
+    errors: List[str] = []
+
+
 # ============================================================================
 # Helper Functions
 # ============================================================================
@@ -1292,4 +1337,413 @@ async def list_spec_versions(
             for v in versions
         ],
         total=len(versions),
+    )
+
+
+# ============================================================================
+# Execution Routes
+# ============================================================================
+
+
+@router.post("/{spec_id}/execute", response_model=SpecExecuteResponse)
+async def execute_spec(
+    spec_id: str,
+    request: SpecExecuteRequest = SpecExecuteRequest(),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Execute the spec-driven development workflow.
+
+    This starts the state machine which orchestrates the multi-phase
+    spec generation workflow:
+    EXPLORE -> REQUIREMENTS -> DESIGN -> TASKS -> SYNC -> COMPLETE
+
+    Each phase:
+    - Runs as a separate Agent SDK session
+    - Has access to codebase tools (Glob, Read, Grep)
+    - Saves to database before proceeding
+    - Can be resumed from any checkpoint
+    - Has validation gates with retry
+
+    The workflow runs asynchronously and updates the spec's phase_data
+    and current_phase as it progresses.
+
+    Args:
+        spec_id: ID of the spec to execute.
+        request: Execution configuration options.
+
+    Returns:
+        SpecExecuteResponse with execution status.
+    """
+    import asyncio
+    import os
+
+    from omoi_os.workers.spec_state_machine import run_spec_state_machine
+
+    # Verify spec exists
+    spec = await _get_spec_async(db, spec_id)
+    if not spec:
+        raise HTTPException(status_code=404, detail="Spec not found")
+
+    # Check if spec is already executing
+    if spec.status == "executing":
+        return SpecExecuteResponse(
+            spec_id=spec_id,
+            status="already_running",
+            message="Spec execution is already in progress",
+            current_phase=spec.current_phase,
+        )
+
+    # Update spec status to executing
+    await _update_spec_async(db, spec_id, status="executing")
+
+    # Create version history entry for execution start
+    await _create_spec_version_async(
+        db,
+        spec_id,
+        change_type="phase_changed",
+        change_summary="Spec execution started",
+        change_details={"action": "execute", "phase": spec.current_phase or "explore"},
+    )
+
+    # Determine working directory
+    working_dir = request.working_directory or os.getcwd()
+
+    # Run the state machine asynchronously (fire and forget)
+    # The state machine will update the database as it progresses
+    async def run_execution():
+        try:
+            success = await run_spec_state_machine(
+                spec_id=spec_id,
+                working_directory=working_dir,
+                enable_embeddings=request.enable_embeddings,
+            )
+            if not success:
+                # Update spec status on failure
+                await _update_spec_async(db, spec_id, status="failed")
+        except Exception as e:
+            # Update spec status on error
+            await _update_spec_async(db, spec_id, status="failed")
+            # Log the error (in production, use proper logging)
+            import logging
+            logging.getLogger(__name__).error(f"Spec execution failed: {e}")
+
+    # Start the execution in the background
+    asyncio.create_task(run_execution())
+
+    return SpecExecuteResponse(
+        spec_id=spec_id,
+        status="started",
+        message="Spec execution started successfully",
+        current_phase=spec.current_phase or "explore",
+    )
+
+
+@router.get("/{spec_id}/phase-data", response_model=SpecPhaseDataResponse)
+async def get_spec_phase_data(
+    spec_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Get the current phase data for a spec.
+
+    This returns the accumulated outputs from each phase of the
+    spec-driven development workflow, including:
+    - explore: Codebase exploration results
+    - requirements: Generated EARS-format requirements
+    - design: Technical design artifacts
+    - tasks: Implementation task breakdown
+    - sync: Sync status and statistics
+
+    Also includes phase_attempts (retry counts per phase) and
+    any errors that occurred during execution.
+    """
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+
+        if not spec:
+            raise HTTPException(status_code=404, detail="Spec not found")
+
+        return SpecPhaseDataResponse(
+            spec_id=spec.id,
+            current_phase=spec.current_phase or "explore",
+            phase_data=spec.phase_data or {},
+            phase_attempts=spec.phase_attempts or {},
+            last_checkpoint_at=spec.last_checkpoint_at,
+            last_error=spec.last_error,
+        )
+
+
+@router.post("/{spec_id}/sync", response_model=SpecSyncStatsResponse)
+async def sync_spec_data(
+    spec_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Manually trigger sync of phase data to database.
+
+    This endpoint allows manually syncing the requirements, tasks,
+    and acceptance criteria from phase_data to the database with
+    deduplication. This is useful when:
+
+    1. The automatic SYNC phase was skipped or failed
+    2. Phase data was modified and needs to be re-synced
+    3. Testing the sync functionality independently
+
+    The sync service uses deduplication to prevent duplicate entities:
+    - Hash-based: Fast exact-match check using SHA256 of normalized content
+    - Semantic: Embedding similarity check via pgvector cosine distance
+
+    Returns sync statistics including counts of created/skipped entities.
+    """
+    from omoi_os.services.embedding import get_embedding_service
+    from omoi_os.services.spec_sync import get_spec_sync_service
+
+    # Initialize embedding service (optional - graceful fallback if unavailable)
+    embedding_service = None
+    try:
+        embedding_service = get_embedding_service()
+    except Exception:
+        pass  # Hash-only deduplication will be used
+
+    # Initialize sync service
+    sync_service = get_spec_sync_service(
+        db=db,
+        embedding_service=embedding_service,
+    )
+
+    # Execute sync
+    sync_result = await sync_service.sync_spec(spec_id=spec_id)
+
+    if not sync_result.success:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Sync failed: {sync_result.message}",
+        )
+
+    return SpecSyncStatsResponse(
+        requirements_created=sync_result.stats.requirements_created,
+        requirements_skipped=sync_result.stats.requirements_skipped,
+        criteria_created=sync_result.stats.criteria_created,
+        criteria_skipped=sync_result.stats.criteria_skipped,
+        tasks_created=sync_result.stats.tasks_created,
+        tasks_skipped=sync_result.stats.tasks_skipped,
+        errors=sync_result.stats.errors,
+    )
+
+
+# ============================================================================
+# Task Execution Routes
+# ============================================================================
+
+
+class ExecuteTasksRequest(BaseModel):
+    """Request to execute spec tasks via sandbox system."""
+
+    task_ids: Optional[List[str]] = Field(
+        None,
+        description="Optional list of specific SpecTask IDs to execute. "
+        "If not provided, all pending tasks will be executed.",
+    )
+
+
+class ExecuteTasksResponse(BaseModel):
+    """Response from task execution initiation."""
+
+    success: bool
+    message: str
+    tasks_created: int = 0
+    tasks_skipped: int = 0
+    ticket_id: Optional[str] = None
+    errors: List[str] = []
+
+
+class TaskExecutionStatusResponse(BaseModel):
+    """Response for task execution status."""
+
+    spec_id: str
+    total_tasks: int
+    status_counts: Dict[str, int]
+    progress: float
+    is_complete: bool
+
+
+class CriterionStatus(BaseModel):
+    """Status of an individual acceptance criterion."""
+
+    id: str
+    text: str
+    completed: bool
+
+
+class RequirementCriteriaStatus(BaseModel):
+    """Criteria status for a single requirement."""
+
+    requirement_title: str
+    total: int
+    completed: int
+    criteria: List[CriterionStatus]
+
+
+class CriteriaStatusResponse(BaseModel):
+    """Response for acceptance criteria status."""
+
+    spec_id: str
+    total_criteria: int
+    completed_criteria: int
+    completion_percentage: float
+    all_complete: bool
+    by_requirement: Dict[str, RequirementCriteriaStatus]
+
+
+@router.post("/{spec_id}/execute-tasks", response_model=ExecuteTasksResponse)
+async def execute_spec_tasks(
+    spec_id: str,
+    request: ExecuteTasksRequest = ExecuteTasksRequest(),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Execute SpecTasks via the sandbox system.
+
+    This endpoint converts SpecTasks to executable Tasks and enqueues them
+    for execution via Daytona sandboxes. The spec must have design_approved=True
+    before tasks can be executed.
+
+    Flow:
+    1. Creates/finds a bridging Ticket for the Spec
+    2. Converts pending SpecTasks to Tasks linked to that Ticket
+    3. TaskQueueService and OrchestratorWorker pick up and execute via Daytona
+    4. Task completion events update SpecTask status automatically
+
+    Args:
+        spec_id: ID of the spec whose tasks to execute
+        request: Optional specific task IDs to execute (executes all pending if omitted)
+
+    Returns:
+        ExecuteTasksResponse with creation stats and ticket ID
+    """
+    from omoi_os.services.spec_task_execution import SpecTaskExecutionService
+    from omoi_os.services.event_bus import get_event_bus
+
+    # Initialize service with event bus for completion tracking
+    event_bus = None
+    try:
+        event_bus = get_event_bus()
+    except Exception:
+        pass  # Event bus optional
+
+    service = SpecTaskExecutionService(db=db, event_bus=event_bus)
+
+    # Subscribe to completions if event bus available
+    if event_bus:
+        service.subscribe_to_completions()
+
+    # Execute tasks
+    result = await service.execute_spec_tasks(
+        spec_id=spec_id,
+        task_ids=request.task_ids,
+    )
+
+    if not result.success:
+        raise HTTPException(
+            status_code=400,
+            detail=result.message,
+        )
+
+    return ExecuteTasksResponse(
+        success=result.success,
+        message=result.message,
+        tasks_created=result.stats.tasks_created,
+        tasks_skipped=result.stats.tasks_skipped,
+        ticket_id=result.stats.ticket_id,
+        errors=result.stats.errors,
+    )
+
+
+@router.get("/{spec_id}/execution-status", response_model=TaskExecutionStatusResponse)
+async def get_execution_status(
+    spec_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Get execution status for a spec's tasks.
+
+    Returns task counts by status (pending, in_progress, completed, blocked)
+    and overall progress percentage.
+
+    Args:
+        spec_id: ID of the spec to get status for
+
+    Returns:
+        TaskExecutionStatusResponse with status counts and progress
+    """
+    from omoi_os.services.spec_task_execution import SpecTaskExecutionService
+
+    service = SpecTaskExecutionService(db=db)
+    status = await service.get_execution_status(spec_id)
+
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+
+    return TaskExecutionStatusResponse(
+        spec_id=status["spec_id"],
+        total_tasks=status["total_tasks"],
+        status_counts=status["status_counts"],
+        progress=status["progress"],
+        is_complete=status["is_complete"],
+    )
+
+
+@router.get("/{spec_id}/criteria-status", response_model=CriteriaStatusResponse)
+async def get_criteria_status(
+    spec_id: str,
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Get acceptance criteria status for a spec.
+
+    Returns completion status for all criteria organized by requirement,
+    including total counts and completion percentage.
+
+    Args:
+        spec_id: ID of the spec to get criteria status for
+
+    Returns:
+        CriteriaStatusResponse with criteria completion details
+    """
+    from omoi_os.services.spec_acceptance_validator import get_spec_acceptance_validator
+
+    validator = get_spec_acceptance_validator(db=db)
+    status = await validator.get_spec_criteria_status(spec_id)
+
+    if "error" in status:
+        raise HTTPException(status_code=404, detail=status["error"])
+
+    # Convert by_requirement dict to use RequirementCriteriaStatus model
+    by_requirement = {}
+    for req_id, req_data in status.get("by_requirement", {}).items():
+        by_requirement[req_id] = RequirementCriteriaStatus(
+            requirement_title=req_data["requirement_title"],
+            total=req_data["total"],
+            completed=req_data["completed"],
+            criteria=[
+                CriterionStatus(
+                    id=c["id"],
+                    text=c["text"],
+                    completed=c["completed"],
+                )
+                for c in req_data["criteria"]
+            ],
+        )
+
+    return CriteriaStatusResponse(
+        spec_id=status["spec_id"],
+        total_criteria=status["total_criteria"],
+        completed_criteria=status["completed_criteria"],
+        completion_percentage=status["completion_percentage"],
+        all_complete=status["all_complete"],
+        by_requirement=by_requirement,
     )

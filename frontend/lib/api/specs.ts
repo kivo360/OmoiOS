@@ -390,3 +390,81 @@ export async function listSpecVersions(
   const params = limit ? `?limit=${limit}` : ""
   return apiRequest<SpecVersionListResponse>(`/api/v1/specs/${specId}/versions${params}`)
 }
+
+// ============================================================================
+// Task Execution
+// ============================================================================
+
+export interface ExecuteTasksRequest {
+  task_ids?: string[]
+}
+
+export interface ExecuteTasksResponse {
+  success: boolean
+  message: string
+  tasks_created: number
+  tasks_skipped: number
+  ticket_id: string | null
+  errors: string[]
+}
+
+export interface ExecutionStatusResponse {
+  spec_id: string
+  total_tasks: number
+  status_counts: Record<string, number>
+  progress: number
+  is_complete: boolean
+}
+
+export interface CriteriaStatusResponse {
+  spec_id: string
+  total_criteria: number
+  completed_criteria: number
+  completion_percentage: number
+  all_complete: boolean
+  by_requirement: Record<string, {
+    requirement_title: string
+    total: number
+    completed: number
+    criteria: Array<{
+      id: string
+      text: string
+      completed: boolean
+    }>
+  }>
+}
+
+/**
+ * Execute spec tasks via sandbox system.
+ * Converts pending SpecTasks to executable Tasks and queues them for Daytona sandboxes.
+ * Requires design_approved=true on the spec.
+ */
+export async function executeSpecTasks(
+  specId: string,
+  request?: ExecuteTasksRequest
+): Promise<ExecuteTasksResponse> {
+  return apiRequest<ExecuteTasksResponse>(`/api/v1/specs/${specId}/execute-tasks`, {
+    method: "POST",
+    body: request || {},
+  })
+}
+
+/**
+ * Get execution status for a spec's tasks.
+ * Returns task counts by status and overall progress percentage.
+ */
+export async function getExecutionStatus(
+  specId: string
+): Promise<ExecutionStatusResponse> {
+  return apiRequest<ExecutionStatusResponse>(`/api/v1/specs/${specId}/execution-status`)
+}
+
+/**
+ * Get acceptance criteria status for a spec.
+ * Returns completion status for all criteria organized by requirement.
+ */
+export async function getCriteriaStatus(
+  specId: string
+): Promise<CriteriaStatusResponse> {
+  return apiRequest<CriteriaStatusResponse>(`/api/v1/specs/${specId}/criteria-status`)
+}

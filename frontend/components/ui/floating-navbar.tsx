@@ -66,7 +66,7 @@ export const FloatingNav = ({
           href="/register"
           className="relative flex items-center gap-1 rounded-full bg-landing-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-landing-accent-dark"
         >
-          <span>Get Early Access</span>
+          <span>Get Started Free</span>
           <ArrowRight className="h-3 w-3" />
         </Link>
       </motion.div>

@@ -89,7 +89,7 @@ export function StatsSection({ className }: StatsSectionProps) {
             I didn&apos;t touch a single ticket or attend a single standup.&rdquo;
           </blockquote>
           <cite className="mt-4 block text-sm text-landing-text-subtle">
-            — Early Access User, Series A Startup
+            — Engineering Lead, Series A Startup
           </cite>
         </motion.div>
       </div>

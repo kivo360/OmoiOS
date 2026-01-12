@@ -346,6 +346,10 @@ export interface TicketCreate {
   phase_id?: string
   priority?: string
   project_id?: string
+  // Workflow mode options
+  workflow_mode?: "quick" | "spec_driven"
+  generate_spec?: boolean
+  auto_spawn_sandbox?: boolean
   // Deduplication options
   check_duplicates?: boolean
   similarity_threshold?: number

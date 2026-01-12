@@ -38,7 +38,7 @@ export function HeroSection({ className }: HeroSectionProps) {
     setIsSubmitting(true)
     // Small delay for visual feedback before redirect
     setTimeout(() => {
-      router.push(`/register?email=${encodeURIComponent(email)}&source=waitlist`)
+      router.push(`/register?email=${encodeURIComponent(email)}`)
     }, 300)
   }
 
@@ -70,7 +70,7 @@ export function HeroSection({ className }: HeroSectionProps) {
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-landing-accent opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-landing-accent" />
               </span>
-              Now in Early Access
+              Now Available
             </span>
           </motion.div>
 
@@ -125,7 +125,7 @@ export function HeroSection({ className }: HeroSectionProps) {
                   <Loader2 className="h-5 w-5 animate-spin" />
                 ) : (
                   <>
-                    Join Waitlist
+                    Get Started Free
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </>
                 )}
@@ -179,7 +179,7 @@ export function HeroSection({ className }: HeroSectionProps) {
                 ))}
               </div>
               <span className="text-sm text-landing-text-muted">
-                <span className="font-semibold text-landing-text">500+</span> engineers on the waitlist
+                Trusted by <span className="font-semibold text-landing-text">500+</span> engineers
               </span>
             </div>
           </motion.div>

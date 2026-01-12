@@ -11,14 +11,9 @@ import { cn } from "@/lib/utils"
 
 const faqs = [
   {
-    question: "When does OmoiOS launch?",
-    answer:
-      "We're launching in January 2025. Founding members get immediate early access to start using OmoiOS before the public launch.",
-  },
-  {
     question: "How does billing work?",
     answer:
-      "Founding members pay a one-time fee for lifetime access with 5 concurrent agents included. After launch, we'll offer monthly subscriptions starting at $50/month for Pro. Pro and above can bring your own API keys to bypass usage limits.",
+      "Start free with 1 concurrent agent. Pro is $50/month with 5 concurrent agents. Team is $200/month with 10 agents. Pro and above can bring your own API keys to bypass usage limits.",
   },
   {
     question: "What are concurrent agents?",
@@ -28,12 +23,12 @@ const faqs = [
   {
     question: "What if it doesn't work for my use case?",
     answer:
-      "We offer a 30-day money-back guarantee for founding members. If OmoiOS doesn't work for your workflow, we'll refund you—no questions asked.",
+      "We offer a 30-day money-back guarantee for paid plans. If OmoiOS doesn't work for your workflow, we'll refund you—no questions asked.",
   },
   {
     question: "What is 'Bring Your Own API Keys'?",
     answer:
-      "Pro and Team users can connect their own LLM API keys (OpenAI, Anthropic, etc.). You pay the LLM provider directly for tokens, which lets you run unlimited workflows without worrying about our usage caps. Founding members get early access to this feature.",
+      "Pro and Team users can connect their own LLM API keys (OpenAI, Anthropic, etc.). You pay the LLM provider directly for tokens, which lets you run unlimited workflows without worrying about our usage caps.",
   },
   {
     question: "Is my code safe?",

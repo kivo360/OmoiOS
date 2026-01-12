@@ -69,6 +69,9 @@ import {
   useDeleteRequirement,
   useAddCriterion,
   useSpecVersions,
+  useExecuteSpecTasks,
+  useExecutionStatus,
+  useCriteriaStatus,
 } from "@/hooks/useSpecs"
 import { useProject } from "@/hooks/useProjects"
 import {
@@ -136,6 +139,17 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const { data: allSpecs } = useProjectSpecs(projectId)
   const { data: versionsData } = useSpecVersions(specId, 10)
 
+  // Execution status - poll every 5s when executing
+  const isExecuting = spec?.status === "executing"
+  const { data: executionStatus } = useExecutionStatus(specId, {
+    enabled: isExecuting,
+    refetchInterval: isExecuting ? 5000 : false,
+  })
+  const { data: criteriaStatus } = useCriteriaStatus(specId, {
+    enabled: isExecuting,
+    refetchInterval: isExecuting ? 5000 : false,
+  })
+
   // Mutations
   const approveReqMutation = useApproveRequirements(specId)
   const approveDesignMutation = useApproveDesign(specId)
@@ -145,6 +159,7 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const deleteTaskMutation = useDeleteTask(specId)
   const deleteRequirementMutation = useDeleteRequirement(specId)
   const addCriterionMutation = useAddCriterion(specId, addCriterionOpen || "")
+  const executeTasksMutation = useExecuteSpecTasks(specId)
 
   // Derive spec display data from API response with safe defaults
   const specData = useMemo(() => ({
@@ -292,6 +307,19 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
       toast.success("Task deleted!")
     } catch {
       toast.error("Failed to delete task")
+    }
+  }
+
+  const handleExecuteTasks = async () => {
+    try {
+      const result = await executeTasksMutation.mutateAsync(undefined)
+      if (result.success) {
+        toast.success(`Execution started! ${result.tasks_created} task(s) queued.`)
+      } else {
+        toast.error(result.message)
+      }
+    } catch {
+      toast.error("Failed to execute tasks")
     }
   }
 
@@ -1291,83 +1319,193 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
             {/* Execution Tab */}
             <TabsContent value="execution" className="m-0 p-6">
               <div className="space-y-6">
-                <div>
-                  <h2 className="text-lg font-semibold">Execution Progress</h2>
-                  <p className="text-sm text-muted-foreground">
-                    Real-time execution status and metrics
-                  </p>
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold">Execution Progress</h2>
+                    <p className="text-sm text-muted-foreground">
+                      Real-time execution status and metrics
+                    </p>
+                  </div>
+                  {/* Execute Tasks Button - Only enabled after design is approved */}
+                  <Button
+                    onClick={handleExecuteTasks}
+                    disabled={executeTasksMutation.isPending || isExecuting || tasks.length === 0}
+                  >
+                    {executeTasksMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Starting...
+                      </>
+                    ) : isExecuting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Executing...
+                      </>
+                    ) : (
+                      <>
+                        <Play className="mr-2 h-4 w-4" />
+                        Execute Tasks
+                      </>
+                    )}
+                  </Button>
                 </div>
 
-                {!execution ? (
+                {/* Progress Overview - Always show when we have execution status */}
+                {(executionStatus || execution) && (
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">Task Progress</p>
+                          <p className="text-2xl font-bold">
+                            {executionStatus?.progress ?? execution?.overall_progress ?? 0}%
+                          </p>
+                          <Progress value={executionStatus?.progress ?? execution?.overall_progress ?? 0} />
+                          {executionStatus && (
+                            <p className="text-xs text-muted-foreground">
+                              {executionStatus.total_tasks} total tasks
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">Criteria Met</p>
+                          <p className="text-2xl font-bold">
+                            {criteriaStatus?.completion_percentage?.toFixed(0) ?? execution?.test_coverage ?? 0}%
+                          </p>
+                          {criteriaStatus && (
+                            <p className="text-xs text-muted-foreground">
+                              {criteriaStatus.completed_criteria}/{criteriaStatus.total_criteria} criteria
+                            </p>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">Active Agents</p>
+                          <p className="text-2xl font-bold">{execution?.active_agents ?? 0}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {execution?.commits ?? 0} commits
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4">
+                        <div className="space-y-2">
+                          <p className="text-sm text-muted-foreground">Lines Changed</p>
+                          <p className="text-2xl font-bold font-mono">
+                            <span className="text-green-600">+{execution?.lines_added ?? 0}</span>
+                            {" / "}
+                            <span className="text-red-600">-{execution?.lines_removed ?? 0}</span>
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Task Status Breakdown */}
+                {executionStatus && executionStatus.status_counts && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Task Status</CardTitle>
+                      <CardDescription>Breakdown by execution status</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-3 md:grid-cols-4">
+                        {Object.entries(executionStatus.status_counts).map(([status, count]) => {
+                          const statusInfo = statusConfig[status as keyof typeof statusConfig] || statusConfig.pending
+                          const StatusIcon = statusInfo.icon
+                          return (
+                            <div key={status} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                              <StatusIcon className={`h-4 w-4 ${status === "in_progress" ? "animate-spin" : ""}`} />
+                              <span className="capitalize text-sm">{status.replace("_", " ")}</span>
+                              <Badge variant="outline" className="ml-auto">{count}</Badge>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      {executionStatus.is_complete && (
+                        <div className="mt-4 p-3 rounded-md bg-green-500/10 border border-green-500/20">
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <CheckCircle className="h-4 w-4" />
+                            <span className="font-medium">All tasks completed!</span>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Acceptance Criteria Progress */}
+                {criteriaStatus && criteriaStatus.by_requirement && Object.keys(criteriaStatus.by_requirement).length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base">Acceptance Criteria</CardTitle>
+                      <CardDescription>
+                        {criteriaStatus.completed_criteria}/{criteriaStatus.total_criteria} criteria validated
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {Object.entries(criteriaStatus.by_requirement).map(([reqId, reqData]) => (
+                          <div key={reqId} className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <span className="text-sm font-medium">{reqData.requirement_title}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {reqData.completed}/{reqData.total}
+                              </span>
+                            </div>
+                            <Progress value={(reqData.completed / reqData.total) * 100} className="h-1.5" />
+                            <div className="space-y-1">
+                              {reqData.criteria.map((c) => (
+                                <div key={c.id} className="flex items-center gap-2 text-xs">
+                                  <div className={`h-3 w-3 rounded-full flex items-center justify-center ${
+                                    c.completed ? "bg-green-500" : "bg-muted"
+                                  }`}>
+                                    {c.completed && <Check className="h-2 w-2 text-white" />}
+                                  </div>
+                                  <span className={c.completed ? "text-muted-foreground line-through" : ""}>
+                                    {c.text}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {criteriaStatus.all_complete && (
+                        <div className="mt-4 p-3 rounded-md bg-green-500/10 border border-green-500/20">
+                          <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                            <CheckCircle className="h-4 w-4" />
+                            <span className="font-medium">All acceptance criteria met!</span>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Empty State */}
+                {!execution && !executionStatus && (
                   <Card>
                     <CardContent className="p-6 text-center text-muted-foreground">
                       <Play className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p>No execution data yet</p>
-                      <p className="text-sm mt-2">Execution metrics will appear once agents start working on tasks.</p>
+                      <p className="text-sm mt-2">
+                        {tasks.length === 0
+                          ? "Add tasks to the spec before executing."
+                          : "Click \"Execute Tasks\" to start running tasks in sandbox environments."
+                        }
+                      </p>
                     </CardContent>
                   </Card>
-                ) : (
-                  <>
-                    {/* Progress Overview */}
-                    <div className="grid gap-4 md:grid-cols-4">
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            <p className="text-sm text-muted-foreground">Overall Progress</p>
-                            <p className="text-2xl font-bold">{execution.overall_progress || 0}%</p>
-                            <Progress value={execution.overall_progress || 0} />
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            <p className="text-sm text-muted-foreground">Test Coverage</p>
-                            <p className="text-2xl font-bold">{execution.test_coverage || 0}%</p>
-                            <p className="text-xs text-muted-foreground">
-                              {execution.tests_passing || 0}/{execution.tests_total || 0} passing
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            <p className="text-sm text-muted-foreground">Active Agents</p>
-                            <p className="text-2xl font-bold">{execution.active_agents || 0}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {execution.commits || 0} commits
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card>
-                        <CardContent className="p-4">
-                          <div className="space-y-2">
-                            <p className="text-sm text-muted-foreground">Lines Changed</p>
-                            <p className="text-2xl font-bold font-mono">
-                              <span className="text-green-600">+{execution.lines_added || 0}</span>
-                              {" / "}
-                              <span className="text-red-600">-{execution.lines_removed || 0}</span>
-                            </p>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-
-                    {/* Running Tasks info */}
-                    <Card>
-                      <CardHeader>
-                        <CardTitle className="text-base">Running Tasks</CardTitle>
-                        <CardDescription>Currently executing tasks</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="text-center text-sm text-muted-foreground py-4">
-                          Task progress details will show here when agents are working.
-                        </p>
-                      </CardContent>
-                    </Card>
-                  </>
                 )}
 
                 {/* Quick Actions */}

@@ -1,4 +1,42 @@
-"""Worker service for executing tasks."""
+"""Worker service for executing tasks.
+
+.. deprecated:: 2025-01
+    This module is DEPRECATED and should not be used for new development.
+
+    **Current architecture (use instead):**
+    Task execution now uses Daytona sandboxes via ``orchestrator_worker.py``:
+    - ``omoi_os/workers/orchestrator_worker.py`` - Orchestrates task execution
+    - ``omoi_os/services/daytona_spawner.py`` - Spawns sandboxes for tasks
+
+    **Why this is deprecated:**
+    This worker uses the legacy ``AgentExecutor`` which wraps OpenHands SDK
+    for local execution. The new architecture provides better:
+    - Isolation via Daytona sandboxes
+    - Resource management
+    - Security boundaries
+    - Scalability
+
+    **Migration:**
+    Instead of running this worker directly, use:
+    - ``OrchestratorWorker`` from ``omoi_os/workers/orchestrator_worker.py``
+    - Set ``DAYTONA_SANDBOX_EXECUTION=true`` for sandbox mode
+
+    **Code that should use the new system:**
+    - SpecTaskExecutionService creates Tasks that are picked up by OrchestratorWorker
+    - TaskQueueService remains the same - it's the worker that changed
+
+    This module is kept for backwards compatibility and testing only.
+"""
+
+import warnings
+
+warnings.warn(
+    "omoi_os.worker is deprecated. Use omoi_os.workers.orchestrator_worker instead. "
+    "This module uses legacy AgentExecutor for local execution. "
+    "New tasks should use Daytona sandboxes via OrchestratorWorker.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 import asyncio
 import os
