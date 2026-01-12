@@ -217,6 +217,16 @@ export function RepoSelectStep() {
           </>
         )}
       </Button>
+
+      {/* Skip option */}
+      <Button
+        variant="ghost"
+        onClick={nextStep}
+        disabled={onboardingLoading}
+        className="w-full text-muted-foreground"
+      >
+        Skip for now - I&apos;ll select a repo later
+      </Button>
     </div>
   )
 }
