@@ -92,6 +92,18 @@ export function GitHubStep() {
           text="Disconnect anytime in settings"
         />
       </div>
+
+      {/* Skip option */}
+      <div className="pt-4 border-t">
+        <Button
+          variant="ghost"
+          onClick={nextStep}
+          disabled={isLoading}
+          className="w-full text-muted-foreground"
+        >
+          Skip for now - I&apos;ll connect later
+        </Button>
+      </div>
     </div>
   )
 }
