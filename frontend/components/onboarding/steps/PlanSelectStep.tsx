@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   Check,
   Crown,
@@ -13,11 +14,15 @@ import {
   Loader2,
   Sparkles,
   Clock,
+  Tag,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react"
 import { useOnboarding } from "@/hooks/useOnboarding"
 import { cn } from "@/lib/utils"
-import { useCreateLifetimeCheckout, useStripeConfig } from "@/hooks/useBilling"
+import { useCreateLifetimeCheckout, useStripeConfig, useValidatePromoCode, useRedeemPromoCode } from "@/hooks/useBilling"
 import { useToast } from "@/hooks/use-toast"
+import type { PromoCode } from "@/lib/api/types"
 
 interface PlanOption {
   id: string
@@ -87,12 +92,92 @@ export function PlanSelectStep() {
   const [selectedPlan, setSelectedPlan] = useState<string>(data.selectedPlan || "free")
   const [isProcessing, setIsProcessing] = useState(false)
 
+  // Promo code state
+  const [promoCode, setPromoCode] = useState("")
+  const [showPromoInput, setShowPromoInput] = useState(false)
+  const [validatedPromo, setValidatedPromo] = useState<PromoCode | null>(null)
+  const [promoError, setPromoError] = useState<string | null>(null)
+
   const createLifetimeCheckout = useCreateLifetimeCheckout()
   const { data: stripeConfig } = useStripeConfig()
+  const validatePromoCode = useValidatePromoCode()
+  const redeemPromoCode = useRedeemPromoCode()
 
   const handleSelectPlan = (planId: string) => {
     setSelectedPlan(planId)
     updateData({ selectedPlan: planId })
+  }
+
+  const handleValidatePromo = async () => {
+    if (!promoCode.trim()) return
+
+    setPromoError(null)
+    try {
+      const result = await validatePromoCode.mutateAsync({ code: promoCode.trim().toUpperCase() })
+      if (result.valid && result.promo_code) {
+        setValidatedPromo(result.promo_code)
+        toast({
+          title: "Promo code valid!",
+          description: result.message,
+        })
+      } else {
+        setPromoError(result.message)
+        setValidatedPromo(null)
+      }
+    } catch {
+      setPromoError("Failed to validate promo code")
+      setValidatedPromo(null)
+    }
+  }
+
+  const handleRedeemPromo = async () => {
+    const orgId = data.organizationId
+    if (!orgId || !validatedPromo) return
+
+    setIsProcessing(true)
+    try {
+      const result = await redeemPromoCode.mutateAsync({
+        orgId,
+        data: { code: validatedPromo.code },
+      })
+
+      if (result.success) {
+        toast({
+          title: "Promo code applied!",
+          description: result.tier_granted
+            ? `You now have ${result.tier_granted} access!`
+            : result.message,
+        })
+
+        // Update the selected plan based on what was granted
+        if (result.tier_granted) {
+          updateData({ selectedPlan: result.tier_granted })
+        }
+
+        // Continue to next step
+        nextStep()
+      } else {
+        toast({
+          title: "Error",
+          description: result.message,
+          variant: "destructive",
+        })
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to redeem promo code. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const clearPromo = () => {
+    setPromoCode("")
+    setValidatedPromo(null)
+    setPromoError(null)
   }
 
   const handleContinue = async () => {
@@ -149,7 +234,7 @@ export function PlanSelectStep() {
     nextStep()
   }
 
-  const isLoading = onboardingLoading || isProcessing || createLifetimeCheckout.isPending
+  const isLoading = onboardingLoading || isProcessing || createLifetimeCheckout.isPending || redeemPromoCode.isPending
 
   return (
     <div className="space-y-6">
@@ -189,41 +274,145 @@ export function PlanSelectStep() {
         ))}
       </div>
 
+      {/* Promo Code Section */}
+      <div className="border-t pt-4">
+        {!showPromoInput && !validatedPromo ? (
+          <button
+            type="button"
+            onClick={() => setShowPromoInput(true)}
+            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-2 transition-colors"
+          >
+            <Tag className="h-4 w-4" />
+            Have a promo code?
+          </button>
+        ) : validatedPromo ? (
+          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                <div>
+                  <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                    {validatedPromo.code}
+                  </p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-500">
+                    {validatedPromo.discount_type === "full_bypass" && validatedPromo.grant_tier
+                      ? `Grants ${validatedPromo.grant_tier} access${validatedPromo.grant_duration_months ? ` for ${validatedPromo.grant_duration_months} months` : ""}`
+                      : validatedPromo.discount_type === "percentage"
+                      ? `${validatedPromo.discount_value}% off`
+                      : validatedPromo.description || "Valid promo code"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearPromo}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <XCircle className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter promo code"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === "Enter" && handleValidatePromo()}
+                disabled={validatePromoCode.isPending}
+                className="flex-1 uppercase"
+              />
+              <Button
+                onClick={handleValidatePromo}
+                disabled={!promoCode.trim() || validatePromoCode.isPending}
+                variant="outline"
+              >
+                {validatePromoCode.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  "Apply"
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => {
+                  setShowPromoInput(false)
+                  clearPromo()
+                }}
+              >
+                <XCircle className="h-4 w-4" />
+              </Button>
+            </div>
+            {promoError && (
+              <p className="text-sm text-destructive flex items-center gap-1">
+                <XCircle className="h-4 w-4" />
+                {promoError}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Action buttons */}
       <div className="space-y-3">
-        <Button
-          size="lg"
-          onClick={handleContinue}
-          disabled={isLoading}
-          className={cn(
-            "w-full",
-            selectedPlan === "lifetime" && "bg-emerald-600 hover:bg-emerald-700"
-          )}
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Processing...
-            </>
-          ) : selectedPlan === "free" ? (
-            <>
-              Continue with Free
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </>
-          ) : selectedPlan === "lifetime" ? (
-            <>
-              Claim Founding Member Access
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </>
-          ) : (
-            <>
-              Upgrade to {PLANS.find(p => p.id === selectedPlan)?.name}
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </>
-          )}
-        </Button>
+        {validatedPromo ? (
+          // Show redeem button when promo code is validated
+          <Button
+            size="lg"
+            onClick={handleRedeemPromo}
+            disabled={isLoading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700"
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Applying...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="mr-2 h-5 w-5" />
+                Redeem {validatedPromo.code} &amp; Continue
+              </>
+            )}
+          </Button>
+        ) : (
+          <Button
+            size="lg"
+            onClick={handleContinue}
+            disabled={isLoading}
+            className={cn(
+              "w-full",
+              selectedPlan === "lifetime" && "bg-emerald-600 hover:bg-emerald-700"
+            )}
+          >
+            {isLoading ? (
+              <>
+                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                Processing...
+              </>
+            ) : selectedPlan === "free" ? (
+              <>
+                Continue with Free
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </>
+            ) : selectedPlan === "lifetime" ? (
+              <>
+                Claim Founding Member Access
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </>
+            ) : (
+              <>
+                Upgrade to {PLANS.find(p => p.id === selectedPlan)?.name}
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </>
+            )}
+          </Button>
+        )}
 
-        {selectedPlan !== "free" && (
+        {selectedPlan !== "free" && !validatedPromo && (
           <Button
             variant="ghost"
             onClick={handleSkip}

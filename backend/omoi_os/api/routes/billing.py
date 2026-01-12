@@ -25,6 +25,8 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.stripe_service import get_stripe_service, StripeService
 from omoi_os.services.subscription_service import SubscriptionService, get_subscription_service
 from omoi_os.models.subscription import SubscriptionTier
+from omoi_os.models.promo_code import PromoCode, PromoCodeRedemption, PromoCodeType
+from omoi_os.utils.datetime import utc_now
 
 logger = logging.getLogger(__name__)
 
@@ -263,6 +265,77 @@ class CostRecordResponse(BaseModel):
     completion_cost: float
     total_cost: float
     recorded_at: Optional[datetime]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ========== Promo Code Models ==========
+
+class PromoCodeValidateRequest(BaseModel):
+    """Request to validate a promo code."""
+    code: str = Field(..., min_length=1, max_length=50, description="Promo code to validate")
+
+
+class PromoCodeValidateResponse(BaseModel):
+    """Response for promo code validation."""
+    valid: bool
+    code: str
+    discount_type: Optional[str] = None
+    discount_value: Optional[int] = None
+    grant_tier: Optional[str] = None
+    grant_duration_months: Optional[int] = None
+    description: Optional[str] = None
+    message: str
+
+
+class PromoCodeRedeemRequest(BaseModel):
+    """Request to redeem a promo code."""
+    code: str = Field(..., min_length=1, max_length=50, description="Promo code to redeem")
+
+
+class PromoCodeRedeemResponse(BaseModel):
+    """Response for promo code redemption."""
+    success: bool
+    code: str
+    discount_type: Optional[str] = None
+    tier_granted: Optional[str] = None
+    duration_months_granted: Optional[int] = None
+    message: str
+
+
+class PromoCodeCreateRequest(BaseModel):
+    """Request to create a promo code (admin only)."""
+    code: str = Field(..., min_length=3, max_length=50, description="Unique promo code")
+    description: Optional[str] = Field(None, max_length=500)
+    discount_type: str = Field("full_bypass", description="percentage, fixed_amount, full_bypass, trial_extension")
+    discount_value: int = Field(0, ge=0, description="Percentage (0-100) or cents for fixed amount")
+    trial_days: Optional[int] = Field(None, ge=1, le=365)
+    max_uses: Optional[int] = Field(None, ge=1)
+    valid_until: Optional[datetime] = None
+    applicable_tiers: Optional[list[str]] = None
+    grant_tier: Optional[str] = Field(None, description="Tier to grant for full_bypass codes (pro, team, etc)")
+    grant_duration_months: Optional[int] = Field(None, ge=1, le=36, description="Duration in months (null = lifetime)")
+
+
+class PromoCodeResponse(BaseModel):
+    """Response model for promo code."""
+    id: str
+    code: str
+    description: Optional[str]
+    discount_type: str
+    discount_value: int
+    trial_days: Optional[int]
+    max_uses: Optional[int]
+    current_uses: int
+    uses_remaining: Optional[int]
+    valid_from: datetime
+    valid_until: Optional[datetime]
+    applicable_tiers: Optional[list[str]]
+    grant_tier: Optional[str]
+    grant_duration_months: Optional[int]
+    is_active: bool
+    is_valid: bool
+    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -556,6 +629,322 @@ async def reactivate_subscription(
 
     subscription_service.reactivate_subscription(subscription.id)
     return {"status": "success", "message": "Subscription reactivated"}
+
+
+# ========== Promo Code Endpoints ==========
+
+@router.post("/promo-codes/validate", response_model=PromoCodeValidateResponse)
+async def validate_promo_code(
+    request: PromoCodeValidateRequest,
+    db: DatabaseService = Depends(get_database_service),
+):
+    """
+    Validate a promo code without redeeming it.
+
+    Checks if the code exists, is active, and hasn't exceeded usage limits.
+    """
+    from sqlalchemy import select
+
+    code = request.code.strip().upper()
+
+    with db.get_session() as sess:
+        result = sess.execute(
+            select(PromoCode).where(PromoCode.code == code)
+        )
+        promo_code = result.scalar_one_or_none()
+
+        if not promo_code:
+            return PromoCodeValidateResponse(
+                valid=False,
+                code=code,
+                message="Invalid promo code"
+            )
+
+        if not promo_code.is_valid:
+            if not promo_code.is_active:
+                message = "This promo code is no longer active"
+            elif promo_code.max_uses and promo_code.current_uses >= promo_code.max_uses:
+                message = "This promo code has reached its usage limit"
+            elif promo_code.valid_until and utc_now() > promo_code.valid_until:
+                message = "This promo code has expired"
+            else:
+                message = "This promo code is not valid"
+
+            return PromoCodeValidateResponse(
+                valid=False,
+                code=code,
+                message=message
+            )
+
+        # Code is valid
+        return PromoCodeValidateResponse(
+            valid=True,
+            code=code,
+            discount_type=promo_code.discount_type,
+            discount_value=promo_code.discount_value,
+            grant_tier=promo_code.grant_tier,
+            grant_duration_months=promo_code.grant_duration_months,
+            description=promo_code.description,
+            message="Promo code is valid!"
+        )
+
+
+@router.post("/account/{organization_id}/promo-codes/redeem", response_model=PromoCodeRedeemResponse)
+async def redeem_promo_code(
+    organization_id: UUID,
+    request: PromoCodeRedeemRequest,
+    db: DatabaseService = Depends(get_database_service),
+    billing_service: BillingService = Depends(get_billing_service_dep),
+    subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
+):
+    """
+    Redeem a promo code for an organization.
+
+    For full_bypass codes, this will create a subscription at the granted tier.
+    For discount codes, the discount will be applied to the next checkout.
+    """
+    from sqlalchemy import select
+    from uuid import uuid4
+
+    code = request.code.strip().upper()
+
+    with db.get_session() as sess:
+        # Get promo code
+        result = sess.execute(
+            select(PromoCode).where(PromoCode.code == code)
+        )
+        promo_code = result.scalar_one_or_none()
+
+        if not promo_code:
+            return PromoCodeRedeemResponse(
+                success=False,
+                code=code,
+                message="Invalid promo code"
+            )
+
+        if not promo_code.is_valid:
+            return PromoCodeRedeemResponse(
+                success=False,
+                code=code,
+                message="This promo code is not valid or has expired"
+            )
+
+        # Get billing account
+        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+
+        # Check if user already redeemed this code
+        existing_redemption = sess.execute(
+            select(PromoCodeRedemption).where(
+                PromoCodeRedemption.promo_code_id == promo_code.id,
+                PromoCodeRedemption.organization_id == organization_id
+            )
+        ).scalar_one_or_none()
+
+        if existing_redemption:
+            return PromoCodeRedeemResponse(
+                success=False,
+                code=code,
+                message="You have already redeemed this promo code"
+            )
+
+        # Handle full_bypass codes - create/upgrade subscription
+        if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value:
+            grant_tier = promo_code.grant_tier or "pro"  # Default to pro
+
+            # Check for existing subscription
+            existing = subscription_service.get_subscription(organization_id, session=sess)
+
+            if existing:
+                # Upgrade existing subscription
+                try:
+                    tier_enum = SubscriptionTier(grant_tier)
+                    existing.upgrade_to_tier(tier_enum)
+                    sess.add(existing)
+                except ValueError:
+                    logger.error(f"Invalid grant_tier: {grant_tier}")
+                    return PromoCodeRedeemResponse(
+                        success=False,
+                        code=code,
+                        message="Invalid subscription tier configured for this code"
+                    )
+            else:
+                # Create new subscription
+                try:
+                    tier_enum = SubscriptionTier(grant_tier)
+                    subscription_service.create_subscription(
+                        organization_id=organization_id,
+                        billing_account_id=account.id,
+                        tier=tier_enum,
+                        session=sess,
+                    )
+                except ValueError:
+                    logger.error(f"Invalid grant_tier: {grant_tier}")
+                    return PromoCodeRedeemResponse(
+                        success=False,
+                        code=code,
+                        message="Invalid subscription tier configured for this code"
+                    )
+
+        # Record the redemption
+        redemption = PromoCodeRedemption(
+            id=uuid4(),
+            promo_code_id=promo_code.id,
+            user_id=account.organization_id,  # This should be actual user_id if available
+            organization_id=organization_id,
+            discount_type_applied=promo_code.discount_type,
+            discount_value_applied=promo_code.discount_value,
+            tier_granted=promo_code.grant_tier if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
+            duration_months_granted=promo_code.grant_duration_months if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
+        )
+        sess.add(redemption)
+
+        # Increment usage count
+        promo_code.redeem()
+
+        sess.commit()
+
+        logger.info(f"Promo code {code} redeemed for org {organization_id} (type: {promo_code.discount_type})")
+
+        # Build success message
+        if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value:
+            tier_name = promo_code.grant_tier.title() if promo_code.grant_tier else "Pro"
+            if promo_code.grant_duration_months:
+                message = f"Success! You now have {tier_name} access for {promo_code.grant_duration_months} months"
+            else:
+                message = f"Success! You now have lifetime {tier_name} access"
+        elif promo_code.discount_type == PromoCodeType.PERCENTAGE.value:
+            message = f"Success! {promo_code.discount_value}% discount applied to your account"
+        elif promo_code.discount_type == PromoCodeType.FIXED_AMOUNT.value:
+            message = f"Success! ${promo_code.discount_value / 100:.2f} credit applied to your account"
+        elif promo_code.discount_type == PromoCodeType.TRIAL_EXTENSION.value:
+            message = f"Success! Your trial has been extended by {promo_code.trial_days} days"
+        else:
+            message = "Promo code successfully applied!"
+
+        return PromoCodeRedeemResponse(
+            success=True,
+            code=code,
+            discount_type=promo_code.discount_type,
+            tier_granted=promo_code.grant_tier if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
+            duration_months_granted=promo_code.grant_duration_months if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
+            message=message
+        )
+
+
+@router.post("/promo-codes", response_model=PromoCodeResponse)
+async def create_promo_code(
+    request: PromoCodeCreateRequest,
+    db: DatabaseService = Depends(get_database_service),
+):
+    """
+    Create a new promo code (admin only).
+
+    TODO: Add proper admin authentication check.
+    """
+    from sqlalchemy import select
+    from uuid import uuid4
+
+    code = request.code.strip().upper()
+
+    with db.get_session() as sess:
+        # Check if code already exists
+        existing = sess.execute(
+            select(PromoCode).where(PromoCode.code == code)
+        ).scalar_one_or_none()
+
+        if existing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Promo code '{code}' already exists"
+            )
+
+        # Validate discount type
+        try:
+            PromoCodeType(request.discount_type)
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid discount_type. Must be one of: {[t.value for t in PromoCodeType]}"
+            )
+
+        # Create promo code
+        promo_code = PromoCode(
+            id=uuid4(),
+            code=code,
+            description=request.description,
+            discount_type=request.discount_type,
+            discount_value=request.discount_value,
+            trial_days=request.trial_days,
+            max_uses=request.max_uses,
+            valid_until=request.valid_until,
+            applicable_tiers=request.applicable_tiers,
+            grant_tier=request.grant_tier,
+            grant_duration_months=request.grant_duration_months,
+            is_active=True,
+        )
+
+        sess.add(promo_code)
+        sess.commit()
+        sess.refresh(promo_code)
+
+        logger.info(f"Created promo code: {code} (type: {request.discount_type})")
+
+        return PromoCodeResponse(**promo_code.to_dict())
+
+
+@router.get("/promo-codes", response_model=list[PromoCodeResponse])
+async def list_promo_codes(
+    active_only: bool = True,
+    db: DatabaseService = Depends(get_database_service),
+):
+    """
+    List all promo codes (admin only).
+
+    TODO: Add proper admin authentication check.
+    """
+    from sqlalchemy import select
+
+    with db.get_session() as sess:
+        query = select(PromoCode).order_by(PromoCode.created_at.desc())
+
+        if active_only:
+            query = query.where(PromoCode.is_active == True)
+
+        result = sess.execute(query)
+        codes = result.scalars().all()
+
+        return [PromoCodeResponse(**code.to_dict()) for code in codes]
+
+
+@router.delete("/promo-codes/{code}")
+async def deactivate_promo_code(
+    code: str,
+    db: DatabaseService = Depends(get_database_service),
+):
+    """
+    Deactivate a promo code (admin only).
+
+    TODO: Add proper admin authentication check.
+    """
+    from sqlalchemy import select
+
+    code = code.strip().upper()
+
+    with db.get_session() as sess:
+        result = sess.execute(
+            select(PromoCode).where(PromoCode.code == code)
+        )
+        promo_code = result.scalar_one_or_none()
+
+        if not promo_code:
+            raise HTTPException(status_code=404, detail="Promo code not found")
+
+        promo_code.is_active = False
+        sess.commit()
+
+        logger.info(f"Deactivated promo code: {code}")
+
+        return {"status": "success", "message": f"Promo code '{code}' deactivated"}
 
 
 # ========== Subscription Checkout ==========
