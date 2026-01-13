@@ -18,7 +18,7 @@ const SUGGESTION_CHIPS = [
 ]
 
 export function FirstSpecStep() {
-  const { data, submitFirstSpec, isLoading, error, clearError } = useOnboarding()
+  const { data, submitFirstSpec, isLoading, error, clearError, nextStep } = useOnboarding()
   const [specText, setSpecText] = useState(data.firstSpecText || "")
 
   const handleSubmit = async () => {
@@ -133,6 +133,16 @@ export function FirstSpecStep() {
             <ArrowRight className="ml-2 h-5 w-5" />
           </>
         )}
+      </Button>
+
+      {/* Skip option */}
+      <Button
+        variant="ghost"
+        onClick={nextStep}
+        disabled={isLoading}
+        className="w-full text-muted-foreground"
+      >
+        Skip for now - I&apos;ll create a spec later
       </Button>
     </div>
   )
