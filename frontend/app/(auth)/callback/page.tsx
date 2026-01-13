@@ -22,23 +22,47 @@ function CallbackContent() {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Check for error from OAuth provider
-      const error = searchParams.get("error")
-      if (error) {
-        setStatus("error")
-        setErrorMessage(error.replace(/_/g, " "))
-        setTimeout(() => router.push(`/login?error=${error}`), 3000)
-        return
-      }
-
-      // Get tokens from URL
-      const accessToken = searchParams.get("access_token")
-      const refreshToken = searchParams.get("refresh_token")
+      // Check if this is a "connect" callback (linking GitHub to existing user)
+      const isConnect = searchParams.get("connect") === "true"
+      const connected = searchParams.get("connected") === "true"
+      const username = searchParams.get("username")
       const providerName = searchParams.get("provider")
 
       if (providerName) {
         setProvider(providerName)
       }
+
+      // Check for error from OAuth provider
+      const error = searchParams.get("error")
+      if (error) {
+        setStatus("error")
+        setErrorMessage(error.replace(/_/g, " "))
+        const redirectPath = isConnect ? "/onboarding?step=github&error=connect_failed" : `/login?error=${error}`
+        setTimeout(() => router.push(redirectPath), 3000)
+        return
+      }
+
+      // Handle "connect" flow (linking GitHub to existing account during onboarding)
+      if (isConnect && connected) {
+        // GitHub was successfully connected to the current user
+        // Invalidate queries to refresh connection status
+        queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] })
+        queryClient.invalidateQueries({ queryKey: ["github-repos"] })
+
+        setStatus("success")
+
+        // Redirect back to onboarding repo selection step
+        const redirectUrl = username
+          ? `/onboarding?step=repo&github_connected=true&github_username=${username}`
+          : "/onboarding?step=repo&github_connected=true"
+        setTimeout(() => router.push(redirectUrl), 1500)
+        return
+      }
+
+      // Regular OAuth login flow
+      // Get tokens from URL
+      const accessToken = searchParams.get("access_token")
+      const refreshToken = searchParams.get("refresh_token")
 
       if (!accessToken || !refreshToken) {
         setStatus("error")
@@ -56,11 +80,11 @@ function CallbackContent() {
 
         // Update auth context
         login(user)
-        
+
         // Invalidate OAuth-related queries to refresh connection status
         queryClient.invalidateQueries({ queryKey: ["oauth", "connected"] })
         queryClient.invalidateQueries({ queryKey: ["github-repos"] })
-        
+
         setStatus("success")
 
         // Redirect to main app after brief success display

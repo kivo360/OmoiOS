@@ -415,12 +415,74 @@ async def connect_provider(
     Start OAuth flow to connect a provider to the current user's account.
 
     Returns the authorization URL - the frontend should redirect the user to this URL.
+
+    IMPORTANT: This uses a special "connect" flow that ensures the OAuth provider
+    is linked to the CURRENT authenticated user, not matched by email. This prevents
+    the issue where connecting GitHub to a new account would redirect to an old account
+    that shares the same GitHub email.
     """
     try:
-        auth_url, state = oauth_service.get_auth_url(provider)
+        # Use get_connect_auth_url which stores user_id in state
+        auth_url, state = oauth_service.get_connect_auth_url(provider, current_user.id)
         return AuthUrlResponse(auth_url=auth_url, state=state)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/oauth/{provider}/connect-callback")
+async def oauth_connect_callback(
+    provider: str,
+    code: str = Query(...),
+    state: str = Query(...),
+    error: Optional[str] = Query(None),
+    error_description: Optional[str] = Query(None),
+    oauth_service: OAuthService = Depends(get_oauth_service),
+):
+    """
+    Handle OAuth callback for connecting a provider to an existing user.
+
+    This is different from the regular oauth_callback because it links the
+    provider to the user_id stored in the state, rather than matching by email.
+    This allows the same GitHub account to be connected to different OmoiOS users.
+    """
+    settings = get_app_settings().auth
+    frontend_url = settings.oauth_redirect_uri
+
+    # Handle OAuth error
+    if error:
+        error_msg = error_description or error
+        return RedirectResponse(url=f"{frontend_url}?error={error_msg}&connect=true")
+
+    # Verify state and get user_id
+    user_id = oauth_service.verify_connect_state(state, provider)
+    if not user_id:
+        return RedirectResponse(url=f"{frontend_url}?error=invalid_state&connect=true")
+
+    # Exchange code for user info
+    oauth_info = await oauth_service.handle_connect_callback(provider, code)
+    if not oauth_info:
+        return RedirectResponse(url=f"{frontend_url}?error=oauth_failed&connect=true")
+
+    # Connect the provider to the specified user (NOT matching by email)
+    success = oauth_service.connect_provider_to_user(user_id, oauth_info)
+    if not success:
+        return RedirectResponse(url=f"{frontend_url}?error=user_not_found&connect=true")
+
+    # Get username for the success message
+    username = oauth_info.raw_data.get("login", "")
+
+    # Redirect to frontend with success
+    redirect_url = (
+        f"{frontend_url}"
+        f"?connect=true"
+        f"&provider={provider}"
+        f"&connected=true"
+        f"&username={username}"
+    )
+
+    logger.info(f"Successfully connected {provider} account @{username} to user {user_id}")
+
+    return RedirectResponse(url=redirect_url)
 
 
 class CopyCredentialsRequest(BaseModel):

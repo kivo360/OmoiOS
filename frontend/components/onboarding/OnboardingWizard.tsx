@@ -45,13 +45,20 @@ export function OnboardingWizard() {
     checkGitHubConnection,
   } = useOnboarding()
 
-  // Handle return from GitHub OAuth
+  // Handle return from GitHub OAuth (including the new connect flow)
   useEffect(() => {
     const step = searchParams.get("step")
     const githubConnected = searchParams.get("github_connected")
+    const githubUsername = searchParams.get("github_username")
 
     if (githubConnected === "true") {
+      // Check connection status from server (this updates the store)
       checkGitHubConnection()
+
+      // If username is provided in URL (from connect callback), ensure it's captured
+      if (githubUsername) {
+        console.log(`GitHub connected as @${githubUsername}`)
+      }
     }
 
     if (step && isValidStep(step)) {
