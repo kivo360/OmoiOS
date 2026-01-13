@@ -4,45 +4,94 @@ This directory contains documentation for the spec-driven development workflow s
 
 ## Overview
 
-Spec-driven development allows users to go from **idea → spec → automated execution** without creating tickets that clutter the kanban board.
+Spec-driven development allows users to go from **idea → spec → tickets → automated execution**.
+
+## ⚠️ GAPS IDENTIFIED (Not as bad as we thought!)
+
+1. **SpecTask → Ticket Gap**: ~~SpecTasks never become Tickets~~ → **Bridge EXISTS but not wired!** See [impact-assessment.md](./impact-assessment.md)
+2. **Sandbox Execution Bug**: `/execute` endpoint runs in API process, not sandbox. See [sandbox-execution.md](./sandbox-execution.md)
+3. **No Event Reporting**: State machine doesn't report events for real-time UI. See [ui-and-events.md](./ui-and-events.md)
+4. **⚠️ Ticket `user_id` Not Set**: Tickets without `user_id` won't show on **board view** (but WILL show in **ticket list**). See [ticket-field-gap.md](./ticket-field-gap.md)
+
+**TL;DR**: The `SpecTaskExecutionService` at `omoi_os/services/spec_task_execution.py` has the bridge fully implemented. The state machine just doesn't call it!
+
+**Visibility Clarification**:
+- **Ticket List API** (`/api/v1/tickets`): Filters by `project_id` only → Tickets visible ✅
+- **Board View API** (`/api/v1/board/view`): Filters by `project_id` AND `user_id` → Tickets without `user_id` invisible ⚠️
+
+This may be intentional (board shows "my tickets", list shows "all project tickets").
 
 ## Documents
 
 | Document | Description |
 |----------|-------------|
+| [impact-assessment.md](./impact-assessment.md) | **START HERE**: How fucked are we? (Not very!) |
+| [ticket-field-gap.md](./ticket-field-gap.md) | **🔴 CRITICAL**: Tickets invisible on board - missing `user_id` |
+| [skill-to-api-flow.md](./skill-to-api-flow.md) | **🔴 COMPLETE TRACE**: Both ticket creation paths and the `user_id` gap |
 | [architecture.md](./architecture.md) | Complete system architecture and flow tracing |
+| [phase-data-flow.md](./phase-data-flow.md) | What data is saved at each phase |
+| [data-flow-gap.md](./data-flow-gap.md) | SpecTask → Ticket gap (bridge exists!) |
 | [implementation-gaps.md](./implementation-gaps.md) | Current gaps and what needs to be built |
 | [activation-guide.md](./activation-guide.md) | How to activate each workflow path |
-| [command-page-integration.md](./command-page-integration.md) | **Priority**: Google-like entry point from command page |
+| [command-page-integration.md](./command-page-integration.md) | Google-like entry point from command page |
 | [sandbox-execution.md](./sandbox-execution.md) | **CRITICAL**: Sandbox vs API process execution issue |
+| [ui-and-events.md](./ui-and-events.md) | Event reporting gap and UI improvements |
 
-## Quick Summary
-
-### Two Existing Paths (as of 2025-01)
-
-1. **Prompt Injection Path**: Agent gets `spec_driven_dev_prompt` telling it to manually create specs
-2. **SpecStateMachine Path**: Programmatic multi-phase execution (requires pre-existing spec_id)
-
-### The Gap
-
-There's no direct path from "user idea" → "create spec" → "run state machine" without going through tickets.
-
-### Desired Flow (Command Page)
+## The Correct Flow (What Should Happen)
 
 ```
-Command Page (type idea, select "Spec-Driven", hit Enter)
-    ↓
-POST /api/v1/specs/launch (creates spec + starts execution)
-    ↓
-Redirect to Spec Detail Page
-    ↓
-SpecStateMachine runs phases:
-    EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC → COMPLETE
-    ↓
-User watches progress, reviews artifacts
+User Idea (Command Page)
+    │
+    ▼
+SPEC PHASES (Planning)
+    │ EXPLORE → REQUIREMENTS → DESIGN → TASKS
+    │
+    ▼
+SYNC Phase
+    │ Creates: SpecRequirement, SpecAcceptanceCriterion, SpecTask
+    │ MISSING: Should also create Ticket + Task records!
+    │
+    ▼
+TICKET EXECUTION (Work)
+    │ Tickets appear on kanban board
+    │ Agents pick up Tasks and execute
+    │
+    ▼
+FINAL SYNC
+    │ When all tickets complete → Mark spec complete
+    │
+    ▼
+DONE
 ```
 
-**Key insight**: Command page is like Google - simple, type and go. No tickets needed.
+## Current State (What Actually Happens)
+
+```
+SPEC PHASES
+    │ EXPLORE → REQUIREMENTS → DESIGN → TASKS
+    │
+    ▼
+SYNC Phase
+    │ Creates: SpecRequirement, SpecAcceptanceCriterion, SpecTask
+    │
+    ▼
+COMPLETE Phase
+    │ Marks spec "completed"
+    │
+    ▼
+DEAD END - SpecTasks never become Tickets!
+    - Nothing on kanban board
+    - No agents assigned
+    - Work never happens
+```
+
+## Key Insight
+
+**The planning domain (Spec) and execution domain (Ticket/Task) are NOT connected!**
+
+- `Spec` → `SpecTask` (planning artifacts) ✅ EXISTS
+- `SpecTask` → `Ticket` (execution work items) ❌ MISSING
+- `Ticket` → `Spec` (completion tracking) ❌ MISSING
 
 ## Related Code
 
