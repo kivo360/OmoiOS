@@ -41,66 +41,73 @@ export function initPostHog(): void {
     return
   }
 
-  posthog.init(POSTHOG_KEY, {
-    api_host: POSTHOG_API_HOST,
+  try {
+    posthog.init(POSTHOG_KEY, {
+      api_host: POSTHOG_API_HOST,
 
-    // UI host is where PostHog's toolbar/features are served from (not proxied)
-    ui_host: POSTHOG_HOST,
+      // UI host is where PostHog's toolbar/features are served from (not proxied)
+      ui_host: POSTHOG_HOST,
 
-    // Capture all clicks, form submissions automatically
-    autocapture: true,
+      // Capture all clicks, form submissions automatically
+      autocapture: true,
 
-    // Track page views automatically
-    capture_pageview: true,
+      // Track page views automatically
+      capture_pageview: true,
 
-    // Track when users leave pages
-    capture_pageleave: true,
+      // Track when users leave pages
+      capture_pageleave: true,
 
-    // Session Recording configuration
-    session_recording: {
-      // Don't mask all inputs by default - we want to see user interactions
-      maskAllInputs: false,
-      // But DO mask sensitive inputs like passwords
-      maskInputOptions: {
-        password: true,
-      },
-      // Mask specific CSS selectors (credit cards, SSN fields, etc.)
-      maskCapturedNetworkRequestFn: (request) => {
-        // Mask authorization headers
-        if (request.requestHeaders) {
-          if (request.requestHeaders['Authorization']) {
-            request.requestHeaders['Authorization'] = '***'
+      // Session Recording configuration
+      session_recording: {
+        // Don't mask all inputs by default - we want to see user interactions
+        maskAllInputs: false,
+        // But DO mask sensitive inputs like passwords
+        maskInputOptions: {
+          password: true,
+        },
+        // Mask specific CSS selectors (credit cards, SSN fields, etc.)
+        maskCapturedNetworkRequestFn: (request) => {
+          // Mask authorization headers
+          if (request.requestHeaders) {
+            if (request.requestHeaders['Authorization']) {
+              request.requestHeaders['Authorization'] = '***'
+            }
           }
-        }
-        return request
+          return request
+        },
       },
-    },
 
-    // Enable heatmaps for click tracking visualization
-    enable_heatmaps: true,
+      // Enable heatmaps for click tracking visualization
+      enable_heatmaps: true,
 
-    // Disable in development if needed (can be toggled)
-    loaded: (ph) => {
-      // Enable debug mode in development
-      if (process.env.NODE_ENV === 'development') {
-        ph.debug()
-      }
-    },
+      // Disable in development if needed (can be toggled)
+      loaded: (ph) => {
+        // Enable debug mode in development
+        if (process.env.NODE_ENV === 'development') {
+          ph.debug()
+        }
+      },
 
-    // Respect Do Not Track browser setting
-    respect_dnt: true,
+      // Respect Do Not Track browser setting
+      respect_dnt: true,
 
-    // Persist user identity across sessions
-    persistence: 'localStorage+cookie',
+      // Persist user identity across sessions - use cookie as fallback when localStorage blocked
+      persistence: 'localStorage+cookie',
 
-    // Cross-subdomain cookie for tracking across subdomains
-    cross_subdomain_cookie: true,
+      // Cross-subdomain cookie for tracking across subdomains
+      cross_subdomain_cookie: true,
 
-    // Disable automatic session recording start - we'll control this
-    disable_session_recording: false,
-  })
+      // Disable automatic session recording start - we'll control this
+      disable_session_recording: false,
+    })
 
-  isInitialized = true
+    isInitialized = true
+  } catch (error) {
+    // PostHog initialization failed - likely due to blocked storage
+    // This can happen in private browsing, iframes, or with strict privacy settings
+    console.warn('[PostHog] Failed to initialize:', error)
+    // Continue without analytics rather than crashing the app
+  }
 }
 
 /**
