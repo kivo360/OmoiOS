@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { useAuth } from "@/hooks/useAuth"
+import { createSafeStorage } from "@/lib/storage/safeStorage"
 import { api } from "@/lib/api/client"
 import { track, trackEvent as analyticsTrackEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import {
@@ -172,6 +173,7 @@ export const useOnboardingStore = create<OnboardingState>()(
     }),
     {
       name: "omoios_onboarding_state",
+      storage: createSafeStorage(),
       partialize: (state) => ({
         currentStep: state.currentStep,
         completedSteps: state.completedSteps,
@@ -373,10 +375,22 @@ export function useOnboarding() {
     setData(updates)
   }, [setData])
 
-  const connectGitHub = useCallback(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-    const returnUrl = `${window.location.origin}/onboarding?step=repo`
-    window.location.href = `${apiUrl}/api/v1/auth/oauth/github?onboarding=true&return_url=${encodeURIComponent(returnUrl)}`
+  const connectGitHub = useCallback(async () => {
+    // Use the authenticated connect flow to ensure GitHub is linked to the CURRENT user
+    // This prevents the issue where GitHub OAuth matches by email and redirects to old account
+    try {
+      const response = await api.post<{ auth_url: string; state: string }>(
+        "/api/v1/auth/oauth/github/connect"
+      )
+      // Redirect to GitHub OAuth
+      window.location.href = response.auth_url
+    } catch (err) {
+      console.error("Failed to start GitHub connect flow:", err)
+      // Fallback to direct OAuth if the authenticated flow fails (e.g., not logged in)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
+      const returnUrl = `${window.location.origin}/onboarding?step=repo`
+      window.location.href = `${apiUrl}/api/v1/auth/oauth/github?onboarding=true&return_url=${encodeURIComponent(returnUrl)}`
+    }
   }, [])
 
   const checkGitHubConnection = useCallback(async () => {
