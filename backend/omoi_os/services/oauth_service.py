@@ -158,6 +158,10 @@ class OAuthService:
         ensuring that when the callback completes, the GitHub account is linked to THIS
         user instead of being matched by email (which could match a different user).
 
+        IMPORTANT: This uses the SAME callback URL as regular OAuth login. The difference
+        is in the state value format - "connect:provider:user_id" vs just "provider".
+        This allows us to use a single callback URL registered with GitHub.
+
         Args:
             provider_name: Name of the OAuth provider
             user_id: ID of the user to connect the provider to
@@ -172,8 +176,8 @@ class OAuthService:
         if not config:
             raise ValueError(f"Provider '{provider_name}' not configured")
 
-        # Use connect callback instead of regular callback
-        redirect_uri = self._build_connect_redirect_uri(provider_name)
+        # Use the SAME redirect URI as regular OAuth (single callback URL)
+        redirect_uri = self._build_redirect_uri(provider_name)
 
         provider = get_provider(
             name=provider_name,
@@ -196,9 +200,10 @@ class OAuthService:
             f"Generated OAuth connect URL for {provider_name} (state: {state[:8]}..., user: {user_id})"
         )
 
-        # Store state with user_id in Redis (format: "provider:user_id")
+        # Store state with "connect:" prefix and user_id in Redis
+        # Format: "connect:provider:user_id" to differentiate from login flow ("provider")
         state_key = f"{OAUTH_STATE_PREFIX}{state}"
-        state_value = f"{provider_name}:{user_id}"
+        state_value = f"connect:{provider_name}:{user_id}"
         try:
             self._redis.setex(state_key, OAUTH_STATE_TTL, state_value)
             logger.debug(f"Stored OAuth connect state for provider {provider_name}, user {user_id}")
@@ -208,47 +213,19 @@ class OAuthService:
 
         return auth_url, state
 
-    def _build_connect_redirect_uri(self, provider_name: str) -> str:
-        """Build the OAuth connect callback redirect URI for a provider."""
-        from urllib.parse import urlparse
-
-        # If oauth_backend_url is explicitly set, use it directly
-        if self.settings.oauth_backend_url:
-            redirect_uri = f"{self.settings.oauth_backend_url.rstrip('/')}/api/v1/auth/oauth/{provider_name}/connect-callback"
-            logger.info(
-                f"OAuth connect redirect URI for {provider_name}: {redirect_uri} "
-                f"(using oauth_backend_url: {self.settings.oauth_backend_url})"
-            )
-            return redirect_uri
-
-        # Fallback: derive backend URL from frontend URL
-        base_uri = self.settings.oauth_redirect_uri
-        parsed = urlparse(base_uri)
-
-        if "localhost:3000" in parsed.netloc:
-            backend_netloc = parsed.netloc.replace("localhost:3000", "localhost:18000")
-        else:
-            backend_netloc = parsed.netloc
-
-        redirect_uri = f"{parsed.scheme}://{backend_netloc}/api/v1/auth/oauth/{provider_name}/connect-callback"
-
-        logger.info(
-            f"OAuth connect redirect URI for {provider_name}: {redirect_uri} "
-            f"(derived from base_uri: {base_uri})"
-        )
-
-        return redirect_uri
-
-    def verify_connect_state(self, state: str, provider_name: str) -> Optional[UUID]:
+    def verify_state_and_get_mode(self, state: str, provider_name: str) -> tuple[bool, Optional[UUID]]:
         """
-        Verify OAuth connect state parameter and return the user_id.
+        Verify OAuth state and determine if this is a login or connect flow.
 
         Args:
             state: OAuth state parameter
             provider_name: Expected provider name
 
         Returns:
-            User ID if valid, None otherwise
+            Tuple of (is_valid, user_id_if_connect)
+            - For login flow: (True, None)
+            - For connect flow: (True, user_id)
+            - For invalid state: (False, None)
         """
         state_key = f"{OAUTH_STATE_PREFIX}{state}"
         try:
@@ -259,65 +236,43 @@ class OAuthService:
             stored_value = results[0]
 
             if stored_value is None:
-                logger.warning(f"OAuth connect state not found or expired: {state[:8]}...")
-                return None
+                logger.warning(f"OAuth state not found or expired: {state[:8]}...")
+                return (False, None)
 
-            # Parse "provider:user_id" format
-            parts = stored_value.split(":", 1)
-            if len(parts) != 2:
-                logger.warning(f"OAuth connect state has invalid format: {stored_value}")
-                return None
+            # Check if this is a connect flow (format: "connect:provider:user_id")
+            if stored_value.startswith("connect:"):
+                parts = stored_value.split(":", 2)
+                if len(parts) != 3:
+                    logger.warning(f"OAuth connect state has invalid format: {stored_value}")
+                    return (False, None)
 
-            stored_provider, user_id_str = parts
+                _, stored_provider, user_id_str = parts
 
-            if stored_provider != provider_name:
+                if stored_provider != provider_name:
+                    logger.warning(
+                        f"OAuth state provider mismatch: expected {provider_name}, got {stored_provider}"
+                    )
+                    return (False, None)
+
+                try:
+                    user_id = UUID(user_id_str)
+                    return (True, user_id)
+                except ValueError:
+                    logger.error(f"Invalid user_id in OAuth state: {user_id_str}")
+                    return (False, None)
+
+            # Regular login flow (format: just "provider")
+            if stored_value != provider_name:
                 logger.warning(
-                    f"OAuth state provider mismatch: expected {provider_name}, got {stored_provider}"
+                    f"OAuth state provider mismatch: expected {provider_name}, got {stored_value}"
                 )
-                return None
+                return (False, None)
 
-            try:
-                return UUID(user_id_str)
-            except ValueError:
-                logger.error(f"Invalid user_id in OAuth state: {user_id_str}")
-                return None
+            return (True, None)
 
         except redis.RedisError as e:
             logger.error(f"Failed to verify OAuth state in Redis: {e}")
-            return None
-
-    async def handle_connect_callback(
-        self,
-        provider_name: str,
-        code: str,
-    ) -> Optional[OAuthUserInfo]:
-        """
-        Handle OAuth connect callback and exchange code for user info.
-
-        Uses the connect redirect URI.
-        """
-        config = self.settings.get_provider_config(provider_name)
-        if not config:
-            return None
-
-        redirect_uri = self._build_connect_redirect_uri(provider_name)
-
-        provider = get_provider(
-            name=provider_name,
-            client_id=config["client_id"],
-            client_secret=config["client_secret"],
-            redirect_uri=redirect_uri,
-            **{
-                k: v
-                for k, v in config.items()
-                if k not in ("client_id", "client_secret")
-            },
-        )
-
-        if not provider:
-            return None
-
-        return await provider.exchange_code(code)
+            return (False, None)
 
     def connect_provider_to_user(self, user_id: UUID, oauth_info: OAuthUserInfo) -> bool:
         """

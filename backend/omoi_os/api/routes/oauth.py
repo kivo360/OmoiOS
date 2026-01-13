@@ -290,9 +290,13 @@ async def oauth_callback(
     db: DatabaseService = Depends(get_db_service),
 ):
     """
-    Handle OAuth callback.
+    Handle OAuth callback for both login and connect flows.
 
-    Exchanges code for user info, creates/updates user, and redirects to frontend.
+    The flow type is determined by the state parameter:
+    - Login flow: state contains just "provider" -> creates/updates user and returns tokens
+    - Connect flow: state contains "connect:provider:user_id" -> links provider to specific user
+
+    This allows us to use a single callback URL registered with GitHub.
     """
     settings = get_app_settings().auth
     frontend_url = settings.oauth_redirect_uri
@@ -302,8 +306,9 @@ async def oauth_callback(
         error_msg = error_description or error
         return RedirectResponse(url=f"{frontend_url}?error={error_msg}")
 
-    # Verify state
-    if not oauth_service.verify_state(state, provider):
+    # Verify state and determine flow type
+    is_valid, connect_user_id = oauth_service.verify_state_and_get_mode(state, provider)
+    if not is_valid:
         return RedirectResponse(url=f"{frontend_url}?error=invalid_state")
 
     # Exchange code for user info
@@ -311,8 +316,30 @@ async def oauth_callback(
     if not oauth_info:
         return RedirectResponse(url=f"{frontend_url}?error=oauth_failed")
 
-    # Get or create user and generate tokens in the same session
-    # This ensures the user object stays attached to the session
+    # ========================================================================
+    # CONNECT FLOW: Link provider to specific user (not matched by email)
+    # ========================================================================
+    if connect_user_id is not None:
+        success = oauth_service.connect_provider_to_user(connect_user_id, oauth_info)
+        if not success:
+            return RedirectResponse(url=f"{frontend_url}?error=user_not_found&connect=true")
+
+        username = oauth_info.raw_data.get("login", "")
+        logger.info(f"Successfully connected {provider} account @{username} to user {connect_user_id}")
+
+        # Redirect to frontend with connect success params (no tokens needed - user already logged in)
+        redirect_url = (
+            f"{frontend_url}"
+            f"?connect=true"
+            f"&provider={provider}"
+            f"&connected=true"
+            f"&username={username}"
+        )
+        return RedirectResponse(url=redirect_url)
+
+    # ========================================================================
+    # LOGIN FLOW: Create/update user and return tokens
+    # ========================================================================
     from omoi_os.config import settings as auth_settings
 
     with db.get_session() as session:
@@ -427,62 +454,6 @@ async def connect_provider(
         return AuthUrlResponse(auth_url=auth_url, state=state)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
-
-@router.get("/oauth/{provider}/connect-callback")
-async def oauth_connect_callback(
-    provider: str,
-    code: str = Query(...),
-    state: str = Query(...),
-    error: Optional[str] = Query(None),
-    error_description: Optional[str] = Query(None),
-    oauth_service: OAuthService = Depends(get_oauth_service),
-):
-    """
-    Handle OAuth callback for connecting a provider to an existing user.
-
-    This is different from the regular oauth_callback because it links the
-    provider to the user_id stored in the state, rather than matching by email.
-    This allows the same GitHub account to be connected to different OmoiOS users.
-    """
-    settings = get_app_settings().auth
-    frontend_url = settings.oauth_redirect_uri
-
-    # Handle OAuth error
-    if error:
-        error_msg = error_description or error
-        return RedirectResponse(url=f"{frontend_url}?error={error_msg}&connect=true")
-
-    # Verify state and get user_id
-    user_id = oauth_service.verify_connect_state(state, provider)
-    if not user_id:
-        return RedirectResponse(url=f"{frontend_url}?error=invalid_state&connect=true")
-
-    # Exchange code for user info
-    oauth_info = await oauth_service.handle_connect_callback(provider, code)
-    if not oauth_info:
-        return RedirectResponse(url=f"{frontend_url}?error=oauth_failed&connect=true")
-
-    # Connect the provider to the specified user (NOT matching by email)
-    success = oauth_service.connect_provider_to_user(user_id, oauth_info)
-    if not success:
-        return RedirectResponse(url=f"{frontend_url}?error=user_not_found&connect=true")
-
-    # Get username for the success message
-    username = oauth_info.raw_data.get("login", "")
-
-    # Redirect to frontend with success
-    redirect_url = (
-        f"{frontend_url}"
-        f"?connect=true"
-        f"&provider={provider}"
-        f"&connected=true"
-        f"&username={username}"
-    )
-
-    logger.info(f"Successfully connected {provider} account @{username} to user {user_id}")
-
-    return RedirectResponse(url=redirect_url)
 
 
 class CopyCredentialsRequest(BaseModel):
