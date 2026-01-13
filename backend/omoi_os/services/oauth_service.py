@@ -148,6 +148,214 @@ class OAuthService:
 
         return auth_url, state
 
+    def get_connect_auth_url(
+        self, provider_name: str, user_id: UUID
+    ) -> tuple[str, str]:
+        """
+        Get OAuth authorization URL for connecting a provider to an existing user.
+
+        This is different from get_auth_url() because it stores the user_id in the state,
+        ensuring that when the callback completes, the GitHub account is linked to THIS
+        user instead of being matched by email (which could match a different user).
+
+        Args:
+            provider_name: Name of the OAuth provider
+            user_id: ID of the user to connect the provider to
+
+        Returns:
+            Tuple of (auth_url, state)
+
+        Raises:
+            ValueError: If provider not configured
+        """
+        config = self.settings.get_provider_config(provider_name)
+        if not config:
+            raise ValueError(f"Provider '{provider_name}' not configured")
+
+        # Use connect callback instead of regular callback
+        redirect_uri = self._build_connect_redirect_uri(provider_name)
+
+        provider = get_provider(
+            name=provider_name,
+            client_id=config["client_id"],
+            client_secret=config["client_secret"],
+            redirect_uri=redirect_uri,
+            **{
+                k: v
+                for k, v in config.items()
+                if k not in ("client_id", "client_secret")
+            },
+        )
+
+        if not provider:
+            raise ValueError(f"Provider '{provider_name}' not found")
+
+        auth_url, state = provider.get_auth_url()
+
+        logger.debug(
+            f"Generated OAuth connect URL for {provider_name} (state: {state[:8]}..., user: {user_id})"
+        )
+
+        # Store state with user_id in Redis (format: "provider:user_id")
+        state_key = f"{OAUTH_STATE_PREFIX}{state}"
+        state_value = f"{provider_name}:{user_id}"
+        try:
+            self._redis.setex(state_key, OAUTH_STATE_TTL, state_value)
+            logger.debug(f"Stored OAuth connect state for provider {provider_name}, user {user_id}")
+        except redis.RedisError as e:
+            logger.error(f"Failed to store OAuth state in Redis: {e}")
+            raise ValueError("Failed to initialize OAuth flow. Please try again.")
+
+        return auth_url, state
+
+    def _build_connect_redirect_uri(self, provider_name: str) -> str:
+        """Build the OAuth connect callback redirect URI for a provider."""
+        from urllib.parse import urlparse
+
+        # If oauth_backend_url is explicitly set, use it directly
+        if self.settings.oauth_backend_url:
+            redirect_uri = f"{self.settings.oauth_backend_url.rstrip('/')}/api/v1/auth/oauth/{provider_name}/connect-callback"
+            logger.info(
+                f"OAuth connect redirect URI for {provider_name}: {redirect_uri} "
+                f"(using oauth_backend_url: {self.settings.oauth_backend_url})"
+            )
+            return redirect_uri
+
+        # Fallback: derive backend URL from frontend URL
+        base_uri = self.settings.oauth_redirect_uri
+        parsed = urlparse(base_uri)
+
+        if "localhost:3000" in parsed.netloc:
+            backend_netloc = parsed.netloc.replace("localhost:3000", "localhost:18000")
+        else:
+            backend_netloc = parsed.netloc
+
+        redirect_uri = f"{parsed.scheme}://{backend_netloc}/api/v1/auth/oauth/{provider_name}/connect-callback"
+
+        logger.info(
+            f"OAuth connect redirect URI for {provider_name}: {redirect_uri} "
+            f"(derived from base_uri: {base_uri})"
+        )
+
+        return redirect_uri
+
+    def verify_connect_state(self, state: str, provider_name: str) -> Optional[UUID]:
+        """
+        Verify OAuth connect state parameter and return the user_id.
+
+        Args:
+            state: OAuth state parameter
+            provider_name: Expected provider name
+
+        Returns:
+            User ID if valid, None otherwise
+        """
+        state_key = f"{OAUTH_STATE_PREFIX}{state}"
+        try:
+            pipe = self._redis.pipeline()
+            pipe.get(state_key)
+            pipe.delete(state_key)
+            results = pipe.execute()
+            stored_value = results[0]
+
+            if stored_value is None:
+                logger.warning(f"OAuth connect state not found or expired: {state[:8]}...")
+                return None
+
+            # Parse "provider:user_id" format
+            parts = stored_value.split(":", 1)
+            if len(parts) != 2:
+                logger.warning(f"OAuth connect state has invalid format: {stored_value}")
+                return None
+
+            stored_provider, user_id_str = parts
+
+            if stored_provider != provider_name:
+                logger.warning(
+                    f"OAuth state provider mismatch: expected {provider_name}, got {stored_provider}"
+                )
+                return None
+
+            try:
+                return UUID(user_id_str)
+            except ValueError:
+                logger.error(f"Invalid user_id in OAuth state: {user_id_str}")
+                return None
+
+        except redis.RedisError as e:
+            logger.error(f"Failed to verify OAuth state in Redis: {e}")
+            return None
+
+    async def handle_connect_callback(
+        self,
+        provider_name: str,
+        code: str,
+    ) -> Optional[OAuthUserInfo]:
+        """
+        Handle OAuth connect callback and exchange code for user info.
+
+        Uses the connect redirect URI.
+        """
+        config = self.settings.get_provider_config(provider_name)
+        if not config:
+            return None
+
+        redirect_uri = self._build_connect_redirect_uri(provider_name)
+
+        provider = get_provider(
+            name=provider_name,
+            client_id=config["client_id"],
+            client_secret=config["client_secret"],
+            redirect_uri=redirect_uri,
+            **{
+                k: v
+                for k, v in config.items()
+                if k not in ("client_id", "client_secret")
+            },
+        )
+
+        if not provider:
+            return None
+
+        return await provider.exchange_code(code)
+
+    def connect_provider_to_user(self, user_id: UUID, oauth_info: OAuthUserInfo) -> bool:
+        """
+        Connect an OAuth provider to a specific user.
+
+        Unlike get_or_create_user(), this does NOT create new users and does NOT
+        match by email. It links the OAuth credentials to the specified user_id.
+
+        Args:
+            user_id: The user to connect the provider to
+            oauth_info: OAuth user info from the provider
+
+        Returns:
+            True if successful, False if user not found
+        """
+        with self.db.get_session() as session:
+            user = session.get(User, user_id)
+            if not user:
+                logger.error(f"User {user_id} not found for OAuth connect")
+                return False
+
+            attrs = user.attributes or {}
+            attrs[f"{oauth_info.provider}_user_id"] = oauth_info.provider_user_id
+            attrs[f"{oauth_info.provider}_access_token"] = oauth_info.access_token
+            if oauth_info.refresh_token:
+                attrs[f"{oauth_info.provider}_refresh_token"] = oauth_info.refresh_token
+            if oauth_info.raw_data.get("login"):
+                attrs[f"{oauth_info.provider}_username"] = oauth_info.raw_data["login"]
+            user.attributes = attrs
+
+            session.commit()
+
+            logger.info(
+                f"Connected {oauth_info.provider} account @{oauth_info.raw_data.get('login')} "
+                f"to user {user_id}"
+            )
+            return True
+
     def verify_state(self, state: str, provider_name: str) -> bool:
         """Verify OAuth state parameter and remove it (one-time use)."""
         state_key = f"{OAUTH_STATE_PREFIX}{state}"
