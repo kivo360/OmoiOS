@@ -740,7 +740,7 @@ async def admin_disconnect_github_for_user(
     Requires admin role (checked below).
     """
     # Check if current user is admin
-    if current_user.role != "admin":
+    if not current_user.is_super_admin:
         raise HTTPException(
             status_code=403,
             detail="Admin access required."
@@ -802,7 +802,7 @@ async def admin_disconnect_all_github(
     Use with caution - this will require all users to reconnect GitHub.
     """
     # Check if current user is admin
-    if current_user.role != "admin":
+    if not current_user.is_super_admin:
         raise HTTPException(
             status_code=403,
             detail="Admin access required."
