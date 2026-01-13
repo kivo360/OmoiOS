@@ -672,3 +672,182 @@ async def create_pull_request(
         )
 
     return result
+
+
+# ============================================================================
+# GitHub Disconnect Routes
+# ============================================================================
+
+
+@router.delete("/disconnect")
+async def disconnect_github(
+    current_user: User = Depends(get_approved_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Disconnect GitHub from the current user's account.
+
+    This clears all GitHub-related data from the user's attributes,
+    allowing them to reconnect with a different GitHub account or
+    allowing the same GitHub account to be used with a different user.
+    """
+    attrs = current_user.attributes or {}
+
+    # Check if GitHub is connected
+    if not attrs.get("github_access_token") and not attrs.get("github_user_id"):
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub is not connected to this account."
+        )
+
+    # Store username for response before clearing
+    github_username = attrs.get("github_username")
+
+    # Clear all GitHub-related attributes
+    github_keys_to_remove = [k for k in attrs.keys() if "github" in k.lower()]
+    for key in github_keys_to_remove:
+        del attrs[key]
+
+    # Update user in database
+    with db.get_session() as session:
+        from sqlalchemy import update
+        session.execute(
+            update(User)
+            .where(User.id == current_user.id)
+            .values(attributes=attrs)
+        )
+        session.commit()
+
+    logger.info(f"User {current_user.id} disconnected GitHub account: {github_username}")
+
+    return {
+        "success": True,
+        "message": f"GitHub account @{github_username} has been disconnected.",
+        "disconnected_username": github_username,
+        "cleared_keys": github_keys_to_remove,
+    }
+
+
+@router.delete("/admin/disconnect/{user_id}")
+async def admin_disconnect_github_for_user(
+    user_id: str,
+    current_user: User = Depends(get_approved_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Admin endpoint to disconnect GitHub from a specific user.
+
+    Requires admin role (checked below).
+    """
+    # Check if current user is admin
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required."
+        )
+
+    with db.get_session() as session:
+        from sqlalchemy import select, update
+        from uuid import UUID
+
+        # Get target user
+        result = session.execute(
+            select(User).where(User.id == UUID(user_id))
+        )
+        target_user = result.scalar_one_or_none()
+
+        if not target_user:
+            raise HTTPException(status_code=404, detail="User not found.")
+
+        attrs = target_user.attributes or {}
+        github_username = attrs.get("github_username")
+
+        if not attrs.get("github_access_token") and not attrs.get("github_user_id"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"GitHub is not connected for user {target_user.email}."
+            )
+
+        # Clear GitHub attributes
+        github_keys_to_remove = [k for k in attrs.keys() if "github" in k.lower()]
+        for key in github_keys_to_remove:
+            del attrs[key]
+
+        session.execute(
+            update(User)
+            .where(User.id == UUID(user_id))
+            .values(attributes=attrs)
+        )
+        session.commit()
+
+    logger.info(f"Admin {current_user.email} disconnected GitHub for user {user_id} ({github_username})")
+
+    return {
+        "success": True,
+        "message": f"GitHub disconnected for user {target_user.email}",
+        "user_id": user_id,
+        "user_email": target_user.email,
+        "disconnected_username": github_username,
+    }
+
+
+@router.delete("/admin/disconnect-all")
+async def admin_disconnect_all_github(
+    current_user: User = Depends(get_approved_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Admin endpoint to disconnect GitHub from ALL users.
+
+    Use with caution - this will require all users to reconnect GitHub.
+    """
+    # Check if current user is admin
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="Admin access required."
+        )
+
+    disconnected_count = 0
+    disconnected_users = []
+
+    with db.get_session() as session:
+        from sqlalchemy import select, update
+
+        # Get all users with GitHub connected
+        result = session.execute(select(User))
+        users = result.scalars().all()
+
+        for user in users:
+            attrs = user.attributes or {}
+            if attrs.get("github_access_token") or attrs.get("github_user_id"):
+                github_username = attrs.get("github_username")
+
+                # Clear GitHub attributes
+                github_keys = [k for k in attrs.keys() if "github" in k.lower()]
+                for key in github_keys:
+                    del attrs[key]
+
+                session.execute(
+                    update(User)
+                    .where(User.id == user.id)
+                    .values(attributes=attrs)
+                )
+
+                disconnected_count += 1
+                disconnected_users.append({
+                    "user_id": str(user.id),
+                    "email": user.email,
+                    "github_username": github_username,
+                })
+
+        session.commit()
+
+    logger.warning(f"Admin {current_user.email} disconnected GitHub for ALL users ({disconnected_count} users)")
+
+    return {
+        "success": True,
+        "message": f"GitHub disconnected for {disconnected_count} users.",
+        "disconnected_count": disconnected_count,
+        "disconnected_users": disconnected_users,
+    }
