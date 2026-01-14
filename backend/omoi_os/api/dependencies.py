@@ -71,7 +71,17 @@ def get_db_service() -> "DatabaseService":
     from omoi_os.services.database import DatabaseService
 
     app_settings = get_app_settings()
-    _db_service_instance = DatabaseService(connection_string=app_settings.database.url)
+    _db_service_instance = DatabaseService(
+        connection_string=app_settings.database.url,
+        pool_size=app_settings.database.pool_size,
+        max_overflow=app_settings.database.max_overflow,
+        pool_timeout=app_settings.database.pool_timeout,
+        pool_recycle=app_settings.database.pool_recycle,
+        pool_pre_ping=app_settings.database.pool_pre_ping,
+        pool_use_lifo=app_settings.database.pool_use_lifo,
+        command_timeout=app_settings.database.command_timeout,
+        connect_timeout=app_settings.database.connect_timeout,
+    )
 
     return _db_service_instance
 
