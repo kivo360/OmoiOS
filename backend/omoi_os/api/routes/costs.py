@@ -21,7 +21,7 @@ router = APIRouter()
 
 class CostRecordResponse(BaseModel):
     """Response model for cost record."""
-    id: int
+    id: str  # UUID string (matches CostRecord ORM model)
     task_id: str
     agent_id: str | None
     provider: str
