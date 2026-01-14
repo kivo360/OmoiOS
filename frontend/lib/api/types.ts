@@ -327,6 +327,12 @@ export interface MembershipCreate {
 // Ticket Types
 // ============================================================================
 
+export interface TicketContext {
+  spec_id?: string
+  spec_title?: string
+  source?: string
+}
+
 export interface Ticket {
   id: string
   title: string
@@ -338,6 +344,7 @@ export interface Ticket {
   created_at: string | null
   updated_at?: string | null
   project_id?: string
+  context?: TicketContext | null
 }
 
 export interface TicketCreate {

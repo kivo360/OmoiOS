@@ -245,7 +245,7 @@ DONE
 | File | Change |
 |------|--------|
 | `omoi_os/models/ticket.py` | Add `spec_id`, `spec_task_id` foreign keys |
-| `omoi_os/services/spec_sync.py` | Add ticket creation logic to SYNC phase |
+| `omoi_os/workers/spec_state_machine.py` | Add `execute_spec_tasks()` call in `_execute_sync_phase` (line 291) |
 | `omoi_os/api/routes/tickets.py` | Add spec completion check when ticket marked done |
 | `alembic/versions/xxx_add_spec_ticket_link.py` | Migration for new columns |
 
@@ -267,26 +267,41 @@ CREATE INDEX idx_tickets_spec_id ON tickets(spec_id) WHERE spec_id IS NOT NULL;
 
 ---
 
-## Questions to Resolve
+## Questions to Resolve (ANSWERED!)
 
-1. **One Ticket per SpecTask?** Or group related SpecTasks into one Ticket?
+These questions are already answered by `SpecTaskExecutionService` implementation:
 
-2. **Ticket Priority Mapping?** How to map SpecTask priority to Ticket priority?
+| Question | Answer | Implementation Location |
+|----------|--------|------------------------|
+| **One Ticket per SpecTask?** | ❌ ONE Ticket per SPEC (bridging ticket), each SpecTask → separate Task | `spec_task_execution.py:288-338` |
+| **Ticket Priority Mapping?** | Uses `PRIORITY_MAP`: high→HIGH, medium→MEDIUM, low→LOW | `spec_task_execution.py:359` |
+| **Dependency Handling?** | ✅ SpecTask dependencies copied to Task dependencies | `spec_task_execution.py:383-385` |
+| **Approval Gates?** | ❌ No - tasks go straight to execution (status="building") | `spec_task_execution.py:320` |
+| **What Phase?** | Uses `PHASE_MAP` or defaults to `PHASE_IMPLEMENTATION` | `spec_task_execution.py:360` |
 
-3. **Dependency Handling?** If SpecTask A depends on SpecTask B, should Ticket A depend on Ticket B?
+### Key Implementation Details
 
-4. **Approval Gates?** Should tickets require approval before agents start work?
+```
+Spec
+ └── SpecTask (N)
+        │
+        ▼ SpecTaskExecutionService
+        │
+Ticket (ONE per Spec - bridging ticket)
+ └── Task (N - one per SpecTask)
+```
 
-5. **What Phase?** Should all spec-generated tickets go to `PHASE_IMPLEMENTATION`?
+**The pattern**: One Ticket groups all Tasks from a single Spec. This keeps related work together on the kanban board.
 
 ---
 
 ## Summary
 
-The current system has a fundamental disconnect:
+**UPDATE**: The bridge EXISTS but isn't wired!
 
-- **Spec domain** (requirements, design, tasks) is complete
-- **Execution domain** (tickets, agent tasks) is complete
-- **The bridge between them does NOT exist!**
+- **Spec domain** (requirements, design, tasks) ✅ Complete
+- **Execution domain** (tickets, agent tasks) ✅ Complete
+- **Bridge** (`SpecTaskExecutionService`) ✅ Exists at `spec_task_execution.py`
+- **Wiring** ❌ State machine doesn't call the bridge after SYNC
 
-The SYNC phase creates `SpecTask` records but never converts them to `Ticket` records that agents can actually work on.
+**The Fix**: Call `SpecTaskExecutionService.execute_spec_tasks()` after SYNC phase completes. See [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) Task 1.1.

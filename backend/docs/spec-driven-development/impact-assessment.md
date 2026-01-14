@@ -1,8 +1,21 @@
 # Impact Assessment - How Fucked Are We?
 
 **Created**: 2025-01-11
+**Updated**: 2025-01-13 (cross-referenced with sandbox-agents implementation)
 **Status**: GOOD NEWS / BAD NEWS
 **Purpose**: Assess damage and what needs to be fixed
+
+---
+
+## 🔄 Cross-Reference Note (2025-01-13)
+
+This document was written before discovering that the **sandbox infrastructure is 100% implemented** (see `docs/design/sandbox-agents/IMPLEMENTATION_COMPLETE_STATUS.md`).
+
+The assessment below remains valid, but keep in mind:
+- The sandbox event system EXISTS and WORKS
+- The worker CAN run in spec mode when properly triggered
+- The `spawn_for_phase()` method EXISTS at `daytona_spawner.py:750`
+- The issue is the API TRIGGER, not missing infrastructure
 
 ---
 
@@ -186,7 +199,7 @@ What SHOULD happen:
 
 ### Priority 1: Wire Up the Bridge (1 hour)
 
-Add to `spec_sync.py` or create new EXECUTE phase:
+Add to `spec_state_machine.py:_execute_sync_phase()` (line 291):
 
 ```python
 # After SYNC phase creates SpecTask records:

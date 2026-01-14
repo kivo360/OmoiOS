@@ -60,6 +60,7 @@ import {
   Loader2,
   Radio,
   CircleDot,
+  FileText,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
@@ -67,7 +68,7 @@ import { useProject } from "@/hooks/useProjects"
 import { useBatchSpawnPhaseTasks } from "@/hooks/useTickets"
 import { useBoardEvents, type BoardEvent, type RunningTaskInfo } from "@/hooks/useBoardEvents"
 import { AgentPanel } from "@/components/board"
-import type { Ticket as ApiTicket, BoardColumn } from "@/lib/api/types"
+import type { Ticket as ApiTicket, BoardColumn, TicketContext } from "@/lib/api/types"
 
 interface BoardPageProps {
   params: Promise<{ projectId: string }>
@@ -83,6 +84,7 @@ interface BoardTicket {
   phase: string
   description: string | null
   approval_status: string | null
+  context?: TicketContext | null
 }
 
 interface Column {
@@ -223,6 +225,17 @@ function TicketCard({
 
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Spec badge - show if ticket was created from a spec */}
+          {ticket.context?.spec_id && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-purple-500/10 text-purple-600 border-purple-500/30 hover:bg-purple-500/20"
+              title={ticket.context.spec_title || "From Spec"}
+            >
+              <FileText className="h-3 w-3 mr-1" />
+              Spec
+            </Badge>
+          )}
           <Badge variant={priorityCfg.color as "default" | "destructive" | "secondary" | "outline"} className="text-xs">
             {priorityCfg.label}
           </Badge>
@@ -467,6 +480,7 @@ export default function BoardPage({ params }: BoardPageProps) {
         phase: t.phase_id,
         description: t.description,
         approval_status: t.approval_status,
+        context: t.context,
       }))
     )
   }, [boardData])

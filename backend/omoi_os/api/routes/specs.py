@@ -18,8 +18,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from omoi_os.api.dependencies import get_db_service
+from omoi_os.api.dependencies import (
+    get_db_service,
+    get_current_user,
+    verify_project_access,
+    verify_spec_access,
+)
 from omoi_os.models.project import Project
+from omoi_os.models.user import User
 from omoi_os.models.spec import (
     Spec as SpecModel,
     SpecRequirement as SpecRequirementModel,
@@ -72,6 +78,7 @@ async def _create_spec_async(
     project_id: str,
     title: str,
     description: Optional[str],
+    user_id: Optional[UUID] = None,
 ) -> SpecModel:
     """Create a new spec (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
@@ -81,6 +88,7 @@ async def _create_spec_async(
             description=description,
             status="draft",
             phase="Requirements",
+            user_id=user_id,
         )
         session.add(new_spec)
         await session.commit()
@@ -944,7 +952,9 @@ def _spec_to_response(spec: SpecModel) -> SpecResponse:
 async def list_project_specs(
     project_id: str,
     status: Optional[str] = Query(None, description="Filter by status"),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_project_access),  # Verify access to project
 ):
     """List all specs for a project."""
     # Use async database operations (non-blocking)
@@ -958,12 +968,16 @@ async def list_project_specs(
 @router.post("", response_model=SpecResponse)
 async def create_spec(
     spec: SpecCreate,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Create a new specification."""
+    # Verify user has access to the project
+    await verify_project_access(spec.project_id, current_user, db)
+
     # Use async database operations (non-blocking)
     new_spec = await _create_spec_async(
-        db, spec.project_id, spec.title, spec.description
+        db, spec.project_id, spec.title, spec.description, user_id=current_user.id
     )
 
     # Create initial version history entry
@@ -972,6 +986,7 @@ async def create_spec(
         new_spec.id,
         change_type="created",
         change_summary=f"Specification '{spec.title}' created",
+        created_by=str(current_user.id),
     )
 
     return _spec_to_response(new_spec)
@@ -980,7 +995,9 @@ async def create_spec(
 @router.get("/{spec_id}", response_model=SpecResponse)
 async def get_spec(
     spec_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),  # Verify access to spec
 ):
     """Get a spec by ID."""
     # Use async database operations (non-blocking)
@@ -994,7 +1011,9 @@ async def get_spec(
 async def update_spec(
     spec_id: str,
     updates: SpecUpdate,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),  # Verify access to spec
 ):
     """Update a spec."""
     # Get current state before update for change tracking
@@ -1043,7 +1062,9 @@ async def update_spec(
 @router.delete("/{spec_id}")
 async def delete_spec(
     spec_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),  # Verify access to spec
 ):
     """Delete a spec."""
     # Use async database operations (non-blocking)
@@ -1416,23 +1437,25 @@ async def list_spec_versions(
 async def execute_spec(
     spec_id: str,
     request: SpecExecuteRequest = SpecExecuteRequest(),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),  # Verify access to spec
 ):
     """
-    Execute the spec-driven development workflow.
+    Execute the spec-driven development workflow via Daytona sandbox.
 
-    This starts the state machine which orchestrates the multi-phase
-    spec generation workflow:
+    This spawns a Daytona sandbox that runs the state machine which
+    orchestrates the multi-phase spec generation workflow:
     EXPLORE -> REQUIREMENTS -> DESIGN -> TASKS -> SYNC -> COMPLETE
 
     Each phase:
-    - Runs as a separate Agent SDK session
+    - Runs inside an isolated Daytona sandbox
     - Has access to codebase tools (Glob, Read, Grep)
     - Saves to database before proceeding
     - Can be resumed from any checkpoint
     - Has validation gates with retry
 
-    The workflow runs asynchronously and updates the spec's phase_data
+    The sandbox runs asynchronously and updates the spec's phase_data
     and current_phase as it progresses.
 
     Args:
@@ -1442,10 +1465,8 @@ async def execute_spec(
     Returns:
         SpecExecuteResponse with execution status.
     """
-    import asyncio
-    import os
-
-    from omoi_os.workers.spec_state_machine import run_spec_state_machine
+    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    from omoi_os.services.event_bus import get_event_bus
 
     # Verify spec exists
     spec = await _get_spec_async(db, spec_id)
@@ -1481,37 +1502,57 @@ async def execute_spec(
         change_details={"action": "execute", "phase": spec.current_phase or "explore"},
     )
 
-    # Determine working directory
-    working_dir = request.working_directory or os.getcwd()
+    # Get the current phase to resume from
+    current_phase = spec.current_phase or "explore"
 
-    # Run the state machine asynchronously (fire and forget)
-    # The state machine will update the database as it progresses
-    async def run_execution():
+    # Get accumulated phase data for context
+    phase_context = spec.phase_data or {}
+
+    # Get any saved transcript for session resumption
+    resume_transcript = None
+    if spec.session_transcripts:
+        resume_transcript = spec.session_transcripts.get(current_phase)
+
+    try:
+        # Initialize event bus (optional)
+        event_bus = None
         try:
-            success = await run_spec_state_machine(
-                spec_id=spec_id,
-                working_directory=working_dir,
-                enable_embeddings=request.enable_embeddings,
-            )
-            if not success:
-                # Update spec status on failure
-                await _update_spec_async(db, spec_id, status="failed")
-        except Exception as e:
-            # Update spec status on error
-            await _update_spec_async(db, spec_id, status="failed")
-            # Log the error (in production, use proper logging)
-            import logging
-            logging.getLogger(__name__).error(f"Spec execution failed: {e}")
+            event_bus = get_event_bus()
+        except Exception:
+            pass
 
-    # Start the execution in the background
-    asyncio.create_task(run_execution())
+        # Spawn Daytona sandbox for the spec phase execution
+        spawner = DaytonaSpawnerService(db=db, event_bus=event_bus)
+        sandbox_id = await spawner.spawn_for_phase(
+            spec_id=spec_id,
+            phase=current_phase,
+            project_id=spec.project_id,
+            phase_context=phase_context,
+            resume_transcript=resume_transcript,
+            extra_env={
+                "ENABLE_EMBEDDINGS": "1" if request.enable_embeddings else "0",
+            },
+        )
 
-    return SpecExecuteResponse(
-        spec_id=spec_id,
-        status="started",
-        message="Spec execution started successfully",
-        current_phase=spec.current_phase or "explore",
-    )
+        logger.info(
+            f"Spawned sandbox {sandbox_id} for spec {spec_id} phase {current_phase}"
+        )
+
+        return SpecExecuteResponse(
+            spec_id=spec_id,
+            status="started",
+            message=f"Spec execution started in sandbox {sandbox_id}",
+            current_phase=current_phase,
+        )
+
+    except Exception as e:
+        # Revert status on spawn failure
+        await _update_spec_async(db, spec_id, status="failed")
+        logger.error(f"Failed to spawn sandbox for spec {spec_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to start execution: {e}",
+        )
 
 
 @router.get("/{spec_id}/phase-data", response_model=SpecPhaseDataResponse)
@@ -1678,7 +1719,9 @@ class CriteriaStatusResponse(BaseModel):
 async def execute_spec_tasks(
     spec_id: str,
     request: ExecuteTasksRequest = ExecuteTasksRequest(),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),  # Verify access to spec
 ):
     """
     Execute SpecTasks via the sandbox system.
@@ -1830,3 +1873,351 @@ async def get_criteria_status(
         all_complete=status["all_complete"],
         by_requirement=by_requirement,
     )
+
+
+# ============================================================================
+# Spec Events Endpoint (Phase 3: Event Reporting)
+# ============================================================================
+
+
+class SpecEventItem(BaseModel):
+    """Individual sandbox event for a spec."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    sandbox_id: str
+    spec_id: Optional[str] = None
+    event_type: str
+    event_data: dict
+    source: str
+    created_at: datetime
+
+
+class SpecEventsResponse(BaseModel):
+    """Response for spec events query."""
+
+    spec_id: str
+    events: List[SpecEventItem]
+    total_count: int
+    has_more: bool
+
+
+@router.get("/{spec_id}/events", response_model=SpecEventsResponse)
+async def get_spec_events(
+    spec_id: str,
+    limit: int = Query(default=100, le=500, ge=1, description="Max events to return"),
+    offset: int = Query(default=0, ge=0, description="Pagination offset"),
+    event_type: Optional[str] = Query(default=None, description="Filter by event type"),
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Get sandbox events for a spec.
+
+    Returns events from all sandboxes associated with this spec,
+    ordered by creation time (newest first). Useful for monitoring
+    spec-driven development progress.
+
+    Args:
+        spec_id: ID of the spec to get events for
+        limit: Maximum number of events to return (default: 100, max: 500)
+        offset: Pagination offset (default: 0)
+        event_type: Optional filter by event type (e.g., 'agent.tool_use')
+
+    Returns:
+        SpecEventsResponse with events and pagination info
+    """
+    from sqlalchemy import func
+
+    from omoi_os.models.sandbox_event import SandboxEvent
+
+    async with db.get_async_session() as session:
+        # Build base filter for this spec
+        base_filter = SandboxEvent.spec_id == spec_id
+        if event_type:
+            base_filter = base_filter & (SandboxEvent.event_type == event_type)
+
+        # Get total count
+        count_result = await session.execute(
+            select(func.count(SandboxEvent.id)).filter(base_filter)
+        )
+        total_count = count_result.scalar() or 0
+
+        # Get paginated results, ordered by created_at desc (newest first)
+        result = await session.execute(
+            select(SandboxEvent)
+            .filter(base_filter)
+            .order_by(SandboxEvent.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        events = result.scalars().all()
+
+        return SpecEventsResponse(
+            spec_id=spec_id,
+            events=[
+                SpecEventItem(
+                    id=str(e.id),
+                    sandbox_id=e.sandbox_id,
+                    spec_id=e.spec_id,
+                    event_type=e.event_type,
+                    event_data=e.event_data or {},
+                    source=e.source,
+                    created_at=e.created_at,
+                )
+                for e in events
+            ],
+            total_count=total_count,
+            has_more=offset + len(events) < total_count,
+        )
+
+
+# ============================================================================
+# PR Creation Endpoints (GitHub Integration)
+# ============================================================================
+
+
+class SpecCreatePRRequest(BaseModel):
+    """Request to create a PR for a spec."""
+
+    force: bool = Field(default=False, description="Create PR even if tasks incomplete")
+
+
+class SpecCreatePRResponse(BaseModel):
+    """Response from PR creation."""
+
+    spec_id: str
+    success: bool
+    pr_number: Optional[int] = None
+    pr_url: Optional[str] = None
+    branch_name: Optional[str] = None
+    error: Optional[str] = None
+    already_exists: bool = False
+
+
+@router.post("/{spec_id}/create-branch", response_model=SpecCreatePRResponse)
+async def create_spec_branch(
+    spec_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Create a git branch for a spec.
+
+    This creates a feature branch for spec work. The branch name follows
+    the format: spec/{spec_id_prefix}-{title_slug}
+
+    Should be called when spec execution starts, but can also be called
+    manually to prepare a branch ahead of time.
+
+    Args:
+        spec_id: ID of the spec
+
+    Returns:
+        SpecCreatePRResponse with branch_name if successful
+    """
+    from omoi_os.services.spec_completion_service import get_spec_completion_service
+    from omoi_os.services.event_bus import get_event_bus
+
+    event_bus = None
+    try:
+        event_bus = get_event_bus()
+    except Exception:
+        pass
+
+    completion_service = get_spec_completion_service(db, event_bus)
+    result = await completion_service.create_branch_for_spec(
+        spec_id=spec_id,
+        user_id=current_user.id,
+    )
+
+    if result.get("success"):
+        return SpecCreatePRResponse(
+            spec_id=spec_id,
+            success=True,
+            branch_name=result.get("branch_name"),
+        )
+    else:
+        return SpecCreatePRResponse(
+            spec_id=spec_id,
+            success=False,
+            error=result.get("error"),
+        )
+
+
+@router.post("/{spec_id}/create-pr", response_model=SpecCreatePRResponse)
+async def create_spec_pr(
+    spec_id: str,
+    request: SpecCreatePRRequest = SpecCreatePRRequest(),
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Create a pull request for a spec.
+
+    This creates a PR from the spec's branch to the project's default branch.
+    By default, requires all spec tasks to be completed. Use force=true to
+    create PR even with incomplete tasks.
+
+    The PR includes:
+    - Title: feat: {spec.title}
+    - Body: Spec description and completed tasks checklist
+    - Branch: spec/{spec_id_prefix}-{title_slug}
+
+    Args:
+        spec_id: ID of the spec
+        request: Optional request with force flag
+
+    Returns:
+        SpecCreatePRResponse with pr_number and pr_url if successful
+    """
+    from omoi_os.services.spec_completion_service import get_spec_completion_service
+    from omoi_os.services.event_bus import get_event_bus
+
+    event_bus = None
+    try:
+        event_bus = get_event_bus()
+    except Exception:
+        pass
+
+    completion_service = get_spec_completion_service(db, event_bus)
+    result = await completion_service.create_pr_for_spec(
+        spec_id=spec_id,
+        force=request.force,
+    )
+
+    if result.get("success"):
+        return SpecCreatePRResponse(
+            spec_id=spec_id,
+            success=True,
+            pr_number=result.get("pr_number"),
+            pr_url=result.get("pr_url"),
+            already_exists=result.get("already_exists", False),
+        )
+    else:
+        return SpecCreatePRResponse(
+            spec_id=spec_id,
+            success=False,
+            error=result.get("error"),
+        )
+
+
+# ============================================================================
+# Spec Launch Endpoint (Phase 4: Command Page Integration)
+# ============================================================================
+
+
+class SpecLaunchRequest(BaseModel):
+    """Request to launch a new spec (create and optionally execute)."""
+
+    title: str = Field(..., min_length=1, max_length=500)
+    description: str = Field(..., min_length=1)
+    project_id: str
+    auto_execute: bool = Field(default=True, description="Start execution immediately after creation")
+
+
+class SpecLaunchResponse(BaseModel):
+    """Response from spec launch."""
+
+    spec_id: str
+    status: str  # "created" or "executing"
+    current_phase: Optional[str] = None
+    sandbox_id: Optional[str] = None
+    message: str
+
+
+@router.post("/launch", response_model=SpecLaunchResponse)
+async def launch_spec(
+    request: SpecLaunchRequest,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Create a new spec and optionally start execution.
+
+    This is the primary entry point for the command page's spec-driven mode.
+    It combines spec creation with optional immediate execution, providing
+    a streamlined workflow for users.
+
+    Args:
+        request: Launch request with title, description, project_id, and auto_execute flag
+
+    Returns:
+        SpecLaunchResponse with spec_id, status, and optional sandbox_id
+    """
+    # 0. Verify project access from request body
+    await verify_project_access(request.project_id, current_user, db)
+
+    # 1. Check billing
+    billing = await get_billing_service()
+    can_execute, billing_reason = await billing.can_execute_spec(current_user.id)
+    if not can_execute and request.auto_execute:
+        raise HTTPException(status_code=402, detail=f"Execution blocked: {billing_reason}")
+
+    # 2. Create spec
+    spec = await _create_spec_async(
+        db=db,
+        project_id=request.project_id,
+        title=request.title,
+        description=request.description,
+        user_id=current_user.id,
+    )
+
+    # 3. If not auto-executing, return created spec
+    if not request.auto_execute:
+        return SpecLaunchResponse(
+            spec_id=spec.id,
+            status="created",
+            current_phase=spec.current_phase,
+            message="Spec created (not executing)",
+        )
+
+    # 4. Start execution in sandbox
+    try:
+        # Update status to executing
+        await _update_spec_async(db, spec.id, status="executing")
+
+        # Spawn sandbox
+        from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+        from omoi_os.services.event_bus import get_event_bus
+
+        event_bus = None
+        try:
+            event_bus = get_event_bus()
+        except Exception:
+            pass
+
+        spawner = DaytonaSpawnerService(db=db, event_bus=event_bus)
+
+        sandbox_id = await spawner.spawn_for_phase(
+            spec_id=spec.id,
+            phase=spec.current_phase or "explore",
+            project_id=request.project_id,
+            phase_context={
+                "title": request.title,
+                "description": request.description,
+            },
+        )
+
+        return SpecLaunchResponse(
+            spec_id=spec.id,
+            status="executing",
+            current_phase=spec.current_phase or "explore",
+            sandbox_id=sandbox_id,
+            message="Spec created and execution started",
+        )
+
+    except Exception as e:
+        # Revert status on failure
+        await _update_spec_async(db, spec.id, status="draft")
+        logger.error(f"Failed to launch spec execution: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Spec created but execution failed to start: {str(e)}",
+        )
+
+

@@ -21,6 +21,10 @@ import {
   executeSpecTasks,
   getExecutionStatus,
   getCriteriaStatus,
+  createSpecBranch,
+  createSpecPR,
+  launchSpec,
+  getSpecEvents,
 } from "@/lib/api/specs"
 import type {
   Spec,
@@ -42,6 +46,12 @@ import type {
   ExecuteTasksResponse,
   ExecutionStatusResponse,
   CriteriaStatusResponse,
+  CreateBranchResponse,
+  CreatePRResponse,
+  SpecLaunchRequest,
+  SpecLaunchResponse,
+  SpecEventsResponse,
+  GetSpecEventsParams,
 } from "@/lib/api/specs"
 
 export const specsKeys = {
@@ -51,30 +61,68 @@ export const specsKeys = {
   versions: (specId: string) => [...specsKeys.all, "versions", specId] as const,
   executionStatus: (specId: string) => [...specsKeys.all, "execution", specId] as const,
   criteriaStatus: (specId: string) => [...specsKeys.all, "criteria", specId] as const,
+  events: (specId: string) => [...specsKeys.all, "events", specId] as const,
 }
 
 /**
  * Hook to list specs for a project
+ *
+ * @param projectId - The project ID
+ * @param options.status - Optional status filter
+ * @param options.refetchInterval - Polling interval in ms (default: false)
+ *
+ * @example
+ * // Poll every 5s when any spec is executing
+ * const { data } = useProjectSpecs(projectId, {
+ *   refetchInterval: (query) => {
+ *     const hasExecuting = query.state.data?.specs.some(s => s.status === "executing")
+ *     return hasExecuting ? 5000 : false
+ *   }
+ * })
  */
 export function useProjectSpecs(
   projectId: string | undefined,
-  params?: { status?: string }
+  options?: {
+    status?: string
+    refetchInterval?: number | false | ((query: { state: { data: SpecListResponse | undefined } }) => number | false)
+  }
 ) {
+  const { status, refetchInterval } = options || {}
   return useQuery<SpecListResponse>({
     queryKey: specsKeys.project(projectId!),
-    queryFn: () => listProjectSpecs(projectId!, params),
+    queryFn: () => listProjectSpecs(projectId!, { status }),
     enabled: !!projectId,
+    refetchInterval: refetchInterval as any, // TanStack Query supports function callback
   })
 }
 
 /**
  * Hook to get a single spec
+ *
+ * @param specId - The spec ID to get
+ * @param options.enabled - Whether to enable the query (default: true if specId provided)
+ * @param options.refetchInterval - Polling interval in ms, or function that receives query and returns interval (default: false)
+ *
+ * @example
+ * // Poll every 5s when spec is executing to see task status updates
+ * const { data: spec } = useSpec(specId, {
+ *   refetchInterval: (query) => {
+ *     return query.state.data?.status === "executing" ? 5000 : false
+ *   },
+ * })
  */
-export function useSpec(specId: string | undefined) {
+export function useSpec(
+  specId: string | undefined,
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number | false | ((query: { state: { data: Spec | undefined } }) => number | false)
+  }
+) {
   return useQuery<Spec>({
     queryKey: specsKeys.detail(specId!),
     queryFn: () => getSpec(specId!),
-    enabled: !!specId,
+    enabled: options?.enabled ?? !!specId,
+    refetchInterval: options?.refetchInterval as any, // TanStack Query supports function callback
   })
 }
 
@@ -363,6 +411,111 @@ export function useCriteriaStatus(
   return useQuery<CriteriaStatusResponse>({
     queryKey: specsKeys.criteriaStatus(specId!),
     queryFn: () => getCriteriaStatus(specId!),
+    enabled: options?.enabled ?? !!specId,
+    refetchInterval: options?.refetchInterval,
+  })
+}
+
+// ============================================================================
+// GitHub/PR Integration Hooks
+// ============================================================================
+
+/**
+ * Hook to create a git branch for a spec.
+ * Creates a branch in the project's GitHub repository for the spec's work.
+ */
+export function useCreateSpecBranch(specId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<CreateBranchResponse, Error, void>({
+    mutationFn: () => createSpecBranch(specId),
+    onSuccess: () => {
+      // Invalidate spec detail to refresh branch_name
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+    },
+  })
+}
+
+/**
+ * Hook to create a pull request for a completed spec.
+ * Optionally force PR creation even if some tasks aren't completed.
+ */
+export function useCreateSpecPR(specId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<CreatePRResponse, Error, { force?: boolean } | undefined>({
+    mutationFn: (options) => createSpecPR(specId, options?.force),
+    onSuccess: () => {
+      // Invalidate spec detail to refresh PR tracking fields
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+    },
+  })
+}
+
+// ============================================================================
+// Spec Launch Hook (Command Page Integration)
+// ============================================================================
+
+/**
+ * Hook to launch a new spec directly from the command page.
+ * This is the preferred entry point for spec-driven mode, bypassing ticket creation.
+ * Creates a spec and optionally starts sandbox execution immediately.
+ *
+ * @returns Mutation with spec_id and sandbox_id for navigation
+ */
+export function useLaunchSpec() {
+  const queryClient = useQueryClient()
+
+  return useMutation<SpecLaunchResponse, Error, SpecLaunchRequest>({
+    mutationFn: launchSpec,
+    onSuccess: (data, variables) => {
+      // Invalidate project specs list to show the new spec
+      queryClient.invalidateQueries({ queryKey: specsKeys.project(variables.project_id) })
+    },
+  })
+}
+
+// ============================================================================
+// Spec Events Hook (Real-time monitoring)
+// ============================================================================
+
+/**
+ * Hook to get real-time events for a spec.
+ * Returns sandbox events from all sandboxes associated with this spec,
+ * ordered by creation time (newest first).
+ *
+ * Use refetchInterval for real-time updates during spec execution.
+ * Recommended: 2000ms (2s) for active execution, false when idle.
+ *
+ * @param specId - The spec ID to get events for
+ * @param options.enabled - Whether to enable the query (default: true if specId provided)
+ * @param options.refetchInterval - Polling interval in ms for real-time updates (default: false)
+ * @param options.limit - Max events to return (default: 100)
+ * @param options.eventType - Filter by specific event type (optional)
+ *
+ * @example
+ * // Poll every 2s when spec is executing
+ * const { data: events } = useSpecEvents(specId, {
+ *   enabled: spec?.status === "executing",
+ *   refetchInterval: spec?.status === "executing" ? 2000 : false,
+ * })
+ */
+export function useSpecEvents(
+  specId: string | undefined,
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number | false
+    limit?: number
+    eventType?: string
+  }
+) {
+  const params: GetSpecEventsParams = {}
+  if (options?.limit) params.limit = options.limit
+  if (options?.eventType) params.event_type = options.eventType
+
+  return useQuery<SpecEventsResponse>({
+    queryKey: [...specsKeys.events(specId!), params],
+    queryFn: () => getSpecEvents(specId!, params),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval,
   })

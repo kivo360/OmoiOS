@@ -1,8 +1,23 @@
 # Sandbox Execution - Critical Architecture Issue
 
 **Created**: 2025-01-11
-**Status**: CRITICAL - Bug/Gap identified
+**Updated**: 2025-01-13 (clarified sandbox infrastructure status)
+**Status**: CRITICAL - API Trigger Gap (not infrastructure gap)
 **Purpose**: Document where spec execution SHOULD vs DOES run
+
+---
+
+## 🔄 Cross-Reference Update (2025-01-13)
+
+**Important Clarification**: The sandbox infrastructure is **FULLY IMPLEMENTED** (see `docs/design/sandbox-agents/IMPLEMENTATION_COMPLETE_STATUS.md`):
+- ✅ `spawn_for_phase()` method exists at `daytona_spawner.py:750`
+- ✅ Worker can run in spec mode when `SPEC_PHASE` and `SPEC_ID` env vars are set
+- ✅ Worker's `_run_spec_state_machine()` method at `claude_sandbox_worker.py:4211`
+- ✅ Sandbox event reporting works (`sandbox.py:365`)
+- ✅ Message injection works (`sandbox.py:758,803`)
+- ✅ Guardian can intervene with sandboxes (`intelligent_guardian.py:693-887`)
+
+**The GAP**: The API endpoint `POST /specs/{id}/execute` runs `run_spec_state_machine()` directly in the API process instead of calling `spawn_for_phase()`. This is a **wiring issue**, not a missing infrastructure issue.
 
 ---
 

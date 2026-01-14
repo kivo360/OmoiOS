@@ -70,6 +70,11 @@ export interface Spec {
   execution: SpecExecution | null
   created_at: string
   updated_at: string
+
+  // GitHub/PR tracking fields
+  branch_name: string | null
+  pull_request_url: string | null
+  pull_request_number: number | null
 }
 
 export interface SpecListResponse {
@@ -467,4 +472,128 @@ export async function getCriteriaStatus(
   specId: string
 ): Promise<CriteriaStatusResponse> {
   return apiRequest<CriteriaStatusResponse>(`/api/v1/specs/${specId}/criteria-status`)
+}
+
+// ============================================================================
+// GitHub/PR Integration
+// ============================================================================
+
+export interface CreateBranchResponse {
+  success: boolean
+  branch_name?: string
+  error?: string
+}
+
+export interface CreatePRResponse {
+  success: boolean
+  pr_number?: number
+  pr_url?: string
+  error?: string
+  already_exists?: boolean
+  incomplete_tasks?: string[]
+}
+
+/**
+ * Create a git branch for a spec.
+ * This creates a branch in the project's GitHub repository for the spec's work.
+ */
+export async function createSpecBranch(specId: string): Promise<CreateBranchResponse> {
+  return apiRequest<CreateBranchResponse>(`/api/v1/specs/${specId}/create-branch`, {
+    method: "POST",
+  })
+}
+
+/**
+ * Create a pull request for a completed spec.
+ * Optionally force PR creation even if some tasks aren't completed.
+ */
+export async function createSpecPR(
+  specId: string,
+  force?: boolean
+): Promise<CreatePRResponse> {
+  return apiRequest<CreatePRResponse>(`/api/v1/specs/${specId}/create-pr`, {
+    method: "POST",
+    body: { force: force || false },
+  })
+}
+
+// ============================================================================
+// Spec Launch (Direct spec creation from command page)
+// ============================================================================
+
+export interface SpecLaunchRequest {
+  title: string
+  description: string
+  project_id: string
+  working_directory?: string
+  auto_execute?: boolean
+}
+
+export interface SpecLaunchResponse {
+  spec_id: string
+  sandbox_id: string | null
+  status: string
+  message: string
+}
+
+/**
+ * Launch a new spec directly (bypassing ticket creation).
+ * This is the preferred entry point from the command page for spec-driven mode.
+ * Creates a spec and optionally starts sandbox execution immediately.
+ */
+export async function launchSpec(
+  request: SpecLaunchRequest
+): Promise<SpecLaunchResponse> {
+  return apiRequest<SpecLaunchResponse>("/api/v1/specs/launch", {
+    method: "POST",
+    body: request,
+  })
+}
+
+// ============================================================================
+// Spec Events (Real-time monitoring)
+// ============================================================================
+
+export interface SpecEventItem {
+  id: string
+  sandbox_id: string
+  spec_id: string | null
+  event_type: string
+  event_data: Record<string, unknown>
+  source: string
+  created_at: string
+}
+
+export interface SpecEventsResponse {
+  spec_id: string
+  events: SpecEventItem[]
+  total_count: number
+  has_more: boolean
+}
+
+export interface GetSpecEventsParams {
+  limit?: number
+  offset?: number
+  event_type?: string
+}
+
+/**
+ * Get sandbox events for a spec.
+ * Returns events from all sandboxes associated with this spec,
+ * ordered by creation time (newest first). Useful for real-time
+ * monitoring of spec-driven development progress.
+ */
+export async function getSpecEvents(
+  specId: string,
+  params?: GetSpecEventsParams
+): Promise<SpecEventsResponse> {
+  const searchParams = new URLSearchParams()
+  if (params?.limit) searchParams.set("limit", params.limit.toString())
+  if (params?.offset) searchParams.set("offset", params.offset.toString())
+  if (params?.event_type) searchParams.set("event_type", params.event_type)
+
+  const query = searchParams.toString()
+  return apiRequest<SpecEventsResponse>(
+    `/api/v1/specs/${specId}/events${query ? `?${query}` : ""}`
+  )
 }

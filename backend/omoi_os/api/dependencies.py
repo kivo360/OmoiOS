@@ -997,3 +997,62 @@ async def verify_task_access(
         await verify_ticket_access(task.ticket_id, current_user, db)
 
         return task_id
+
+
+async def verify_spec_access(
+    spec_id: str,
+    current_user: "User" = Depends(get_current_user),
+    db: "DatabaseService" = Depends(get_db_service),
+) -> str:
+    """
+    Verify the current user has access to the specified spec.
+
+    A spec is accessible if:
+    1. The spec's user_id matches the current user (direct ownership)
+    2. OR the spec belongs to a project in an organization the user is a member of
+
+    Args:
+        spec_id: The spec ID to check access for
+
+    Returns:
+        The spec ID if access is granted
+
+    Raises:
+        HTTPException 403: If user doesn't have access to the spec
+        HTTPException 404: If spec doesn't exist
+    """
+    from sqlalchemy import select
+    from omoi_os.models.spec import Spec
+
+    async with db.get_async_session() as session:
+        # Get the spec
+        result = await session.execute(
+            select(Spec).where(Spec.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+
+        if not spec:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Spec not found",
+            )
+
+        # Check direct user ownership first (user_id field)
+        if hasattr(spec, 'user_id') and spec.user_id and spec.user_id == current_user.id:
+            return spec_id
+
+        # If spec has a project, verify project access
+        if spec.project_id:
+            await verify_project_access(spec.project_id, current_user, db)
+            return spec_id
+
+        # Spec has no user_id and no valid project access - deny access
+        logger.warning(
+            f"Spec {spec_id} access denied - no user_id and no valid project access",
+            spec_id=spec_id,
+            user_id=str(current_user.id),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have access to this spec",
+        )

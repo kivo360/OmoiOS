@@ -30,11 +30,11 @@ interface SpecsPageProps {
 }
 
 const statusConfig = {
-  draft: { label: "Draft", icon: FileText, color: "secondary" },
-  requirements: { label: "Requirements", icon: FileText, color: "secondary" },
-  design: { label: "Design", icon: AlertCircle, color: "warning" },
-  executing: { label: "Executing", icon: PlayCircle, color: "default" },
-  completed: { label: "Completed", icon: CheckCircle, color: "success" },
+  draft: { label: "Draft", icon: FileText, color: "secondary", spinning: false },
+  requirements: { label: "Requirements", icon: FileText, color: "secondary", spinning: false },
+  design: { label: "Design", icon: AlertCircle, color: "warning", spinning: false },
+  executing: { label: "Executing", icon: Loader2, color: "default", spinning: true },
+  completed: { label: "Completed", icon: CheckCircle, color: "success", spinning: false },
 }
 
 export default function SpecsPage({ params }: SpecsPageProps) {
@@ -44,7 +44,13 @@ export default function SpecsPage({ params }: SpecsPageProps) {
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
 
-  const { data, isLoading, error } = useProjectSpecs(projectId)
+  // Poll every 5s when any spec is executing to see status updates
+  const { data, isLoading, error } = useProjectSpecs(projectId, {
+    refetchInterval: (query) => {
+      const hasExecuting = query.state.data?.specs.some(s => s.status === "executing")
+      return hasExecuting ? 5000 : false
+    }
+  })
   const { data: project } = useProject(projectId)
   const createMutation = useCreateSpec()
 
@@ -192,7 +198,7 @@ export default function SpecsPage({ params }: SpecsPageProps) {
                       </CardDescription>
                     </div>
                     <Badge variant={config.color as "default" | "secondary" | "destructive" | "outline"}>
-                      <StatusIcon className="mr-1 h-3 w-3" />
+                      <StatusIcon className={`mr-1 h-3 w-3 ${config.spinning ? "animate-spin" : ""}`} />
                       {config.label}
                     </Badge>
                   </div>

@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -27,6 +27,7 @@ class SandboxEvent(Base):
     Attributes:
         id: Unique event identifier (UUID)
         sandbox_id: ID of the sandbox that generated this event
+        spec_id: Optional ID of the spec this event is associated with
         event_type: Type of event (e.g., 'agent.started', 'agent.tool_use')
         event_data: JSON payload with event-specific data
         source: Source of the event ('agent', 'guardian', 'system')
@@ -39,6 +40,13 @@ class SandboxEvent(Base):
         String, primary_key=True, default=lambda: str(uuid4())
     )
     sandbox_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    spec_id: Mapped[Optional[str]] = mapped_column(
+        String,
+        ForeignKey("specs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Spec this event is associated with (for spec-driven development)",
+    )
     event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     event_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     source: Mapped[str] = mapped_column(
