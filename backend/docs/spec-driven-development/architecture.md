@@ -1,8 +1,19 @@
 # Spec-Driven Development Architecture
 
 **Created**: 2025-01-11
-**Status**: Documentation of existing system
+**Updated**: 2025-01-13 (Added Target State diagrams and cross-references)
+**Status**: Documentation of existing system + target architecture
 **Purpose**: Trace complete flow of spec-driven development paths
+
+---
+
+## 🔄 Cross-Reference (2025-01-13)
+
+**Sandbox Infrastructure Status**: The sandbox event system, message injection, and `spawn_for_phase()` are **100% implemented**. See `docs/design/sandbox-agents/IMPLEMENTATION_COMPLETE_STATUS.md`.
+
+**What's Missing**: The API endpoints don't call the sandbox infrastructure. See [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) for fixes.
+
+---
 
 ## System Overview
 
@@ -279,3 +290,243 @@ class Ticket(Base):
     description: str
     # NO spec_id field - this is a gap
 ```
+
+---
+
+## 🎯 TARGET STATE ARCHITECTURE (After Implementation)
+
+This section shows how the system SHOULD work after implementing the fixes in [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md).
+
+### Complete End-to-End Flow
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          SPEC-DRIVEN DEVELOPMENT FLOW                        │
+│                            (TARGET STATE - FIXED)                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+                              USER INPUT
+                                  │
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  ENTRY POINTS                                                                │
+│  ┌─────────────┐    ┌──────────────────┐    ┌─────────────────────┐         │
+│  │ Command     │    │ POST /specs      │    │ POST /specs/{id}    │         │
+│  │ Page Input  │───►│ (create spec)    │───►│ /execute            │         │
+│  │ (Cmd+K)     │    │                  │    │                     │         │
+│  └─────────────┘    └──────────────────┘    └──────────┬──────────┘         │
+└─────────────────────────────────────────────────────────│────────────────────┘
+                                                          │
+                                          ┌───────────────┴───────────────┐
+                                          │  spawn_for_phase()            │
+                                          │  (daytona_spawner.py:750)     │
+                                          │                               │
+                                          │  Sets: SPEC_ID, SPEC_PHASE    │
+                                          │        PROJECT_ID, etc.       │
+                                          └───────────────┬───────────────┘
+                                                          │
+                                                          ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  SANDBOX ENVIRONMENT (Isolated)                                              │
+│  ┌───────────────────────────────────────────────────────────────────────┐  │
+│  │  claude_sandbox_worker.py                                              │  │
+│  │                                                                        │  │
+│  │  if config.spec_phase AND config.spec_id:                             │  │
+│  │      await _run_spec_state_machine()   (line 4211)                    │  │
+│  │                                                                        │  │
+│  │  ┌────────────────────────────────────────────────────────────────┐   │  │
+│  │  │                    SPEC STATE MACHINE                           │   │  │
+│  │  │                                                                 │   │  │
+│  │  │  EXPLORE ──► REQUIREMENTS ──► DESIGN ──► TASKS ──► SYNC       │   │  │
+│  │  │     │              │            │          │          │        │   │  │
+│  │  │     ▼              ▼            ▼          ▼          ▼        │   │  │
+│  │  │  (eval)        (eval)       (eval)     (eval)     (eval)      │   │  │
+│  │  │                                                      │         │   │  │
+│  │  │                                                      ▼         │   │  │
+│  │  │                                           SpecTaskExecutionSvc │   │  │
+│  │  │                                           (NEW - wired in)     │   │  │
+│  │  └────────────────────────────────────────────┬───────────────────┘   │  │
+│  │                                               │                        │  │
+│  │  ┌────────────────────────────────────────────┼───────────────────┐   │  │
+│  │  │  EventReporter (NEW - reports to API)      │                   │   │  │
+│  │  │  POST /api/v1/sandboxes/{id}/events        │                   │   │  │
+│  │  │                                            │                   │   │  │
+│  │  │  Events: phase_started, phase_complete,    │                   │   │  │
+│  │  │          error, progress                   │                   │   │  │
+│  │  └────────────────────────────────────────────┼───────────────────┘   │  │
+│  └───────────────────────────────────────────────┼───────────────────────┘  │
+└──────────────────────────────────────────────────│──────────────────────────┘
+                                                   │
+                                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  BRIDGE: SpecTaskExecutionService                                            │
+│  (omoi_os/services/spec_task_execution.py)                                   │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  1. Creates bridging Ticket (if not exists)                            │ │
+│  │     - ticket.user_id = spec.user_id (NEW)                              │ │
+│  │     - ticket.spec_id stored in context (or FK)                         │ │
+│  │                                                                         │ │
+│  │  2. Converts SpecTask → Task                                           │ │
+│  │     - For each SpecTask: create Task record                            │ │
+│  │     - Task linked to Ticket                                            │ │
+│  │                                                                         │ │
+│  │  3. Tasks queued for execution                                         │ │
+│  │     - TaskQueueService picks up Tasks                                  │ │
+│  │     - OrchestratorWorker assigns to agents                             │ │
+│  └──────────────────────────────────────────┬─────────────────────────────┘ │
+└─────────────────────────────────────────────│───────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  EXECUTION: OrchestratorWorker → Daytona Sandboxes                          │
+│                                                                              │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │  orchestrator_worker.py                                                │ │
+│  │                                                                         │ │
+│  │  1. Poll TaskQueueService for ready tasks                              │ │
+│  │  2. For each Task:                                                     │ │
+│  │     - Spawn Daytona sandbox                                            │ │
+│  │     - Clone GitHub repo (if project has repo)                          │ │
+│  │     - Agent executes task                                              │ │
+│  │     - Push changes, create PR                                          │ │
+│  │  3. On completion:                                                     │ │
+│  │     - Update SpecTask status via event                                 │ │
+│  │     - Update Ticket progress                                           │ │
+│  └──────────────────────────────────────────┬─────────────────────────────┘ │
+└─────────────────────────────────────────────│───────────────────────────────┘
+                                              │
+                                              ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  COMPLETION: Spec Status Updates                                             │
+│                                                                              │
+│  When ALL Tasks complete:                                                    │
+│  1. Ticket marked completed                                                  │
+│  2. SpecTask records updated                                                 │
+│  3. Spec.status = "completed"                                                │
+│  4. GitHub PR ready for review                                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Current vs Target State Comparison
+
+```
+CURRENT STATE (BROKEN):
+
+POST /specs/{id}/execute
+        │
+        ▼
+run_spec_state_machine()  ← Runs in API process! ❌
+        │
+        ▼
+EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC → COMPLETE
+                                            │
+                                            ▼
+                                    Creates SpecTask records
+                                            │
+                                            ▼
+                                    DEAD END ❌ (Nothing happens)
+
+
+TARGET STATE (FIXED):
+
+POST /specs/{id}/execute
+        │
+        ▼
+spawn_for_phase()  ← Spawns sandbox! ✅
+        │
+        ▼
+[Sandbox] claude_sandbox_worker._run_spec_state_machine()
+        │
+        ▼
+EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC
+                                            │
+        ┌───────────────────────────────────┘
+        │
+        ▼
+SpecTaskExecutionService.execute_spec_tasks()  ← NEW wiring! ✅
+        │
+        ▼
+Creates Ticket + Tasks
+        │
+        ▼
+TaskQueueService → OrchestratorWorker → Daytona Sandboxes
+        │
+        ▼
+EXECUTION (agents working on code)
+        │
+        ▼
+COMPLETION (PR created, spec done)
+```
+
+### Key Components Requiring Changes
+
+| Component | Current State | Target State | Change Required |
+|-----------|--------------|--------------|-----------------|
+| `specs.py:execute` | Calls `run_spec_state_machine()` | Calls `spawn_for_phase()` | Yes |
+| `spec_state_machine.py:291` | Creates SpecTask via SpecSyncService | Also calls `execute_spec_tasks()` | Yes |
+| `Spec` model | No `user_id` field | Has `user_id` field | Yes (migration) |
+| `SpecStateMachine` | No EventReporter | Uses EventReporter | Yes |
+| `Ticket.spec_id` | Stored in context JSON | Proper FK column | Optional |
+
+### File Locations for Implementation
+
+```
+PHASE 1: Critical Wiring
+├── omoi_os/api/routes/specs.py:1440-1514    → Change /execute to spawn sandbox
+└── omoi_os/workers/spec_state_machine.py:291  → Add execute_spec_tasks() call in _execute_sync_phase
+
+PHASE 2: User Ownership
+├── omoi_os/models/spec.py                    → Add user_id FK
+└── alembic/versions/xxx_add_spec_user_id.py  → Migration
+
+PHASE 3: Real-Time UI
+├── omoi_os/workers/spec_state_machine.py     → Add EventReporter usage
+└── omoi_os/workers/spec_*.py phases          → Emit phase events
+
+PHASE 4: Command Page
+└── omoi_os/api/routes/specs.py               → Add /launch endpoint
+```
+
+### GitHub Integration Points (Task Execution)
+
+The orchestrator already handles GitHub integration for task execution:
+
+```
+orchestrator_worker.py:530-629  ─►  GitHub Repo Clone
+orchestrator_worker.py:1075-1170 ─►  PR Creation on Success
+
+This works when:
+1. Project has github_repo_url set
+2. User has GitHub token connected
+3. Task is picked up by orchestrator
+
+This is NOT connected to spec execution yet - that's the gap.
+```
+
+---
+
+## Summary: What Works vs What's Broken
+
+### ✅ Working Components
+
+1. **Spec State Machine** - All phases work correctly
+2. **SpecTaskExecutionService** - Bridge fully implemented
+3. **Sandbox Infrastructure** - `spawn_for_phase()` exists and works
+4. **Task Execution** - Orchestrator → Daytona → Agent flow works
+5. **GitHub Integration** - Clone, commit, PR creation works in task execution
+
+### ❌ Broken Connections
+
+1. `/execute` runs in API process, not sandbox
+2. SYNC phase doesn't call SpecTaskExecutionService
+3. Spec has no `user_id` → Tickets invisible on board
+4. State machine doesn't emit real-time events
+
+### 📋 Implementation Roadmap
+
+See [IMPLEMENTATION_ROADMAP.md](./IMPLEMENTATION_ROADMAP.md) for:
+- Step-by-step fix instructions
+- Code snippets for each change
+- Verification checklists
+- Estimated time per phase

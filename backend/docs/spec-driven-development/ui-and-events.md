@@ -180,8 +180,14 @@ async def get_spec_events(
     db: DatabaseService = Depends(get_db_service),
 ):
     """Get events for a spec execution."""
-    # Query sandbox_events where spec_id matches
-    # Or create new spec_events table
+    # Query sandbox_events using the spec_id FK column
+    async with db.get_async_session() as session:
+        stmt = select(SandboxEvent).where(
+            SandboxEvent.spec_id == spec_id
+        ).order_by(SandboxEvent.created_at.desc()).limit(limit).offset(offset)
+        result = await session.execute(stmt)
+        events = result.scalars().all()
+    return SpecEventsResponse(spec_id=spec_id, events=[...], total=len(events))
 ```
 
 ### 5. Frontend Changes
@@ -312,28 +318,60 @@ export function EventTimeline({ specId }: { specId: string }) {
 
 ## Database Schema Considerations
 
-### Option A: Use Existing sandbox_events
+### ✅ DECISION: Use Existing sandbox_events (Option A)
+
+**Rationale**: Don't repeat ourselves - leverage existing event infrastructure.
+
+**Current Model** (`omoi_os/models/sandbox_event.py:21-52`):
+```python
+class SandboxEvent(Base):
+    __tablename__ = "sandbox_events"
+
+    id: str              # UUID
+    sandbox_id: str      # The sandbox that generated this event
+    event_type: str      # e.g., 'agent.started', 'agent.tool_use'
+    event_data: dict     # JSONB payload with event-specific data
+    source: str          # 'agent', 'guardian', 'system'
+    created_at: datetime
+```
+
+**Required Change**: Add `spec_id` column to link events to specs.
 
 ```sql
--- Add spec_id to sandbox_events
+-- Migration: Add spec_id to sandbox_events
 ALTER TABLE sandbox_events ADD COLUMN spec_id VARCHAR REFERENCES specs(id);
+CREATE INDEX idx_sandbox_events_spec_id ON sandbox_events(spec_id) WHERE spec_id IS NOT NULL;
 ```
 
-### Option B: Create spec_events Table
-
-```sql
-CREATE TABLE spec_events (
-  id UUID PRIMARY KEY,
-  spec_id VARCHAR REFERENCES specs(id),
-  sandbox_id VARCHAR,  -- If running in sandbox
-  event_type VARCHAR NOT NULL,
-  event_data JSONB,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_spec_events_spec_id ON spec_events(spec_id);
-CREATE INDEX idx_spec_events_created_at ON spec_events(created_at);
+**Model Update** (`omoi_os/models/sandbox_event.py`):
+```python
+# Add to SandboxEvent class:
+spec_id: Mapped[Optional[str]] = mapped_column(
+    String,
+    ForeignKey("specs.id", ondelete="SET NULL"),
+    nullable=True,
+    index=True,
+    comment="Spec ID if this event is from spec execution"
+)
 ```
+
+### New Spec-Specific Event Types
+
+The state machine will emit these new event types (stored in existing `sandbox_events` table):
+
+| Event Type | source | Payload | UI Display |
+|------------|--------|---------|------------|
+| `spec.execution_started` | `system` | `{spec_id, starting_phase}` | "Execution started" |
+| `spec.phase_started` | `system` | `{spec_id, phase, attempt}` | Phase indicator activates |
+| `spec.phase_completed` | `system` | `{spec_id, phase, duration, eval_score}` | Phase checkmark |
+| `spec.phase_failed` | `system` | `{spec_id, phase, error, attempt}` | Phase error indicator |
+| `spec.phase_retry` | `system` | `{spec_id, phase, attempt, max_attempts}` | Retry count badge |
+| `spec.execution_completed` | `system` | `{spec_id, success, total_duration}` | Success/failure banner |
+| `spec.sync_started` | `system` | `{spec_id, items_to_sync}` | "Syncing N items..." |
+| `spec.sync_completed` | `system` | `{spec_id, items_synced}` | "Synced N items" |
+| `spec.tasks_queued` | `system` | `{spec_id, task_count, ticket_id}` | "N tasks queued" |
+
+These events will display differently in the UI than regular agent events - showing phase progress, evaluator scores, and task execution status.
 
 ---
 

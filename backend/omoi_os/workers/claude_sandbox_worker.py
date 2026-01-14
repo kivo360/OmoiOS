@@ -2506,6 +2506,10 @@ class EventReporter:
             "sandbox_id": self.config.sandbox_id,
         }
 
+        # Add spec_id for spec-driven development events
+        if hasattr(self.config, "spec_id") and self.config.spec_id:
+            event_data["spec_id"] = self.config.spec_id
+
         url = f"{self.config.callback_url}/api/v1/sandboxes/{self.config.sandbox_id}/events"
 
         try:

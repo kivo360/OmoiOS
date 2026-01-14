@@ -2,11 +2,11 @@
 
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from omoi_os.models.base import Base
@@ -14,6 +14,7 @@ from omoi_os.utils.datetime import utc_now
 
 if TYPE_CHECKING:
     from omoi_os.models.project import Project
+    from omoi_os.models.user import User
 
 
 class Spec(Base):
@@ -29,6 +30,13 @@ class Spec(Base):
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+    user_id: Mapped[Optional[UUID]] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="User who created the spec",
     )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -119,6 +127,23 @@ class Spec(Base):
         comment="Retry attempts per phase: {explore: 1, requirements: 2, ...}",
     )
 
+    # GitHub/PR tracking for spec completion
+    branch_name: Mapped[Optional[str]] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="Git branch name for this spec (e.g., spec/abc123-feature-name)",
+    )
+    pull_request_url: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="GitHub PR URL after spec completion",
+    )
+    pull_request_number: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        nullable=True,
+        comment="GitHub PR number for tracking",
+    )
+
     # Deduplication support (pgvector for efficient similarity search)
     embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
         Vector(1536),  # pgvector native type for cosine similarity
@@ -145,6 +170,11 @@ class Spec(Base):
 
     # Relationships
     project: Mapped["Project"] = relationship("Project", back_populates="specs")
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[user_id],
+        lazy="select",
+    )
     requirements: Mapped[list["SpecRequirement"]] = relationship(
         "SpecRequirement",
         back_populates="spec",

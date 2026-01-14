@@ -6,6 +6,7 @@
 **Purpose**: Clear buyer-facing positioning, messaging, and focus for OmoiOS.
 
 > **Related Documents**:
+> - [Competitive Analysis](./competitive_analysis.md) - Positioning vs. Cursor 2.0 and Google Antigravity
 > - [Sub-Niche Targeting](./sub_niche_targeting.md) - Specific software sub-niches (2 layers deep)
 > - [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) - Non-software market opportunities
 > - [Go-to-Market Strategy](./go_to_market_strategy.md) - Full GTM plan and launch sequence

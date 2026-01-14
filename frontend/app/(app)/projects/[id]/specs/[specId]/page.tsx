@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState, useMemo } from "react"
+import { use, useState, useMemo, useEffect, useRef } from "react"
 import Link from "next/link"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -72,7 +72,11 @@ import {
   useExecuteSpecTasks,
   useExecutionStatus,
   useCriteriaStatus,
+  useCreateSpecBranch,
+  useCreateSpecPR,
+  useSpecEvents,
 } from "@/hooks/useSpecs"
+import { EventTimeline, PhaseProgress, PhaseProgressInline } from "@/components/spec"
 import { useProject } from "@/hooks/useProjects"
 import {
   Dialog,
@@ -135,7 +139,14 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
 
   // Fetch project and spec data
   const { data: project } = useProject(projectId)
-  const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId)
+  // Poll spec every 5s when executing to see real-time task status updates
+  const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId, {
+    refetchInterval: (query) => {
+      // Enable polling only when spec is executing
+      const specData = query.state.data
+      return specData?.status === "executing" ? 5000 : false
+    },
+  })
   const { data: allSpecs } = useProjectSpecs(projectId)
   const { data: versionsData } = useSpecVersions(specId, 10)
 
@@ -150,6 +161,59 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     refetchInterval: isExecuting ? 5000 : false,
   })
 
+  // Track phase changes for toast notifications
+  const previousPhaseRef = useRef<string | null>(null)
+  const previousStatusRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (!spec) return
+
+    const currentPhase = spec.phase?.toLowerCase()
+    const currentStatus = spec.status
+
+    // Phase transition notification
+    if (previousPhaseRef.current && currentPhase && previousPhaseRef.current !== currentPhase) {
+      const phaseLabels: Record<string, string> = {
+        explore: "🔍 Explore",
+        requirements: "📋 Requirements",
+        design: "🎨 Design",
+        tasks: "📝 Tasks",
+        sync: "🔄 Sync",
+        complete: "✅ Complete",
+      }
+      const phaseLabel = phaseLabels[currentPhase] || currentPhase
+      const fromPhaseLabel = phaseLabels[previousPhaseRef.current] || previousPhaseRef.current
+
+      toast.success(`Phase transitioned: ${fromPhaseLabel} → ${phaseLabel}`, {
+        description: "Spec execution progressing",
+        duration: 5000,
+      })
+    }
+
+    // Status transition notification (started, completed, failed)
+    if (previousStatusRef.current && currentStatus && previousStatusRef.current !== currentStatus) {
+      if (currentStatus === "completed") {
+        toast.success("🎉 Spec execution completed!", {
+          description: "All tasks have been processed",
+          duration: 8000,
+        })
+      } else if (currentStatus === "failed") {
+        toast.error("❌ Spec execution failed", {
+          description: "Check the event timeline for details",
+          duration: 10000,
+        })
+      } else if (currentStatus === "executing" && previousStatusRef.current === "draft") {
+        toast.info("🚀 Spec execution started", {
+          description: "Working through phases...",
+          duration: 4000,
+        })
+      }
+    }
+
+    previousPhaseRef.current = currentPhase || null
+    previousStatusRef.current = currentStatus
+  }, [spec?.phase, spec?.status])
+
   // Mutations
   const approveReqMutation = useApproveRequirements(specId)
   const approveDesignMutation = useApproveDesign(specId)
@@ -160,6 +224,8 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const deleteRequirementMutation = useDeleteRequirement(specId)
   const addCriterionMutation = useAddCriterion(specId, addCriterionOpen || "")
   const executeTasksMutation = useExecuteSpecTasks(specId)
+  const createBranchMutation = useCreateSpecBranch(specId)
+  const createPRMutation = useCreateSpecPR(specId)
 
   // Derive spec display data from API response with safe defaults
   const specData = useMemo(() => ({
@@ -323,6 +389,44 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     }
   }
 
+  const handleCreateBranch = async () => {
+    try {
+      const result = await createBranchMutation.mutateAsync()
+      if (result.success) {
+        toast.success(`Branch created: ${result.branch_name}`)
+      } else {
+        toast.error(result.error || "Failed to create branch")
+      }
+    } catch {
+      toast.error("Failed to create branch")
+    }
+  }
+
+  const handleCreatePR = async (force?: boolean) => {
+    try {
+      const result = await createPRMutation.mutateAsync({ force })
+      if (result.success) {
+        if (result.already_exists) {
+          toast.info("PR already exists", {
+            description: `PR #${result.pr_number}`,
+          })
+        } else {
+          toast.success(`PR created: #${result.pr_number}`)
+        }
+      } else {
+        if (result.incomplete_tasks && result.incomplete_tasks.length > 0) {
+          toast.error(result.error || "Tasks not complete", {
+            description: `${result.incomplete_tasks.length} task(s) still incomplete. Use "Force Create PR" to create anyway.`,
+          })
+        } else {
+          toast.error(result.error || "Failed to create PR")
+        }
+      }
+    } catch {
+      toast.error("Failed to create PR")
+    }
+  }
+
   if (specLoading) {
     return (
       <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
@@ -450,6 +554,15 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                 </Badge>
               </div>
               <p className="text-sm text-muted-foreground">{specData.description}</p>
+              {/* Phase Progress Indicator */}
+              <div className="mt-3">
+                <PhaseProgress
+                  currentPhase={specData.phase.toLowerCase()}
+                  status={specData.status}
+                  size="sm"
+                  showLabels={false}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm">
@@ -1492,6 +1605,87 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                   </Card>
                 )}
 
+                {/* GitHub/PR Section - Show when execution is complete */}
+                {executionStatus?.is_complete && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <GitBranch className="h-4 w-4" />
+                        GitHub Integration
+                      </CardTitle>
+                      <CardDescription>
+                        Create a pull request to merge your changes
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {/* Branch Status */}
+                      {spec?.branch_name ? (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                          <GitBranch className="h-4 w-4 text-muted-foreground" />
+                          <code className="text-sm font-mono flex-1 truncate">{spec.branch_name}</code>
+                          <Badge variant="outline" className="text-xs">Active</Badge>
+                        </div>
+                      ) : (
+                        <Button
+                          onClick={handleCreateBranch}
+                          disabled={createBranchMutation.isPending}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          {createBranchMutation.isPending ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            <GitBranch className="mr-2 h-4 w-4" />
+                          )}
+                          Create Branch
+                        </Button>
+                      )}
+
+                      {/* PR Status */}
+                      {spec?.pull_request_url ? (
+                        <a
+                          href={spec.pull_request_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-3 p-3 rounded-md bg-green-500/10 border border-green-500/30 hover:bg-green-500/20 transition-colors"
+                        >
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-green-600">Pull Request #{spec.pull_request_number}</p>
+                            <p className="text-xs text-green-600/80">Ready for review</p>
+                          </div>
+                          <ExternalLink className="h-4 w-4 text-green-600" />
+                        </a>
+                      ) : spec?.branch_name ? (
+                        <div className="space-y-2">
+                          <Button
+                            onClick={() => handleCreatePR(false)}
+                            disabled={createPRMutation.isPending}
+                            className="w-full"
+                          >
+                            {createPRMutation.isPending ? (
+                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            ) : (
+                              <ExternalLink className="mr-2 h-4 w-4" />
+                            )}
+                            Create Pull Request
+                          </Button>
+                          <p className="text-xs text-muted-foreground text-center">
+                            This will create a PR with all completed tasks
+                          </p>
+                        </div>
+                      ) : null}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Event Timeline - Real-time event feed */}
+                <EventTimeline
+                  specId={specId}
+                  isExecuting={isExecuting}
+                  maxHeight="400px"
+                />
+
                 {/* Empty State */}
                 {!execution && !executionStatus && (
                   <Card>
@@ -1553,6 +1747,13 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
             <div>
               <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
               <div className="space-y-2.5 text-sm">
+                {/* Phase Progress Inline */}
+                <div className="rounded-md border bg-muted/30 p-2">
+                  <PhaseProgressInline
+                    currentPhase={specData.phase.toLowerCase()}
+                    status={specData.status}
+                  />
+                </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Phase</span>
                   <Badge variant="outline" className="font-normal">{specData.phase}</Badge>
@@ -1598,18 +1799,83 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
 
             <Separator />
 
+            {/* GitHub Integration */}
+            <div>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">GitHub</h3>
+              <div className="space-y-2">
+                {/* Branch Status */}
+                {spec?.branch_name ? (
+                  <div className="rounded-md border bg-muted/30 p-2">
+                    <div className="flex items-center gap-2">
+                      <GitBranch className="h-3.5 w-3.5 text-muted-foreground" />
+                      <span className="text-xs font-mono truncate flex-1">{spec.branch_name}</span>
+                    </div>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={handleCreateBranch}
+                    disabled={createBranchMutation.isPending}
+                  >
+                    {createBranchMutation.isPending ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <GitBranch className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    Create Branch
+                  </Button>
+                )}
+
+                {/* PR Status */}
+                {spec?.pull_request_url ? (
+                  <a
+                    href={spec.pull_request_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-md border bg-green-500/10 border-green-500/30 p-2 hover:bg-green-500/20 transition-colors"
+                  >
+                    <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                    <span className="text-xs font-medium text-green-600">PR #{spec.pull_request_number}</span>
+                    <ExternalLink className="h-3 w-3 text-green-600 ml-auto" />
+                  </a>
+                ) : spec?.branch_name ? (
+                  <div className="space-y-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full justify-start h-8 text-xs"
+                      onClick={() => handleCreatePR(false)}
+                      disabled={createPRMutation.isPending}
+                    >
+                      {createPRMutation.isPending ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                      )}
+                      Create Pull Request
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start h-7 text-[10px] text-muted-foreground"
+                      onClick={() => handleCreatePR(true)}
+                      disabled={createPRMutation.isPending}
+                    >
+                      Force Create PR (skip task check)
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            <Separator />
+
             {/* Quick Actions */}
             <div>
               <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Quick Actions</h3>
               <div className="space-y-1.5">
-                <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
-                  <GitBranch className="mr-2 h-3.5 w-3.5" />
-                  View Git Branch
-                </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
-                  <ExternalLink className="mr-2 h-3.5 w-3.5" />
-                  Open in Editor
-                </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
                   <Bot className="mr-2 h-3.5 w-3.5" />
                   Run AI Analysis

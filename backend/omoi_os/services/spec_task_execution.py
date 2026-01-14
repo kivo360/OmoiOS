@@ -311,7 +311,7 @@ class SpecTaskExecutionService:
             )
             return existing_ticket.id
 
-        # Create new bridging ticket
+        # Create new bridging ticket - include user_id from spec for ownership
         ticket = Ticket(
             id=str(uuid4()),
             title=f"[Spec] {spec.title}",
@@ -320,6 +320,7 @@ class SpecTaskExecutionService:
             status="building",
             priority="MEDIUM",
             project_id=spec.project_id,
+            user_id=spec.user_id,  # Inherit user ownership from spec
             context={
                 "spec_id": spec.id,
                 "spec_title": spec.title,
@@ -333,6 +334,7 @@ class SpecTaskExecutionService:
             "created_bridging_ticket",
             ticket_id=ticket.id,
             spec_id=spec.id,
+            user_id=str(spec.user_id) if spec.user_id else None,
         )
 
         return ticket.id
