@@ -248,6 +248,18 @@ class DatabaseSettings(OmoiBaseSettings):
 
     url: str = "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
 
+    # Connection pool settings
+    pool_size: int = 5  # Max persistent connections
+    max_overflow: int = 5  # Additional connections above pool_size
+    pool_timeout: int = 30  # Seconds to wait for connection from pool
+    pool_recycle: int = 1800  # Recycle connections after N seconds
+    pool_pre_ping: bool = True  # Verify connection is alive before use
+    pool_use_lifo: bool = True  # Use LIFO for connection reuse (better for idle connections)
+
+    # Statement/command timeouts (in seconds)
+    command_timeout: int = 30  # Max time for a single SQL statement
+    connect_timeout: int = 10  # Max time to establish a new connection
+
 
 class RedisSettings(OmoiBaseSettings):
     """

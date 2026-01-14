@@ -678,8 +678,18 @@ async def lifespan(app: FastAPI):
 
     app_settings = get_app_settings()
 
-    # Initialize services
-    db = DatabaseService(connection_string=app_settings.database.url)
+    # Initialize services with configured pool and timeout settings
+    db = DatabaseService(
+        connection_string=app_settings.database.url,
+        pool_size=app_settings.database.pool_size,
+        max_overflow=app_settings.database.max_overflow,
+        pool_timeout=app_settings.database.pool_timeout,
+        pool_recycle=app_settings.database.pool_recycle,
+        pool_pre_ping=app_settings.database.pool_pre_ping,
+        pool_use_lifo=app_settings.database.pool_use_lifo,
+        command_timeout=app_settings.database.command_timeout,
+        connect_timeout=app_settings.database.connect_timeout,
+    )
     event_bus = EventBusService(redis_url=app_settings.redis.url)
     queue = TaskQueueService(
         db, event_bus=event_bus

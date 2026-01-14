@@ -7,6 +7,16 @@ llm:
 database:
   # Remote Railway PostgreSQL database (default)
   url: postgresql+psycopg://postgres:REDACTED_DB_PASSWORD@REDACTED_DB_HOST:5432/REDACTED_DB
+  # Connection pool settings
+  pool_size: 5              # Max persistent connections
+  max_overflow: 5           # Additional connections above pool_size
+  pool_timeout: 30          # Seconds to wait for connection from pool
+  pool_recycle: 1800        # Recycle connections after 30 min (prevents stale connections)
+  pool_pre_ping: true       # Verify connection is alive before use (prevents "server closed" errors)
+  pool_use_lifo: true       # Use LIFO for connection reuse (better for idle connections)
+  # Statement/command timeouts (in seconds)
+  command_timeout: 30       # Max time for a single SQL statement
+  connect_timeout: 10       # Max time to establish a new connection
 
 redis:
   # Remote Railway Redis instance (default)
