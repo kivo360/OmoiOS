@@ -295,6 +295,10 @@ class SpecStateMachine:
         from phase_data to the database with deduplication to prevent duplicates
         during retries.
 
+        After sync completes successfully, this phase also triggers task execution
+        by calling SpecTaskExecutionService to convert SpecTasks into executable
+        Tasks that the sandbox system can pick up.
+
         Args:
             spec: The spec being processed.
 
@@ -341,12 +345,18 @@ class SpecStateMachine:
                     f"SYNC phase complete: {sync_result.message}",
                     extra={"stats": sync_result.stats.to_dict()},
                 )
+
+                # NEW: After syncing, execute the tasks via SpecTaskExecutionService
+                # This bridges SpecTasks to executable Tasks for the sandbox system
+                execution_stats = await self._execute_spec_tasks_after_sync(spec)
+
                 return PhaseResult(
                     phase=SpecPhase.SYNC,
                     data={
                         "status": "success",
                         "message": sync_result.message,
                         "stats": sync_result.stats.to_dict(),
+                        "task_execution": execution_stats,
                     },
                     attempts=1,
                 )
@@ -371,6 +381,90 @@ class SpecStateMachine:
                 error=str(e),
                 attempts=1,
             )
+
+    async def _execute_spec_tasks_after_sync(self, spec: Any) -> dict:
+        """Execute SpecTasks after successful sync by converting them to Tasks.
+
+        This method bridges the spec-driven development workflow to the execution
+        system by:
+        1. Calling SpecTaskExecutionService to convert SpecTasks to Tasks
+        2. Tasks are then picked up by TaskQueueService and executed via Daytona
+
+        Note: This requires design_approved=True on the spec. If not approved,
+        task execution is skipped (planning-only mode).
+
+        Args:
+            spec: The spec being processed.
+
+        Returns:
+            Dictionary with execution statistics.
+        """
+        try:
+            from omoi_os.services.spec_task_execution import SpecTaskExecutionService
+            from omoi_os.services.database import DatabaseService
+            from omoi_os.services.event_bus import get_event_bus
+
+            # Get database service
+            db_service = DatabaseService()
+
+            # Try to get event bus for completion tracking
+            event_bus = None
+            try:
+                event_bus = get_event_bus()
+            except Exception:
+                pass  # Event bus is optional
+
+            # Create task execution service
+            task_service = SpecTaskExecutionService(db=db_service, event_bus=event_bus)
+
+            # Check if spec design is approved before executing tasks
+            if not getattr(spec, 'design_approved', False):
+                logger.info(
+                    f"[SYNC] Skipping task execution - design not approved for spec {self.spec_id}"
+                )
+                return {
+                    "status": "skipped",
+                    "reason": "design_not_approved",
+                    "message": "Tasks not executed - design approval required",
+                }
+
+            # Execute the spec tasks
+            execution_result = await task_service.execute_spec_tasks(spec_id=self.spec_id)
+
+            if execution_result.success:
+                logger.info(
+                    f"[SYNC] Task execution initiated for spec {self.spec_id}",
+                    extra={
+                        "tasks_created": execution_result.stats.tasks_created,
+                        "tasks_skipped": execution_result.stats.tasks_skipped,
+                        "ticket_id": execution_result.stats.ticket_id,
+                    },
+                )
+                return {
+                    "status": "success",
+                    "message": execution_result.message,
+                    "tasks_created": execution_result.stats.tasks_created,
+                    "tasks_skipped": execution_result.stats.tasks_skipped,
+                    "ticket_id": execution_result.stats.ticket_id,
+                }
+            else:
+                logger.warning(
+                    f"[SYNC] Task execution failed for spec {self.spec_id}: {execution_result.message}"
+                )
+                return {
+                    "status": "failed",
+                    "message": execution_result.message,
+                    "errors": execution_result.stats.errors,
+                }
+
+        except Exception as e:
+            logger.error(f"[SYNC] Task execution error for spec {self.spec_id}: {e}")
+            # Don't fail the sync phase, just log the error
+            # The sync itself succeeded, task execution is a secondary concern
+            return {
+                "status": "error",
+                "message": str(e),
+            }
 
     async def _execute_agent_query(
         self, phase: SpecPhase, prompt: str

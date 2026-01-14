@@ -8,6 +8,7 @@ import { useProjects } from "@/hooks/useProjects"
 import { useConnectedRepositories } from "@/hooks/useGitHub"
 import { useGitHubRepos } from "@/hooks/useGitHubRepos"
 import { useCreateTicket } from "@/hooks/useTickets"
+import { useLaunchSpec } from "@/hooks/useSpecs"
 import { useEvents, type SystemEvent } from "@/hooks/useEvents"
 import { listTasks } from "@/lib/api/tasks"
 import { Loader2 } from "lucide-react"
@@ -15,6 +16,7 @@ import { Loader2 } from "lucide-react"
 type LaunchState =
   | { status: "idle" }
   | { status: "creating_ticket"; prompt: string }
+  | { status: "launching_spec"; prompt: string }
   | { status: "waiting_for_sandbox"; ticketId: string; prompt: string; mode: WorkflowMode; projectId: string }
   | { status: "redirecting"; destination: string }
 
@@ -41,6 +43,7 @@ export default function CommandCenterPage() {
   const { data: projectsData } = useProjects({ status: "active" })
   const { data: connectedRepos } = useConnectedRepositories()
   const createTicketMutation = useCreateTicket()
+  const launchSpecMutation = useLaunchSpec()
 
   // Fetch ALL GitHub repos for the user (not just connected ones)
   // This allows selecting any repo, and the backend will auto-create a project
@@ -191,6 +194,32 @@ export default function CommandCenterPage() {
 
   const handleSubmit = async (prompt: string) => {
     try {
+      // Spec-driven mode: Use direct spec launch (bypass ticket creation)
+      if (selectedMode === "spec_driven") {
+        setLaunchState({ status: "launching_spec", prompt })
+
+        // Spec launch requires a project ID
+        if (!selectedProject?.id) {
+          toast.error("Please select a project for spec-driven development.")
+          setLaunchState({ status: "idle" })
+          return
+        }
+
+        const result = await launchSpecMutation.mutateAsync({
+          title: prompt.slice(0, 100) + (prompt.length > 100 ? "..." : ""),
+          description: prompt,
+          project_id: selectedProject.id,
+          auto_execute: true, // Start sandbox execution immediately
+        })
+
+        // Redirect to spec detail page to watch the spec being built
+        setLaunchState({ status: "redirecting", destination: `/projects/${selectedProject.id}/specs/${result.spec_id}` })
+        toast.success("Spec generation started! Redirecting to spec...")
+        router.push(`/projects/${selectedProject.id}/specs/${result.spec_id}`)
+        return
+      }
+
+      // Quick mode: Use existing ticket-based flow
       setLaunchState({ status: "creating_ticket", prompt })
 
       // Parse github_owner and github_repo from selectedRepo (format: "owner/repo")
@@ -204,8 +233,8 @@ export default function CommandCenterPage() {
         }
       }
 
-      // Build payload based on selected mode
-      const basePayload = {
+      // Build payload for quick mode
+      const payload = {
         title: prompt.slice(0, 100) + (prompt.length > 100 ? "..." : ""),
         description: prompt,
         priority: "MEDIUM" as const,
@@ -215,29 +244,13 @@ export default function CommandCenterPage() {
         // Pass repo info for auto-project creation when no project selected
         github_owner,
         github_repo,
+        // Quick mode specific parameters
+        phase_id: "PHASE_IMPLEMENTATION",
+        workflow_mode: "quick" as const,
+        auto_spawn_sandbox: true,
       }
 
-      // Mode-specific parameters
-      // Both modes spawn sandboxes - the difference is:
-      // - quick: redirects to sandbox page (implementation focused)
-      // - spec_driven: redirects to board page (watch tasks/dependencies being created)
-      const modePayload = selectedMode === "quick"
-        ? {
-            phase_id: "PHASE_IMPLEMENTATION",
-            workflow_mode: "quick" as const,
-            auto_spawn_sandbox: true,
-          }
-        : {
-            phase_id: "PHASE_REQUIREMENTS",
-            workflow_mode: "spec_driven" as const,
-            generate_spec: true,
-            auto_spawn_sandbox: true, // Spawn sandbox for spec generation too!
-          }
-
-      const result = await createTicketMutation.mutateAsync({
-        ...basePayload,
-        ...modePayload,
-      })
+      const result = await createTicketMutation.mutateAsync(payload)
 
       // Check if we got a duplicate response instead of a ticket
       if ("is_duplicate" in result) {
@@ -250,9 +263,7 @@ export default function CommandCenterPage() {
       // The backend may auto-create a project or the ticket may have one assigned
       const projectId = result.project_id || selectedProject?.id || "all"
 
-      // Both modes wait for sandbox to spawn, then redirect appropriately:
-      // - quick: redirects to sandbox page
-      // - spec_driven: redirects to board page to watch tasks being created
+      // Quick mode waits for sandbox to spawn, then redirects to sandbox page
       toast.info("Launching sandbox...")
       setLaunchState({
         status: "waiting_for_sandbox",
@@ -263,7 +274,7 @@ export default function CommandCenterPage() {
       })
 
     } catch (error) {
-      toast.error("Failed to create task. Please try again.")
+      toast.error("Failed to launch. Please try again.")
       setLaunchState({ status: "idle" })
     }
   }
@@ -309,18 +320,18 @@ export default function CommandCenterPage() {
               {launchState.status === "creating_ticket" && (
                 <span>Creating task...</span>
               )}
+              {launchState.status === "launching_spec" && (
+                <span>Creating spec and launching agent...</span>
+              )}
               {launchState.status === "waiting_for_sandbox" && (
-                <span>
-                  {launchState.mode === "quick"
-                    ? "Launching sandbox environment..."
-                    : "Starting spec generation agent..."
-                  }
-                </span>
+                <span>Launching sandbox environment...</span>
               )}
               {launchState.status === "redirecting" && (
                 <span>
                   {launchState.destination.includes("/sandbox/")
                     ? "Redirecting to sandbox..."
+                    : launchState.destination.includes("/specs/")
+                    ? "Redirecting to spec..."
                     : "Redirecting to board..."
                   }
                 </span>

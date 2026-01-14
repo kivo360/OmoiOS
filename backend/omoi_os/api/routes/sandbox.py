@@ -243,6 +243,7 @@ def persist_sandbox_event(
     event_type: str,
     event_data: dict,
     source: str,
+    spec_id: Optional[str] = None,
 ) -> str:
     """
     Persist event to database (SYNC version - use persist_sandbox_event_async in async contexts).
@@ -258,6 +259,7 @@ def persist_sandbox_event(
         event_type: Original event type (e.g., 'agent.tool_use')
         event_data: Event payload dictionary
         source: Event source ('agent', 'worker', 'system')
+        spec_id: Optional spec ID for spec-driven development events
 
     Returns:
         Persisted event ID
@@ -267,6 +269,7 @@ def persist_sandbox_event(
     with db.get_session() as session:
         db_event = SandboxEvent(
             sandbox_id=sandbox_id,
+            spec_id=spec_id,
             event_type=event_type,
             event_data=event_data,
             source=source,
@@ -303,6 +306,7 @@ async def persist_sandbox_event_async(
     event_type: str,
     event_data: dict,
     source: str,
+    spec_id: Optional[str] = None,
 ) -> str:
     """
     Persist event to database (ASYNC version - non-blocking).
@@ -318,6 +322,7 @@ async def persist_sandbox_event_async(
         event_type: Original event type (e.g., 'agent.tool_use')
         event_data: Event payload dictionary
         source: Event source ('agent', 'worker', 'system')
+        spec_id: Optional spec ID for spec-driven development events
 
     Returns:
         Persisted event ID
@@ -329,6 +334,7 @@ async def persist_sandbox_event_async(
     async with db.get_async_session() as session:
         db_event = SandboxEvent(
             sandbox_id=sandbox_id,
+            spec_id=spec_id,
             event_type=event_type,
             event_data=event_data,
             source=source,
@@ -650,15 +656,19 @@ async def post_sandbox_event(
     event_id: str | None = None
     try:
         db = get_db_service()
+        # Extract spec_id from event_data if present (for spec-driven development)
+        spec_id = event.event_data.get("spec_id")
         event_id = await persist_sandbox_event_async(
             db=db,
             sandbox_id=sandbox_id,
             event_type=event.event_type,
             event_data=event.event_data,
             source=event.source,
+            spec_id=spec_id,
         )
         logger.debug(
             f"[SandboxEvent] Persisted event {event_id} for {event.event_type}"
+            + (f" (spec_id={spec_id})" if spec_id else "")
         )
     except Exception as e:
         # Persistence is optional - don't fail if DB unavailable

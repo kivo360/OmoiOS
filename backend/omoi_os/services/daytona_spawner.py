@@ -830,6 +830,68 @@ class DaytonaSpawnerService:
         if app_settings.llm.api_key:
             env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
 
+        # ==== GitHub Integration: Fetch credentials and repo info ====
+        # This enables sandboxes to clone repos and create PRs
+        if self.db:
+            from omoi_os.services.credentials import CredentialsService
+            from omoi_os.models.spec import Spec
+            from omoi_os.models.project import Project
+
+            cred_service = CredentialsService(self.db)
+
+            # Get spec to find user_id
+            user_id = None
+            with self.db.get_session() as session:
+                spec = session.get(Spec, spec_id)
+                if spec and spec.user_id:
+                    user_id = spec.user_id
+                    env_vars["USER_ID"] = str(user_id)
+
+                # Get project for GitHub repo info
+                project = session.get(Project, project_id)
+                if project and project.github_owner and project.github_repo:
+                    env_vars["GITHUB_REPO"] = f"{project.github_owner}/{project.github_repo}"
+                    env_vars["GITHUB_REPO_OWNER"] = project.github_owner
+                    env_vars["GITHUB_REPO_NAME"] = project.github_repo
+                    logger.info(
+                        f"[SPAWNER] GitHub repo configured: {project.github_owner}/{project.github_repo}"
+                    )
+                else:
+                    logger.info(
+                        f"[SPAWNER] No GitHub repo configured for project {project_id}"
+                    )
+
+            # Get GitHub credentials for the user
+            if user_id:
+                github_creds = cred_service.get_github_credentials(user_id=user_id)
+                if github_creds.access_token:
+                    env_vars["GITHUB_TOKEN"] = github_creds.access_token
+                    if github_creds.username:
+                        env_vars["GITHUB_USERNAME"] = github_creds.username
+                    logger.info(
+                        f"[SPAWNER] GitHub token configured from {github_creds.source}"
+                    )
+                else:
+                    logger.warning(
+                        f"[SPAWNER] No GitHub token available for user {user_id} - "
+                        "sandbox will not be able to clone private repos or create PRs"
+                    )
+
+                # Get Anthropic credentials for the user
+                anthropic_creds = cred_service.get_anthropic_credentials(user_id=user_id)
+                if anthropic_creds.oauth_token:
+                    env_vars["CLAUDE_CODE_OAUTH_TOKEN"] = anthropic_creds.oauth_token
+                    logger.info("[SPAWNER] Using OAuth token for Claude Agent SDK")
+                elif anthropic_creds.api_key:
+                    env_vars["ANTHROPIC_API_KEY"] = anthropic_creds.api_key
+                    logger.info("[SPAWNER] Using API key for authentication")
+                if anthropic_creds.base_url:
+                    env_vars["ANTHROPIC_BASE_URL"] = anthropic_creds.base_url
+                if anthropic_creds.model:
+                    env_vars["MODEL"] = anthropic_creds.model
+                    env_vars["ANTHROPIC_MODEL"] = anthropic_creds.model
+        # ==== End GitHub Integration ====
+
         # Add phase context as base64-encoded JSON
         if phase_context:
             context_json = json.dumps(phase_context)

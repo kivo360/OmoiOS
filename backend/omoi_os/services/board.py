@@ -87,6 +87,8 @@ class BoardService:
                         "phase_id": t.phase_id,
                         "priority": t.priority,
                         "status": t.status,
+                        "approval_status": t.approval_status,
+                        "context": t.context,  # Include context for spec_id tracking
                     }
                     for t in tickets_in_column
                 ],
