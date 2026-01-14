@@ -604,6 +604,24 @@ async def _list_spec_versions_async(
 # ============================================================================
 
 
+async def _get_organization_id_for_project(
+    db: DatabaseService, project_id: str
+) -> Optional[UUID]:
+    """Get the organization ID for a project.
+
+    Returns None if project not found or has no organization.
+    """
+    async with db.get_async_session() as session:
+        result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project or not project.organization_id:
+            return None
+
+        return project.organization_id
+
+
 async def _get_organization_id_for_spec(
     db: DatabaseService, spec_id: str
 ) -> Optional[UUID]:
@@ -2152,11 +2170,19 @@ async def launch_spec(
     # 0. Verify project access from request body
     await verify_project_access(request.project_id, current_user, db)
 
-    # 1. Check billing
-    billing = await get_billing_service()
-    can_execute, billing_reason = await billing.can_execute_spec(current_user.id)
-    if not can_execute and request.auto_execute:
-        raise HTTPException(status_code=402, detail=f"Execution blocked: {billing_reason}")
+    # 1. Check billing (only if auto-executing)
+    if request.auto_execute:
+        org_id = await _get_organization_id_for_project(db, request.project_id)
+        if not org_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Project is not linked to an organization. Please ensure your project is properly set up.",
+            )
+
+        billing_service = get_billing_service(db)
+        can_execute, billing_reason = billing_service.can_execute_workflow(org_id)
+        if not can_execute:
+            raise HTTPException(status_code=402, detail=f"Execution blocked: {billing_reason}")
 
     # 2. Create spec
     spec = await _create_spec_async(
