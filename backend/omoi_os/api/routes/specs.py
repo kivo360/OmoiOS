@@ -82,6 +82,18 @@ async def _create_spec_async(
 ) -> SpecModel:
     """Create a new spec (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
+        # Safety check: Verify project exists before creating spec
+        # This provides a cleaner error than FK violation if project doesn't exist
+        project_result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = project_result.scalar_one_or_none()
+        if not project:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Project '{project_id}' not found. Cannot create spec for non-existent project.",
+            )
+
         new_spec = SpecModel(
             project_id=project_id,
             title=title,
