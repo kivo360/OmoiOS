@@ -413,7 +413,8 @@ async def get_current_user(
 
     # Check if credentials are provided
     if not credentials:
-        logger.warning("Missing Authorization header in get_current_user")
+        # Debug level - this is expected for unauthenticated requests to protected endpoints
+        logger.debug("Missing Authorization header in get_current_user")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing authorization credentials",

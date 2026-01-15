@@ -6,7 +6,7 @@ from uuid import UUID
 import secrets
 import hashlib
 
-from passlib.context import CryptContext
+import bcrypt
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
@@ -16,8 +16,15 @@ from omoi_os.models.user import User
 from omoi_os.models.auth import Session, APIKey
 from omoi_os.utils.datetime import utc_now
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def _hash_password(password: str) -> str:
+    """Hash password using bcrypt."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify password against bcrypt hash."""
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 class TokenData(BaseModel):
@@ -46,11 +53,11 @@ class AuthService:
     # Password operations
     def hash_password(self, password: str) -> str:
         """Hash password using bcrypt."""
-        return pwd_context.hash(password)
+        return _hash_password(password)
 
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify password against hash."""
-        return pwd_context.verify(plain_password, hashed_password)
+        return _verify_password(plain_password, hashed_password)
 
     def validate_password_strength(self, password: str) -> Tuple[bool, Optional[str]]:
         """
