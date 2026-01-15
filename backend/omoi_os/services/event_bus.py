@@ -25,7 +25,7 @@ class EventBusService:
     If Redis is unavailable, operations are no-ops (graceful degradation).
     """
 
-    def __init__(self, redis_url: str = "redis://localhost:16379"):
+    def __init__(self, redis_url: str | None = None):
         """
         Initialize event bus service.
 
@@ -35,6 +35,14 @@ class EventBusService:
         self.redis_client: Optional[redis.Redis] = None
         self.pubsub = None
         self._available = False
+
+        # If no URL provided, try to get from settings
+        if redis_url is None:
+            try:
+                from omoi_os.config import get_app_settings
+                redis_url = get_app_settings().redis.url
+            except Exception:
+                pass  # Will be handled below
 
         # Validate URL has a proper host (not just "redis://" or local-only)
         # Check for minimal valid URL pattern (redis://host or redis://host:port)
