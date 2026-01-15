@@ -27,6 +27,7 @@ from sqlalchemy import select
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.logging import get_logger
 from omoi_os.models.billing import BillingAccount
+from omoi_os.models.spec import Spec
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.project import Project
@@ -230,6 +231,79 @@ def broadcast_sandbox_event(
     bus = get_event_bus()
     system_event = _create_system_event(sandbox_id, event_type, event_data, source)
     bus.publish(system_event)
+
+
+async def _update_spec_phase_data(
+    db: DatabaseService,
+    spec_id: str,
+    phase_data: dict,
+    success: bool = True,
+) -> None:
+    """
+    Update spec's phase_data when a spec sandbox completes.
+
+    This is called when an agent.completed event is received for a spec sandbox.
+    The phase_data contains the generated requirements, design, tasks, etc.
+    from the SpecStateMachine that ran inside the sandbox.
+
+    The phase_data is MERGED with existing data (not replaced) to support
+    incremental phase execution across multiple sandbox runs.
+
+    Args:
+        db: Database service
+        spec_id: Spec UUID
+        phase_data: Dict of phase name -> phase content, e.g.:
+            {"explore": {...}, "requirements": {...}, ...}
+        success: Whether the sandbox execution was successful
+    """
+    try:
+        async with db.get_async_session() as session:
+            result = await session.execute(
+                select(Spec).where(Spec.id == spec_id)
+            )
+            spec = result.scalar_one_or_none()
+
+            if not spec:
+                logger.warning(f"Spec {spec_id} not found for phase_data update")
+                return
+
+            # Merge phase_data with existing data (don't overwrite previous phases)
+            existing_phase_data = spec.phase_data or {}
+            for phase_name, phase_content in phase_data.items():
+                existing_phase_data[phase_name] = phase_content
+                logger.info(
+                    f"Updated spec {spec_id} phase: {phase_name}",
+                    extra={"keys": list(phase_content.keys()) if isinstance(phase_content, dict) else "non-dict"}
+                )
+
+            spec.phase_data = existing_phase_data
+            spec.updated_at = utc_now()
+
+            # Update status based on success
+            if success:
+                # Determine current phase based on what data we have
+                phase_order = ["explore", "requirements", "design", "tasks"]
+                current_phase = "explore"
+                for phase in phase_order:
+                    if phase in existing_phase_data:
+                        current_phase = phase
+
+                spec.current_phase = current_phase
+                # Don't change status to 'completed' here - that's done by SYNC phase
+                # Just update to 'draft' if it was 'executing'
+                if spec.status == "executing":
+                    spec.status = "draft"
+            else:
+                spec.status = "failed"
+
+            await session.commit()
+            logger.info(
+                f"Updated spec {spec_id} phase_data with phases: {list(phase_data.keys())}",
+                extra={"new_status": spec.status, "current_phase": spec.current_phase}
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to update spec {spec_id} phase_data: {e}", exc_info=True)
 
 
 # ============================================================================
@@ -982,6 +1056,16 @@ async def post_sandbox_event(
                         f"Spec sandbox event (spec_id={spec_id}), skipping task status update. "
                         f"event_type={event.event_type}, sandbox_id={sandbox_id}"
                     )
+                    # Handle spec completion - update spec's phase_data
+                    if event.event_type == "agent.completed":
+                        phase_data = event.event_data.get("phase_data")
+                        if phase_data:
+                            await _update_spec_phase_data(
+                                db=db,
+                                spec_id=spec_id,
+                                phase_data=phase_data,
+                                success=event.event_data.get("success", True),
+                            )
                 else:
                     logger.warning(
                         f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
