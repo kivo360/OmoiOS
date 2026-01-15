@@ -37,9 +37,13 @@ import re
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 from pydantic import BaseModel
+
+# Type alias for progress callback function
+# Signature: async def callback(event_type: str, event_data: dict) -> None
+ProgressCallback = Callable[[str, dict], Awaitable[None]]
 
 from omoi_os.evals import (
     DesignEvaluator,
@@ -141,6 +145,7 @@ class SpecStateMachine:
         model: str = "claude-sonnet-4-20250514",
         embedding_service: Optional[EmbeddingService] = None,
         sync_service: Optional[SpecSyncService] = None,
+        progress_callback: Optional[ProgressCallback] = None,
     ):
         """
         Initialize the state machine.
@@ -153,6 +158,9 @@ class SpecStateMachine:
             model: Claude model to use
             embedding_service: Optional embedding service for semantic deduplication
             sync_service: Optional sync service (created automatically if not provided)
+            progress_callback: Optional async callback for reporting progress events.
+                              Called with (event_type: str, event_data: dict).
+                              Used by sandbox worker to report work events to idle monitor.
         """
         self.spec_id = spec_id
         self.db = db_session
@@ -165,6 +173,9 @@ class SpecStateMachine:
         # The sync service handles persisting phase data to database with deduplication
         self.sync_service = sync_service
 
+        # Progress callback for reporting work events
+        self.progress_callback = progress_callback
+
         # Initialize evaluators
         self.evaluators = {
             SpecPhase.EXPLORE: ExplorationEvaluator(),
@@ -172,6 +183,22 @@ class SpecStateMachine:
             SpecPhase.DESIGN: DesignEvaluator(),
             SpecPhase.TASKS: TaskEvaluator(),
         }
+
+    async def _report_progress(self, event_type: str, event_data: dict) -> None:
+        """Report progress via callback if available.
+
+        This is used to send work events to the idle sandbox monitor so
+        the sandbox isn't terminated while the state machine is running.
+
+        Args:
+            event_type: Event type (e.g., "spec.phase_completed")
+            event_data: Event payload data
+        """
+        if self.progress_callback:
+            try:
+                await self.progress_callback(event_type, event_data)
+            except Exception as e:
+                logger.warning(f"Progress callback failed: {e}")
 
     async def run(self) -> bool:
         """
@@ -196,10 +223,32 @@ class SpecStateMachine:
             if phase == SpecPhase.COMPLETE:
                 await self.mark_complete(spec)
                 logger.info(f"Spec {self.spec_id} completed successfully")
+                # Report completion as work event
+                await self._report_progress(
+                    "agent.tool_completed",
+                    {
+                        "tool": "spec_state_machine",
+                        "action": "complete",
+                        "spec_id": self.spec_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
                 break
 
             logger.info(f"Executing phase: {phase.value}")
             start_time = datetime.now(timezone.utc)
+
+            # Report phase start as work event
+            await self._report_progress(
+                "agent.tool_use",
+                {
+                    "tool": "spec_state_machine",
+                    "action": "phase_started",
+                    "phase": phase.value,
+                    "spec_id": self.spec_id,
+                    "timestamp": start_time.isoformat(),
+                },
+            )
 
             try:
                 result = await asyncio.wait_for(
@@ -218,6 +267,21 @@ class SpecStateMachine:
                 logger.info(
                     f"Phase {phase.value} complete in {result.duration_seconds:.1f}s. "
                     f"Score: {result.eval_score:.2f}, Attempts: {result.attempts}"
+                )
+
+                # Report phase completion as work event
+                await self._report_progress(
+                    "agent.tool_completed",
+                    {
+                        "tool": "spec_state_machine",
+                        "action": "phase_completed",
+                        "phase": phase.value,
+                        "spec_id": self.spec_id,
+                        "duration_seconds": result.duration_seconds,
+                        "eval_score": result.eval_score,
+                        "attempts": result.attempts,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    },
                 )
 
             except asyncio.TimeoutError:
