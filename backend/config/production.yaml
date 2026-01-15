@@ -50,6 +50,8 @@ auth:
   max_login_attempts: 5
   login_attempt_window_minutes: 15
   session_expire_days: 30
+  # OAuth redirect - MUST match your frontend callback URL
+  oauth_redirect_uri: https://omoios.dev/callback
 
 workspace:
   root: /tmp/workspaces

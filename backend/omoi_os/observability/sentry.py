@@ -103,8 +103,17 @@ def _redact_value(value: Any) -> Any:
     return "[REDACTED]"
 
 
-def _scrub_pii_from_string(value: str) -> str:
-    """Scrub PII patterns from a string value."""
+def _scrub_pii_from_string(value: str | None) -> str:
+    """Scrub PII patterns from a string value.
+
+    Args:
+        value: String to scrub, or None
+
+    Returns:
+        Scrubbed string, or empty string if None was passed
+    """
+    if value is None:
+        return ""
     result = value
     for pattern_name, pattern in PII_PATTERNS.items():
         result = pattern.sub(f"[{pattern_name.upper()}_REDACTED]", result)
