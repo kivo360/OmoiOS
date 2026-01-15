@@ -1495,7 +1495,7 @@ async def execute_spec(
     Returns:
         SpecExecuteResponse with execution status.
     """
-    from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+    from omoi_os.services.daytona_spawner import get_daytona_spawner
     from omoi_os.services.event_bus import get_event_bus
 
     # Verify spec exists
@@ -1552,7 +1552,7 @@ async def execute_spec(
             pass
 
         # Spawn Daytona sandbox for the spec phase execution
-        spawner = DaytonaSpawnerService(db=db, event_bus=event_bus)
+        spawner = get_daytona_spawner(db=db, event_bus=event_bus)
         sandbox_id = await spawner.spawn_for_phase(
             spec_id=spec_id,
             phase=current_phase,
@@ -2220,7 +2220,7 @@ async def launch_spec(
         await _update_spec_async(db, spec.id, status="executing")
 
         # Spawn sandbox
-        from omoi_os.services.daytona_spawner import DaytonaSpawnerService
+        from omoi_os.services.daytona_spawner import get_daytona_spawner
         from omoi_os.services.event_bus import get_event_bus
 
         event_bus = None
@@ -2229,7 +2229,7 @@ async def launch_spec(
         except Exception:
             pass
 
-        spawner = DaytonaSpawnerService(db=db, event_bus=event_bus)
+        spawner = get_daytona_spawner(db=db, event_bus=event_bus)
 
         sandbox_id = await spawner.spawn_for_phase(
             spec_id=spec.id,

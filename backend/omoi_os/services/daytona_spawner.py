@@ -21,6 +21,7 @@ from uuid import uuid4
 from omoi_os.config import load_daytona_settings, get_app_settings
 from omoi_os.logging import get_logger
 from omoi_os.sandbox_skills import get_skills_for_upload
+from omoi_os.sandbox_modules import get_spec_state_machine_files
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
@@ -1244,6 +1245,38 @@ class DaytonaSpawnerService:
             except Exception as e:
                 logger.warning(f"Failed to upload Claude skills: {e}")
                 # Continue without skills - agent can still function
+
+        # Upload SpecStateMachine modules to sandbox
+        # These modules allow the sandbox to run spec phases (EXPLORE, REQUIREMENTS, etc.)
+        # without needing the full omoi_os package installed
+        logger.info("Uploading SpecStateMachine modules to sandbox...")
+        try:
+            # Create base directory for omoi_os modules
+            sandbox.process.exec("mkdir -p /tmp/omoi_os")
+
+            # Get all files needed for SpecStateMachine
+            spec_modules = get_spec_state_machine_files(install_path="/tmp/omoi_os")
+            for sandbox_path, content in spec_modules.items():
+                # Create parent directory for the file
+                parent_dir = "/".join(sandbox_path.rsplit("/", 1)[:-1])
+                sandbox.process.exec(f"mkdir -p {parent_dir}")
+                # Upload the file
+                sandbox.fs.upload_file(content.encode("utf-8"), sandbox_path)
+                logger.debug(f"Uploaded module: {sandbox_path}")
+
+            logger.info(
+                f"Uploaded {len(spec_modules)} SpecStateMachine modules to /tmp/omoi_os"
+            )
+
+            # Add /tmp/omoi_os to PYTHONPATH so imports work
+            if "PYTHONPATH" in env_vars:
+                env_vars["PYTHONPATH"] = f"/tmp/omoi_os:{env_vars['PYTHONPATH']}"
+            else:
+                env_vars["PYTHONPATH"] = "/tmp/omoi_os"
+
+        except Exception as e:
+            logger.warning(f"Failed to upload SpecStateMachine modules: {e}")
+            # Continue - worker can still run without state machine
 
         # Clone GitHub repository using Daytona SDK (if configured)
         # This uses sandbox.git.clone() directly instead of shell commands
