@@ -30,7 +30,7 @@ class StripeSettings(OmoiBaseSettings):
     )
 
     # API keys (from environment only - never in YAML)
-    api_key: Optional[str] = None  # STRIPE_API_KEY
+    secret_key: Optional[str] = None  # STRIPE_SECRET_KEY
     webhook_secret: Optional[str] = None  # STRIPE_WEBHOOK_SECRET
     publishable_key: Optional[str] = None  # STRIPE_PUBLISHABLE_KEY
 
@@ -67,15 +67,15 @@ class StripeService:
         self.settings = settings or load_stripe_settings()
 
         # Configure Stripe API key
-        if self.settings.api_key:
-            stripe.api_key = self.settings.api_key
+        if self.settings.secret_key:
+            stripe.api_key = self.settings.secret_key
         else:
             logger.warning("Stripe API key not configured - payment processing disabled")
 
     @property
     def is_configured(self) -> bool:
         """Check if Stripe is properly configured."""
-        return bool(self.settings.api_key)
+        return bool(self.settings.secret_key)
 
     # ========== Customer Management ==========
 
