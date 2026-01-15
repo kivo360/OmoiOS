@@ -4277,9 +4277,12 @@ This is a continuation of your previous work. Please review the notes below and 
                 return 1
 
         except ImportError as e:
-            logger.error(f"SPEC STATE MACHINE: Failed to import SpecStateMachine: {e}")
-            logger.error("SPEC STATE MACHINE: Ensure omoi_os.workers.spec_state_machine is available")
-            return 1
+            logger.warning(f"SPEC STATE MACHINE: SpecStateMachine not available: {e}")
+            logger.info("SPEC STATE MACHINE: Falling back to prompt-driven spec workflow")
+            logger.info("SPEC STATE MACHINE: The spec-driven-dev skill has been injected into the prompt")
+            # Return None to signal fallback to regular execution
+            # The caller will continue with standard agent execution
+            return None
         except Exception as e:
             logger.exception(f"SPEC STATE MACHINE: Unexpected error: {e}")
             return 1
@@ -4425,14 +4428,21 @@ The following dependencies were automatically installed before you started:
         # =================================================================
         # SPEC STATE MACHINE EXECUTION
         # =================================================================
-        # If SPEC_PHASE is set, run the spec-driven state machine instead
-        # of the regular single-session agent execution.
+        # If SPEC_PHASE is set, try to run the spec-driven state machine.
+        # If SpecStateMachine is not available (sandbox environment without
+        # omoi_os package), fall back to prompt-driven spec workflow.
         #
         # The state machine handles multiple short query() invocations
         # within a SINGLE sandbox (not multiple sandboxes per phase).
         # spawn_for_phase() is only used for CRASH RECOVERY.
         if self.config.spec_phase and self.config.spec_id:
-            return await self._run_spec_state_machine()
+            result = await self._run_spec_state_machine()
+            # If result is None, SpecStateMachine wasn't available - continue with regular execution
+            # The spec-driven-dev skill has been injected into the prompt, so Claude will
+            # follow the spec workflow without needing the Python state machine
+            if result is not None:
+                return result
+            logger.info("Continuing with prompt-driven spec execution (no state machine)")
 
         async with EventReporter(self.config) as reporter:
             self.reporter = reporter
