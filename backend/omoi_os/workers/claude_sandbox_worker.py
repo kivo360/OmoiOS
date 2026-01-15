@@ -4212,7 +4212,9 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info("=" * 80)
         return prompt
 
-    async def _run_spec_state_machine(self) -> int:
+    async def _run_spec_state_machine(
+        self, reporter: Optional["EventReporter"] = None
+    ) -> int:
         """Run spec-driven state machine execution.
 
         This is the integration point for phase-aware execution.
@@ -4228,8 +4230,13 @@ This is a continuation of your previous work. Please review the notes below and 
         spawn_for_phase() in DaytonaSpawnerService is only used for CRASH RECOVERY,
         not for normal phase progression.
 
+        Args:
+            reporter: Optional EventReporter for sending work events.
+                     When provided, the state machine will report phase
+                     progress as work events to prevent idle termination.
+
         Returns:
-            0 on success, 1 on failure
+            0 on success, 1 on failure, None if state machine unavailable
         """
         logger.info("=" * 60)
         logger.info("SPEC STATE MACHINE: Starting Phase-Aware Execution")
@@ -4248,12 +4255,23 @@ This is a continuation of your previous work. Please review the notes below and 
             # For now, we create a mock-compatible session or use environment config
             db_session = await self._get_database_session()
 
-            # Initialize state machine
+            # Create progress callback that reports events via the reporter
+            # This is critical: without work events, the idle sandbox monitor
+            # will terminate the sandbox after 10 minutes as "stuck_running"
+            progress_callback = None
+            if reporter:
+                async def progress_callback(event_type: str, event_data: dict) -> None:
+                    """Report state machine progress as work events."""
+                    await reporter.report(event_type, event_data, source="spec_state_machine")
+                logger.info("SPEC STATE MACHINE: Progress callback configured for idle monitoring")
+
+            # Initialize state machine with progress callback
             state_machine = SpecStateMachine(
                 spec_id=self.config.spec_id,
                 db_session=db_session,
                 working_directory=self.config.cwd,
                 model=self.config.model,
+                progress_callback=progress_callback,
             )
 
             # Inject pre-loaded phase data if available (from PHASE_DATA_B64)
@@ -4290,11 +4308,15 @@ This is a continuation of your previous work. Please review the notes below and 
     async def _run_spec_state_machine_with_heartbeats(
         self, reporter: "EventReporter"
     ) -> Optional[int]:
-        """Run spec state machine with background heartbeat reporting.
+        """Run spec state machine with background heartbeat reporting and work events.
 
-        This wraps _run_spec_state_machine() with a concurrent heartbeat task
-        so the idle sandbox monitor doesn't terminate the sandbox while the
-        state machine is running.
+        This wraps _run_spec_state_machine() with:
+        1. A concurrent heartbeat task (keeps sandbox alive)
+        2. Work event reporting via progress callback (prevents "stuck_running")
+
+        The state machine reports phase transitions as work events. Combined with
+        heartbeats, this ensures the idle sandbox monitor won't terminate the
+        sandbox while spec generation is actively running.
 
         Args:
             reporter: EventReporter instance for sending heartbeats and events
@@ -4337,8 +4359,10 @@ This is a continuation of your previous work. Please review the notes below and 
         heartbeat_task = asyncio.create_task(heartbeat_loop())
 
         try:
-            # Run the actual state machine
-            result = await self._run_spec_state_machine()
+            # Run the state machine with the reporter for work event reporting
+            # The state machine will call reporter.report() when phases complete,
+            # which counts as work events for idle detection
+            result = await self._run_spec_state_machine(reporter=reporter)
             return result
         finally:
             # Stop heartbeat task

@@ -389,6 +389,11 @@ def save_session_transcript(
         # No transcript provided - skip saving
         return
 
+    # Normalize empty string task_id to None (spec sandboxes don't have task_id)
+    # This prevents FK constraint violations - empty string '' is not the same as NULL
+    if task_id == "":
+        task_id = None
+
     try:
         from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
 
@@ -447,6 +452,11 @@ async def save_session_transcript_async(
     if not transcript_b64:
         # No transcript provided - skip saving
         return
+
+    # Normalize empty string task_id to None (spec sandboxes don't have task_id)
+    # This prevents FK constraint violations - empty string '' is not the same as NULL
+    if task_id == "":
+        task_id = None
 
     try:
         from sqlalchemy import select
@@ -964,9 +974,18 @@ async def post_sandbox_event(
                     )
                     logger.info(f"Successfully updated task {task_id} to failed")
             else:
-                logger.warning(
-                    f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
-                )
+                # Check if this is a spec sandbox (has spec_id but no task_id)
+                # Spec sandboxes don't need task status updates - they have their own workflow
+                spec_id = event.event_data.get("spec_id")
+                if spec_id:
+                    logger.debug(
+                        f"Spec sandbox event (spec_id={spec_id}), skipping task status update. "
+                        f"event_type={event.event_type}, sandbox_id={sandbox_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
+                    )
         except Exception as e:
             # Task status update is important but shouldn't break event processing
             # Log error with full stack trace for debugging
