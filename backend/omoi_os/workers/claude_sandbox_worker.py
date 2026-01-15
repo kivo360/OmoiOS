@@ -4287,6 +4287,71 @@ This is a continuation of your previous work. Please review the notes below and 
             logger.exception(f"SPEC STATE MACHINE: Unexpected error: {e}")
             return 1
 
+    async def _run_spec_state_machine_with_heartbeats(
+        self, reporter: "EventReporter"
+    ) -> Optional[int]:
+        """Run spec state machine with background heartbeat reporting.
+
+        This wraps _run_spec_state_machine() with a concurrent heartbeat task
+        so the idle sandbox monitor doesn't terminate the sandbox while the
+        state machine is running.
+
+        Args:
+            reporter: EventReporter instance for sending heartbeats and events
+
+        Returns:
+            0 on success, 1 on failure, None if state machine unavailable
+        """
+        import asyncio
+
+        heartbeat_interval = self.config.heartbeat_interval
+        stop_heartbeat = asyncio.Event()
+
+        async def heartbeat_loop():
+            """Send periodic heartbeats while state machine runs."""
+            while not stop_heartbeat.is_set():
+                try:
+                    await reporter.report(
+                        "agent.heartbeat",
+                        {
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "status": "running",
+                            "mode": "spec_state_machine",
+                            "spec_id": self.config.spec_id,
+                            "spec_phase": self.config.spec_phase,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(f"Heartbeat failed: {e}")
+
+                # Wait for interval or stop signal
+                try:
+                    await asyncio.wait_for(
+                        stop_heartbeat.wait(), timeout=heartbeat_interval
+                    )
+                    break  # Stop signal received
+                except asyncio.TimeoutError:
+                    pass  # Continue heartbeat loop
+
+        # Start heartbeat task
+        heartbeat_task = asyncio.create_task(heartbeat_loop())
+
+        try:
+            # Run the actual state machine
+            result = await self._run_spec_state_machine()
+            return result
+        finally:
+            # Stop heartbeat task
+            stop_heartbeat.set()
+            try:
+                await asyncio.wait_for(heartbeat_task, timeout=5.0)
+            except asyncio.TimeoutError:
+                heartbeat_task.cancel()
+                try:
+                    await heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+
     async def _get_database_session(self):
         """Get a database session for the state machine.
 
@@ -4435,13 +4500,47 @@ The following dependencies were automatically installed before you started:
         # The state machine handles multiple short query() invocations
         # within a SINGLE sandbox (not multiple sandboxes per phase).
         # spawn_for_phase() is only used for CRASH RECOVERY.
+        #
+        # IMPORTANT: We wrap this in an EventReporter context so heartbeats
+        # are sent during state machine execution. Without this, the idle
+        # sandbox monitor would terminate the sandbox prematurely.
         if self.config.spec_phase and self.config.spec_id:
-            result = await self._run_spec_state_machine()
-            # If result is None, SpecStateMachine wasn't available - continue with regular execution
-            # The spec-driven-dev skill has been injected into the prompt, so Claude will
-            # follow the spec workflow without needing the Python state machine
-            if result is not None:
-                return result
+            async with EventReporter(self.config) as reporter:
+                self.reporter = reporter
+
+                # Report startup for spec state machine
+                await reporter.report(
+                    "agent.started",
+                    {
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "sdk": "spec_state_machine",
+                        "model": self.config.model or "default",
+                        "spec_id": self.config.spec_id,
+                        "spec_phase": self.config.spec_phase,
+                        "mode": "spec_driven",
+                    },
+                    source="worker",
+                )
+
+                result = await self._run_spec_state_machine_with_heartbeats(reporter)
+
+                # If result is None, SpecStateMachine wasn't available - continue with regular execution
+                # The spec-driven-dev skill has been injected into the prompt, so Claude will
+                # follow the spec workflow without needing the Python state machine
+                if result is not None:
+                    # Report completion
+                    await reporter.report(
+                        "agent.completed",
+                        {
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
+                            "success": result == 0,
+                            "spec_id": self.config.spec_id,
+                            "spec_phase": self.config.spec_phase,
+                        },
+                        source="worker",
+                    )
+                    return result
+
             logger.info("Continuing with prompt-driven spec execution (no state machine)")
 
         async with EventReporter(self.config) as reporter:
