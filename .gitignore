@@ -1,6 +1,13 @@
 # External dependencies
 external/
 
+# Node.js
+node_modules/
+pnpm-lock.yaml
+
+# Iteration notes (agent workflow artifacts)
+ITERATION_NOTES.md
+
 # Python
 **/__pycache__/
 *.pyc
