@@ -138,3 +138,19 @@ class EventBusService:
             self.pubsub.close()
         if self.redis_client:
             self.redis_client.close()
+
+
+# Singleton instance for the event bus
+_event_bus_instance: EventBusService | None = None
+
+
+def get_event_bus() -> EventBusService:
+    """Get or create the singleton EventBusService instance.
+
+    Returns:
+        EventBusService: The singleton event bus instance
+    """
+    global _event_bus_instance
+    if _event_bus_instance is None:
+        _event_bus_instance = EventBusService()
+    return _event_bus_instance
