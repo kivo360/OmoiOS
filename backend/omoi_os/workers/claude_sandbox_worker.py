@@ -4212,6 +4212,48 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info("=" * 80)
         return prompt
 
+    async def _read_spec_phase_data(self) -> dict:
+        """Read phase data from file checkpoints after spec state machine completes.
+
+        The state machine saves phase data to .omoi_os/phase_data/*.json files.
+        This method reads all phase files and combines them into a single dict
+        that can be sent back to the server for persistence.
+
+        Returns:
+            Dict mapping phase names to their data, e.g.:
+            {
+                "explore": {...},
+                "requirements": {...},
+                "design": {...},
+                "tasks": {...}
+            }
+        """
+        import json
+        from pathlib import Path
+
+        phase_data = {}
+        phase_data_dir = Path(self.config.cwd) / ".omoi_os" / "phase_data"
+
+        if not phase_data_dir.exists():
+            logger.warning(f"Phase data directory not found: {phase_data_dir}")
+            return phase_data
+
+        # Read all phase JSON files
+        for phase_file in phase_data_dir.glob("*.json"):
+            phase_name = phase_file.stem  # e.g., "explore", "requirements"
+            try:
+                phase_content = json.loads(phase_file.read_text())
+                phase_data[phase_name] = phase_content
+                logger.info(
+                    f"Read phase data: {phase_name}",
+                    extra={"keys": list(phase_content.keys()) if isinstance(phase_content, dict) else "non-dict"}
+                )
+            except Exception as e:
+                logger.warning(f"Failed to read phase file {phase_file}: {e}")
+
+        logger.info(f"Loaded phase data for phases: {list(phase_data.keys())}")
+        return phase_data
+
     async def _run_spec_state_machine(
         self, reporter: Optional["EventReporter"] = None
     ) -> int:
@@ -4552,7 +4594,11 @@ The following dependencies were automatically installed before you started:
                 # The spec-driven-dev skill has been injected into the prompt, so Claude will
                 # follow the spec workflow without needing the Python state machine
                 if result is not None:
-                    # Report completion
+                    # Read phase data from file checkpoints to send back to server
+                    # The state machine saves to .omoi_os/phase_data/*.json
+                    phase_data = await self._read_spec_phase_data()
+
+                    # Report completion with phase data
                     await reporter.report(
                         "agent.completed",
                         {
@@ -4560,6 +4606,7 @@ The following dependencies were automatically installed before you started:
                             "success": result == 0,
                             "spec_id": self.config.spec_id,
                             "spec_phase": self.config.spec_phase,
+                            "phase_data": phase_data,  # Include generated spec data
                         },
                         source="worker",
                     )
