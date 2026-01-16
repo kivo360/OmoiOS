@@ -1,5 +1,15 @@
 """Pydantic schemas for structured LLM outputs."""
 
+from omoi_os.schemas.github import (
+    AvailabilityCheckRequest,
+    AvailabilityCheckResponse,
+    CreateRepositoryRequest,
+    CreateRepositoryResponse,
+    GitHubOwner,
+    OwnersListResponse,
+    RepoTemplate,
+    RepoVisibility,
+)
 from omoi_os.schemas.memory_analysis import MemoryClassification, PatternExtraction
 from omoi_os.schemas.diagnostic_analysis import (
     DiagnosticAnalysis,
@@ -51,6 +61,15 @@ from omoi_os.schemas.spec_generation import (
 )
 
 __all__ = [
+    # GitHub
+    "AvailabilityCheckRequest",
+    "AvailabilityCheckResponse",
+    "CreateRepositoryRequest",
+    "CreateRepositoryResponse",
+    "GitHubOwner",
+    "OwnersListResponse",
+    "RepoTemplate",
+    "RepoVisibility",
     # Memory Analysis
     "MemoryClassification",
     "PatternExtraction",
