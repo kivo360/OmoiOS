@@ -5,6 +5,11 @@
 # The new Claude sandbox workers don't use AgentExecutor.
 
 from omoi_os.services.agent_health import AgentHealthService
+from omoi_os.services.repository_service import (
+    GitHubAPIError,
+    RepositoryService,
+    RepositoryServiceError,
+)
 from omoi_os.services.agent_registry import AgentRegistryService
 from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.ace_engine import ACEEngine
@@ -67,4 +72,7 @@ __all__ = [
     "ValidationAgent",
     "get_llm_service",
     "get_message_queue",
+    "GitHubAPIError",
+    "RepositoryService",
+    "RepositoryServiceError",
 ]
