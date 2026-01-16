@@ -1288,6 +1288,95 @@ class TaskQueueService:
 
             return batch
 
+    async def get_unblocked_tasks_for_autonomous_projects_async(
+        self,
+        project_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> list[Task]:
+        """
+        Get all unblocked tasks from projects with autonomous_execution_enabled=True.
+
+        This method is designed for the autonomous execution flow where tasks
+        are automatically spawned when they become unblocked (all dependencies completed).
+
+        Args:
+            project_id: Optional project ID to filter by (None = all autonomous projects)
+            limit: Maximum number of tasks to return
+
+        Returns:
+            List of Task objects ready for execution, sorted by score descending
+        """
+        from omoi_os.models.ticket import Ticket
+        from omoi_os.models.project import Project
+
+        async with self.db.get_async_session() as session:
+            # Build query for pending tasks without sandbox from autonomous projects
+            if project_id:
+                # Filter by specific project
+                stmt = (
+                    select(Task)
+                    .join(Ticket, Task.ticket_id == Ticket.id)
+                    .join(Project, Ticket.project_id == Project.id)
+                    .filter(
+                        Task.status == "pending",
+                        Task.sandbox_id.is_(None),
+                        Project.id == project_id,
+                        Project.autonomous_execution_enabled == True,
+                    )
+                )
+            else:
+                # Get from all autonomous projects
+                stmt = (
+                    select(Task)
+                    .join(Ticket, Task.ticket_id == Ticket.id)
+                    .join(Project, Ticket.project_id == Project.id)
+                    .filter(
+                        Task.status == "pending",
+                        Task.sandbox_id.is_(None),
+                        Project.autonomous_execution_enabled == True,
+                    )
+                )
+
+            result = await session.execute(stmt)
+            tasks = result.scalars().all()
+
+            if not tasks:
+                return []
+
+            # Filter out tasks with incomplete dependencies
+            available_tasks = []
+            for task in tasks:
+                if not await self._check_dependencies_complete_async(session, task):
+                    continue
+
+                # Compute and update score
+                task.score = self.scorer.compute_score(task)
+                available_tasks.append(task)
+
+            # Sort by score descending
+            available_tasks.sort(key=lambda t: t.score, reverse=True)
+
+            # Take top N tasks
+            batch = available_tasks[:limit]
+
+            # Update scores in database
+            for task in batch:
+                await session.execute(
+                    update(Task).where(Task.id == task.id).values(score=task.score)
+                )
+            await session.commit()
+
+            # Refresh all tasks
+            for task in batch:
+                await session.refresh(task)
+
+            logger.info(
+                f"Found {len(batch)} unblocked tasks from autonomous projects"
+                + (f" (project_id={project_id})" if project_id else "")
+            )
+
+            return batch
+
     async def get_next_task_async(
         self, phase_id: Optional[str] = None, agent_capabilities: Optional[List[str]] = None
     ) -> Task | None:
@@ -1811,6 +1900,15 @@ class TaskQueueService:
                 project = session.query(Project).filter(Project.id == project_id).first()
                 organization_id = str(project.organization_id) if project and project.organization_id else None
 
+                # Check if autonomous execution is enabled for this project
+                # Tasks from projects without autonomous_execution_enabled are skipped
+                if project and not project.autonomous_execution_enabled:
+                    logger.debug(
+                        f"Project {project_id} has autonomous_execution_enabled=False, "
+                        f"skipping task {task.id}"
+                    )
+                    continue
+
                 # Check organization-level agent limits first (if org exists)
                 if organization_id:
                     # Cache org agent limit
@@ -1939,6 +2037,15 @@ class TaskQueueService:
                 # Get project to find organization
                 project = session.query(Project).filter(Project.id == project_id).first()
                 organization_id = str(project.organization_id) if project and project.organization_id else None
+
+                # Check if autonomous execution is enabled for this project
+                # Tasks from projects without autonomous_execution_enabled are skipped
+                if project and not project.autonomous_execution_enabled:
+                    logger.debug(
+                        f"Project {project_id} has autonomous_execution_enabled=False, "
+                        f"skipping validation task {task.id}"
+                    )
+                    continue
 
                 # Check organization-level agent limits first (if org exists)
                 if organization_id:
