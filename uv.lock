@@ -10,7 +10,7 @@ resolution-markers = [
 [manifest]
 members = [
     "omoi-os",
-    "sandbox-runtime",
+    "spec-sandbox",
 ]
 
 [[package]]
@@ -2901,8 +2901,8 @@ dependencies = [
     { name = "redis" },
     { name = "resend" },
     { name = "rich" },
-    { name = "sandbox-runtime" },
     { name = "sentry-sdk", extra = ["fastapi", "sqlalchemy"] },
+    { name = "spec-sandbox" },
     { name = "sqlalchemy" },
     { name = "stripe" },
     { name = "structlog" },
@@ -2974,8 +2974,8 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0.0,<6" },
     { name = "resend", specifier = ">=2.19.0" },
     { name = "rich", specifier = ">=13.0.0" },
-    { name = "sandbox-runtime", editable = "subsystems/sandbox-runtime" },
     { name = "sentry-sdk", extras = ["fastapi", "sqlalchemy"], specifier = ">=2.0.0" },
+    { name = "spec-sandbox", editable = "subsystems/spec-sandbox" },
     { name = "sqlalchemy", specifier = ">=2.0.0,<3" },
     { name = "stripe", specifier = ">=7.0.0" },
     { name = "structlog", specifier = ">=24.0.0" },
@@ -7514,11 +7514,6 @@ wheels = [
 ]
 
 [[package]]
-name = "sandbox-runtime"
-version = "0.1.0"
-source = { editable = "subsystems/sandbox-runtime" }
-
-[[package]]
 name = "screeninfo"
 version = "0.8.1"
 source = { registry = "https://pypi.org/simple" }
@@ -7609,6 +7604,36 @@ sdist = { url = "https://files.pythonhosted.org/packages/89/23/adf3796d740536d63
 wheels = [
     { url = "https://files.pythonhosted.org/packages/48/f3/b67d6ea49ca9154453b6d70b34ea22f3996b9fa55da105a79d8732227adc/soupsieve-2.8.1-py3-none-any.whl", hash = "sha256:a11fe2a6f3d76ab3cf2de04eb339c1be5b506a8a47f2ceb6d139803177f85434", size = 36710, upload-time = "2025-12-18T13:50:33.267Z" },
 ]
+
+[[package]]
+name = "spec-sandbox"
+version = "0.1.0"
+source = { editable = "subsystems/spec-sandbox" }
+dependencies = [
+    { name = "click" },
+    { name = "httpx" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "click", specifier = ">=8.1.0" },
+    { name = "httpx", specifier = ">=0.27.0" },
+    { name = "pydantic", specifier = ">=2.7.0" },
+    { name = "pydantic-settings", specifier = ">=2.3.0" },
+    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23.0" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.1.0" },
+]
+provides-extras = ["dev"]
 
 [[package]]
 name = "sqlalchemy"
