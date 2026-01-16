@@ -82,3 +82,10 @@ examples/workspaces/
 media/
 
 backend/omoios.db
+
+# Node.js
+node_modules/
+pnpm-lock.yaml
+
+# System files
+ITERATION_NOTES.md
