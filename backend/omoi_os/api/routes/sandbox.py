@@ -1909,6 +1909,157 @@ async def get_messages(sandbox_id: str) -> list[MessageItem]:
 
 
 # ============================================================================
+# TASK COMPLETION API ENDPOINT (Sandbox Callback)
+# ============================================================================
+
+
+class TaskCompleteRequest(BaseModel):
+    """Request schema for sandbox to report task completion."""
+
+    task_id: str = Field(..., description="Task ID that completed")
+    success: bool = Field(default=True, description="Whether task completed successfully")
+    result: Optional[dict] = Field(
+        default=None, description="Task result data (output, artifacts, etc.)"
+    )
+    error_message: Optional[str] = Field(
+        default=None, description="Error message if task failed"
+    )
+
+
+class TaskCompleteResponse(BaseModel):
+    """Response schema for task completion."""
+
+    status: str
+    task_id: str
+    new_status: str
+    unblocked_tasks: list[str] = Field(
+        default_factory=list,
+        description="List of task IDs that are now unblocked due to this completion",
+    )
+
+
+@router.post("/{sandbox_id}/task-complete", response_model=TaskCompleteResponse)
+async def report_task_complete(
+    sandbox_id: str,
+    request: TaskCompleteRequest,
+) -> TaskCompleteResponse:
+    """
+    Report task completion from a sandbox.
+
+    This endpoint allows sandboxes to report when a task has completed.
+    When a task completes successfully:
+    1. Task status is updated to 'completed'
+    2. DAG is re-evaluated to find newly unblocked tasks
+    3. Event is published for orchestrator to spawn unblocked tasks
+
+    This is the HTTP callback equivalent for Option 1 (HTTP Callback) in
+    the task completion strategy.
+
+    Args:
+        sandbox_id: Sandbox identifier (from URL path)
+        request: Task completion data
+
+    Returns:
+        TaskCompleteResponse with new status and unblocked task IDs
+
+    Example:
+        POST /api/v1/sandboxes/sandbox-abc123/task-complete
+        {
+            "task_id": "task-xyz",
+            "success": true,
+            "result": {
+                "output": "Feature implemented successfully",
+                "branch_name": "feature/auth-flow",
+                "pr_url": "https://github.com/org/repo/pull/123"
+            }
+        }
+    """
+    from omoi_os.services.task_queue import TaskQueueService
+
+    db = get_db_service()
+    task_queue = TaskQueueService(db, event_bus=get_event_bus())
+
+    # Determine new status based on success
+    new_status = "completed" if request.success else "failed"
+
+    # Update task status
+    if request.success:
+        await task_queue.update_task_status_async(
+            task_id=request.task_id,
+            status=new_status,
+            result=request.result,
+        )
+    else:
+        await task_queue.update_task_status_async(
+            task_id=request.task_id,
+            status=new_status,
+            error_message=request.error_message,
+        )
+
+    logger.info(
+        f"Task {request.task_id} reported as {new_status} from sandbox {sandbox_id}"
+    )
+
+    # Find tasks that are now unblocked due to this completion
+    unblocked_task_ids: list[str] = []
+    if request.success:
+        try:
+            # Get tasks that were blocked by this task
+            async with db.get_async_session() as session:
+                # Find tasks where this task_id is in their depends_on list
+                # and all their dependencies are now completed
+                result = await session.execute(
+                    select(Task).where(
+                        Task.status == "pending",
+                        Task.dependencies.isnot(None),
+                    )
+                )
+                pending_tasks = result.scalars().all()
+
+                for task in pending_tasks:
+                    deps = task.dependencies or {}
+                    depends_on = deps.get("depends_on", [])
+
+                    if request.task_id in depends_on:
+                        # Check if all dependencies are now completed
+                        all_deps_complete = await task_queue._check_dependencies_complete_async(
+                            session, task
+                        )
+                        if all_deps_complete:
+                            unblocked_task_ids.append(str(task.id))
+
+            if unblocked_task_ids:
+                logger.info(
+                    f"Task {request.task_id} completion unblocked {len(unblocked_task_ids)} tasks: {unblocked_task_ids}"
+                )
+
+                # Publish event for orchestrator to pick up unblocked tasks
+                event_bus = get_event_bus()
+                event_bus.publish(
+                    SystemEvent(
+                        event_type="TASKS_UNBLOCKED",
+                        entity_type="task",
+                        entity_id=request.task_id,
+                        payload={
+                            "completed_task_id": request.task_id,
+                            "unblocked_task_ids": unblocked_task_ids,
+                            "sandbox_id": sandbox_id,
+                        },
+                    )
+                )
+        except Exception as e:
+            logger.error(f"Failed to find unblocked tasks: {e}", exc_info=True)
+            # Don't fail the request - task completion was successful
+
+    return TaskCompleteResponse(
+        status="accepted",
+        task_id=request.task_id,
+        new_status=new_status,
+        unblocked_tasks=unblocked_task_ids,
+    )
+
+
+# ============================================================================
 # VALIDATION API ENDPOINTS
 # ============================================================================
 

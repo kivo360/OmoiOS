@@ -62,6 +62,13 @@ class Project(Base):
         String(50), nullable=False, default="active", index=True
     )  # active, archived, completed
 
+    # Autonomous execution toggle
+    # When enabled, the orchestrator will automatically spawn tasks for this project
+    # when they become unblocked (all dependencies completed)
+    autonomous_execution_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False, index=True
+    )
+
     # Configuration
     settings: Mapped[Optional[dict]] = mapped_column(
         JSONB, nullable=True, comment="Project-specific settings (WIP limits, etc.)"
