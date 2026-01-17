@@ -1,0 +1,54 @@
+# Virtual environments
+.venv/
+**/.venv/
+**/venv/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+
+# Claude/AI
+.claude/
+
+# Build artifacts
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local config
+.env.local
+.env.production
+.env.remote-test
+
+# macOS
+.DS_Store
+
+# Frontend (not needed for backend builds)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# External dependencies
+external/
+
+# Misc
+*.log
+*.tmp
