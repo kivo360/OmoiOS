@@ -9,7 +9,9 @@
       "backend/omoi_os/models/**",
       "backend/omoi_os/config/**",
       "backend/pyproject.toml",
-      "backend/uv.lock"
+      "subsystems/spec-sandbox/**",
+      "pyproject.toml",
+      "uv.lock"
     ]
   },
   "deploy": {

@@ -6,15 +6,21 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy dependency files
+# Copy root workspace configuration first (required for uv workspace resolution)
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies into .venv (without installing project itself)
+# Copy workspace member: spec-sandbox (required by backend)
+COPY subsystems/spec-sandbox ./subsystems/spec-sandbox
+
+# Copy backend package
+COPY backend ./backend
+
+# Install dependencies into .venv from backend directory
+WORKDIR /app/backend
+
+# Install dependencies (without installing project itself)
 # Note: Railway cache mounts require hardcoded service IDs, so we skip caching for portability
 RUN uv sync --locked --no-install-project --no-editable
-
-# Copy project source code
-COPY . /app
 
 # Install project in non-editable mode
 RUN uv sync --locked --no-editable
@@ -22,8 +28,8 @@ RUN uv sync --locked --no-editable
 # Stage 2: Runtime image
 FROM python:3.12-slim
 
-# Copy virtual environment from builder
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
+# Copy virtual environment from builder (uv creates it at workspace root)
+COPY --from=builder /app/.venv /app/.venv
 
 # Set Python path
 ENV PATH="/app/.venv/bin:$PATH"
@@ -31,8 +37,8 @@ ENV PYTHONPATH=/app
 
 WORKDIR /app
 
-# Copy application code
-COPY --from=builder /app /app
+# Copy backend application code
+COPY --from=builder /app/backend /app
 
 # Run taskiq worker
 CMD ["taskiq", "worker", "omoi_os.tasks.broker:broker"]

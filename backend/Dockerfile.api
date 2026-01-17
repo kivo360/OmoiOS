@@ -5,14 +5,20 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 WORKDIR /app
 
-# Copy dependency files
+# Copy root workspace configuration first (required for uv workspace resolution)
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies into .venv (without installing project itself)
-RUN uv sync --locked --no-install-project --no-editable
+# Copy workspace member: spec-sandbox (required by backend)
+COPY subsystems/spec-sandbox ./subsystems/spec-sandbox
 
-# Copy project source code
-COPY . /app
+# Copy backend package
+COPY backend ./backend
+
+# Install dependencies into .venv from backend directory
+WORKDIR /app/backend
+
+# Install dependencies (without installing project itself)
+RUN uv sync --locked --no-install-project --no-editable
 
 # Install project in non-editable mode
 RUN uv sync --locked --no-editable
@@ -20,8 +26,8 @@ RUN uv sync --locked --no-editable
 # Stage 2: Runtime image
 FROM python:3.12-slim
 
-# Copy virtual environment from builder
-COPY --from=builder --chown=app:app /app/.venv /app/.venv
+# Copy virtual environment from builder (uv creates it at workspace root)
+COPY --from=builder /app/.venv /app/.venv
 
 # Set Python path so Python can find omoi_os package
 ENV PATH="/app/.venv/bin:$PATH"
@@ -42,11 +48,11 @@ ENV RELOAD_MODE="false"
 
 WORKDIR /app
 
-# Copy application code
-COPY --from=builder /app /app
+# Copy backend application code
+COPY --from=builder /app/backend /app
 
-# Copy startup script
-COPY docker-entrypoint.sh /docker-entrypoint.sh
+# Copy startup script (from backend directory in build context)
+COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
 # Expose dynamic port

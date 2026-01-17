@@ -4,7 +4,10 @@
     "builder": "DOCKERFILE",
     "dockerfilePath": "backend/Dockerfile.api",
     "watchPatterns": [
-      "**"
+      "backend/**",
+      "subsystems/spec-sandbox/**",
+      "pyproject.toml",
+      "uv.lock"
     ]
   },
   "deploy": {
