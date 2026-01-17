@@ -10,8 +10,10 @@
       "backend/omoi_os/**/*.md",
       "backend/config/**",
       "backend/pyproject.toml",
-      "backend/uv.lock",
-      "backend/Dockerfile.worker"
+      "backend/Dockerfile.worker",
+      "subsystems/spec-sandbox/**",
+      "pyproject.toml",
+      "uv.lock"
     ]
   },
   "deploy": {
