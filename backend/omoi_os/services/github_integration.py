@@ -17,7 +17,8 @@ from uuid import uuid4
 from omoi_os.models.project import Project
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.task import Task
-from omoi_os.ticketing.models import TicketCommit, TicketPullRequest
+from omoi_os.models.ticket_commit import TicketCommit
+from omoi_os.models.ticket_pull_request import TicketPullRequest
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
