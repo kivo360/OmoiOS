@@ -61,6 +61,7 @@ from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task_memory import TaskMemory
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.ticket_status import TicketStatus
+from omoi_os.ticketing.models import TicketPullRequest
 from omoi_os.models.validation_review import ValidationReview
 from omoi_os.models.workflow_result import WorkflowResult
 from omoi_os.models.mcp_server import (
@@ -150,6 +151,7 @@ __all__ = [
     "TaskMemory",
     "TaskPattern",
     "Ticket",
+    "TicketPullRequest",
     "TicketStatus",
     "UsageRecord",
     "Subscription",
