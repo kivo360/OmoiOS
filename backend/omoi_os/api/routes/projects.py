@@ -193,7 +193,7 @@ async def _get_project_stats_async(
     db: DatabaseService, project_id: str
 ) -> Optional[Dict[str, Any]]:
     """Get project stats (ASYNC - non-blocking)."""
-    from omoi_os.ticketing.models import TicketCommit
+    from omoi_os.models.ticket_commit import TicketCommit
     from omoi_os.models.agent import Agent
     from omoi_os.models.task import Task
 

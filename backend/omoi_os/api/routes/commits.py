@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict
 
 from omoi_os.api.dependencies import get_db_service, get_event_bus_service
 from omoi_os.models.ticket import Ticket
-from omoi_os.ticketing.models import TicketCommit
+from omoi_os.models.ticket_commit import TicketCommit
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.utils.datetime import utc_now
