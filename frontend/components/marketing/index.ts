@@ -3,6 +3,7 @@ export { MarketingNavbar } from "./FloatingNavbar"
 
 // Section components
 export { HeroSection } from "./sections/HeroSection"
+export { PainPointsSection } from "./sections/PainPointsSection"
 export { LogoCloudSection } from "./sections/LogoCloudSection"
 export { FeaturesSection } from "./sections/FeaturesSection"
 export { WorkflowSection } from "./sections/WorkflowSection"

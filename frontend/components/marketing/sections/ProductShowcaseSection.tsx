@@ -26,7 +26,7 @@ const showcaseItems = [
   {
     id: "kanban",
     title: "Kanban Board",
-    description: "Watch your tickets flow through the pipeline: Backlog → Analyzing → Building → Testing → Deploying → Done. Full visibility into agent progress.",
+    description: "Watch work flow through the pipeline: Backlog → Analyzing → Building → Testing → Deploying → Done. Full visibility into agent progress.",
     icon: FolderKanban,
     image: "/screenshots/agent-task-view.png",
     alt: "OmoiOS Kanban Board showing task pipeline",
@@ -34,7 +34,7 @@ const showcaseItems = [
   {
     id: "project",
     title: "Project Dashboard",
-    description: "One view for everything: active tickets, running agents, commit history, and GitHub integration. Know exactly where every project stands.",
+    description: "One view for everything: active work, running agents, commit history, and GitHub integration. Know exactly where every project stands.",
     icon: LayoutDashboard,
     image: "/screenshots/command-center.png",
     alt: "OmoiOS Project Dashboard with overview stats",

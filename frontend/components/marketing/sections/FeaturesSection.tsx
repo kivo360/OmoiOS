@@ -24,9 +24,9 @@ const features = [
     visual: <SpecDrivenVisual />,
   },
   {
-    title: "Never Worry About Stuck Tasks",
+    title: "Work Doesn’t Get Stuck",
     description:
-      "If something goes wrong, it gets fixed automatically. No babysitting required.",
+      "If something goes wrong, it retries and self-corrects. No babysitting required.",
     icon: Shield,
     className: "md:col-span-1",
     visual: <GuardianVisual />,
@@ -82,10 +82,10 @@ export function FeaturesSection({ className, id }: FeaturesSectionProps) {
           className="mx-auto mb-16 max-w-2xl text-center"
         >
           <h2 className="text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            Your Time Back. Your Sanity Intact.
+            An Army of Agents. In Formation.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Stop managing tickets. Start shipping products.
+            Orchestrated execution with guardrails, tests, and self-correction—so errors don&apos;t pile up.
           </p>
         </motion.div>
 
@@ -113,7 +113,7 @@ export function FeaturesSection({ className, id }: FeaturesSectionProps) {
 // Visual Components for Bento Grid Items
 
 function SpecDrivenVisual() {
-  const phases = ["Requirements", "Design", "Tasks", "Execution"]
+  const phases = ["Requirements", "Design", "Plan", "Execution"]
   return (
     <div className="flex h-full min-h-[120px] items-center justify-center gap-2 rounded-lg bg-landing-bg-muted p-4">
       {phases.map((phase, i) => (

@@ -56,7 +56,7 @@ export function NightShiftSection({ className }: NightShiftSectionProps) {
           >
             {[
               { value: "2h 28m", label: "of work done for you" },
-              { value: "5", label: "tasks you didn't manage" },
+              { value: "5", label: "steps you didn't manage" },
               { value: "1", label: "PR ready to merge" },
             ].map((stat) => (
               <div key={stat.label}>

@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import {
   MarketingNavbar,
   HeroSection,
+  PainPointsSection,
   LogoCloudSection,
   FeaturesSection,
   WorkflowSection,
@@ -23,7 +24,7 @@ import Link from "next/link"
 
 function LandingPage() {
   return (
-    <div className="min-h-screen bg-landing-bg">
+    <div className="landing-page min-h-screen bg-landing-bg">
       {/* Announcement Banner - sticky at top, above navbar */}
       <div className="sticky top-0 z-[5001] flex justify-center bg-landing-bg-muted py-2.5">
         <Link href="https://prompt.omoios.dev/" target="_blank" rel="noopener noreferrer">
@@ -42,6 +43,9 @@ function LandingPage() {
 
       {/* Hero Section */}
       <HeroSection />
+
+      {/* Pain Points */}
+      <PainPointsSection id="why" />
 
       {/* Logo Cloud */}
       <LogoCloudSection />

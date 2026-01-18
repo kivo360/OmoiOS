@@ -94,8 +94,9 @@ export function HeroSection({ className }: HeroSectionProps) {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="mx-auto mt-6 max-w-2xl text-lg text-landing-text-muted md:text-xl"
           >
-            Tell us what you want built in plain English. By morning, there&apos;s a
-            pull request waiting for your review. That&apos;s it.
+            Describe what you want. We turn it into a plan with a clear schedule and traceable
+            outputs—requirements, design, and tested code—until a pull request is ready for your
+            review.
           </motion.p>
 
           {/* CTAs */}
