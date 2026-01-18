@@ -2,11 +2,18 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent } from "@/components/ui/card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import {
   Search,
   Plus,
@@ -19,8 +26,9 @@ import {
   Loader2,
   RefreshCw,
   Box,
+  MoreVertical,
 } from "lucide-react"
-import { useSandboxTasks } from "@/hooks/useTasks"
+import { useSandboxTasks, useFailTask } from "@/hooks/useTasks"
 import { useQueryClient } from "@tanstack/react-query"
 import { taskKeys } from "@/hooks/useTasks"
 
@@ -81,8 +89,23 @@ export default function SandboxesPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<TaskStatus | "all">("all")
   const queryClient = useQueryClient()
-  
+
   const { data: tasks, isLoading, error, refetch, isFetching } = useSandboxTasks({ limit: 100 })
+  const failTaskMutation = useFailTask()
+
+  const handleMarkFailed = (taskId: string) => {
+    failTaskMutation.mutate(
+      { taskId, reason: "marked_failed_by_user" },
+      {
+        onSuccess: () => {
+          toast.success("Task marked as failed")
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to mark task as failed")
+        },
+      }
+    )
+  }
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return []
@@ -237,52 +260,83 @@ export default function SandboxesPage() {
               const status = normalizeStatus(task.status)
               const config = statusConfig[status]
               const StatusIcon = config.icon
+              const canMarkFailed = ["running", "pending"].includes(status)
 
               return (
-                <Link
-                  key={task.id}
-                  href={task.sandbox_id ? `/sandbox/${task.sandbox_id}` : "#"}
-                  className={!task.sandbox_id ? "pointer-events-none opacity-50" : ""}
-                >
-                  <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full">
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className={`p-1.5 rounded ${config.bgColor}`}>
-                            <StatusIcon
-                              className={`h-4 w-4 ${config.color} ${status === "running" ? "animate-spin" : ""}`}
-                            />
+                <div key={task.id} className="group relative">
+                  <Link
+                    href={task.sandbox_id ? `/sandbox/${task.sandbox_id}` : "#"}
+                    className={!task.sandbox_id ? "pointer-events-none opacity-50" : ""}
+                  >
+                    <Card className="hover:border-primary/50 hover:shadow-md transition-all cursor-pointer h-full">
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded ${config.bgColor}`}>
+                              <StatusIcon
+                                className={`h-4 w-4 ${config.color} ${status === "running" ? "animate-spin" : ""}`}
+                              />
+                            </div>
+                            <Badge variant="outline" className="text-[10px]">
+                              {task.task_type}
+                            </Badge>
                           </div>
-                          <Badge variant="outline" className="text-[10px]">
-                            {task.task_type}
-                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {formatTimeAgo(task.started_at || task.created_at)}
+                          </span>
                         </div>
-                        <span className="text-xs text-muted-foreground">
-                          {formatTimeAgo(task.started_at || task.created_at)}
-                        </span>
-                      </div>
 
-                      <h3 className="font-medium text-sm mb-1 line-clamp-2">
-                        {task.title || `Task ${task.id.slice(0, 8)}`}
-                      </h3>
+                        <h3 className="font-medium text-sm mb-1 line-clamp-2">
+                          {task.title || `Task ${task.id.slice(0, 8)}`}
+                        </h3>
 
-                      {task.sandbox_id && (
-                        <p className="text-[10px] text-muted-foreground font-mono truncate">
-                          {task.sandbox_id}
-                        </p>
-                      )}
-
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t">
-                        <Badge variant={status === "completed" ? "default" : status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
-                          {config.label}
-                        </Badge>
-                        {!task.sandbox_id && (
-                          <span className="text-[10px] text-muted-foreground">No sandbox</span>
+                        {task.sandbox_id && (
+                          <p className="text-[10px] text-muted-foreground font-mono truncate">
+                            {task.sandbox_id}
+                          </p>
                         )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t">
+                          <Badge variant={status === "completed" ? "default" : status === "failed" ? "destructive" : "secondary"} className="text-[10px]">
+                            {config.label}
+                          </Badge>
+                          {!task.sandbox_id && (
+                            <span className="text-[10px] text-muted-foreground">No sandbox</span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </Link>
+
+                  {/* Action menu for running/pending tasks */}
+                  {canMarkFailed && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-2 top-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity bg-background/80 hover:bg-background"
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                          <span className="sr-only">Task actions</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={(e) => {
+                            e.preventDefault()
+                            handleMarkFailed(task.id)
+                          }}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Mark as Failed
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
               )
             })}
           </div>

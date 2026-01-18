@@ -2,7 +2,14 @@
 
 import Link from "next/link"
 import { cn } from "@/lib/utils"
-import { Loader2, Check, X, AlertCircle, Clock, ShieldCheck } from "lucide-react"
+import { Loader2, Check, X, AlertCircle, Clock, ShieldCheck, MoreVertical } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 
 export type TaskStatus = "pending" | "assigned" | "running" | "completed" | "failed" | "pending_validation" | "validating"
 
@@ -15,6 +22,7 @@ interface TaskCardProps {
   timeAgo: string
   isSelected?: boolean
   className?: string
+  onMarkFailed?: (taskId: string) => void
 }
 
 const statusConfig = {
@@ -64,6 +72,7 @@ export function TaskCard({
   timeAgo,
   isSelected,
   className,
+  onMarkFailed,
 }: TaskCardProps) {
   const normalizedStatus = normalizeStatus(status)
   const { icon: StatusIcon, iconClass } = statusConfig[normalizedStatus]
@@ -74,26 +83,59 @@ export function TaskCard({
   // Link to sandbox if available, otherwise to task
   const href = sandboxId ? `/sandbox/${sandboxId}` : `/tasks/${id}`
 
+  // Can mark as failed if running, assigned, or pending
+  const canMarkFailed = onMarkFailed && ["running", "assigned", "pending"].includes(normalizedStatus)
+
   return (
-    <Link
-      href={href}
+    <div
       className={cn(
-        "block rounded-md p-2 transition-colors duration-150 hover:bg-accent",
+        "group relative rounded-md p-2 transition-colors duration-150 hover:bg-accent",
         isSelected && "bg-accent border-l-2 border-l-primary",
         className
       )}
     >
-      {/* Row 1: Status + Task Name + Time */}
-      <div className="flex items-start gap-2">
-        <StatusIcon className={cn("mt-0.5 h-4 w-4 shrink-0", iconClass)} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-foreground">
-            {displayName}
-          </p>
+      <Link href={href} className="block">
+        {/* Row 1: Status + Task Name + Time */}
+        <div className="flex items-start gap-2">
+          <StatusIcon className={cn("mt-0.5 h-4 w-4 shrink-0", iconClass)} />
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-foreground">
+              {displayName}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs text-muted-foreground">{timeAgo}</span>
         </div>
-        <span className="shrink-0 text-xs text-muted-foreground">{timeAgo}</span>
-      </div>
-    </Link>
+      </Link>
+
+      {/* Action menu for running/pending tasks */}
+      {canMarkFailed && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => e.preventDefault()}
+            >
+              <MoreVertical className="h-3.5 w-3.5" />
+              <span className="sr-only">Task actions</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={(e) => {
+                e.preventDefault()
+                onMarkFailed(id)
+              }}
+              className="text-destructive focus:text-destructive"
+            >
+              <X className="mr-2 h-4 w-4" />
+              Mark as Failed
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    </div>
   )
 }
 

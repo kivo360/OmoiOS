@@ -251,6 +251,12 @@ class CancelTaskRequest(BaseModel):
     reason: str = "cancelled_by_request"
 
 
+class FailTaskRequest(BaseModel):
+    """Request model for marking a task as failed."""
+
+    reason: str = "marked_failed_by_user"
+
+
 class TaskTimeoutRequest(BaseModel):
     """Request model for setting task timeout."""
 
@@ -948,6 +954,95 @@ async def cancel_task(
         "task_id": task_id,
         "cancelled": True,
         "reason": request.reason,
+    }
+
+
+@router.post("/{task_id}/fail", response_model=dict)
+async def fail_task(
+    task_id: str,
+    request: FailTaskRequest = Body(...),
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """
+    Mark a task as failed.
+
+    Requires authentication and verifies user has access to the task's ticket.
+    This is useful for manually failing stuck tasks or tasks that need to be restarted.
+
+    Args:
+        task_id: Task UUID
+        request: Fail request with reason
+        current_user: Authenticated user
+        db: Database service
+        event_bus: Event bus service
+
+    Returns:
+        Updated task information
+    """
+    from omoi_os.utils.datetime import utc_now
+
+    # Verify user has access to this task
+    await verify_task_access(task_id, current_user, db)
+
+    async with db.get_async_session() as session:
+        result = await session.execute(select(Task).filter(Task.id == task_id))
+        task = result.scalar_one_or_none()
+
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+
+        # Only allow failing tasks that are in running/assigned/pending state
+        if task.status in ["completed", "failed"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot fail task with status '{task.status}'. Task is already completed or failed.",
+            )
+
+        old_status = task.status
+        task.status = "failed"
+        task.error_message = request.reason
+        task.completed_at = utc_now()
+
+        await session.commit()
+        await session.refresh(task)
+
+    # Publish event
+    event_bus.publish(
+        SystemEvent(
+            event_type="TASK_FAILED",
+            entity_type="task",
+            entity_id=task_id,
+            payload={
+                "reason": request.reason,
+                "old_status": old_status,
+                "failed_by": "user",
+            },
+        )
+    )
+
+    # Log reasoning event
+    log_reasoning_event(
+        db=db,
+        entity_type="task",
+        entity_id=task_id,
+        event_type="error",
+        title="Task Marked Failed",
+        description=f"Task manually marked as failed: {request.reason}",
+        details={"reason": request.reason, "old_status": old_status, "failed_by": "user"},
+        decision={
+            "type": "fail",
+            "action": "Mark task as failed",
+            "reasoning": request.reason,
+        },
+    )
+
+    return {
+        "task_id": task_id,
+        "status": "failed",
+        "reason": request.reason,
+        "old_status": old_status,
     }
 
 
