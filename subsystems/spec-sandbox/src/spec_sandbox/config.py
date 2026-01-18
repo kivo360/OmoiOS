@@ -62,13 +62,30 @@ class SpecSandboxSettings(BaseSettings):
     anthropic_base_url: Optional[str] = Field(
         default=None, description="Custom API endpoint"
     )
-    model: Optional[str] = Field(default=None, description="Model to use")
+    model: str = Field(
+        default="claude-sonnet-4-5-20250929",
+        description="Model to use for phase execution",
+    )
+    cwd: Optional[Path] = Field(
+        default=None,
+        description="Working directory for Claude Agent (defaults to working_directory)",
+    )
 
     # === Execution Limits ===
     max_turns: int = Field(default=50, description="Max turns per phase")
     max_budget_usd: float = Field(default=10.0, description="Max budget in USD")
+    use_mock: bool = Field(
+        default=False,
+        description="Use mock executor (for testing without Claude SDK)",
+    )
     heartbeat_interval: int = Field(
         default=30, description="Heartbeat interval in seconds"
+    )
+
+    # === Markdown Generation ===
+    markdown_generator: str = Field(
+        default="claude",
+        description="Generator type: 'static' (template-based) or 'claude' (Claude Agent SDK)",
     )
 
     # === Phase Context (from previous phases) ===
