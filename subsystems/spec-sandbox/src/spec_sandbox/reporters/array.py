@@ -19,8 +19,8 @@ class ArrayReporter(Reporter):
 
         # Assert on collected events
         assert len(reporter.events) > 0
-        assert reporter.has_event("phase_completed")
-        assert len(reporter.get_events_by_type("phase_started")) == 5
+        assert reporter.has_event("spec.phase_completed")
+        assert len(reporter.get_events_by_type("spec.phase_started")) == 5
     """
 
     def __init__(self) -> None:

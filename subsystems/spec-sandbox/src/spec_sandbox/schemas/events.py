@@ -26,26 +26,45 @@ class Event(BaseModel):
 
 
 class EventTypes:
-    """Common event type identifiers."""
+    """Common event type identifiers.
+
+    Event naming convention:
+    - Spec lifecycle events use "spec." prefix to match UI expectations
+    - Phase events use "spec.phase_" prefix for consistency
+    - Execution/monitoring events use "spec." prefix
+    - Artifact events use "spec." prefix
+    - Agent events use "agent." prefix (handled by backend)
+    """
 
     # Lifecycle
-    SPEC_STARTED = "spec_started"
-    SPEC_COMPLETED = "spec_completed"
-    SPEC_FAILED = "spec_failed"
+    SPEC_STARTED = "spec.execution_started"
+    SPEC_COMPLETED = "spec.execution_completed"
+    SPEC_FAILED = "spec.execution_failed"
 
     # Phase events
-    PHASE_STARTED = "phase_started"
-    PHASE_COMPLETED = "phase_completed"
-    PHASE_FAILED = "phase_failed"
-    PHASE_RETRY = "phase_retry"
+    PHASE_STARTED = "spec.phase_started"
+    PHASE_COMPLETED = "spec.phase_completed"
+    PHASE_FAILED = "spec.phase_failed"
+    PHASE_RETRY = "spec.phase_retry"
 
     # Execution
-    HEARTBEAT = "heartbeat"
-    PROGRESS = "progress"
-    EVAL_RESULT = "eval_result"
+    HEARTBEAT = "spec.heartbeat"
+    PROGRESS = "spec.progress"
+    EVAL_RESULT = "spec.eval_result"
 
     # Artifacts
-    ARTIFACT_CREATED = "artifact_created"
-    REQUIREMENTS_GENERATED = "requirements_generated"
-    DESIGN_GENERATED = "design_generated"
-    TASKS_GENERATED = "tasks_generated"
+    ARTIFACT_CREATED = "spec.artifact_created"
+    REQUIREMENTS_GENERATED = "spec.requirements_generated"
+    DESIGN_GENERATED = "spec.design_generated"
+    TASKS_GENERATED = "spec.tasks_generated"
+
+    # Sync phase specific
+    SYNC_STARTED = "spec.sync_started"
+    SYNC_COMPLETED = "spec.sync_completed"
+    TASKS_QUEUED = "spec.tasks_queued"
+
+    # Ticket creation events
+    TICKETS_CREATION_STARTED = "spec.tickets_creation_started"
+    TICKETS_CREATION_COMPLETED = "spec.tickets_creation_completed"
+    TICKET_CREATED = "spec.ticket_created"
+    TASK_CREATED = "spec.task_created"

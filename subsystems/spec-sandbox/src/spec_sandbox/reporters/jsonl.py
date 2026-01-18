@@ -24,7 +24,7 @@ class JSONLReporter(Reporter):
 
         # Then inspect:
         # cat output/events.jsonl | jq .
-        # cat output/events.jsonl | jq 'select(.event_type == "phase_completed")'
+        # cat output/events.jsonl | jq 'select(.event_type == "spec.phase_completed")'
     """
 
     def __init__(self, output_path: Path, create_parents: bool = True) -> None:
