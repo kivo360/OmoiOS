@@ -134,6 +134,7 @@ async def _update_project_async(
     github_repo: Optional[str] = None,
     github_connected: Optional[bool] = None,
     settings: Optional[dict] = None,
+    autonomous_execution_enabled: Optional[bool] = None,
 ) -> Optional[Project]:
     """Update a project (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
@@ -160,6 +161,8 @@ async def _update_project_async(
             project.github_connected = github_connected
         if settings is not None:
             project.settings = settings
+        if autonomous_execution_enabled is not None:
+            project.autonomous_execution_enabled = autonomous_execution_enabled
 
         project.updated_at = utc_now()
         await session.commit()
@@ -486,6 +489,7 @@ async def update_project(
         github_repo=project_data.github_repo,
         github_connected=project_data.github_connected,
         settings=project_data.settings,
+        autonomous_execution_enabled=project_data.autonomous_execution_enabled,
     )
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
