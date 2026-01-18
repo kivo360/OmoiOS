@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
+import { toast } from "sonner"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -9,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Search, Filter, SortAsc, Plus, AlertCircle } from "lucide-react"
 import { TaskCard, type TaskStatus } from "@/components/custom/TaskCard"
 import { TimeGroupHeader } from "@/components/custom"
-import { useSandboxTasks } from "@/hooks/useTasks"
+import { useSandboxTasks, useFailTask } from "@/hooks/useTasks"
 
 function formatTimeAgo(dateStr: string): string {
   const date = new Date(dateStr)
@@ -59,6 +60,21 @@ interface TasksPanelProps {
 export function TasksPanel({ pathname }: TasksPanelProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const { data: tasks, isLoading, error } = useSandboxTasks({ limit: 50 })
+  const failTaskMutation = useFailTask()
+
+  const handleMarkFailed = (taskId: string) => {
+    failTaskMutation.mutate(
+      { taskId, reason: "marked_failed_by_user" },
+      {
+        onSuccess: () => {
+          toast.success("Task marked as failed")
+        },
+        onError: (error) => {
+          toast.error(error instanceof Error ? error.message : "Failed to mark task as failed")
+        },
+      }
+    )
+  }
 
   // Extract sandboxId from pathname like /sandbox/[sandboxId]
   const selectedSandboxId = useMemo(() => {
@@ -162,6 +178,7 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       status={normalizeStatus(task.status)}
                       timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
                       isSelected={task.sandbox_id === selectedSandboxId}
+                      onMarkFailed={handleMarkFailed}
                     />
                   ))}
                 </div>
@@ -216,6 +233,7 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                       status={normalizeStatus(task.status)}
                       timeAgo={formatTimeAgo(task.created_at)}
                       isSelected={task.sandbox_id === selectedSandboxId}
+                      onMarkFailed={handleMarkFailed}
                     />
                   ))}
                 </div>

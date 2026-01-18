@@ -125,6 +125,22 @@ export async function cancelTask(
 }
 
 /**
+ * Mark a task as failed
+ */
+export async function failTask(
+  taskId: string,
+  reason = "marked_failed_by_user"
+): Promise<{ task_id: string; status: string; reason: string; old_status: string }> {
+  return apiRequest<{ task_id: string; status: string; reason: string; old_status: string }>(
+    `/api/v1/tasks/${taskId}/fail`,
+    {
+      method: "POST",
+      body: { reason },
+    }
+  )
+}
+
+/**
  * Get timeout status for a task
  */
 export async function getTaskTimeoutStatus(taskId: string): Promise<{

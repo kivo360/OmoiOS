@@ -12,6 +12,7 @@ import {
   setTaskDependencies,
   removeTaskDependency,
   cancelTask,
+  failTask,
   getTaskTimeoutStatus,
   getTimedOutTasks,
   getCancellableTasks,
@@ -173,6 +174,24 @@ export function useCancelTask() {
   return useMutation({
     mutationFn: ({ taskId, reason }: { taskId: string; reason?: string }) =>
       cancelTask(taskId, reason),
+    onSuccess: (_, { taskId }) => {
+      queryClient.invalidateQueries({ queryKey: taskKeys.detail(taskId) })
+      queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
+      queryClient.invalidateQueries({ queryKey: taskKeys.timedOut() })
+      queryClient.invalidateQueries({ queryKey: taskKeys.cancellable() })
+    },
+  })
+}
+
+/**
+ * Hook to mark a task as failed
+ */
+export function useFailTask() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ taskId, reason }: { taskId: string; reason?: string }) =>
+      failTask(taskId, reason),
     onSuccess: (_, { taskId }) => {
       queryClient.invalidateQueries({ queryKey: taskKeys.detail(taskId) })
       queryClient.invalidateQueries({ queryKey: taskKeys.lists() })
