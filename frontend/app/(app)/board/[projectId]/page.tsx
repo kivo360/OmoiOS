@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -373,6 +375,7 @@ export default function BoardPage({ params }: BoardPageProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState<string>("all")
   const [filterPriority, setFilterPriority] = useState<string>("all")
+  const [hideSpecDriven, setHideSpecDriven] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
@@ -494,7 +497,9 @@ export default function BoardPage({ params }: BoardPageProps) {
     const matchesStatus = filterStatus === "all" || ticket.status === filterStatus
     const matchesPriority =
       filterPriority === "all" || ticket.priority === filterPriority.toLowerCase()
-    return matchesSearch && matchesStatus && matchesPriority
+    // Hide spec-driven tickets if toggle is enabled
+    const matchesSpecFilter = !hideSpecDriven || ticket.context?.workflow_mode !== "spec_driven"
+    return matchesSearch && matchesStatus && matchesPriority && matchesSpecFilter
   })
 
   // Group tickets by column
@@ -559,9 +564,10 @@ export default function BoardPage({ params }: BoardPageProps) {
     setSearchQuery("")
     setFilterStatus("all")
     setFilterPriority("all")
+    setHideSpecDriven(false)
   }
 
-  const hasFilters = searchQuery || filterStatus !== "all" || filterPriority !== "all"
+  const hasFilters = searchQuery || filterStatus !== "all" || filterPriority !== "all" || hideSpecDriven
 
   // Get processable tickets (backlog/in_progress that aren't blocked)
   const processableTickets = allTickets.filter(
@@ -729,6 +735,18 @@ export default function BoardPage({ params }: BoardPageProps) {
                   <SelectItem value="low">Low</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* Hide Spec-Driven Toggle */}
+              <div className="flex items-center gap-2 px-2">
+                <Switch
+                  id="hide-spec-driven"
+                  checked={hideSpecDriven}
+                  onCheckedChange={setHideSpecDriven}
+                />
+                <Label htmlFor="hide-spec-driven" className="text-sm text-muted-foreground cursor-pointer">
+                  Hide Spec-Driven
+                </Label>
+              </div>
 
               {/* Clear Filters */}
               {hasFilters && (

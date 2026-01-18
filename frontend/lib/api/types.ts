@@ -331,6 +331,7 @@ export interface TicketContext {
   spec_id?: string
   spec_title?: string
   source?: string
+  workflow_mode?: "quick" | "spec_driven"
 }
 
 export interface Ticket {
