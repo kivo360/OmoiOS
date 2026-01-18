@@ -186,6 +186,19 @@
   * {
     @apply border-border;
   }
+
+  /* Smooth in-page anchor navigation (respects reduced motion). */
+  @media (prefers-reduced-motion: no-preference) {
+    html {
+      scroll-behavior: smooth;
+    }
+  }
+
+  /* Offset anchor targets to account for the fixed marketing navbar. */
+  .landing-page :where(section[id], div[id]) {
+    scroll-margin-top: 7rem;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;

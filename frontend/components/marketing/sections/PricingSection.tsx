@@ -36,7 +36,7 @@ const pricingTiers: PricingTier[] = [
       "5 workflows per month",
       "1 project",
       "Community support",
-      "Tasks queue when limit hit",
+      "Work queues when limit hit",
     ],
     cta: "Start Free",
     href: "/register",
