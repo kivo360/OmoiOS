@@ -34,9 +34,11 @@ interface NavItem {
 const mainNavItems: NavItem[] = [
   { id: "command", label: "Command", icon: Terminal, href: "/command" },
   { id: "projects", label: "Projects", icon: FolderGit2, href: "/projects" },
-  { id: "phases", label: "Phases", icon: Workflow, href: "/phases" },
+  // TODO: Re-enable when phases feature is ready
+  // { id: "phases", label: "Phases", icon: Workflow, href: "/phases" },
   { id: "sandboxes", label: "Sandboxes", icon: Box, href: "/sandboxes" },
-  { id: "analytics", label: "Analytics", icon: BarChart3, href: "/analytics" },
+  // TODO: Re-enable when analytics feature is ready
+  // { id: "analytics", label: "Analytics", icon: BarChart3, href: "/analytics" },
   { id: "organizations", label: "Organizations", icon: Building2, href: "/organizations" },
 ]
 
