@@ -150,6 +150,7 @@ export interface Project {
   default_phase_id: string
   status: "active" | "paused" | "archived" | "completed"
   settings: Record<string, unknown> | null
+  autonomous_execution_enabled: boolean
   created_at: string
   updated_at: string
 }
@@ -173,6 +174,7 @@ export interface ProjectUpdate {
   github_repo?: string
   github_connected?: boolean
   settings?: Record<string, unknown>
+  autonomous_execution_enabled?: boolean
 }
 
 export interface ProjectListResponse {
