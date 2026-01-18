@@ -1,9 +1,19 @@
-# Webhook Notifications Design
+---
+id: DES-WEBHOOK-001
+title: Webhook Notifications Design
+status: draft
+feature: webhook-notifications
+created: 2025-12-27
+updated: 2025-12-29
+requirements:
+  - REQ-WEBHOOK-CONFIG-001
+  - REQ-WEBHOOK-CONFIG-002
+  - REQ-WEBHOOK-EVENT-001
+  - REQ-WEBHOOK-EVENT-002
+  - REQ-WEBHOOK-EVENT-003
+---
 
-**Feature**: webhook-notifications
-**Created**: 2025-12-27
-**Status**: Draft
-**Requirements**: REQ-WEBHOOK-CONFIG-001, REQ-WEBHOOK-CONFIG-002, REQ-WEBHOOK-EVENT-001, REQ-WEBHOOK-EVENT-002, REQ-WEBHOOK-EVENT-003
+# Webhook Notifications Design
 
 ## Architecture Overview
 
