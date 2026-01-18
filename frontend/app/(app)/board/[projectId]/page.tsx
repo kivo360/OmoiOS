@@ -702,7 +702,8 @@ export default function BoardPage({ params }: BoardPageProps) {
     >
       <div className="flex h-[calc(100vh-3.5rem)] flex-col">
         {/* Header */}
-        <div className="flex-shrink-0 border-b bg-background px-4 py-3">
+        <div className="flex-shrink-0 border-b bg-background px-4 py-2 space-y-2">
+          {/* Row 1: Title and Actions */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               {/* Project Context Breadcrumb */}
@@ -730,92 +731,8 @@ export default function BoardPage({ params }: BoardPageProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search tickets..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-[200px] pl-8"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-[130px]">
-                  <ListFilter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="backlog">Backlog</SelectItem>
-                  <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="review">Review</SelectItem>
-                  <SelectItem value="done">Done</SelectItem>
-                  <SelectItem value="blocked">Blocked</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Priority Filter */}
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-[130px]">
-                  <Filter className="mr-2 h-4 w-4" />
-                  <SelectValue placeholder="Priority" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Priorities</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Autonomous Execution Toggle */}
-              {projectId !== "all" && project && (
-                <div className="flex items-center gap-2 px-2 border-l border-border/50 ml-1">
-                  <Switch
-                    id="autonomous-execution"
-                    checked={project.autonomous_execution_enabled}
-                    onCheckedChange={handleToggleAutonomousExecution}
-                    disabled={updateProject.isPending}
-                    className={project.autonomous_execution_enabled ? "data-[state=checked]:bg-amber-500" : ""}
-                  />
-                  <Label
-                    htmlFor="autonomous-execution"
-                    className={`text-sm cursor-pointer flex items-center gap-1.5 ${
-                      project.autonomous_execution_enabled ? "text-amber-600 font-medium" : "text-muted-foreground"
-                    }`}
-                  >
-                    <Zap className={`h-3.5 w-3.5 ${project.autonomous_execution_enabled ? "fill-amber-500" : ""}`} />
-                    Auto
-                  </Label>
-                </div>
-              )}
-
-              {/* Hide Spec-Driven Toggle */}
-              <div className="flex items-center gap-2 px-2">
-                <Switch
-                  id="hide-spec-driven"
-                  checked={hideSpecDriven}
-                  onCheckedChange={setHideSpecDriven}
-                />
-                <Label htmlFor="hide-spec-driven" className="text-sm text-muted-foreground cursor-pointer">
-                  Hide Spec-Driven
-                </Label>
-              </div>
-
-              {/* Clear Filters */}
-              {hasFilters && (
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  <X className="mr-1 h-4 w-4" />
-                  Clear
-                </Button>
-              )}
-
               {/* View Graph */}
-              <Button variant="outline" asChild>
+              <Button variant="outline" size="sm" asChild>
                 <Link href={`/graph/${projectId}`}>
                   <BarChart3 className="mr-2 h-4 w-4" />
                   Graph
@@ -825,6 +742,7 @@ export default function BoardPage({ params }: BoardPageProps) {
               {/* Start Processing - spawns tasks for all eligible tickets */}
               <Button
                 variant="default"
+                size="sm"
                 onClick={handleStartProcessing}
                 disabled={batchSpawn.isPending || processableTickets.length === 0}
                 className="bg-green-600 hover:bg-green-700"
@@ -848,10 +766,101 @@ export default function BoardPage({ params }: BoardPageProps) {
               </Button>
 
               {/* Create Ticket */}
-              <Button onClick={() => setIsCreateDialogOpen(true)}>
+              <Button size="sm" onClick={() => setIsCreateDialogOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 Create Ticket
               </Button>
+            </div>
+          </div>
+
+          {/* Row 2: Filters and Toggles */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search tickets..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-[180px] h-8 pl-8 text-sm"
+                />
+              </div>
+
+              {/* Status Filter */}
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger className="w-[120px] h-8 text-sm">
+                  <ListFilter className="mr-1.5 h-3.5 w-3.5" />
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="backlog">Backlog</SelectItem>
+                  <SelectItem value="in_progress">In Progress</SelectItem>
+                  <SelectItem value="review">Review</SelectItem>
+                  <SelectItem value="done">Done</SelectItem>
+                  <SelectItem value="blocked">Blocked</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Priority Filter */}
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-[120px] h-8 text-sm">
+                  <Filter className="mr-1.5 h-3.5 w-3.5" />
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Clear Filters */}
+              {hasFilters && (
+                <Button variant="ghost" size="sm" className="h-8" onClick={clearFilters}>
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Clear
+                </Button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {/* Autonomous Execution Toggle */}
+              {projectId !== "all" && project && (
+                <div className="flex items-center gap-2">
+                  <Switch
+                    id="autonomous-execution"
+                    checked={project.autonomous_execution_enabled}
+                    onCheckedChange={handleToggleAutonomousExecution}
+                    disabled={updateProject.isPending}
+                    className={project.autonomous_execution_enabled ? "data-[state=checked]:bg-amber-500" : ""}
+                  />
+                  <Label
+                    htmlFor="autonomous-execution"
+                    className={`text-sm cursor-pointer flex items-center gap-1.5 ${
+                      project.autonomous_execution_enabled ? "text-amber-600 font-medium" : "text-muted-foreground"
+                    }`}
+                  >
+                    <Zap className={`h-3.5 w-3.5 ${project.autonomous_execution_enabled ? "fill-amber-500" : ""}`} />
+                    Auto
+                  </Label>
+                </div>
+              )}
+
+              {/* Hide Spec-Driven Toggle */}
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="hide-spec-driven"
+                  checked={hideSpecDriven}
+                  onCheckedChange={setHideSpecDriven}
+                />
+                <Label htmlFor="hide-spec-driven" className="text-sm text-muted-foreground cursor-pointer">
+                  Hide Spec-Driven
+                </Label>
+              </div>
             </div>
           </div>
         </div>
