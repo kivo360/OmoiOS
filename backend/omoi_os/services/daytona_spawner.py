@@ -284,19 +284,63 @@ class DaytonaSpawnerService:
                 extra={"task_id": task_id},
             )
 
-        # Get API key from parameter or fall back to LLM settings
+        # Get API key from parameter or generate from task's user
         api_key_source = None
         if omoios_api_key:
             env_vars["OMOIOS_API_KEY"] = omoios_api_key
             api_key_source = "parameter"
-        else:
-            # Fall back to LLM API key from settings
-            from omoi_os.config import get_app_settings
+        elif self.db:
+            # Generate a JWT token for the task's user
+            # This allows sandbox MCP tools to authenticate API calls
+            try:
+                from datetime import timedelta
+                from omoi_os.models.task import Task
+                from omoi_os.models.ticket import Ticket
+                from omoi_os.services.auth_service import AuthService
+                from omoi_os.config import settings
 
-            app_settings = get_app_settings()
-            if app_settings.llm.api_key:
-                env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
-                api_key_source = "llm_settings"
+                user_id = None
+                with self.db.get_session() as session:
+                    # Get user_id from task -> ticket chain
+                    task = session.get(Task, task_id)
+                    if task and task.ticket_id:
+                        ticket = session.get(Ticket, task.ticket_id)
+                        if ticket and ticket.user_id:
+                            user_id = ticket.user_id
+
+                    if user_id:
+                        # Create a short-lived token (1 hour) for sandbox operations
+                        auth_service = AuthService(
+                            db=session,
+                            jwt_secret=settings.jwt_secret_key,
+                            jwt_algorithm=settings.jwt_algorithm,
+                            access_token_expire_minutes=settings.access_token_expire_minutes,
+                            refresh_token_expire_days=settings.refresh_token_expire_days,
+                        )
+                        sandbox_token = auth_service.create_access_token(
+                            user_id=user_id,
+                            expires_delta=timedelta(hours=1),
+                        )
+                        env_vars["OMOIOS_API_KEY"] = sandbox_token
+                        api_key_source = "generated_jwt"
+                        logger.info(
+                            "[SPAWNER] Generated OmoiOS API token for task sandbox",
+                            extra={
+                                "user_id": str(user_id),
+                                "task_id": task_id,
+                                "token_expiry": "1 hour",
+                            },
+                        )
+                    else:
+                        logger.warning(
+                            "[SPAWNER] Could not find user_id for task - sandbox API calls may fail",
+                            extra={"task_id": task_id},
+                        )
+            except Exception as e:
+                logger.warning(
+                    f"[SPAWNER] Failed to generate OmoiOS API token for task: {e}",
+                    extra={"task_id": task_id},
+                )
 
         if require_spec_skill:
             logger.info(
@@ -825,12 +869,6 @@ class DaytonaSpawnerService:
             "REQUIRE_SPEC_SKILL": "true",
         }
 
-        # Add API key for spec sync
-        from omoi_os.config import get_app_settings
-        app_settings = get_app_settings()
-        if app_settings.llm.api_key:
-            env_vars["OMOIOS_API_KEY"] = app_settings.llm.api_key
-
         # ==== GitHub Integration: Fetch credentials and repo info ====
         # This enables sandboxes to clone repos and create PRs
         if self.db:
@@ -891,6 +929,36 @@ class DaytonaSpawnerService:
                 if anthropic_creds.model:
                     env_vars["MODEL"] = anthropic_creds.model
                     env_vars["ANTHROPIC_MODEL"] = anthropic_creds.model
+
+                # Generate OmoiOS API token for sandbox to authenticate API calls
+                # This is a JWT that the sandbox uses to call /api/v1/specs etc.
+                try:
+                    from datetime import timedelta
+                    from omoi_os.services.auth_service import AuthService
+                    from omoi_os.config import settings
+
+                    # Create a short-lived token (1 hour) for sandbox operations
+                    auth_service = AuthService(
+                        db=session,
+                        jwt_secret=settings.jwt_secret_key,
+                        jwt_algorithm=settings.jwt_algorithm,
+                        access_token_expire_minutes=settings.access_token_expire_minutes,
+                        refresh_token_expire_days=settings.refresh_token_expire_days,
+                    )
+                    sandbox_token = auth_service.create_access_token(
+                        user_id=user_id,
+                        expires_delta=timedelta(hours=1),
+                    )
+                    env_vars["OMOIOS_API_KEY"] = sandbox_token
+                    logger.info(
+                        "[SPAWNER] Generated OmoiOS API token for sandbox",
+                        extra={"user_id": str(user_id), "token_expiry": "1 hour"},
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[SPAWNER] Failed to generate OmoiOS API token: {e} - "
+                        "sandbox API calls may fail with 401"
+                    )
         # ==== End GitHub Integration ====
 
         # Add phase context as base64-encoded JSON
