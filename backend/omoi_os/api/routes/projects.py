@@ -282,6 +282,7 @@ class ProjectUpdate(BaseModel):
     github_repo: Optional[str] = None
     github_connected: Optional[bool] = None
     settings: Optional[dict] = None
+    autonomous_execution_enabled: Optional[bool] = None
 
 
 class ProjectResponse(BaseModel):
@@ -296,6 +297,7 @@ class ProjectResponse(BaseModel):
     default_phase_id: str
     status: str
     settings: Optional[dict] = None
+    autonomous_execution_enabled: bool = False
     created_at: datetime
     updated_at: datetime
 

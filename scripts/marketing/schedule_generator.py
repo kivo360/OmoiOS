@@ -50,19 +50,22 @@ from swipe_file_parser import (
 # Schedule Slot Configuration
 # ============================================================================
 
-# Default posting schedule: 3 posts/day weekdays, 2 posts/day weekends
-WEEKDAY_SLOTS = ["09:00", "12:00", "18:00"]
-WEEKEND_SLOTS = ["10:00", "15:00"]
+# Default posting schedule: 5 posts/day weekdays, 4 posts/day weekends
+WEEKDAY_SLOTS = ["07:00", "10:00", "13:00", "17:00", "21:00"]
+WEEKEND_SLOTS = ["09:00", "12:00", "16:00", "20:00"]
 
 # Category priority for each time slot (preferred categories)
 SLOT_PREFERENCES = {
-    "09:00": ["general-builder", "stories", "vision-product", "competitor-callouts", "build-in-public"],
-    "10:00": ["hot-takes", "raw-unclean"],  # Weekend morning
+    "07:00": ["general-builder", "stories", "raw-unclean"],  # Early morning motivation
+    "09:00": ["hot-takes", "raw-unclean", "stories"],  # Weekend morning
+    "10:00": ["vision-product", "competitor-callouts", "build-in-public", "raw-unclean"],
     "11:00": ["threads"],  # Sunday threads
-    "12:00": ["spec-driven", "technical-education", "use-cases", "memes-analogies", "failure-stories", "raw-unclean"],
-    "15:00": ["customer-avatars", "hot-takes", "raw-unclean"],  # Weekend afternoon
-    "18:00": ["engagement-questions", "cto-pain", "stories", "hot-takes", "raw-unclean"],
-    "21:00": ["raw-unclean", "stories"],  # Late evening for raw posts
+    "12:00": ["spec-driven", "technical-education", "use-cases", "raw-unclean"],  # Weekend midday
+    "13:00": ["spec-driven", "technical-education", "use-cases", "memes-analogies", "failure-stories", "raw-unclean"],
+    "16:00": ["customer-avatars", "hot-takes", "raw-unclean"],  # Weekend afternoon
+    "17:00": ["engagement-questions", "cto-pain", "stories", "hot-takes", "raw-unclean"],
+    "20:00": ["raw-unclean", "hot-takes", "stories"],  # Weekend evening
+    "21:00": ["raw-unclean", "stories", "hot-takes"],  # Late evening for raw posts
 }
 
 # Day preferences for categories
