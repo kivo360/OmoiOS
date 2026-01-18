@@ -807,6 +807,36 @@ def _get_api_base() -> str:
     return os.environ.get("CALLBACK_URL", "http://localhost:18000")
 
 
+def _get_api_headers() -> dict[str, str]:
+    """Get authentication headers for API calls.
+
+    The sandbox receives OMOIOS_API_KEY from the spawner, which can be used
+    as a Bearer token for API authentication.
+    """
+    headers = {"Content-Type": "application/json"}
+
+    # Check for API key (set by daytona_spawner)
+    api_key = os.environ.get("OMOIOS_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+        return headers
+
+    # Fallback: Check for service token
+    service_token = os.environ.get("OMOIOS_SERVICE_TOKEN")
+    if service_token:
+        headers["Authorization"] = f"Bearer {service_token}"
+        return headers
+
+    # Fallback: Check for user token (less common in sandbox)
+    user_token = os.environ.get("OMOIOS_USER_TOKEN")
+    if user_token:
+        headers["Authorization"] = f"Bearer {user_token}"
+        return headers
+
+    logger.warning("No API authentication token found - API calls may fail with 401")
+    return headers
+
+
 # Only define tools if SDK is available
 if SDK_AVAILABLE:
 
@@ -823,9 +853,11 @@ if SDK_AVAILABLE:
         """Create a new spec via API."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
                     f"{api_base}/api/v1/specs",
+                    headers=headers,
                     json={
                         "project_id": args["project_id"],
                         "title": args["title"],
@@ -856,9 +888,11 @@ if SDK_AVAILABLE:
         """Get spec details via API."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.get(
-                    f"{api_base}/api/v1/specs/{args['spec_id']}"
+                    f"{api_base}/api/v1/specs/{args['spec_id']}",
+                    headers=headers,
                 )
                 response.raise_for_status()
                 spec = response.json()
@@ -903,12 +937,13 @@ if SDK_AVAILABLE:
         """List specs for a project."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 url = f"{api_base}/api/v1/specs/project/{args['project_id']}"
                 params = {}
                 if args.get("status"):
                     params["status"] = args["status"]
-                response = await client.get(url, params=params)
+                response = await client.get(url, params=params, headers=headers)
                 response.raise_for_status()
                 data = response.json()
 
@@ -939,9 +974,11 @@ if SDK_AVAILABLE:
         """Add a requirement to a spec."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
                     f"{api_base}/api/v1/specs/{args['spec_id']}/requirements",
+                    headers=headers,
                     json={
                         "title": args["title"],
                         "condition": args["condition"],
@@ -976,9 +1013,11 @@ if SDK_AVAILABLE:
         """Add an acceptance criterion to a requirement."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
                     f"{api_base}/api/v1/specs/{args['spec_id']}/requirements/{args['requirement_id']}/criteria",
+                    headers=headers,
                     json={"text": args["text"]},
                 )
                 response.raise_for_status()
@@ -1009,6 +1048,7 @@ if SDK_AVAILABLE:
         """Update design for a spec."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 design = {
                     "architecture": args.get("architecture"),
@@ -1017,6 +1057,7 @@ if SDK_AVAILABLE:
                 }
                 response = await client.put(
                     f"{api_base}/api/v1/specs/{args['spec_id']}/design",
+                    headers=headers,
                     json=design,
                 )
                 response.raise_for_status()
@@ -1045,9 +1086,11 @@ if SDK_AVAILABLE:
         """Add a task to a spec."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
                     f"{api_base}/api/v1/specs/{args['spec_id']}/tasks",
+                    headers=headers,
                     json={
                         "title": args["title"],
                         "description": args.get("description"),
@@ -1085,9 +1128,11 @@ if SDK_AVAILABLE:
         """Create a ticket via API."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
                     f"{api_base}/api/v1/tickets",
+                    headers=headers,
                     json={
                         "title": args["title"],
                         "description": args.get("description"),
@@ -1120,9 +1165,11 @@ if SDK_AVAILABLE:
         """Get ticket details."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.get(
-                    f"{api_base}/api/v1/tickets/{args['ticket_id']}"
+                    f"{api_base}/api/v1/tickets/{args['ticket_id']}",
+                    headers=headers,
                 )
                 response.raise_for_status()
                 ticket = response.json()
@@ -1152,9 +1199,11 @@ if SDK_AVAILABLE:
         """Approve requirements for a spec."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
-                    f"{api_base}/api/v1/specs/{args['spec_id']}/approve-requirements"
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/approve-requirements",
+                    headers=headers,
                 )
                 response.raise_for_status()
                 return _format_mcp_response(
@@ -1177,9 +1226,11 @@ if SDK_AVAILABLE:
         """Approve design for a spec."""
         try:
             api_base = _get_api_base()
+            headers = _get_api_headers()
             async with httpx.AsyncClient(timeout=SPEC_API_TIMEOUT) as client:
                 response = await client.post(
-                    f"{api_base}/api/v1/specs/{args['spec_id']}/approve-design"
+                    f"{api_base}/api/v1/specs/{args['spec_id']}/approve-design",
+                    headers=headers,
                 )
                 response.raise_for_status()
                 return _format_mcp_response(
