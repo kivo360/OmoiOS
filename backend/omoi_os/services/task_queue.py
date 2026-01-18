@@ -1902,7 +1902,9 @@ class TaskQueueService:
 
                 # Check if autonomous execution is enabled for this project
                 # Tasks from projects without autonomous_execution_enabled are skipped
-                if project and not project.autonomous_execution_enabled:
+                # UNLESS force_execute is set (quick mode from command page or spec workflow)
+                force_execute = task.execution_config.get("force_execute", False) if task.execution_config else False
+                if project and not project.autonomous_execution_enabled and not force_execute:
                     logger.debug(
                         f"Project {project_id} has autonomous_execution_enabled=False, "
                         f"skipping task {task.id}"
