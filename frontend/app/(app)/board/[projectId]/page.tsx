@@ -63,10 +63,11 @@ import {
   Radio,
   CircleDot,
   FileText,
+  Zap,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
-import { useProject } from "@/hooks/useProjects"
+import { useProject, useUpdateProject } from "@/hooks/useProjects"
 import { useBatchSpawnPhaseTasks } from "@/hooks/useTickets"
 import { useBoardEvents, type BoardEvent, type RunningTaskInfo } from "@/hooks/useBoardEvents"
 import { AgentPanel } from "@/components/board"
@@ -386,10 +387,11 @@ export default function BoardPage({ params }: BoardPageProps) {
   const [isAgentPanelExpanded, setIsAgentPanelExpanded] = useState(false)
 
   // Fetch project and board data from API
-  const { data: project } = useProject(projectId === "all" ? undefined : projectId)
+  const { data: project, refetch: refetchProject } = useProject(projectId === "all" ? undefined : projectId)
   const { data: boardData, isLoading, error } = useBoardView(projectId === "all" ? undefined : projectId)
   const moveTicket = useMoveTicket()
   const batchSpawn = useBatchSpawnPhaseTasks()
+  const updateProject = useUpdateProject()
 
   // Handle WebSocket events for real-time updates
   const handleBoardEvent = useCallback((event: BoardEvent) => {
@@ -613,6 +615,28 @@ export default function BoardPage({ params }: BoardPageProps) {
     }
   }
 
+  // Toggle autonomous execution
+  const handleToggleAutonomousExecution = async (enabled: boolean) => {
+    if (projectId === "all") return
+
+    try {
+      await updateProject.mutateAsync({
+        projectId,
+        data: { autonomous_execution_enabled: enabled },
+      })
+      await refetchProject()
+      toast.success(enabled ? "Autonomous execution enabled" : "Autonomous execution disabled", {
+        description: enabled
+          ? "Tasks will be automatically executed by agents."
+          : "Tasks will require manual triggering.",
+      })
+    } catch (error) {
+      toast.error("Failed to update project", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
+  }
+
   // Loading state
   if (isLoading) {
     return (
@@ -735,6 +759,28 @@ export default function BoardPage({ params }: BoardPageProps) {
                   <SelectItem value="low">Low</SelectItem>
                 </SelectContent>
               </Select>
+
+              {/* Autonomous Execution Toggle */}
+              {projectId !== "all" && project && (
+                <div className="flex items-center gap-2 px-2 border-l border-border/50 ml-1">
+                  <Switch
+                    id="autonomous-execution"
+                    checked={project.autonomous_execution_enabled}
+                    onCheckedChange={handleToggleAutonomousExecution}
+                    disabled={updateProject.isPending}
+                    className={project.autonomous_execution_enabled ? "data-[state=checked]:bg-amber-500" : ""}
+                  />
+                  <Label
+                    htmlFor="autonomous-execution"
+                    className={`text-sm cursor-pointer flex items-center gap-1.5 ${
+                      project.autonomous_execution_enabled ? "text-amber-600 font-medium" : "text-muted-foreground"
+                    }`}
+                  >
+                    <Zap className={`h-3.5 w-3.5 ${project.autonomous_execution_enabled ? "fill-amber-500" : ""}`} />
+                    Auto
+                  </Label>
+                </div>
+              )}
 
               {/* Hide Spec-Driven Toggle */}
               <div className="flex items-center gap-2 px-2">
