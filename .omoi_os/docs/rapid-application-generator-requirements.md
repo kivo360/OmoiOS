@@ -1,7 +1,14 @@
+---
+id: DOC-RAG-001
+title: Rapid Application Generator - Requirements Analysis
+status: draft
+created: 2025-01-07
+updated: 2025-01-07
+category: analysis
+---
+
 # Rapid Application Generator - Requirements Analysis
 
-**Created**: 2025-01-07
-**Status**: Draft Analysis
 **Purpose**: Requirements analysis for enabling rapid entire application creation using the existing spec-driven-dev workflow.
 
 ---
