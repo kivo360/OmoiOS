@@ -226,6 +226,118 @@ async def _generate_embedding_background(
         logger.warning(f"Failed to generate embedding in background for ticket {ticket_id}: {e}")
 
 
+async def _trigger_spec_driven_workflow(
+    db: DatabaseService,
+    ticket_id: str,
+    project_id: str,
+    title: str,
+    description: str,
+    user_id: str,
+) -> None:
+    """Trigger spec-driven workflow for a ticket.
+
+    This creates a Spec record and spawns the spec state machine via Daytona.
+    The state machine will run through phases: explore -> requirements -> design -> tasks -> sync
+
+    Args:
+        db: Database service
+        ticket_id: The ticket ID that triggered this workflow
+        project_id: Project ID for the spec
+        title: Title for the spec (from ticket)
+        description: Description for the spec (from ticket)
+        user_id: User ID who created the ticket
+    """
+    from omoi_os.logging import get_logger
+    from omoi_os.models.spec import Spec
+    from omoi_os.services.billing_service import get_billing_service
+    from omoi_os.services.daytona_spawner import get_daytona_spawner
+    from omoi_os.services.event_bus import get_event_bus
+
+    logger = get_logger(__name__)
+
+    try:
+        # 1. Check billing before creating spec
+        org_id = await _get_organization_id_for_project(db, project_id)
+        if org_id:
+            billing_service = get_billing_service(db)
+            can_execute, billing_reason = billing_service.can_execute_workflow(org_id)
+            if not can_execute:
+                logger.warning(
+                    f"Spec-driven workflow blocked by billing for ticket {ticket_id}: {billing_reason}"
+                )
+                return  # Silently skip - ticket is still created but spec workflow won't run
+
+        # 2. Create the Spec record
+        async with db.get_async_session() as session:
+            spec = Spec(
+                title=title,
+                description=description,
+                project_id=project_id,
+                user_id=user_id,
+                status="executing",
+                current_phase="explore",
+                spec_context={
+                    "source_ticket_id": ticket_id,
+                    "workflow_mode": "spec_driven",
+                },
+            )
+            session.add(spec)
+            await session.commit()
+            await session.refresh(spec)
+            spec_id = spec.id
+
+        logger.info(
+            f"Created spec {spec_id} from ticket {ticket_id} for spec-driven workflow"
+        )
+
+        # 3. Spawn the spec state machine
+        event_bus = None
+        try:
+            event_bus = get_event_bus()
+        except Exception:
+            pass
+
+        spawner = get_daytona_spawner(db=db, event_bus=event_bus)
+
+        sandbox_id = await spawner.spawn_for_phase(
+            spec_id=spec_id,
+            phase="explore",
+            project_id=project_id,
+            phase_context={
+                "title": title,
+                "description": description,
+                "source_ticket_id": ticket_id,
+            },
+        )
+
+        logger.info(
+            f"Spawned spec sandbox {sandbox_id} for spec {spec_id} (ticket {ticket_id})"
+        )
+
+    except Exception as e:
+        logger.error(
+            f"Failed to trigger spec-driven workflow for ticket {ticket_id}: {e}",
+            exc_info=True,
+        )
+        # Don't re-raise - ticket creation should still succeed even if spec workflow fails
+
+
+async def _get_organization_id_for_project(
+    db: DatabaseService,
+    project_id: str,
+) -> str | None:
+    """Get organization ID for a project."""
+    from omoi_os.models.project import Project
+
+    async with db.get_async_session() as session:
+        from sqlalchemy import select
+        result = await session.execute(
+            select(Project.organization_id).where(Project.id == project_id)
+        )
+        row = result.first()
+        return str(row[0]) if row and row[0] else None
+
+
 @router.post("", response_model=TicketResponse | DuplicateCheckResponse)
 async def create_ticket(
     ticket_data: TicketCreate,
@@ -392,6 +504,11 @@ async def create_ticket(
 
     # Use async session for ticket creation
     async with db.get_async_session() as session:
+        # Build ticket context with workflow_mode if specified
+        ticket_context = None
+        if ticket_data.workflow_mode:
+            ticket_context = {"workflow_mode": ticket_data.workflow_mode}
+
         ticket = Ticket(
             title=ticket_data.title,
             description=ticket_data.description,
@@ -401,6 +518,7 @@ async def create_ticket(
             project_id=ticket_data.project_id,  # Associate ticket with project
             user_id=current_user.id,  # Associate ticket with user for filtering (UUID)
             dependencies=ticket_data.dependencies,  # Ticket-to-ticket dependencies (blocked_by/blocks)
+            context=ticket_context,  # Store workflow_mode for filtering on board
         )
 
         # Store embedding if we generated one during dedup check
@@ -455,23 +573,34 @@ async def create_ticket(
     # Only create initial task if ticket is approved (REQ-THA-007)
     # IMPORTANT: This must happen AFTER commit so ticket is visible in new session
     if should_create_task:
-        # Build execution_config based on workflow_mode from frontend
-        execution_config = None
+        # Check if this is spec-driven mode - triggers the spec state machine instead of regular task
         if workflow_mode_for_task == "spec_driven":
-            execution_config = {
-                "require_spec_skill": True,
-                "selected_skill": "spec-driven-dev",
-            }
+            # Spec-driven workflow: Create spec and spawn state machine
+            await _trigger_spec_driven_workflow(
+                db=db,
+                ticket_id=ticket_id_for_task,
+                project_id=ticket_data.project_id,
+                title=title_for_task,
+                description=ticket_data.description or "",
+                user_id=current_user.id,
+            )
+        else:
+            # Regular workflow: Create task for orchestrator
+            # Quick mode tasks bypass autonomous_execution_enabled check
+            # because the user explicitly requested immediate execution
+            execution_config = None
+            if workflow_mode_for_task == "quick":
+                execution_config = {"force_execute": True}
 
-        queue.enqueue_task(
-            ticket_id=ticket_id_for_task,
-            phase_id=phase_for_task,
-            task_type="analyze_requirements",
-            description=f"Analyze requirements for: {title_for_task}",
-            priority=priority_for_task,
-            execution_config=execution_config,
-            session=None,  # Creates own session, ticket already committed
-        )
+            queue.enqueue_task(
+                ticket_id=ticket_id_for_task,
+                phase_id=phase_for_task,
+                task_type="analyze_requirements",
+                description=f"Analyze requirements for: {title_for_task}",
+                priority=priority_for_task,
+                session=None,  # Creates own session, ticket already committed
+                execution_config=execution_config,
+            )
 
     # Fire-and-forget: Log reasoning event and publish event
     # These don't need to block the response
