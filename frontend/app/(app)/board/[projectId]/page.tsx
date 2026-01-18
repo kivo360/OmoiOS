@@ -64,6 +64,7 @@ import {
   CircleDot,
   FileText,
   Zap,
+  Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
@@ -228,6 +229,17 @@ function TicketCard({
 
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Spec Gen badge - show if ticket triggers spec generation */}
+          {ticket.context?.workflow_mode === "spec_driven" && (
+            <Badge
+              variant="outline"
+              className="text-xs bg-blue-500/10 text-blue-600 border-blue-500/30 hover:bg-blue-500/20"
+              title="This ticket generates specs"
+            >
+              <Sparkles className="h-3 w-3 mr-1" />
+              Spec Gen
+            </Badge>
+          )}
           {/* Spec badge - show if ticket was created from a spec */}
           {ticket.context?.spec_id && (
             <Badge
