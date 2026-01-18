@@ -47,7 +47,8 @@ class TicketWorkflowOrchestrator:
         "PHASE_DESIGN": TicketStatus.ANALYZING.value,
         "PHASE_IMPLEMENTATION": TicketStatus.BUILDING.value,
         "PHASE_TESTING": TicketStatus.TESTING.value,
-        "PHASE_DEPLOYMENT": TicketStatus.DONE.value,
+        "PHASE_DEPLOYMENT": TicketStatus.BUILDING_DONE.value,  # Deploying phase
+        "PHASE_DONE": TicketStatus.DONE.value,  # Done column
     }
 
     # Status to phase mapping (reverse lookup)
@@ -55,9 +56,9 @@ class TicketWorkflowOrchestrator:
         TicketStatus.BACKLOG.value: "PHASE_BACKLOG",
         TicketStatus.ANALYZING.value: "PHASE_REQUIREMENTS",
         TicketStatus.BUILDING.value: "PHASE_IMPLEMENTATION",
-        TicketStatus.BUILDING_DONE.value: "PHASE_IMPLEMENTATION",  # Same phase
+        TicketStatus.BUILDING_DONE.value: "PHASE_DEPLOYMENT",  # Goes to Deploying column
         TicketStatus.TESTING.value: "PHASE_TESTING",
-        TicketStatus.DONE.value: "PHASE_DEPLOYMENT",
+        TicketStatus.DONE.value: "PHASE_DONE",  # Goes to Done column
     }
 
     def __init__(

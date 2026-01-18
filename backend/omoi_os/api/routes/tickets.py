@@ -746,6 +746,7 @@ async def update_ticket(
     Update a ticket by ID (async).
 
     Requires authentication and verifies user has access to the ticket's project.
+    When status is updated, phase_id is automatically synced to match.
 
     Args:
         ticket_id: Ticket ID
@@ -756,6 +757,8 @@ async def update_ticket(
     Returns:
         Updated ticket instance
     """
+    from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
+
     # Verify user has access to this ticket
     await verify_ticket_access(str(ticket_id), current_user, db)
 
@@ -772,6 +775,12 @@ async def update_ticket(
         for field, value in update_data.items():
             if value is not None:
                 setattr(ticket, field, value)
+
+        # Sync phase_id when status changes to keep board column in sync
+        if "status" in update_data and update_data["status"] is not None:
+            new_status = update_data["status"]
+            if new_status in TicketWorkflowOrchestrator.STATUS_TO_PHASE:
+                ticket.phase_id = TicketWorkflowOrchestrator.STATUS_TO_PHASE[new_status]
 
         await session.commit()
         await session.refresh(ticket)
