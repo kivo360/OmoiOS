@@ -341,27 +341,26 @@ export default function CommandCenterPage() {
         )}
 
         {/* Controls Row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <WorkflowModeSelector
-              value={selectedMode}
-              onValueChange={setSelectedMode}
-            />
-            <RepoSelector
-              projects={projects}
-              repositories={repositories}
-              selectedProject={selectedProject}
-              selectedRepo={selectedRepo}
-              selectedBranch={selectedBranch}
-              onProjectSelect={handleProjectSelect}
-              onRepoSelect={handleRepoSelect}
-              onBranchChange={setSelectedBranch}
-            />
-          </div>
-          <ModelSelector
+        <div className="flex items-center gap-3">
+          <WorkflowModeSelector
+            value={selectedMode}
+            onValueChange={setSelectedMode}
+          />
+          <RepoSelector
+            projects={projects}
+            repositories={repositories}
+            selectedProject={selectedProject}
+            selectedRepo={selectedRepo}
+            selectedBranch={selectedBranch}
+            onProjectSelect={handleProjectSelect}
+            onRepoSelect={handleRepoSelect}
+            onBranchChange={setSelectedBranch}
+          />
+          {/* TODO: Re-enable when model selection is ready */}
+          {/* <ModelSelector
             value={selectedModel}
             onValueChange={setSelectedModel}
-          />
+          /> */}
         </div>
 
         {/* Context Indicator */}
