@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
@@ -65,6 +65,9 @@ import {
   FileText,
   Zap,
   Sparkles,
+  GitPullRequest,
+  GitMerge,
+  ExternalLink,
 } from "lucide-react"
 import { toast } from "sonner"
 import { useBoardView, useMoveTicket } from "@/hooks/useBoard"
@@ -72,7 +75,7 @@ import { useProject, useUpdateProject } from "@/hooks/useProjects"
 import { useBatchSpawnPhaseTasks } from "@/hooks/useTickets"
 import { useBoardEvents, type BoardEvent, type RunningTaskInfo } from "@/hooks/useBoardEvents"
 import { AgentPanel } from "@/components/board"
-import type { Ticket as ApiTicket, BoardColumn, TicketContext } from "@/lib/api/types"
+import type { Ticket as ApiTicket, BoardColumn, TicketContext, TicketPullRequest } from "@/lib/api/types"
 
 interface BoardPageProps {
   params: Promise<{ projectId: string }>
@@ -89,6 +92,7 @@ interface BoardTicket {
   description: string | null
   approval_status: string | null
   context?: TicketContext | null
+  pull_requests?: TicketPullRequest[] | null
 }
 
 interface Column {
@@ -229,6 +233,39 @@ function TicketCard({
 
         {/* Badges row */}
         <div className="flex items-center gap-1.5 flex-wrap">
+          {/* PR badge - show if ticket has linked PRs */}
+          {ticket.pull_requests && ticket.pull_requests.length > 0 && (() => {
+            const latestPR = ticket.pull_requests[0]
+            const isMerged = latestPR.state === "merged"
+            const isOpen = latestPR.state === "open"
+            return (
+              <a
+                href={latestPR.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-medium transition-colors ${
+                  isMerged
+                    ? "bg-purple-500/10 text-purple-600 border border-purple-500/30 hover:bg-purple-500/20"
+                    : isOpen
+                      ? "bg-green-500/10 text-green-600 border border-green-500/30 hover:bg-green-500/20"
+                      : "bg-gray-500/10 text-gray-600 border border-gray-500/30 hover:bg-gray-500/20"
+                }`}
+                title={`PR #${latestPR.pr_number}: ${latestPR.pr_title}`}
+              >
+                {isMerged ? (
+                  <GitMerge className="h-3 w-3" />
+                ) : (
+                  <GitPullRequest className="h-3 w-3" />
+                )}
+                #{latestPR.pr_number}
+                {ticket.pull_requests.length > 1 && (
+                  <span className="ml-0.5 text-muted-foreground">+{ticket.pull_requests.length - 1}</span>
+                )}
+                <ExternalLink className="h-2.5 w-2.5 opacity-50" />
+              </a>
+            )
+          })()}
           {/* Spec Gen badge - show if ticket triggers spec generation */}
           {ticket.context?.workflow_mode === "spec_driven" && (
             <Badge
@@ -498,6 +535,7 @@ export default function BoardPage({ params }: BoardPageProps) {
         description: t.description,
         approval_status: t.approval_status,
         context: t.context,
+        pull_requests: t.pull_requests,
       }))
     )
   }, [boardData])
@@ -868,9 +906,9 @@ export default function BoardPage({ params }: BoardPageProps) {
         {/* Main Content Area - Board + Agent Panel */}
         <div className="flex-1 flex overflow-hidden">
           {/* Board */}
-          <div className={`flex-1 transition-all duration-300 ${selectedSandboxId && !isAgentPanelExpanded ? "mr-0" : ""}`}>
-            <ScrollArea className="h-full">
-              <div className="flex gap-4 p-4 pb-8">
+          <div className={`flex-1 transition-all duration-300 overflow-hidden ${selectedSandboxId && !isAgentPanelExpanded ? "mr-0" : ""}`}>
+            <div className="h-full overflow-x-auto overflow-y-hidden">
+              <div className="flex gap-4 p-4 pb-8 min-w-max">
                 {columns.map((column) => (
                   <KanbanColumn
                     key={column.id}
@@ -883,8 +921,7 @@ export default function BoardPage({ params }: BoardPageProps) {
                   />
                 ))}
               </div>
-              <ScrollBar orientation="horizontal" />
-            </ScrollArea>
+            </div>
           </div>
 
           {/* Agent Panel - Slide in from right */}
