@@ -86,7 +86,7 @@ export function StatsSection({ className }: StatsSectionProps) {
         >
           <blockquote className="text-lg italic text-landing-text-muted">
             &ldquo;I wrote what I wanted Monday morning. Had a working PR to review by lunch.
-            I didn&apos;t touch a single ticket or attend a single standup.&rdquo;
+            I didn&apos;t touch a board, chase updates, or attend a single standup.&rdquo;
           </blockquote>
           <cite className="mt-4 block text-sm text-landing-text-subtle">
             — Engineering Lead, Series A Startup

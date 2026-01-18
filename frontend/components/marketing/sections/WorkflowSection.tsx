@@ -23,20 +23,20 @@ const phases = [
     number: "02",
     title: "We Plan the Work",
     description:
-      "Your spec becomes tickets and tasks with clear dependencies. You see exactly what will be built and in what order. Approve or adjust before any code is written.",
+      "Your spec becomes an ordered plan with clear dependencies. You see what will be built, in what order, and why. Approve or adjust before any code is written.",
     icon: ListChecks,
     color: "bg-blue-500",
-    highlight: "Tickets & dependencies",
+    highlight: "Plan & dependencies",
   },
   {
     id: "execution",
     number: "03",
-    title: "Agents Work Overnight",
+    title: "Agents Execute the Plan",
     description:
-      "Go to sleep. Agents work through tickets in isolated sandboxes—writing code, running tests, fixing issues. They don't stop until every task is complete.",
+      "Agents work in isolated sandboxes—writing code, running tests, fixing issues. They keep going until the plan is complete.",
     icon: Moon,
     color: "bg-amber-500",
-    highlight: "Runs until completion",
+    highlight: "Runs until done",
   },
   {
     id: "review",
@@ -69,7 +69,8 @@ export function WorkflowSection({ className }: WorkflowSectionProps) {
             You Sleep. Agents Ship.
           </h2>
           <p className="mt-4 text-lg text-landing-text-muted">
-            Write a spec, approve the plan, go to bed. Wake up to a pull request.
+            Write a spec, approve the plan, go to bed. Agents execute in an organized pipeline—with
+            guardrails, tests, and retries—so you wake up to a PR you can trust.
           </p>
         </motion.div>
 

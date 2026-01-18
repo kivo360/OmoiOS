@@ -11,6 +11,16 @@ import { cn } from "@/lib/utils"
 
 const faqs = [
   {
+    question: "How do you avoid low-quality output?",
+    answer:
+      "OmoiOS doesn’t just generate text. It executes the plan in real environments: running commands, running tests, and iterating when something fails. You get working, reviewable output—not a pile of guesswork.",
+  },
+  {
+    question: "How is everything traceable?",
+    answer:
+      "Each run produces structured artifacts (requirements, design, implementation steps, and results) that link back to the original request. You can review what happened, why it happened, and what changed.",
+  },
+  {
     question: "How does billing work?",
     answer:
       "Start free with 1 concurrent agent. Pro is $50/month with 5 concurrent agents. Team is $200/month with 10 agents. Pro and above can bring your own API keys to bypass usage limits.",
@@ -18,7 +28,7 @@ const faqs = [
   {
     question: "What are concurrent agents?",
     answer:
-      "Concurrent agents is how many tasks can run in parallel. Free users get 1 agent (tasks run one at a time). Pro gets 5 agents running simultaneously. Team gets 10. If you hit your limit, new tasks queue up and run when a slot opens—nothing is lost.",
+      "Concurrent agents is how many work items can run in parallel. Free users get 1 agent (work runs one at a time). Pro gets 5 agents running simultaneously. Team gets 10. If you hit your limit, new work queues up and runs when a slot opens—nothing is lost.",
   },
   {
     question: "What if it doesn't work for my use case?",
@@ -33,12 +43,12 @@ const faqs = [
   {
     question: "Is my code safe?",
     answer:
-      "Yes. Your code runs in isolated sandboxes that are destroyed after each task. We never store your source code or share it with anyone. You can also self-host for complete control.",
+      "Yes. Your code runs in isolated sandboxes that are destroyed after each run. We never store your source code or share it with anyone. You can also self-host for complete control.",
   },
   {
     question: "Do I need to babysit the agents?",
     answer:
-      "No. That's the point. You approve the plan, then agents work autonomously—often overnight—until every task is complete. You wake up to a pull request ready for review.",
+      "No. That's the point. You approve the plan, then agents work autonomously—often overnight—until the work is complete. You wake up to a pull request ready for review.",
   },
 ]
 

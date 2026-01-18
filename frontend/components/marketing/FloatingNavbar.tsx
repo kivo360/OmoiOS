@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils"
 import { OmoiOSLogo } from "@/components/ui/omoios-logo"
 
 const navItems = [
+  { name: "Why", link: "#why" },
   { name: "Features", link: "#features" },
   { name: "How It Works", link: "#how-it-works" },
   { name: "Pricing", link: "#pricing" },
-  { name: "Docs", link: "/docs" },
 ]
 
 interface MarketingNavbarProps {
