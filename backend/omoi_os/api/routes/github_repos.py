@@ -2,7 +2,7 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -10,6 +10,13 @@ from omoi_os.api.dependencies import get_db_service, get_approved_user
 from omoi_os.logging import get_logger
 from omoi_os.models.user import User
 from omoi_os.models.project import Project
+from omoi_os.schemas.github import (
+    CreateRepositoryRequest,
+    CreateRepositoryResponse,
+    AvailabilityCheckRequest,
+    AvailabilityCheckResponse,
+    OwnersListResponse,
+)
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.github_api import (
     GitHubAPIService,
@@ -24,6 +31,7 @@ from omoi_os.services.github_api import (
     BranchCreateResult,
     PullRequestCreateResult,
 )
+from omoi_os.services.repository_service import RepositoryService, GitHubAPIError
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -427,6 +435,186 @@ async def get_repo(
         raise HTTPException(status_code=404, detail="Repository not found")
 
     return result
+
+
+# ============================================================================
+# Repository Creation Routes
+# ============================================================================
+
+
+@router.get("/owners", response_model=OwnersListResponse)
+async def list_owners(
+    current_user: User = Depends(verify_github_connected),
+):
+    """List accounts/organizations user can create repositories in."""
+    attrs = current_user.attributes or {}
+    github_token = attrs.get("github_access_token")
+
+    if not github_token:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub not connected. Please authenticate with GitHub first.",
+        )
+
+    try:
+        async with RepositoryService(github_token) as repo_service:
+            owners = await repo_service.list_owners()
+            return OwnersListResponse(owners=owners)
+    except GitHubAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.exception(f"Failed to list owners: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/check-availability", response_model=AvailabilityCheckResponse)
+async def check_availability(
+    request: AvailabilityCheckRequest,
+    current_user: User = Depends(verify_github_connected),
+):
+    """Check if a repository name is available."""
+    attrs = current_user.attributes or {}
+    github_token = attrs.get("github_access_token")
+
+    if not github_token:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub not connected. Please authenticate with GitHub first.",
+        )
+
+    try:
+        async with RepositoryService(github_token) as repo_service:
+            available, suggestion = await repo_service.check_availability(
+                owner=request.owner,
+                name=request.name,
+            )
+            return AvailabilityCheckResponse(available=available, suggestion=suggestion)
+    except GitHubAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.exception(f"Failed to check availability: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/repos", response_model=CreateRepositoryResponse, status_code=201)
+async def create_repository(
+    request: CreateRepositoryRequest,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(verify_github_connected),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Create a new GitHub repository and link to OmoiOS project.
+
+    If auto_scaffold=True and feature_description is provided, triggers
+    the scaffolding workflow to generate specs, tickets, and tasks.
+    """
+    from omoi_os.api.dependencies import get_user_organization_ids
+    from omoi_os.models.organization import Organization
+
+    attrs = current_user.attributes or {}
+    github_token = attrs.get("github_access_token")
+
+    if not github_token:
+        raise HTTPException(
+            status_code=400,
+            detail="GitHub not connected. Please authenticate with GitHub first.",
+        )
+
+    try:
+        async with RepositoryService(github_token) as repo_service:
+            # 1. Check availability first
+            available, _ = await repo_service.check_availability(
+                owner=request.owner,
+                name=request.name,
+            )
+            if not available:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Repository '{request.name}' already exists in {request.owner}",
+                )
+
+            # 2. Get user's default organization for the project
+            org_ids = await get_user_organization_ids(current_user, db)
+            if not org_ids:
+                raise HTTPException(
+                    status_code=400,
+                    detail="User must belong to an organization to create projects",
+                )
+
+            # Use the first organization (primary org)
+            organization_id = org_ids[0]
+
+            # 3. Create the OmoiOS project first (we need its ID for the repo)
+            async with db.get_async_session() as session:
+                project = Project(
+                    organization_id=organization_id,
+                    name=request.name,
+                    description=request.description,
+                    github_owner=request.owner,
+                    github_repo=request.name,
+                    github_connected=True,
+                    status="active",
+                    settings={
+                        "template": request.template.value,
+                        "auto_scaffold": request.auto_scaffold,
+                    },
+                )
+                session.add(project)
+                await session.commit()
+                await session.refresh(project)
+                project_id = project.id
+
+            # 4. Create the GitHub repository
+            repo_response = await repo_service.create_repository(
+                request=request,
+                project_id=project_id,
+            )
+
+            # 5. Update project with GitHub repo ID
+            async with db.get_async_session() as session:
+                result = await session.execute(
+                    select(Project).filter(Project.id == project_id)
+                )
+                project = result.scalar_one()
+                project.settings = {
+                    **(project.settings or {}),
+                    "github_repo_id": repo_response.id,
+                }
+                await session.commit()
+
+            # 6. Trigger scaffolding if enabled and feature description provided
+            if request.auto_scaffold and request.feature_description:
+                from omoi_os.tasks.scaffolding import trigger_scaffolding
+
+                background_tasks.add_task(
+                    trigger_scaffolding,
+                    project_id=project_id,
+                    feature_description=request.feature_description,
+                    user_id=str(current_user.id),
+                )
+                logger.info(
+                    "Scaffolding task queued",
+                    project_id=project_id,
+                    feature_description_length=len(request.feature_description),
+                )
+
+            logger.info(
+                "Repository created successfully",
+                project_id=project_id,
+                repo_name=repo_response.full_name,
+                auto_scaffold=request.auto_scaffold,
+            )
+
+            return repo_response
+
+    except HTTPException:
+        raise
+    except GitHubAPIError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    except Exception as e:
+        logger.exception(f"Failed to create repository: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================================================
