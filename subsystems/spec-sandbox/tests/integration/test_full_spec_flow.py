@@ -22,6 +22,7 @@ async def test_full_spec_flow_with_jsonl(tmp_path):
         spec_description="Test the full flow",
         output_directory=output_dir,
         reporter_mode="jsonl",
+        use_mock=True,  # Use mock executor for fast tests
     )
 
     reporter = JSONLReporter(events_file)
@@ -56,6 +57,7 @@ async def test_spec_flow_creates_output_artifacts(tmp_path):
         spec_id="artifact-test",
         output_directory=output_dir,
         reporter_mode="jsonl",
+        use_mock=True,  # Use mock executor for fast tests
     )
 
     reporter = JSONLReporter(output_dir / "events.jsonl")
@@ -75,6 +77,7 @@ async def test_spec_context_passed_between_phases(tmp_path):
         spec_id="context-test",
         output_directory=tmp_path,
         reporter_mode="jsonl",
+        use_mock=True,  # Use mock executor for fast tests
     )
 
     reporter = JSONLReporter(tmp_path / "events.jsonl")

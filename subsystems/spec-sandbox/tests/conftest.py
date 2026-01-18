@@ -15,12 +15,13 @@ def array_reporter():
 
 @pytest.fixture
 def test_settings():
-    """Create test settings."""
+    """Create test settings with mock execution enabled."""
     return SpecSandboxSettings(
         spec_id="test-spec",
         spec_title="Test Spec",
         spec_description="Test description",
         reporter_mode="array",
+        use_mock=True,  # Use mock executor for fast tests
     )
 
 

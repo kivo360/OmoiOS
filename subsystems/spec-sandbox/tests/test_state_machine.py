@@ -18,6 +18,7 @@ async def test_state_machine_emits_lifecycle_events():
         spec_title="Test Spec",
         spec_description="Build something",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -36,6 +37,7 @@ async def test_state_machine_emits_phase_events():
     settings = SpecSandboxSettings(
         spec_id="test-sm",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -62,6 +64,7 @@ async def test_state_machine_single_phase():
         spec_id="test-single",
         spec_phase="explore",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -81,6 +84,7 @@ async def test_state_machine_stores_phase_results():
     settings = SpecSandboxSettings(
         spec_id="test-results",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -103,6 +107,7 @@ async def test_state_machine_accumulates_context():
     settings = SpecSandboxSettings(
         spec_id="test-context",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -124,6 +129,7 @@ async def test_run_phase_returns_result():
     settings = SpecSandboxSettings(
         spec_id="test-phase",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -145,6 +151,7 @@ async def test_state_machine_spec_started_data():
         spec_title="My Spec",
         spec_description="Build a thing",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -164,6 +171,7 @@ async def test_state_machine_phase_completed_has_score():
     settings = SpecSandboxSettings(
         spec_id="test-score",
         reporter_mode="array",
+        use_mock=True,
     )
 
     machine = SpecStateMachine(settings=settings, reporter=reporter)
@@ -175,3 +183,66 @@ async def test_state_machine_phase_completed_has_score():
     for event in completed_events:
         assert "eval_score" in event.data
         assert "duration_seconds" in event.data
+
+
+@pytest.mark.asyncio
+async def test_state_machine_emits_agent_completed_with_phase_data():
+    """agent.completed event should include spec_id and phase_data for backend sync."""
+    reporter = ArrayReporter()
+    settings = SpecSandboxSettings(
+        spec_id="test-sync",
+        spec_title="Test Sync",
+        spec_description="Test agent.completed event",
+        reporter_mode="array",
+        use_mock=True,
+    )
+
+    machine = SpecStateMachine(settings=settings, reporter=reporter)
+
+    success = await machine.run()
+    assert success is True
+
+    # Should have agent.completed event
+    assert reporter.has_event("agent.completed")
+
+    agent_completed = reporter.get_latest("agent.completed")
+    assert agent_completed is not None
+
+    # Check required fields for backend
+    assert agent_completed.data["spec_id"] == "test-sync"
+    assert agent_completed.data["success"] is True
+    assert "phase_data" in agent_completed.data
+
+    # phase_data should contain all phases
+    phase_data = agent_completed.data["phase_data"]
+    assert "explore" in phase_data
+    assert "requirements" in phase_data
+    assert "design" in phase_data
+    assert "tasks" in phase_data
+    assert "sync" in phase_data
+
+    # phases_completed should also be present
+    assert "phases_completed" in agent_completed.data
+    assert len(agent_completed.data["phases_completed"]) == 5
+
+
+@pytest.mark.asyncio
+async def test_state_machine_agent_completed_spec_id_matches_event_spec_id():
+    """agent.completed event's spec_id in data should match event's spec_id."""
+    reporter = ArrayReporter()
+    settings = SpecSandboxSettings(
+        spec_id="my-unique-spec",
+        reporter_mode="array",
+        use_mock=True,
+    )
+
+    machine = SpecStateMachine(settings=settings, reporter=reporter)
+
+    await machine.run()
+
+    agent_completed = reporter.get_latest("agent.completed")
+    assert agent_completed is not None
+
+    # Both the event's spec_id and data.spec_id should match
+    assert agent_completed.spec_id == "my-unique-spec"
+    assert agent_completed.data["spec_id"] == "my-unique-spec"
