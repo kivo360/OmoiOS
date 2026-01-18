@@ -1,401 +1,368 @@
 # UI and Events - Spec-Driven Development
 
 **Created**: 2025-01-11
-**Status**: Gap Analysis
-**Purpose**: Document UI functionality and event reporting gaps
+**Updated**: 2026-01-18
+**Status**: ✅ Implemented
+**Purpose**: Document UI functionality and event reporting for spec-driven workflow
+
+---
+
+## Overview
+
+The spec-driven development workflow is **fully implemented** with:
+
+1. **Spec-Sandbox Event Reporting** - SpecStateMachine emits comprehensive events via HTTPReporter
+2. **Backend Event Persistence** - Events stored in `sandbox_events` table with `spec_id` FK
+3. **Real-Time UI Updates** - Polling (5s) + WebSocket via EventBus
+4. **Frontend Components** - PhaseProgress, EventTimeline, spec detail page
 
 ---
 
 ## Event Reporting Architecture
 
-### Current Sandbox Event System
-
-The existing sandbox system has robust event reporting:
+### Spec-Sandbox → Backend Flow
 
 ```
-claude_sandbox_worker.py
+spec-sandbox (Daytona)
     │
     ▼
-EventReporter class (line 2473)
-    │ Posts events via HTTP to:
+SpecStateMachine
+    │ Emits events via Reporter abstraction
+    │
+    ▼
+HTTPReporter
     │ POST /api/v1/sandboxes/{sandbox_id}/events
+    │ (Bearer token auth)
     │
     ▼
-Backend stores events in database
+Backend (sandbox.py:create_sandbox_event)
+    ├─► persist_sandbox_event_async() → sandbox_events table
+    ├─► broadcast_sandbox_event() → EventBus (Redis pub/sub)
+    └─► _update_spec_phase_data() → Spec.phase_data (on agent.completed)
     │
     ▼
-Frontend polls via:
-    │ GET /api/v1/sandboxes/{sandbox_id}/events
-    │ GET /api/v1/sandboxes/{sandbox_id}/trajectory
-    │
-    ▼
-Real-time UI updates
+Frontend
+    ├─► Polling: GET /api/v1/specs/{spec_id}/events (5s interval)
+    └─► WebSocket: /api/v1/ws/events (EventBus subscription)
 ```
 
-### Event Types Reported by Sandbox
+### Reporter Abstraction
 
-From `claude_sandbox_worker.py`:
-- `agent.started` - Agent begins execution
-- `agent.tool_completed` - Tool execution complete
-- `agent.subagent_completed` - Subagent finished
-- `agent.skill_completed` - Skill execution done
-- `agent.heartbeat` - Periodic health check
-- `agent.error` - Error occurred
-- `agent.completed` - Agent finished
+The `spec-sandbox` subsystem uses a Reporter abstraction (`subsystems/spec-sandbox/src/spec_sandbox/reporters/`):
 
-### State Machine Event Gap
-
-**PROBLEM**: The `_run_spec_state_machine()` method does NOT use `EventReporter`:
-
-```python
-# claude_sandbox_worker.py:4211-4281
-async def _run_spec_state_machine(self) -> int:
-    # ... runs SpecStateMachine.run()
-    # NO EventReporter usage!
-    # NO event reporting to backend!
-```
-
-The state machine:
-- Logs to console (`logger.info`)
-- Updates database directly
-- Does NOT report events via HTTP
-
-**This means**: No real-time UI updates during state machine execution!
+| Reporter | Use Case | Output |
+|----------|----------|--------|
+| `ArrayReporter` | Unit tests | In-memory list |
+| `JSONLReporter` | Local debugging | Append-only file |
+| `HTTPReporter` | Production (Daytona) | HTTP POST to backend |
 
 ---
 
-## Current UI State
+## Event Types
 
-### Spec Detail Page (`/projects/[id]/specs/[specId]`)
+### Lifecycle Events
 
-**What exists**:
-- Requirements tab with CRUD operations
-- Design tab with architecture/data model display
-- Tasks tab with task management
-- Execution tab with progress metrics
-- Sidebar with metadata
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `spec.execution_started` | Spec execution begins | `{title, description, phases}` |
+| `spec.execution_completed` | All phases completed successfully | `{phases_completed, markdown_artifacts, ticket_creation}` |
+| `spec.execution_failed` | Spec execution failed | `{failed_phase, error}` |
 
-**Execution tab polling** (lines 143-151):
-```typescript
-// Polls every 5s when spec.status === "executing"
-const { data: executionStatus } = useExecutionStatus(specId, {
-  enabled: isExecuting,
-  refetchInterval: isExecuting ? 5000 : false,
-})
-const { data: criteriaStatus } = useCriteriaStatus(specId, {
-  enabled: isExecuting,
-  refetchInterval: isExecuting ? 5000 : false,
-})
-```
+### Phase Events
 
-**What's shown during execution**:
-- Task progress percentage
-- Criteria completion percentage
-- Active agents count
-- Status counts (pending/in_progress/completed)
-- Criteria breakdown by requirement
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `spec.phase_started` | A phase begins execution | `{phase}` |
+| `spec.phase_completed` | A phase completed successfully | `{phase, eval_score, duration_seconds, retry_count}` |
+| `spec.phase_failed` | A phase failed | `{phase, reason, eval_feedback, error}` |
+| `spec.phase_retry` | A phase is being retried | `{phase, retry_count, max_retries, reason}` |
 
-### What's Missing in UI
+### Execution Events
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Real-time phase progress | Missing | No WebSocket/SSE for phase updates |
-| Agent trajectory viewer | Missing | Sandbox has it, specs don't |
-| Phase transition notifications | Missing | No toast/alerts when phase changes |
-| Error details display | Missing | Failures shown but no details |
-| Live log streaming | Missing | No console output visible |
-| Sandbox link | Missing | Can't navigate to sandbox for spec |
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `spec.heartbeat` | Periodic health check | `{phases_completed, current_phase}` |
+| `spec.progress` | Progress update within a phase | `{message, eval_passed?, eval_details?}` |
+
+### Artifact Events
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `spec.artifact_created` | A file artifact was generated | `{artifact_type, path}` |
+| `spec.requirements_generated` | Requirements markdown generated | `{path, requirement_count}` |
+| `spec.design_generated` | Design markdown generated | `{path, component_count}` |
+| `spec.tasks_generated` | Tasks markdown generated | `{path, task_count}` |
+
+### Sync Phase Events
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `spec.sync_started` | SYNC phase begins | `{items_to_sync}` |
+| `spec.sync_completed` | SYNC phase done | `{items_synced}` |
+| `spec.tasks_queued` | Tasks queued for execution | `{task_count}` |
+
+### Ticket Creation Events
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `spec.tickets_creation_started` | Ticket creation begins | `{ticket_count, task_count}` |
+| `spec.tickets_creation_completed` | Ticket creation done | `{tickets_created, tasks_created, errors}` |
+| `spec.ticket_created` | Individual ticket created | `{ticket_id, title}` |
+| `spec.task_created` | Individual task created | `{task_id, title, ticket_id}` |
+
+### Backend Sync Event
+
+| Event Type | Description | Payload |
+|------------|-------------|---------|
+| `agent.completed` | Signals backend to update Spec model | `{spec_id, success, phase_data, phases_completed?, failed_phase?, error?}` |
+
+**Note**: The `agent.completed` event is critical for backend integration. When the backend receives this event with a `spec_id` and `phase_data`, it calls `_update_spec_phase_data()` to persist the phase outputs to the Spec model. This event uses the `agent.` prefix to match the existing sandbox event handling in the backend.
 
 ---
 
-## Required Changes
+## Event Schema
 
-### 1. Add Event Reporting to State Machine
+All events follow the unified `Event` schema from `spec_sandbox.schemas.events`:
 
 ```python
-# In SpecStateMachine class
-class SpecStateMachine:
-    def __init__(self, ..., event_reporter: Optional[EventReporter] = None):
-        self.event_reporter = event_reporter
-
-    async def _report_event(self, event_type: str, data: dict):
-        if self.event_reporter:
-            await self.event_reporter.report(
-                f"spec.{event_type}",
-                {
-                    "spec_id": self.spec_id,
-                    "phase": self.current_phase,
-                    **data
-                }
-            )
-
-    async def _run_phase(self, phase: SpecPhase):
-        await self._report_event("phase_started", {"phase": phase.value})
-        # ... run phase ...
-        await self._report_event("phase_completed", {
-            "phase": phase.value,
-            "duration": duration,
-            "eval_score": result.eval_score,
-        })
+class Event(BaseModel):
+    event_type: str          # Event type identifier (see tables above)
+    timestamp: datetime      # ISO format UTC timestamp
+    spec_id: str             # Required - links event to spec
+    phase: Optional[str]     # "explore", "requirements", "design", "tasks", "sync"
+    data: Optional[dict]     # Event-specific payload
 ```
 
-### 2. Pass EventReporter to State Machine
+Events are serialized to JSON for transport and storage:
 
-```python
-# claude_sandbox_worker.py:_run_spec_state_machine()
-async def _run_spec_state_machine(self) -> int:
-    # Create event reporter for spec events
-    async with EventReporter(self.config) as reporter:
-        state_machine = SpecStateMachine(
-            spec_id=self.config.spec_id,
-            db_session=db_session,
-            working_directory=self.config.cwd,
-            event_reporter=reporter,  # NEW
-        )
-        return await state_machine.run()
+```json
+{
+  "event_type": "spec.phase_completed",
+  "timestamp": "2025-01-16T14:30:00Z",
+  "spec_id": "550e8400-e29b-41d4-a716-446655440000",
+  "phase": "requirements",
+  "data": {
+    "eval_score": 0.92,
+    "duration_seconds": 45.3,
+    "retry_count": 0
+  }
+}
 ```
 
-### 3. New Spec Event Types
+---
 
-| Event Type | Payload | When |
-|------------|---------|------|
-| `spec.execution_started` | `{spec_id, starting_phase}` | Execution begins |
-| `spec.phase_started` | `{spec_id, phase, attempt}` | Phase begins |
-| `spec.phase_completed` | `{spec_id, phase, duration, eval_score}` | Phase passes evaluator |
-| `spec.phase_failed` | `{spec_id, phase, error, attempt}` | Phase fails evaluator |
-| `spec.phase_retry` | `{spec_id, phase, attempt, max_attempts}` | Phase retrying |
-| `spec.execution_completed` | `{spec_id, success, total_duration}` | All phases done |
-| `spec.sync_started` | `{spec_id, items_to_sync}` | SYNC phase begins |
-| `spec.sync_completed` | `{spec_id, items_synced}` | SYNC phase done |
+## Backend Implementation
 
-### 4. API Endpoint for Spec Events
+### Event Persistence
+
+Events are stored in the `sandbox_events` table with `spec_id` FK:
 
 ```python
-# New endpoint in specs.py
-@router.get("/{spec_id}/events")
+# omoi_os/models/sandbox_event.py
+class SandboxEvent(Base):
+    __tablename__ = "sandbox_events"
+
+    id: str              # UUID
+    sandbox_id: str      # The sandbox that generated this event
+    spec_id: str         # FK to specs table (nullable)
+    event_type: str      # e.g., 'spec.phase_completed'
+    event_data: dict     # JSONB payload
+    source: str          # 'agent', 'worker', 'system'
+    created_at: datetime
+```
+
+### Spec Events Endpoint
+
+```python
+# omoi_os/api/routes/specs.py:1936
+@router.get("/{spec_id}/events", response_model=SpecEventsResponse)
 async def get_spec_events(
     spec_id: str,
     limit: int = 50,
     offset: int = 0,
+    event_types: Optional[List[str]] = Query(None),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Get events for a spec execution."""
-    # Query sandbox_events using the spec_id FK column
-    async with db.get_async_session() as session:
-        stmt = select(SandboxEvent).where(
-            SandboxEvent.spec_id == spec_id
-        ).order_by(SandboxEvent.created_at.desc()).limit(limit).offset(offset)
-        result = await session.execute(stmt)
-        events = result.scalars().all()
-    return SpecEventsResponse(spec_id=spec_id, events=[...], total=len(events))
 ```
 
-### 5. Frontend Changes
+### Phase Data Update
 
-#### Add Real-Time Event Polling
+When `agent.completed` is received with `phase_data`:
+
+```python
+# omoi_os/api/routes/sandbox.py:236
+async def _update_spec_phase_data(
+    db: DatabaseService,
+    spec_id: str,
+    phase_data: dict,
+    success: bool = True,
+) -> None:
+    """Update spec's phase_data when a spec sandbox completes."""
+    # Merges phase_data with existing data (supports incremental execution)
+```
+
+### EventBus Broadcasting
+
+All events are broadcast via Redis pub/sub:
+
+```python
+# omoi_os/api/routes/sandbox.py:230
+def broadcast_sandbox_event(sandbox_id, event_type, event_data, source):
+    bus = get_event_bus()
+    system_event = _create_system_event(sandbox_id, event_type, event_data, source)
+    bus.publish(system_event)
+```
+
+Frontend can subscribe via WebSocket at `/api/v1/ws/events`.
+
+---
+
+## Frontend Implementation
+
+### Spec Detail Page
+
+Location: `frontend/app/(app)/projects/[id]/specs/[specId]/page.tsx`
+
+**Features**:
+- Requirements tab with CRUD operations
+- Design tab with architecture/data model display
+- Tasks tab with task management
+- Execution tab with progress metrics and event timeline
+- Sidebar with metadata and phase progress
+
+**Polling** (when `status === "executing"`):
+```typescript
+// Polls spec every 5s during execution
+const { data: spec } = useSpec(specId, {
+  refetchInterval: (query) => {
+    const specData = query.state.data
+    return specData?.status === "executing" ? 5000 : false
+  },
+})
+```
+
+### PhaseProgress Component
+
+Location: `frontend/components/spec/PhaseProgress.tsx`
+
+Visual stepper showing: EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC
 
 ```typescript
-// useSpecs.ts - new hook
+<PhaseProgress
+  currentPhase={spec.current_phase}
+  status={spec.status}
+  size="sm"
+/>
+```
+
+Also available as `PhaseProgressInline` for compact display.
+
+### EventTimeline Component
+
+Location: `frontend/components/spec/EventTimeline.tsx`
+
+Real-time event feed with:
+- Event type badges with appropriate colors
+- Timestamps
+- Event data display
+- Auto-refresh during execution
+
+```typescript
+<EventTimeline
+  specId={specId}
+  isExecuting={isExecuting}
+  maxHeight="400px"
+/>
+```
+
+### useSpecEvents Hook
+
+Location: `frontend/hooks/useSpecs.ts:503`
+
+```typescript
 export function useSpecEvents(
   specId: string | undefined,
-  options?: { enabled?: boolean; refetchInterval?: number }
+  options?: {
+    enabled?: boolean
+    refetchInterval?: number
+    event_types?: string[]
+    limit?: number
+  }
 ) {
   return useQuery<SpecEventsResponse>({
-    queryKey: specsKeys.events(specId!),
-    queryFn: () => getSpecEvents(specId!),
+    queryKey: specsKeys.events(specId!, params),
+    queryFn: () => getSpecEvents(specId!, params),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval,
   })
 }
 ```
 
-#### Add Phase Progress Component
+---
 
-```typescript
-// components/spec/PhaseProgress.tsx
-export function PhaseProgress({ specId }: { specId: string }) {
-  const phases = ["explore", "requirements", "design", "tasks", "sync"]
-  const { data: spec } = useSpec(specId)
+## Real-Time Updates
 
-  return (
-    <div className="flex items-center gap-2">
-      {phases.map((phase, idx) => {
-        const isComplete = /* check spec.phase_data */
-        const isCurrent = spec?.current_phase === phase
-        const isPending = !isComplete && !isCurrent
+### Polling (Primary)
 
-        return (
-          <div key={phase} className="flex items-center">
-            <div className={cn(
-              "w-8 h-8 rounded-full flex items-center justify-center",
-              isComplete && "bg-green-500",
-              isCurrent && "bg-blue-500 animate-pulse",
-              isPending && "bg-gray-300"
-            )}>
-              {isComplete ? <Check /> : idx + 1}
-            </div>
-            {idx < phases.length - 1 && (
-              <div className={cn(
-                "w-8 h-0.5",
-                isComplete ? "bg-green-500" : "bg-gray-300"
-              )} />
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-```
+The frontend uses React Query's `refetchInterval` for real-time updates:
 
-#### Add Event Timeline Component
+- **Spec data**: 5s polling when `status === "executing"`
+- **Events**: 2s polling when executing (configurable)
 
-```typescript
-// components/spec/EventTimeline.tsx
-export function EventTimeline({ specId }: { specId: string }) {
-  const { data: events } = useSpecEvents(specId, {
-    enabled: true,
-    refetchInterval: 2000, // Poll every 2s
-  })
+### WebSocket (Available)
 
-  return (
-    <div className="space-y-2">
-      {events?.events.map(event => (
-        <div key={event.id} className="flex items-start gap-2 text-sm">
-          <span className="text-muted-foreground">
-            {formatTime(event.timestamp)}
-          </span>
-          <Badge variant={getVariantForEventType(event.type)}>
-            {event.type}
-          </Badge>
-          <span>{event.message}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-```
+WebSocket support is available via EventBus:
+
+1. Backend broadcasts events to Redis pub/sub
+2. WebSocket endpoint at `/api/v1/ws/events` subscribes to EventBus
+3. Frontend can connect for instant updates (no polling delay)
+
+**Current Status**: Polling is the primary method; WebSocket is available but frontend uses polling for simplicity.
 
 ---
 
-## UI Improvements Needed
+## Testing
 
-### Execution Tab Enhancements
+### Manual Testing
 
-1. **Phase Progress Bar**
-   - Visual indicator: EXPLORE ──► REQUIREMENTS ──► DESIGN ──► TASKS ──► SYNC
-   - Show current phase highlighted
-   - Show completed phases with checkmarks
+1. Create a spec-driven ticket:
+```bash
+curl -X POST "http://localhost:18000/api/v1/tickets" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Test spec-driven workflow",
+    "description": "Testing events",
+    "project_id": "your-project-id",
+    "workflow_mode": "spec_driven"
+  }'
+```
 
-2. **Live Event Feed**
-   - Stream of events as they happen
-   - Filter by event type
-   - Auto-scroll with pause option
+2. Watch events in UI at `/projects/{id}/specs/{specId}`
 
-3. **Phase Output Viewer**
-   - Expandable sections for each phase's output
-   - Requirements in formatted display
-   - Design artifacts with diagrams
-   - Task breakdown table
+3. Check events via API:
+```bash
+curl "http://localhost:18000/api/v1/specs/{spec_id}/events" \
+  -H "Authorization: Bearer $TOKEN"
+```
 
-4. **Sandbox Link**
-   - When a sandbox is spawned for spec, show link
-   - Navigate to sandbox trajectory view
-   - See detailed agent activity
+### Integration Tests
 
-### Command Page Enhancements
-
-1. **Spec-Driven Mode**
-   - Clear explanation of what happens
-   - Progress indicator after submission
-   - Link to spec detail page
-
-2. **Project Selection**
-   - Required for spec-driven mode
-   - Shows which codebase will be used
+Location: `tests/integration/test_spec_driven_workflow.py`
 
 ---
 
-## Database Schema Considerations
+## File Reference
 
-### ✅ DECISION: Use Existing sandbox_events (Option A)
-
-**Rationale**: Don't repeat ourselves - leverage existing event infrastructure.
-
-**Current Model** (`omoi_os/models/sandbox_event.py:21-52`):
-```python
-class SandboxEvent(Base):
-    __tablename__ = "sandbox_events"
-
-    id: str              # UUID
-    sandbox_id: str      # The sandbox that generated this event
-    event_type: str      # e.g., 'agent.started', 'agent.tool_use'
-    event_data: dict     # JSONB payload with event-specific data
-    source: str          # 'agent', 'guardian', 'system'
-    created_at: datetime
-```
-
-**Required Change**: Add `spec_id` column to link events to specs.
-
-```sql
--- Migration: Add spec_id to sandbox_events
-ALTER TABLE sandbox_events ADD COLUMN spec_id VARCHAR REFERENCES specs(id);
-CREATE INDEX idx_sandbox_events_spec_id ON sandbox_events(spec_id) WHERE spec_id IS NOT NULL;
-```
-
-**Model Update** (`omoi_os/models/sandbox_event.py`):
-```python
-# Add to SandboxEvent class:
-spec_id: Mapped[Optional[str]] = mapped_column(
-    String,
-    ForeignKey("specs.id", ondelete="SET NULL"),
-    nullable=True,
-    index=True,
-    comment="Spec ID if this event is from spec execution"
-)
-```
-
-### New Spec-Specific Event Types
-
-The state machine will emit these new event types (stored in existing `sandbox_events` table):
-
-| Event Type | source | Payload | UI Display |
-|------------|--------|---------|------------|
-| `spec.execution_started` | `system` | `{spec_id, starting_phase}` | "Execution started" |
-| `spec.phase_started` | `system` | `{spec_id, phase, attempt}` | Phase indicator activates |
-| `spec.phase_completed` | `system` | `{spec_id, phase, duration, eval_score}` | Phase checkmark |
-| `spec.phase_failed` | `system` | `{spec_id, phase, error, attempt}` | Phase error indicator |
-| `spec.phase_retry` | `system` | `{spec_id, phase, attempt, max_attempts}` | Retry count badge |
-| `spec.execution_completed` | `system` | `{spec_id, success, total_duration}` | Success/failure banner |
-| `spec.sync_started` | `system` | `{spec_id, items_to_sync}` | "Syncing N items..." |
-| `spec.sync_completed` | `system` | `{spec_id, items_synced}` | "Synced N items" |
-| `spec.tasks_queued` | `system` | `{spec_id, task_count, ticket_id}` | "N tasks queued" |
-
-These events will display differently in the UI than regular agent events - showing phase progress, evaluator scores, and task execution status.
-
----
-
-## Summary of Gaps
-
-| Component | Gap | Priority |
-|-----------|-----|----------|
-| SpecStateMachine | No EventReporter | HIGH |
-| Backend | No spec events endpoint | HIGH |
-| Frontend | No phase progress UI | MEDIUM |
-| Frontend | No event timeline | MEDIUM |
-| Frontend | No sandbox link | LOW |
-| Command Page | No spec redirect | HIGH |
-| WebSocket | No real-time push | LOW (polling OK) |
-
----
-
-## Files to Modify
-
-| File | Change |
-|------|--------|
-| `spec_state_machine.py` | Add event reporting |
-| `claude_sandbox_worker.py` | Pass EventReporter to state machine |
-| `specs.py` | Add `/events` endpoint |
-| `frontend/hooks/useSpecs.ts` | Add `useSpecEvents` hook |
-| `frontend/lib/api/specs.ts` | Add `getSpecEvents` function |
-| `frontend/app/.../specs/[specId]/page.tsx` | Add phase progress, event timeline |
+| Component | Location |
+|-----------|----------|
+| SpecStateMachine | `subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py` |
+| HTTPReporter | `subsystems/spec-sandbox/src/spec_sandbox/reporters/http.py` |
+| Event Schema | `subsystems/spec-sandbox/src/spec_sandbox/schemas/events.py` |
+| Backend Events Handler | `backend/omoi_os/api/routes/sandbox.py` |
+| Spec Events Endpoint | `backend/omoi_os/api/routes/specs.py:1936` |
+| PhaseProgress | `frontend/components/spec/PhaseProgress.tsx` |
+| EventTimeline | `frontend/components/spec/EventTimeline.tsx` |
+| useSpecEvents Hook | `frontend/hooks/useSpecs.ts:503` |
+| Spec Detail Page | `frontend/app/(app)/projects/[id]/specs/[specId]/page.tsx` |

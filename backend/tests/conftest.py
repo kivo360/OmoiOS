@@ -116,14 +116,17 @@ def auth_token(db_service: DatabaseService, test_user: User) -> str:
 
     Use this when you need just the token string.
     """
+    from omoi_os.config import load_auth_settings
     from omoi_os.services.auth_service import AuthService
 
+    # Use actual auth settings to ensure JWT is valid
+    auth_settings = load_auth_settings()
     auth_service = AuthService(
         db=db_service,
-        jwt_secret="test-secret-key-for-testing-only",
-        jwt_algorithm="HS256",
-        access_token_expire_minutes=15,
-        refresh_token_expire_days=7,
+        jwt_secret=auth_settings.jwt_secret_key,
+        jwt_algorithm=auth_settings.jwt_algorithm,
+        access_token_expire_minutes=auth_settings.access_token_expire_minutes,
+        refresh_token_expire_days=auth_settings.refresh_token_expire_days,
     )
     return auth_service.create_access_token(test_user.id)
 
