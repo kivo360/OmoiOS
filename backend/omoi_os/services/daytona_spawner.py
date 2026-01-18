@@ -1369,10 +1369,15 @@ class DaytonaSpawnerService:
                     branch_check = sandbox.process.exec(
                         f"cd {workspace_path} && git branch --show-current"
                     )
+                    # Daytona SDK returns objects with .result or .stdout attribute
                     current_branch = (
-                        branch_check.stdout.strip()
-                        if hasattr(branch_check, "stdout")
-                        else str(branch_check).strip()
+                        branch_check.result.strip()
+                        if hasattr(branch_check, "result") and branch_check.result
+                        else (
+                            branch_check.stdout.strip()
+                            if hasattr(branch_check, "stdout") and branch_check.stdout
+                            else str(branch_check).strip()
+                        )
                     )
                     logger.info(f"Current git branch after clone: '{current_branch}'")
 
@@ -1396,9 +1401,13 @@ class DaytonaSpawnerService:
                             f"cd {workspace_path} && git checkout {branch_name}"
                         )
                         checkout_output = (
-                            checkout_result.stdout
-                            if hasattr(checkout_result, "stdout")
-                            else str(checkout_result)
+                            checkout_result.result
+                            if hasattr(checkout_result, "result") and checkout_result.result
+                            else (
+                                checkout_result.stdout
+                                if hasattr(checkout_result, "stdout") and checkout_result.stdout
+                                else str(checkout_result)
+                            )
                         )
                         logger.info(f"Checkout result: {checkout_output}")
 
@@ -1407,9 +1416,13 @@ class DaytonaSpawnerService:
                             f"cd {workspace_path} && git branch --show-current"
                         )
                         final_branch = (
-                            final_branch_check.stdout.strip()
-                            if hasattr(final_branch_check, "stdout")
-                            else str(final_branch_check).strip()
+                            final_branch_check.result.strip()
+                            if hasattr(final_branch_check, "result") and final_branch_check.result
+                            else (
+                                final_branch_check.stdout.strip()
+                                if hasattr(final_branch_check, "stdout") and final_branch_check.stdout
+                                else str(final_branch_check).strip()
+                            )
                         )
 
                         if final_branch == branch_name:
