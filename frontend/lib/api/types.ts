@@ -329,6 +329,25 @@ export interface MembershipCreate {
 // Ticket Types
 // ============================================================================
 
+export interface TicketPullRequest {
+  id: string
+  ticket_id: string
+  pr_number: number
+  pr_title: string
+  pr_body: string | null
+  head_branch: string
+  base_branch: string
+  repo_owner: string
+  repo_name: string
+  state: "open" | "merged" | "closed"
+  html_url: string
+  created_at: string
+  merged_at: string | null
+  closed_at: string | null
+  github_user: string
+  merge_commit_sha: string | null
+}
+
 export interface TicketContext {
   spec_id?: string
   spec_title?: string
@@ -348,6 +367,7 @@ export interface Ticket {
   updated_at?: string | null
   project_id?: string
   context?: TicketContext | null
+  pull_requests?: TicketPullRequest[] | null
 }
 
 export interface TicketCreate {

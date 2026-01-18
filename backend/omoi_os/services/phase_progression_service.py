@@ -126,6 +126,9 @@ class PhaseProgressionService:
             logger.warning("No event bus available for phase progression hooks")
             return
 
+        # Hook 0: Task started triggers ticket move to building (for implement_feature)
+        self.event_bus.subscribe("TASK_STARTED", self._handle_task_started)
+
         # Hook 1: Task completion triggers phase advancement check
         self.event_bus.subscribe("TASK_COMPLETED", self._handle_task_completed)
 
@@ -136,8 +139,133 @@ class PhaseProgressionService:
 
         logger.info(
             "Phase progression hooks subscribed",
-            hooks=["TASK_COMPLETED", "ticket.status_transitioned"],
+            hooks=["TASK_STARTED", "TASK_COMPLETED", "ticket.status_transitioned"],
         )
+
+    # -------------------------------------------------------------------------
+    # Hook 0: Move ticket to building when implement_feature task starts
+    # -------------------------------------------------------------------------
+
+    def _handle_task_started(self, event_data: dict) -> None:
+        """
+        Handle TASK_STARTED event to move ticket to building status.
+
+        When an implement_feature task starts:
+        1. Move ticket to building status (shows as "doing" on board)
+        2. Publish status change event for real-time board update
+        """
+        try:
+            task_id = event_data.get("entity_id")
+            if not task_id:
+                return
+
+            payload = event_data.get("payload", {})
+            ticket_id = payload.get("ticket_id")
+            task_type = payload.get("task_type")
+
+            if not ticket_id:
+                logger.debug(
+                    "Task started without ticket context",
+                    task_id=task_id,
+                )
+                return
+
+            # Only move ticket for implement_feature tasks
+            if task_type == "implement_feature":
+                logger.info(
+                    "implement_feature task started, moving ticket to building",
+                    task_id=task_id,
+                    ticket_id=ticket_id,
+                )
+                self._move_ticket_to_building(ticket_id, task_id)
+
+        except Exception as e:
+            logger.error(
+                "Error in Hook 0 (task started handler)",
+                error=str(e),
+                event_data=event_data,
+            )
+
+    def _move_ticket_to_building(self, ticket_id: str, task_id: str) -> bool:
+        """
+        Move a ticket to building status when implement_feature starts.
+
+        Args:
+            ticket_id: Ticket ID to move to building
+            task_id: The task ID that triggered this (for logging)
+
+        Returns:
+            True if ticket was moved to building, False otherwise
+        """
+        from omoi_os.models.ticket_status import TicketStatus
+        from omoi_os.utils.datetime import utc_now
+
+        try:
+            with self.db.get_session() as session:
+                ticket = session.get(Ticket, ticket_id)
+                if not ticket:
+                    logger.warning(
+                        "Ticket not found for building transition",
+                        ticket_id=ticket_id,
+                    )
+                    return False
+
+                # Skip if already building, done, or blocked
+                if ticket.status in (TicketStatus.BUILDING.value, TicketStatus.DONE.value):
+                    logger.debug(
+                        "Ticket already in building or done status",
+                        ticket_id=ticket_id,
+                        current_status=ticket.status,
+                    )
+                    return False
+
+                if ticket.is_blocked:
+                    logger.warning(
+                        "Cannot move blocked ticket to building",
+                        ticket_id=ticket_id,
+                    )
+                    return False
+
+                old_status = ticket.status
+                ticket.status = TicketStatus.BUILDING.value
+                ticket.updated_at = utc_now()
+
+                session.commit()
+
+                logger.info(
+                    "Ticket moved to building after implement_feature started",
+                    ticket_id=ticket_id,
+                    task_id=task_id,
+                    old_status=old_status,
+                )
+
+            # Publish ticket status change event (outside session)
+            # Use TICKET_STATUS_CHANGED to match frontend expectations
+            if self.event_bus:
+                self.event_bus.publish(
+                    SystemEvent(
+                        event_type="TICKET_STATUS_CHANGED",
+                        entity_type="ticket",
+                        entity_id=str(ticket_id),
+                        payload={
+                            "from_status": old_status,
+                            "to_status": TicketStatus.BUILDING.value,
+                            "reason": f"implement_feature task {task_id} started",
+                            "task_id": task_id,
+                        },
+                    )
+                )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                "Error moving ticket to building",
+                ticket_id=ticket_id,
+                task_id=task_id,
+                error=str(e),
+            )
+            return False
 
     # -------------------------------------------------------------------------
     # Hook 1: Auto-advance ticket when all phase tasks complete
@@ -148,8 +276,8 @@ class PhaseProgressionService:
         Handle TASK_COMPLETED event to check for phase completion.
 
         When a task completes:
-        1. Get the ticket for this task
-        2. Check if all tasks in the ticket's current phase are done
+        1. If it's an implement_feature task, move ticket directly to done
+        2. Otherwise, check if all tasks in the ticket's current phase are done
         3. If so, validate phase gate and advance ticket
         """
         try:
@@ -160,6 +288,7 @@ class PhaseProgressionService:
             payload = event_data.get("payload", {})
             ticket_id = payload.get("ticket_id")
             phase_id = payload.get("phase_id")
+            task_type = payload.get("task_type")
 
             if not ticket_id or not phase_id:
                 logger.debug(
@@ -173,7 +302,18 @@ class PhaseProgressionService:
                 task_id=task_id,
                 ticket_id=ticket_id,
                 phase_id=phase_id,
+                task_type=task_type,
             )
+
+            # Special case: implement_feature task completion moves ticket to done
+            if task_type == "implement_feature":
+                logger.info(
+                    "implement_feature task completed, moving ticket to done",
+                    task_id=task_id,
+                    ticket_id=ticket_id,
+                )
+                self._move_ticket_to_done(ticket_id, task_id)
+                return
 
             # Check if all phase tasks are complete
             if self._are_all_phase_tasks_complete(ticket_id, phase_id):
@@ -249,6 +389,89 @@ class PhaseProgressionService:
             logger.error(
                 "Error advancing ticket",
                 ticket_id=ticket_id,
+                error=str(e),
+            )
+            return False
+
+    def _move_ticket_to_done(self, ticket_id: str, task_id: str) -> bool:
+        """
+        Move a ticket directly to done status when implement_feature completes.
+
+        This bypasses the normal phase progression and moves the ticket
+        directly to the done status, publishing the appropriate events.
+
+        Args:
+            ticket_id: Ticket ID to move to done
+            task_id: The task ID that triggered this (for logging)
+
+        Returns:
+            True if ticket was moved to done, False otherwise
+        """
+        from omoi_os.models.ticket_status import TicketStatus
+        from omoi_os.utils.datetime import utc_now
+
+        try:
+            with self.db.get_session() as session:
+                ticket = session.get(Ticket, ticket_id)
+                if not ticket:
+                    logger.warning(
+                        "Ticket not found for done transition",
+                        ticket_id=ticket_id,
+                    )
+                    return False
+
+                # Skip if already done or blocked
+                if ticket.status == TicketStatus.DONE.value:
+                    logger.debug(
+                        "Ticket already done",
+                        ticket_id=ticket_id,
+                    )
+                    return False
+
+                if ticket.is_blocked:
+                    logger.warning(
+                        "Cannot move blocked ticket to done",
+                        ticket_id=ticket_id,
+                    )
+                    return False
+
+                old_status = ticket.status
+                ticket.status = TicketStatus.DONE.value
+                ticket.updated_at = utc_now()
+
+                session.commit()
+
+                logger.info(
+                    "Ticket moved to done after implement_feature completion",
+                    ticket_id=ticket_id,
+                    task_id=task_id,
+                    old_status=old_status,
+                )
+
+            # Publish ticket status change event (outside session)
+            # Use TICKET_STATUS_CHANGED to match frontend expectations
+            if self.event_bus:
+                self.event_bus.publish(
+                    SystemEvent(
+                        event_type="TICKET_STATUS_CHANGED",
+                        entity_type="ticket",
+                        entity_id=str(ticket_id),
+                        payload={
+                            "from_status": old_status,
+                            "to_status": TicketStatus.DONE.value,
+                            "reason": f"implement_feature task {task_id} completed",
+                            "task_id": task_id,
+                        },
+                    )
+                )
+
+            return True
+
+        except Exception as e:
+            logger.error(
+                "Error moving ticket to done",
+                ticket_id=ticket_id,
+                task_id=task_id,
                 error=str(e),
             )
             return False

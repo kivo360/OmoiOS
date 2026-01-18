@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from omoi_os.models.playbook_entry import PlaybookEntry
     from omoi_os.models.playbook_change import PlaybookChange
     from omoi_os.models.project import Project
+    from omoi_os.ticketing.models import TicketPullRequest
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
@@ -149,6 +150,11 @@ class Ticket(Base):
     )
     playbook_changes: Mapped[list["PlaybookChange"]] = relationship(
         "PlaybookChange",
+        back_populates="ticket",
+        cascade="all, delete-orphan",
+    )
+    pull_requests: Mapped[list["TicketPullRequest"]] = relationship(
+        "TicketPullRequest",
         back_populates="ticket",
         cascade="all, delete-orphan",
     )
