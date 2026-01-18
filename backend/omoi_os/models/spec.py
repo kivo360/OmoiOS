@@ -127,6 +127,14 @@ class Spec(Base):
         comment="Retry attempts per phase: {explore: 1, requirements: 2, ...}",
     )
 
+    # Context metadata (for tracking source ticket, workflow mode, etc.)
+    spec_context: Mapped[dict] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+        comment="Context metadata: {source_ticket_id, workflow_mode, ...}",
+    )
+
     # GitHub/PR tracking for spec completion
     branch_name: Mapped[Optional[str]] = mapped_column(
         String(255),

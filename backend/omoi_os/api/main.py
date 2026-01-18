@@ -817,12 +817,12 @@ async def lifespan(app: FastAPI):
     # Run: alembic upgrade head (handled in Dockerfile CMD)
 
     # Check if we're in testing mode or loops are disabled
-    # These can be set directly as env vars for convenience
+    # Settings default to disabled for local dev; enable via env vars or YAML config
     is_testing = os.environ.get("TESTING", "").lower() == "true"
-    monitoring_enabled = os.environ.get("MONITORING_ENABLED", "true").lower() != "false"
-    orchestrator_enabled = (
-        os.environ.get("ORCHESTRATOR_ENABLED", "true").lower() != "false"
-    )
+
+    # Use settings (can be overridden by env vars MONITORING_ENABLED, ORCHESTRATOR_ENABLED)
+    monitoring_enabled = app_settings.monitoring.enabled
+    orchestrator_enabled = app_settings.monitoring.orchestrator_enabled
 
     # Start background loops
     orchestrator_task = None
@@ -832,19 +832,19 @@ async def lifespan(app: FastAPI):
     blocking_detection_task = None
     approval_timeout_task = None
 
-    # Orchestrator can be disabled via ORCHESTRATOR_ENABLED=false
+    # Orchestrator disabled by default for local dev; enable via ORCHESTRATOR_ENABLED=true
     if not is_testing and orchestrator_enabled:
         orchestrator_task = asyncio.create_task(orchestrator_loop())
         logger.info("Orchestrator loop started")
     elif not orchestrator_enabled:
-        logger.warning("Orchestrator DISABLED via ORCHESTRATOR_ENABLED=false")
+        logger.info("Orchestrator DISABLED (default for local dev)")
     else:
         logger.info("TESTING mode: Skipping orchestrator loop")
 
-    # Monitoring loops can be disabled separately via MONITORING_ENABLED=false
+    # Monitoring disabled by default for local dev; enable via MONITORING_ENABLED=true
     skip_monitoring = is_testing or not monitoring_enabled
     if not monitoring_enabled and not is_testing:
-        logger.warning("Monitoring DISABLED via MONITORING_ENABLED=false")
+        logger.info("Monitoring DISABLED (default for local dev)")
 
     if not skip_monitoring:
         heartbeat_task = asyncio.create_task(heartbeat_monitoring_loop())
@@ -933,13 +933,14 @@ async def lifespan(app: FastAPI):
 async def combined_lifespan(app: FastAPI):
     """Combined lifespan for FastAPI and FastMCP."""
     is_testing = os.environ.get("TESTING", "").lower() == "true"
-    mcp_enabled = os.environ.get("MCP_ENABLED", "true").lower() != "false"
+    app_settings = get_app_settings()
+    mcp_enabled = app_settings.integrations.mcp_enabled
 
     async with lifespan(app):
         if is_testing or not mcp_enabled:
             # Skip MCP server in test mode or when disabled
             if not mcp_enabled and not is_testing:
-                logger.warning("MCP server DISABLED via MCP_ENABLED=false")
+                logger.warning("MCP server DISABLED (default for local dev)")
             yield
         else:
             # Import here to avoid circular dependencies

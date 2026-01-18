@@ -494,12 +494,14 @@ class MonitoringSettings(OmoiBaseSettings):
     )
 
     # Master toggle for all monitoring loops
-    # Set MONITORING_ENABLED=false to disable all background monitoring
-    enabled: bool = True
+    # Set MONITORING_ENABLED=true to enable all background monitoring
+    # Default: disabled for local development (runs on separate machines in production)
+    enabled: bool = False
 
     # Toggle for orchestrator loop (task assignment/sandbox spawning)
-    # Set ORCHESTRATOR_ENABLED=false to disable the orchestrator
-    orchestrator_enabled: bool = True
+    # Set ORCHESTRATOR_ENABLED=true to enable the orchestrator
+    # Default: disabled for local development (runs on separate machines in production)
+    orchestrator_enabled: bool = False
 
     guardian_interval_seconds: int = 60
     conductor_interval_seconds: int = 300
@@ -606,6 +608,11 @@ class IntegrationSettings(OmoiBaseSettings):
     mcp_server_url: str = "http://localhost:18000/mcp"
     enable_mcp_tools: bool = True
     github_token: Optional[str] = None
+
+    # Toggle for MCP server lifespan (HTTP server at /mcp)
+    # Set MCP_ENABLED=true to enable the MCP server
+    # Default: disabled for local development (runs on separate machines in production)
+    mcp_enabled: bool = False
 
 
 class EmbeddingSettings(OmoiBaseSettings):
