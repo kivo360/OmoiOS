@@ -98,6 +98,18 @@ class BoardService:
 
         return board
 
+    # Phase to status mapping for syncing status when moving tickets
+    PHASE_TO_STATUS: Dict[str, str] = {
+        "PHASE_BACKLOG": "backlog",
+        "PHASE_REQUIREMENTS": "analyzing",
+        "PHASE_DESIGN": "analyzing",
+        "PHASE_IMPLEMENTATION": "building",
+        "PHASE_TESTING": "testing",
+        "PHASE_DEPLOYMENT": "building-done",
+        "PHASE_DONE": "done",
+        "PHASE_BLOCKED": "backlog",  # Blocked is an overlay, keep underlying status
+    }
+
     def move_ticket_to_column(
         self,
         session: Session,
@@ -110,7 +122,7 @@ class BoardService:
         Move ticket to a different board column.
 
         This updates the ticket's phase_id to match the target column's first
-        phase mapping.
+        phase mapping, and syncs the status to keep phase and status aligned.
 
         Args:
             session: Database session.
@@ -151,9 +163,15 @@ class BoardService:
 
         target_phase_id = column.phase_mapping[0]
         old_phase_id = ticket.phase_id
+        old_status = ticket.status
 
         # Update ticket phase
         ticket.phase_id = target_phase_id
+
+        # Sync status to match the new phase (keep phase and status aligned)
+        if target_phase_id in self.PHASE_TO_STATUS:
+            ticket.status = self.PHASE_TO_STATUS[target_phase_id]
+
         session.flush()
 
         # Publish event
@@ -166,6 +184,8 @@ class BoardService:
                     payload={
                         "from_phase": old_phase_id,
                         "to_phase": target_phase_id,
+                        "from_status": old_status,
+                        "to_status": ticket.status,
                         "from_column": self._find_column_for_phase(
                             session, old_phase_id
                         ),
