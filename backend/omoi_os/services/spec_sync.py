@@ -27,6 +27,7 @@ from omoi_os.models.spec import (
     SpecRequirement,
     SpecTask,
 )
+from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.embedding import EmbeddingService
@@ -313,29 +314,27 @@ class SpecSyncService:
     ) -> None:
         """Sync tasks from phase data to database.
 
-        Creates both SpecTask records (for spec tracking) and Ticket records
-        (for kanban board visibility) in backlog status.
+        The TASKS phase output has two arrays:
+        - tickets: Logical groupings of work (what appears on the kanban board)
+        - tasks: Discrete work units with parent_ticket references
+
+        This method creates:
+        1. Ticket records from the 'tickets' array (kanban board items)
+        2. Task records from the 'tasks' array (work units linked to tickets)
+        3. SpecTask records for spec tracking (linked to tasks)
+
+        Falls back to 1:1 mapping if only 'tasks' array is present (legacy format).
 
         Args:
             session: Async database session.
             spec: The spec being synced.
-            tasks_data: Tasks phase output data.
+            tasks_data: Tasks phase output data with 'tickets' and 'tasks' arrays.
             stats: Statistics tracker.
         """
+        tickets = tasks_data.get("tickets", [])
         tasks = tasks_data.get("tasks", [])
-        if not tasks:
-            return
 
-        logger.info(f"Syncing {len(tasks)} tasks for spec {spec.id}")
-
-        # Bulk deduplication
-        dedup_result = await self.dedup_service.deduplicate_tasks_bulk(
-            spec_id=spec.id,
-            tasks=tasks,
-            session=session,
-        )
-
-        # Map spec task priority to ticket priority
+        # Map priority values
         priority_map = {
             "critical": "CRITICAL",
             "high": "HIGH",
@@ -343,58 +342,159 @@ class SpecSyncService:
             "low": "LOW",
         }
 
-        # Create non-duplicate tasks and corresponding tickets
-        for task_data in dedup_result.to_create:
-            try:
-                # Create SpecTask for spec tracking
-                new_task = SpecTask(
-                    spec_id=spec.id,
-                    title=task_data.get("title", ""),
-                    description=task_data.get("description"),
-                    phase=task_data.get("phase", "Implementation"),
-                    priority=task_data.get("priority", "medium"),
-                    status="pending",
-                    dependencies=task_data.get("dependencies", []),
-                    estimated_hours=task_data.get("estimated_hours"),
-                    content_hash=task_data.get("content_hash"),
-                    embedding_vector=task_data.get("embedding_vector"),
-                )
-                session.add(new_task)
-                await session.flush()  # Get the task ID
-                stats.tasks_created += 1
+        # Track local ticket IDs to database IDs for linking tasks
+        ticket_id_map: Dict[str, str] = {}  # local_id -> db_id
 
-                # Create Ticket for kanban board visibility
-                task_priority = task_data.get("priority", "medium").lower()
-                ticket_priority = priority_map.get(task_priority, "MEDIUM")
+        # Phase 1: Create Tickets (logical work groupings for kanban board)
+        if tickets:
+            logger.info(f"Syncing {len(tickets)} tickets for spec {spec.id}")
 
-                new_ticket = Ticket(
-                    title=task_data.get("title", ""),
-                    description=task_data.get("description"),
-                    phase_id="backlog",  # Start in backlog
-                    status="backlog",
-                    priority=ticket_priority,
-                    project_id=spec.project_id,
-                    context={
-                        "spec_id": spec.id,
-                        "spec_task_id": new_task.id,
-                        "source": "spec_sync",
-                        "workflow_mode": "spec_driven",
-                    },
-                )
-                session.add(new_ticket)
-                stats.tickets_created += 1
+            for ticket_data in tickets:
+                try:
+                    local_id = ticket_data.get("id", "")
+                    title = ticket_data.get("title", "")
+                    description = ticket_data.get("description", "")
+                    priority = ticket_data.get("priority", "MEDIUM").upper()
+                    requirements_refs = ticket_data.get("requirements", [])
+                    task_refs = ticket_data.get("tasks", [])
+                    dependencies = ticket_data.get("dependencies", [])
 
-                logger.debug(
-                    f"Created ticket for spec task: {new_task.title}",
-                    extra={"spec_id": spec.id, "task_id": new_task.id},
-                )
+                    # Check for duplicate ticket
+                    existing_ticket = await session.execute(
+                        select(Ticket).where(
+                            Ticket.title == title,
+                            Ticket.project_id == spec.project_id,
+                            Ticket.context["spec_id"].astext == spec.id,
+                        )
+                    )
+                    if existing_ticket.scalar_one_or_none():
+                        stats.tickets_skipped += 1
+                        continue
 
-            except Exception as e:
-                logger.error(f"Failed to create task/ticket: {e}")
-                stats.errors.append(f"Task creation failed: {e}")
+                    new_ticket = Ticket(
+                        title=title,
+                        description=description,
+                        phase_id="backlog",
+                        status="backlog",
+                        priority=priority if priority in priority_map.values() else "MEDIUM",
+                        project_id=spec.project_id,
+                        dependencies={
+                            "blocked_by": dependencies,
+                            "requirements": requirements_refs,
+                            "task_refs": task_refs,
+                        } if dependencies or requirements_refs else None,
+                        context={
+                            "spec_id": spec.id,
+                            "local_ticket_id": local_id,
+                            "source": "spec_sync",
+                            "workflow_mode": "spec_driven",
+                        },
+                    )
+                    session.add(new_ticket)
+                    await session.flush()
+                    stats.tickets_created += 1
+                    ticket_id_map[local_id] = new_ticket.id
 
-        stats.tasks_skipped = len(dedup_result.to_skip)
-        stats.tickets_skipped = len(dedup_result.to_skip)
+                    logger.debug(
+                        f"Created ticket: {title}",
+                        extra={"spec_id": spec.id, "ticket_id": new_ticket.id},
+                    )
+
+                except Exception as e:
+                    logger.error(f"Failed to create ticket: {e}")
+                    stats.errors.append(f"Ticket creation failed: {e}")
+
+        # Phase 2: Create Tasks (discrete work units linked to tickets)
+        if tasks:
+            logger.info(f"Syncing {len(tasks)} tasks for spec {spec.id}")
+
+            # Bulk deduplication for SpecTasks
+            dedup_result = await self.dedup_service.deduplicate_tasks_bulk(
+                spec_id=spec.id,
+                tasks=tasks,
+                session=session,
+            )
+
+            for task_data in dedup_result.to_create:
+                try:
+                    title = task_data.get("title", "")
+                    description = task_data.get("description", "")
+                    parent_ticket_local_id = task_data.get("parent_ticket", "")
+                    task_type = task_data.get("type", "implementation")
+                    priority = task_data.get("priority", "medium").lower()
+                    dependencies = task_data.get("dependencies", {})
+                    estimated_hours = task_data.get("estimated_hours")
+
+                    # Create SpecTask for spec tracking
+                    new_spec_task = SpecTask(
+                        spec_id=spec.id,
+                        title=title,
+                        description=description,
+                        phase=task_data.get("phase", "Implementation"),
+                        priority=priority,
+                        status="pending",
+                        dependencies=dependencies.get("depends_on", []) if isinstance(dependencies, dict) else [],
+                        estimated_hours=estimated_hours,
+                        content_hash=task_data.get("content_hash"),
+                        embedding_vector=task_data.get("embedding_vector"),
+                    )
+                    session.add(new_spec_task)
+                    await session.flush()
+                    stats.tasks_created += 1
+
+                    # Find or create parent ticket for this task
+                    parent_ticket_id = ticket_id_map.get(parent_ticket_local_id)
+
+                    if not parent_ticket_id and not tickets:
+                        # Legacy format: No tickets array, create ticket per task
+                        ticket_priority = priority_map.get(priority, "MEDIUM")
+                        new_ticket = Ticket(
+                            title=title,
+                            description=description,
+                            phase_id="backlog",
+                            status="backlog",
+                            priority=ticket_priority,
+                            project_id=spec.project_id,
+                            context={
+                                "spec_id": spec.id,
+                                "spec_task_id": new_spec_task.id,
+                                "source": "spec_sync",
+                                "workflow_mode": "spec_driven",
+                            },
+                        )
+                        session.add(new_ticket)
+                        await session.flush()
+                        stats.tickets_created += 1
+                        parent_ticket_id = new_ticket.id
+
+                    if parent_ticket_id:
+                        # Create Task (work unit) linked to the Ticket
+                        new_task = Task(
+                            ticket_id=parent_ticket_id,
+                            phase_id="backlog",
+                            task_type=task_type,
+                            title=title,
+                            description=description,
+                            priority=priority_map.get(priority, "MEDIUM"),
+                            status="pending",
+                            dependencies=dependencies if isinstance(dependencies, dict) else {"depends_on": []},
+                        )
+                        session.add(new_task)
+
+                        logger.debug(
+                            f"Created task under ticket: {title}",
+                            extra={
+                                "spec_id": spec.id,
+                                "spec_task_id": new_spec_task.id,
+                                "ticket_id": parent_ticket_id,
+                            },
+                        )
+
+                except Exception as e:
+                    logger.error(f"Failed to create task: {e}")
+                    stats.errors.append(f"Task creation failed: {e}")
+
+            stats.tasks_skipped = len(dedup_result.to_skip)
 
     async def _update_spec_dedup_fields(
         self,

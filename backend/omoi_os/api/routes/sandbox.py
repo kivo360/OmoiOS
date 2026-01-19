@@ -443,39 +443,120 @@ async def _sync_tasks_to_table(
     tasks_output: dict,
 ) -> int:
     """
-    Sync tasks from phase output to spec_tasks table.
+    Sync tasks from phase output to database with proper tickets/tasks hierarchy.
 
-    This function takes the tasks phase output and creates/updates
-    SpecTask records so they appear in the UI.
+    The TASKS phase output has two arrays:
+    - tickets: Logical groupings of work (what appears on the kanban board)
+    - tasks: Discrete work units with parent_ticket references
+
+    This function creates:
+    1. Ticket records from the 'tickets' array (kanban board items)
+    2. Task records from the 'tasks' array (work units linked to tickets)
+    3. SpecTask records for spec tracking
+
+    Falls back to 1:1 mapping if only 'tasks' array is present (legacy format).
 
     Args:
         db: Database service
         spec_id: Spec UUID
-        tasks_output: Dict containing 'tasks' list from phase output
+        tasks_output: Dict containing 'tickets' and 'tasks' lists from phase output
 
     Returns:
         Number of tasks synced
     """
+    tickets_list = tasks_output.get("tickets", [])
     tasks_list = tasks_output.get("tasks", [])
-    if not tasks_list:
-        logger.debug(f"No tasks in phase output for spec {spec_id}")
+
+    if not tasks_list and not tickets_list:
+        logger.debug(f"No tasks/tickets in phase output for spec {spec_id}")
         return 0
 
+    # Map priority values
+    priority_map = {
+        "critical": "CRITICAL",
+        "high": "HIGH",
+        "medium": "MEDIUM",
+        "low": "LOW",
+    }
+
     synced_count = 0
+    tickets_created = 0
+    ticket_id_map: dict[str, str] = {}  # local_id -> db_id
+
     try:
         async with db.get_async_session() as session:
-            for task_data in tasks_list:
-                task_id = task_data.get("id", f"task-{synced_count + 1}")
-                title = task_data.get("title", task_id)
-                description = task_data.get("description", "")
+            # Get spec to find project_id
+            spec_result = await session.execute(
+                select(Spec).where(Spec.id == spec_id)
+            )
+            spec = spec_result.scalar_one_or_none()
+            if not spec:
+                logger.warning(f"Spec {spec_id} not found for task sync")
+                return 0
 
-                # Map fields
+            # Phase 1: Create Tickets (logical work groupings for kanban board)
+            for ticket_data in tickets_list:
+                local_id = ticket_data.get("id", "")
+                title = ticket_data.get("title", "")
+                description = ticket_data.get("description", "")
+                priority = ticket_data.get("priority", "MEDIUM").upper()
+                requirements_refs = ticket_data.get("requirements", [])
+                task_refs = ticket_data.get("tasks", [])
+                dependencies = ticket_data.get("dependencies", [])
+
+                # Check for duplicate ticket
+                existing_ticket = await session.execute(
+                    select(Ticket).where(
+                        Ticket.title == title,
+                        Ticket.project_id == spec.project_id,
+                        Ticket.context["spec_id"].astext == spec_id,
+                    )
+                )
+                if existing_ticket.scalar_one_or_none():
+                    continue
+
+                new_ticket = Ticket(
+                    title=title,
+                    description=description,
+                    phase_id="backlog",
+                    status="backlog",
+                    priority=priority if priority in priority_map.values() else "MEDIUM",
+                    project_id=spec.project_id,
+                    dependencies={
+                        "blocked_by": dependencies,
+                        "requirements": requirements_refs,
+                        "task_refs": task_refs,
+                    } if dependencies or requirements_refs else None,
+                    context={
+                        "spec_id": spec_id,
+                        "local_ticket_id": local_id,
+                        "source": "spec_sync",
+                        "workflow_mode": "spec_driven",
+                    },
+                )
+                session.add(new_ticket)
+                await session.flush()
+                tickets_created += 1
+                ticket_id_map[local_id] = new_ticket.id
+
+                logger.debug(
+                    f"Created ticket: {title}",
+                    extra={"spec_id": spec_id, "ticket_id": new_ticket.id},
+                )
+
+            # Phase 2: Create Tasks (discrete work units)
+            for task_data in tasks_list:
+                task_local_id = task_data.get("id", f"task-{synced_count + 1}")
+                title = task_data.get("title", task_local_id)
+                description = task_data.get("description", "")
+                parent_ticket_local_id = task_data.get("parent_ticket", "")
+                task_type = task_data.get("type", "implementation")
                 phase = task_data.get("phase", "Implementation")
                 priority = task_data.get("priority", "medium")
                 estimated_hours = task_data.get("estimated_hours")
-                dependencies = task_data.get("dependencies", [])
+                dependencies = task_data.get("dependencies", {})
 
-                # Check if task already exists
+                # Check if SpecTask already exists
                 existing = await session.execute(
                     select(SpecTask).where(
                         SpecTask.spec_id == spec_id,
@@ -485,16 +566,16 @@ async def _sync_tasks_to_table(
                 existing_task = existing.scalar_one_or_none()
 
                 if existing_task:
-                    # Update existing
+                    # Update existing SpecTask
                     existing_task.description = description
                     existing_task.phase = phase
                     existing_task.priority = priority
                     existing_task.estimated_hours = estimated_hours
-                    existing_task.dependencies = dependencies
+                    existing_task.dependencies = dependencies.get("depends_on", []) if isinstance(dependencies, dict) else dependencies
                     existing_task.updated_at = utc_now()
                 else:
-                    # Create new
-                    new_task = SpecTask(
+                    # Create new SpecTask for spec tracking
+                    new_spec_task = SpecTask(
                         spec_id=spec_id,
                         title=title,
                         description=description,
@@ -502,14 +583,77 @@ async def _sync_tasks_to_table(
                         priority=priority,
                         status="pending",
                         estimated_hours=estimated_hours,
-                        dependencies=dependencies,
+                        dependencies=dependencies.get("depends_on", []) if isinstance(dependencies, dict) else dependencies,
                     )
-                    session.add(new_task)
+                    session.add(new_spec_task)
+                    await session.flush()
+
+                    # Find or create parent ticket for this task
+                    parent_ticket_id = ticket_id_map.get(parent_ticket_local_id)
+
+                    if not parent_ticket_id and not tickets_list:
+                        # Legacy format: No tickets array, create ticket per task
+                        task_priority = priority.lower() if priority else "medium"
+                        ticket_priority = priority_map.get(task_priority, "MEDIUM")
+
+                        # Check if ticket already exists
+                        existing_ticket = await session.execute(
+                            select(Ticket).where(
+                                Ticket.title == title,
+                                Ticket.project_id == spec.project_id,
+                                Ticket.context["spec_id"].astext == spec_id,
+                            )
+                        )
+                        if not existing_ticket.scalar_one_or_none():
+                            new_ticket = Ticket(
+                                title=title,
+                                description=description,
+                                phase_id="backlog",
+                                status="backlog",
+                                priority=ticket_priority,
+                                project_id=spec.project_id,
+                                context={
+                                    "spec_id": spec_id,
+                                    "spec_task_id": new_spec_task.id,
+                                    "source": "spec_sync",
+                                    "workflow_mode": "spec_driven",
+                                },
+                            )
+                            session.add(new_ticket)
+                            await session.flush()
+                            tickets_created += 1
+                            parent_ticket_id = new_ticket.id
+
+                    if parent_ticket_id:
+                        # Create Task (work unit) linked to the Ticket
+                        task_priority_upper = priority_map.get(priority.lower() if priority else "medium", "MEDIUM")
+                        new_task = Task(
+                            ticket_id=parent_ticket_id,
+                            phase_id="backlog",
+                            task_type=task_type,
+                            title=title,
+                            description=description,
+                            priority=task_priority_upper,
+                            status="pending",
+                            dependencies=dependencies if isinstance(dependencies, dict) else {"depends_on": []},
+                        )
+                        session.add(new_task)
+
+                        logger.debug(
+                            f"Created task under ticket: {title}",
+                            extra={"spec_id": spec_id, "ticket_id": parent_ticket_id},
+                        )
 
                 synced_count += 1
 
+            # Update linked_tickets count on spec
+            if tickets_created > 0:
+                spec.linked_tickets = (spec.linked_tickets or 0) + tickets_created
+
             await session.commit()
-            logger.info(f"Synced {synced_count} tasks for spec {spec_id}")
+            logger.info(
+                f"Synced {synced_count} tasks and created {tickets_created} tickets for spec {spec_id}"
+            )
 
     except Exception as e:
         logger.error(f"Failed to sync tasks for spec {spec_id}: {e}", exc_info=True)
