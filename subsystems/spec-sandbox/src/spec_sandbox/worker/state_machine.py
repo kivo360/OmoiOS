@@ -165,13 +165,14 @@ class SpecStateMachine:
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
         try:
-            # If single phase specified, run only that
-            if self.settings.spec_phase:
+            # If single phase specified (not "all"), run only that phase
+            # If spec_phase is "all" or not set, run all phases in order
+            if self.settings.spec_phase and self.settings.spec_phase.lower() != "all":
                 phase = SpecPhase(self.settings.spec_phase)
                 result = await self.run_phase(phase)
                 success = result.success
             else:
-                # Run all phases in order
+                # Run all phases in order (spec_phase is "all" or not set)
                 success = True
                 for phase in self.PHASES:
                     result = await self.run_phase(phase)
