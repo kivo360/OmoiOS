@@ -282,16 +282,26 @@ async def _update_spec_phase_data(
             # Update status based on success
             if success:
                 # Determine current phase based on what data we have
-                phase_order = ["explore", "requirements", "design", "tasks"]
+                # Phases: explore (20%), requirements (40%), design (60%), tasks (80%), sync (100%)
+                phase_order = ["explore", "requirements", "design", "tasks", "sync"]
                 current_phase = "explore"
+                completed_phases = 0
                 for phase in phase_order:
                     if phase in existing_phase_data:
                         current_phase = phase
+                        completed_phases += 1
 
                 spec.current_phase = current_phase
-                # Don't change status to 'completed' here - that's done by SYNC phase
-                # Just update to 'draft' if it was 'executing'
-                if spec.status == "executing":
+
+                # Calculate progress: each phase is 20% of total
+                spec.progress = completed_phases * 20.0
+
+                # Update status based on completion
+                if "sync" in existing_phase_data:
+                    # All phases complete - mark as completed
+                    spec.status = "completed"
+                elif spec.status == "executing":
+                    # Still in progress - change to draft
                     spec.status = "draft"
             else:
                 spec.status = "failed"
@@ -299,7 +309,11 @@ async def _update_spec_phase_data(
             await session.commit()
             logger.info(
                 f"Updated spec {spec_id} phase_data with phases: {list(phase_data.keys())}",
-                extra={"new_status": spec.status, "current_phase": spec.current_phase}
+                extra={
+                    "new_status": spec.status,
+                    "current_phase": spec.current_phase,
+                    "progress": spec.progress,
+                }
             )
 
     except Exception as e:
@@ -1052,8 +1066,8 @@ async def post_sandbox_event(
                 # Spec sandboxes don't need task status updates - they have their own workflow
                 spec_id = event.event_data.get("spec_id")
                 if spec_id:
-                    logger.debug(
-                        f"Spec sandbox event (spec_id={spec_id}), skipping task status update. "
+                    logger.info(
+                        f"Spec sandbox event received: spec_id={spec_id}, "
                         f"event_type={event.event_type}, sandbox_id={sandbox_id}"
                     )
                     # Handle spec completion - update spec's phase_data
@@ -1061,11 +1075,19 @@ async def post_sandbox_event(
                     if event.event_type in ("agent.completed", "continuous.completed"):
                         phase_data = event.event_data.get("phase_data")
                         if phase_data:
+                            logger.info(
+                                f"Updating spec {spec_id} with phase_data: phases={list(phase_data.keys())}"
+                            )
                             await _update_spec_phase_data(
                                 db=db,
                                 spec_id=spec_id,
                                 phase_data=phase_data,
                                 success=event.event_data.get("success", True),
+                            )
+                        else:
+                            logger.warning(
+                                f"Received {event.event_type} for spec {spec_id} but phase_data is empty or missing. "
+                                f"event_data keys: {list(event.event_data.keys())}"
                             )
                 else:
                     logger.warning(
