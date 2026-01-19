@@ -25,6 +25,10 @@ import {
   createSpecPR,
   launchSpec,
   getSpecEvents,
+  linkTicketsToSpec,
+  unlinkTicketsFromSpec,
+  getLinkedTickets,
+  exportSpec,
 } from "@/lib/api/specs"
 import type {
   Spec,
@@ -52,6 +56,9 @@ import type {
   SpecLaunchResponse,
   SpecEventsResponse,
   GetSpecEventsParams,
+  LinkTicketsResponse,
+  LinkedTicketsResponse,
+  SpecExportFormat,
 } from "@/lib/api/specs"
 
 export const specsKeys = {
@@ -62,6 +69,7 @@ export const specsKeys = {
   executionStatus: (specId: string) => [...specsKeys.all, "execution", specId] as const,
   criteriaStatus: (specId: string) => [...specsKeys.all, "criteria", specId] as const,
   events: (specId: string) => [...specsKeys.all, "events", specId] as const,
+  linkedTickets: (specId: string) => [...specsKeys.all, "linked-tickets", specId] as const,
 }
 
 /**
@@ -518,5 +526,76 @@ export function useSpecEvents(
     queryFn: () => getSpecEvents(specId!, params),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval,
+  })
+}
+
+// ============================================================================
+// Linked Tickets Hooks
+// ============================================================================
+
+/**
+ * Hook to get tickets linked to a spec.
+ *
+ * @param specId - The spec ID to get linked tickets for
+ * @param options.enabled - Whether to enable the query (default: true if specId provided)
+ */
+export function useLinkedTickets(
+  specId: string | undefined,
+  options?: { enabled?: boolean }
+) {
+  return useQuery<LinkedTicketsResponse>({
+    queryKey: specsKeys.linkedTickets(specId!),
+    queryFn: () => getLinkedTickets(specId!),
+    enabled: options?.enabled ?? !!specId,
+  })
+}
+
+/**
+ * Hook to link tickets to a spec.
+ * Associates one or more tickets with this specification.
+ */
+export function useLinkTickets(specId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<LinkTicketsResponse, Error, string[]>({
+    mutationFn: (ticketIds) => linkTicketsToSpec(specId, ticketIds),
+    onSuccess: () => {
+      // Invalidate spec detail to refresh linked_tickets count
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      // Invalidate linked tickets list
+      queryClient.invalidateQueries({ queryKey: specsKeys.linkedTickets(specId) })
+    },
+  })
+}
+
+/**
+ * Hook to unlink tickets from a spec.
+ * Removes the association between tickets and this specification.
+ */
+export function useUnlinkTickets(specId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation<{ spec_id: string; unlinked_count: number }, Error, string[]>({
+    mutationFn: (ticketIds) => unlinkTicketsFromSpec(specId, ticketIds),
+    onSuccess: () => {
+      // Invalidate spec detail to refresh linked_tickets count
+      queryClient.invalidateQueries({ queryKey: specsKeys.detail(specId) })
+      // Invalidate linked tickets list
+      queryClient.invalidateQueries({ queryKey: specsKeys.linkedTickets(specId) })
+    },
+  })
+}
+
+// ============================================================================
+// Export Hook
+// ============================================================================
+
+/**
+ * Hook to export a spec.
+ * Returns the spec data in JSON or Markdown format.
+ */
+export function useExportSpec() {
+  return useMutation<unknown, Error, { specId: string; format: SpecExportFormat }>({
+    mutationFn: ({ specId, format }) => exportSpec(specId, format),
   })
 }

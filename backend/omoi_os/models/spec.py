@@ -15,6 +15,7 @@ from omoi_os.utils.datetime import utc_now
 if TYPE_CHECKING:
     from omoi_os.models.project import Project
     from omoi_os.models.user import User
+    from omoi_os.models.ticket import Ticket
 
 
 class Spec(Base):
@@ -200,6 +201,10 @@ class Spec(Base):
         back_populates="spec",
         cascade="all, delete-orphan",
         order_by="SpecVersion.created_at.desc()",
+    )
+    tickets: Mapped[list["Ticket"]] = relationship(
+        "Ticket",
+        back_populates="spec",
     )
 
 

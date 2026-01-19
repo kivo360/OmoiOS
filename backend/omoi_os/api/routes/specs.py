@@ -942,6 +942,7 @@ class SpecResponse(BaseModel):
     description: Optional[str] = None
     status: str  # draft, requirements, design, executing, completed
     phase: str  # Requirements, Design, Implementation, Testing, Done
+    current_phase: str = "explore"  # State machine phase: explore, requirements, design, tasks, sync, complete
     progress: float = 0
     test_coverage: float = 0
     active_agents: int = 0
@@ -2309,6 +2310,443 @@ async def create_spec_pr(
             success=False,
             error=result.get("error"),
         )
+
+
+# ============================================================================
+# Linked Tickets Routes
+# ============================================================================
+
+
+class LinkTicketsRequest(BaseModel):
+    """Request to link tickets to a spec."""
+
+    ticket_ids: List[str] = Field(..., description="List of ticket IDs to link to this spec")
+
+
+class LinkTicketsResponse(BaseModel):
+    """Response from linking tickets."""
+
+    spec_id: str
+    linked_count: int
+    already_linked_count: int
+    ticket_ids: List[str]
+
+
+class LinkedTicketsResponse(BaseModel):
+    """Response containing tickets linked to a spec."""
+
+    spec_id: str
+    tickets: List[Dict[str, Any]]
+    total: int
+
+
+async def _link_tickets_to_spec_async(
+    db: DatabaseService,
+    spec_id: str,
+    ticket_ids: List[str],
+) -> Dict[str, Any]:
+    """Link tickets to a spec (ASYNC - non-blocking)."""
+    from omoi_os.models.ticket import Ticket as TicketModel
+
+    async with db.get_async_session() as session:
+        # Verify spec exists
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return {"error": "Spec not found", "linked_count": 0, "already_linked_count": 0}
+
+        linked_count = 0
+        already_linked_count = 0
+        linked_ids = []
+
+        for ticket_id in ticket_ids:
+            # Get the ticket
+            ticket_result = await session.execute(
+                select(TicketModel).filter(TicketModel.id == ticket_id)
+            )
+            ticket = ticket_result.scalar_one_or_none()
+            if not ticket:
+                continue
+
+            if ticket.spec_id == spec_id:
+                already_linked_count += 1
+                linked_ids.append(ticket_id)
+            else:
+                ticket.spec_id = spec_id
+                linked_count += 1
+                linked_ids.append(ticket_id)
+
+        await session.commit()
+
+        # Update linked_tickets count on spec
+        spec.linked_tickets = linked_count + already_linked_count
+
+        await session.commit()
+
+        return {
+            "linked_count": linked_count,
+            "already_linked_count": already_linked_count,
+            "ticket_ids": linked_ids,
+        }
+
+
+async def _unlink_tickets_from_spec_async(
+    db: DatabaseService,
+    spec_id: str,
+    ticket_ids: List[str],
+) -> Dict[str, Any]:
+    """Unlink tickets from a spec (ASYNC - non-blocking)."""
+    from omoi_os.models.ticket import Ticket as TicketModel
+
+    async with db.get_async_session() as session:
+        # Verify spec exists
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return {"error": "Spec not found", "unlinked_count": 0}
+
+        unlinked_count = 0
+
+        for ticket_id in ticket_ids:
+            # Get the ticket
+            ticket_result = await session.execute(
+                select(TicketModel).filter(
+                    TicketModel.id == ticket_id,
+                    TicketModel.spec_id == spec_id,
+                )
+            )
+            ticket = ticket_result.scalar_one_or_none()
+            if ticket:
+                ticket.spec_id = None
+                unlinked_count += 1
+
+        await session.commit()
+
+        # Update linked_tickets count
+        count_result = await session.execute(
+            select(TicketModel).filter(TicketModel.spec_id == spec_id)
+        )
+        remaining_count = len(count_result.scalars().all())
+        spec.linked_tickets = remaining_count
+
+        await session.commit()
+
+        return {"unlinked_count": unlinked_count}
+
+
+async def _get_linked_tickets_async(
+    db: DatabaseService,
+    spec_id: str,
+) -> Optional[List[Dict[str, Any]]]:
+    """Get tickets linked to a spec (ASYNC - non-blocking)."""
+    from omoi_os.models.ticket import Ticket as TicketModel
+
+    async with db.get_async_session() as session:
+        # Verify spec exists
+        result = await session.execute(
+            select(SpecModel).filter(SpecModel.id == spec_id)
+        )
+        spec = result.scalar_one_or_none()
+        if not spec:
+            return None
+
+        # Get linked tickets
+        tickets_result = await session.execute(
+            select(TicketModel)
+            .filter(TicketModel.spec_id == spec_id)
+            .order_by(TicketModel.created_at.desc())
+        )
+        tickets = tickets_result.scalars().all()
+
+        return [
+            {
+                "id": t.id,
+                "title": t.title,
+                "description": t.description,
+                "status": t.status,
+                "priority": t.priority,
+                "phase_id": t.phase_id,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in tickets
+        ]
+
+
+@router.post("/{spec_id}/link-tickets", response_model=LinkTicketsResponse)
+async def link_tickets_to_spec(
+    spec_id: str,
+    request: LinkTicketsRequest,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Link tickets to a spec.
+
+    Associates one or more tickets with this specification. Tickets can be
+    linked for tracking purposes or to indicate they were generated from
+    this spec.
+
+    Args:
+        spec_id: ID of the spec to link tickets to
+        request: LinkTicketsRequest with list of ticket IDs
+
+    Returns:
+        LinkTicketsResponse with counts of linked and already-linked tickets
+    """
+    result = await _link_tickets_to_spec_async(db, spec_id, request.ticket_ids)
+
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+
+    return LinkTicketsResponse(
+        spec_id=spec_id,
+        linked_count=result["linked_count"],
+        already_linked_count=result["already_linked_count"],
+        ticket_ids=result["ticket_ids"],
+    )
+
+
+@router.post("/{spec_id}/unlink-tickets")
+async def unlink_tickets_from_spec(
+    spec_id: str,
+    request: LinkTicketsRequest,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Unlink tickets from a spec.
+
+    Removes the association between tickets and this specification.
+
+    Args:
+        spec_id: ID of the spec to unlink tickets from
+        request: LinkTicketsRequest with list of ticket IDs
+
+    Returns:
+        Dict with unlinked_count
+    """
+    result = await _unlink_tickets_from_spec_async(db, spec_id, request.ticket_ids)
+
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+
+    return {"spec_id": spec_id, "unlinked_count": result["unlinked_count"]}
+
+
+@router.get("/{spec_id}/linked-tickets", response_model=LinkedTicketsResponse)
+async def get_linked_tickets(
+    spec_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Get tickets linked to a spec.
+
+    Returns all tickets that are associated with this specification.
+
+    Args:
+        spec_id: ID of the spec
+
+    Returns:
+        LinkedTicketsResponse with list of linked tickets
+    """
+    tickets = await _get_linked_tickets_async(db, spec_id)
+
+    if tickets is None:
+        raise HTTPException(status_code=404, detail="Spec not found")
+
+    return LinkedTicketsResponse(
+        spec_id=spec_id,
+        tickets=tickets,
+        total=len(tickets),
+    )
+
+
+# ============================================================================
+# Export Routes
+# ============================================================================
+
+
+class SpecExportFormat(str):
+    """Supported export formats."""
+    JSON = "json"
+    MARKDOWN = "markdown"
+
+
+@router.get("/{spec_id}/export")
+async def export_spec(
+    spec_id: str,
+    format: str = Query("json", description="Export format: json or markdown"),
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+    _: str = Depends(verify_spec_access),
+):
+    """
+    Export a spec in JSON or Markdown format.
+
+    Args:
+        spec_id: ID of the spec to export
+        format: Export format - "json" or "markdown"
+
+    Returns:
+        JSON object or Markdown string depending on format
+    """
+    from fastapi.responses import Response
+
+    # Get the spec with all relationships
+    spec = await _get_spec_async(db, spec_id)
+    if not spec:
+        raise HTTPException(status_code=404, detail="Spec not found")
+
+    # Build export data
+    export_data = {
+        "id": spec.id,
+        "title": spec.title,
+        "description": spec.description,
+        "status": spec.status,
+        "phase": spec.phase,
+        "current_phase": spec.current_phase,
+        "progress": spec.progress,
+        "test_coverage": spec.test_coverage,
+        "requirements_approved": spec.requirements_approved,
+        "design_approved": spec.design_approved,
+        "created_at": spec.created_at.isoformat() if spec.created_at else None,
+        "updated_at": spec.updated_at.isoformat() if spec.updated_at else None,
+        "requirements": [
+            {
+                "id": req.id,
+                "title": req.title,
+                "condition": req.condition,
+                "action": req.action,
+                "status": req.status,
+                "linked_design": req.linked_design,
+                "criteria": [
+                    {
+                        "id": c.id,
+                        "text": c.text,
+                        "completed": c.completed,
+                    }
+                    for c in req.criteria
+                ],
+            }
+            for req in spec.requirements
+        ],
+        "design": spec.design,
+        "tasks": [
+            {
+                "id": task.id,
+                "title": task.title,
+                "description": task.description,
+                "phase": task.phase,
+                "priority": task.priority,
+                "status": task.status,
+                "assigned_agent": task.assigned_agent,
+                "dependencies": task.dependencies,
+                "estimated_hours": task.estimated_hours,
+                "actual_hours": task.actual_hours,
+            }
+            for task in spec.tasks
+        ],
+    }
+
+    if format.lower() == "markdown":
+        # Generate Markdown
+        md_lines = [
+            f"# {spec.title}",
+            "",
+            f"**Status:** {spec.status}",
+            f"**Phase:** {spec.phase}",
+            f"**Progress:** {spec.progress * 100:.1f}%",
+            "",
+        ]
+
+        if spec.description:
+            md_lines.extend([
+                "## Description",
+                "",
+                spec.description,
+                "",
+            ])
+
+        if spec.requirements:
+            md_lines.extend([
+                "## Requirements",
+                "",
+            ])
+            for req in spec.requirements:
+                md_lines.append(f"### {req.title}")
+                md_lines.append("")
+                md_lines.append(f"**WHEN** {req.condition}")
+                md_lines.append(f"**THE SYSTEM SHALL** {req.action}")
+                md_lines.append("")
+                if req.criteria:
+                    md_lines.append("**Acceptance Criteria:**")
+                    for c in req.criteria:
+                        checkbox = "[x]" if c.completed else "[ ]"
+                        md_lines.append(f"- {checkbox} {c.text}")
+                    md_lines.append("")
+
+        if spec.design:
+            md_lines.extend([
+                "## Design",
+                "",
+            ])
+            if spec.design.get("architecture"):
+                md_lines.extend([
+                    "### Architecture",
+                    "",
+                    spec.design["architecture"],
+                    "",
+                ])
+            if spec.design.get("data_model"):
+                md_lines.extend([
+                    "### Data Model",
+                    "",
+                    spec.design["data_model"],
+                    "",
+                ])
+            if spec.design.get("api_spec"):
+                md_lines.extend([
+                    "### API Specification",
+                    "",
+                ])
+                for ep in spec.design["api_spec"]:
+                    endpoint = ep.get("endpoint") or ep.get("path", "")
+                    desc = ep.get("description") or ep.get("purpose", "")
+                    md_lines.append(f"- `{ep.get('method', 'GET')} {endpoint}` - {desc}")
+                md_lines.append("")
+
+        if spec.tasks:
+            md_lines.extend([
+                "## Tasks",
+                "",
+            ])
+            for task in spec.tasks:
+                checkbox = "[x]" if task.status == "completed" else "[ ]"
+                md_lines.append(f"- {checkbox} **{task.title}** ({task.priority}, {task.phase})")
+                if task.description:
+                    md_lines.append(f"  - {task.description}")
+            md_lines.append("")
+
+        markdown_content = "\n".join(md_lines)
+
+        return Response(
+            content=markdown_content,
+            media_type="text/markdown",
+            headers={
+                "Content-Disposition": f"attachment; filename={spec.id}.md"
+            },
+        )
+    else:
+        # Return JSON
+        return export_data
 
 
 # ============================================================================
