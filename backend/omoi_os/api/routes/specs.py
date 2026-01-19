@@ -766,7 +766,7 @@ class DesignArtifact(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def normalize_design_fields(cls, data):
-        """Convert empty dicts to None for string fields."""
+        """Convert structured data to Mermaid diagrams for visualization."""
         if isinstance(data, dict):
             # Handle architecture field
             arch = data.get("architecture")
@@ -774,9 +774,7 @@ class DesignArtifact(BaseModel):
                 if not arch:  # Empty dict
                     data["architecture"] = None
                 else:
-                    # Non-empty dict - convert to JSON string
-                    import json
-                    data["architecture"] = json.dumps(arch)
+                    data["architecture"] = cls._dict_to_mermaid_architecture(arch)
 
             # Handle data_model field
             dm = data.get("data_model")
@@ -784,10 +782,99 @@ class DesignArtifact(BaseModel):
                 if not dm:  # Empty dict
                     data["data_model"] = None
                 else:
-                    # Non-empty dict - convert to JSON string
-                    import json
-                    data["data_model"] = json.dumps(dm)
+                    data["data_model"] = cls._dict_to_mermaid_erd(dm)
         return data
+
+    @staticmethod
+    def _dict_to_mermaid_architecture(arch_data: dict) -> str:
+        """Convert architecture dict to Mermaid flowchart."""
+        lines = ["```mermaid", "flowchart TB"]
+
+        # Handle layers
+        if "layers" in arch_data:
+            layers = arch_data["layers"]
+            for i, layer in enumerate(layers):
+                layer_id = layer.replace(" ", "_").replace("-", "_")
+                lines.append(f"    {layer_id}[{layer}]")
+                if i > 0:
+                    prev_id = layers[i-1].replace(" ", "_").replace("-", "_")
+                    lines.append(f"    {prev_id} --> {layer_id}")
+
+        # Handle components
+        if "components" in arch_data:
+            for comp in arch_data["components"]:
+                if isinstance(comp, dict):
+                    name = comp.get("name", "Component")
+                    comp_id = name.replace(" ", "_").replace("-", "_")
+                    lines.append(f"    {comp_id}[{name}]")
+                elif isinstance(comp, str):
+                    comp_id = comp.replace(" ", "_").replace("-", "_")
+                    lines.append(f"    {comp_id}[{comp}]")
+
+        # Handle services
+        if "services" in arch_data:
+            for svc in arch_data["services"]:
+                if isinstance(svc, dict):
+                    name = svc.get("name", "Service")
+                    svc_id = name.replace(" ", "_").replace("-", "_")
+                    lines.append(f"    {svc_id}[{name}]")
+                elif isinstance(svc, str):
+                    svc_id = svc.replace(" ", "_").replace("-", "_")
+                    lines.append(f"    {svc_id}[{svc}]")
+
+        # If nothing was added, just dump as comment
+        if len(lines) == 2:
+            import json
+            lines.append(f"    %% Raw data: {json.dumps(arch_data)}")
+
+        lines.append("```")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _dict_to_mermaid_erd(dm_data: dict) -> str:
+        """Convert data model dict to Mermaid ERD."""
+        lines = ["```mermaid", "erDiagram"]
+
+        # Handle tables/entities
+        tables = dm_data.get("tables", dm_data.get("entities", []))
+        for table in tables:
+            if isinstance(table, dict):
+                name = table.get("name", "Entity")
+                fields = table.get("fields", table.get("columns", []))
+                lines.append(f"    {name} {{")
+                for field in fields:
+                    if isinstance(field, dict):
+                        fname = field.get("name", "field")
+                        ftype = field.get("type", "string")
+                        lines.append(f"        {ftype} {fname}")
+                    elif isinstance(field, str):
+                        lines.append(f"        string {field}")
+                lines.append("    }")
+            elif isinstance(table, str):
+                lines.append(f"    {table} {{")
+                lines.append("    }")
+
+        # Handle relationships
+        relationships = dm_data.get("relationships", [])
+        for rel in relationships:
+            if isinstance(rel, dict):
+                from_tbl = rel.get("from", "A")
+                to_tbl = rel.get("to", "B")
+                rel_type = rel.get("type", "one-to-many")
+                if rel_type == "one-to-one":
+                    lines.append(f"    {from_tbl} ||--|| {to_tbl} : has")
+                elif rel_type == "one-to-many":
+                    lines.append(f"    {from_tbl} ||--o{{ {to_tbl} : has")
+                elif rel_type == "many-to-many":
+                    lines.append(f"    {from_tbl} }}o--o{{ {to_tbl} : has")
+
+        # If nothing was added, just dump as comment
+        if len(lines) == 2:
+            import json
+            lines.append(f"    %% Raw data: {json.dumps(dm_data)}")
+
+        lines.append("```")
+        return "\n".join(lines)
 
 
 class SpecTask(BaseModel):
