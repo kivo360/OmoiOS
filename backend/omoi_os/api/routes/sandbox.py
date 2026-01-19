@@ -27,7 +27,7 @@ from sqlalchemy import select
 from omoi_os.api.dependencies import get_db_service
 from omoi_os.logging import get_logger
 from omoi_os.models.billing import BillingAccount
-from omoi_os.models.spec import Spec
+from omoi_os.models.spec import Spec, SpecRequirement, SpecTask, SpecAcceptanceCriterion
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.project import Project
@@ -316,8 +316,252 @@ async def _update_spec_phase_data(
                 }
             )
 
+        # Sync phase outputs to related tables for UI display
+        # This runs AFTER the main transaction commits to avoid nested transaction issues
+        for phase_name, phase_content in phase_data.items():
+            if not isinstance(phase_content, dict):
+                continue
+
+            if phase_name == "requirements":
+                await _sync_requirements_to_table(db, spec_id, phase_content)
+            elif phase_name == "tasks":
+                await _sync_tasks_to_table(db, spec_id, phase_content)
+            elif phase_name == "design":
+                await _sync_design_to_spec(db, spec_id, phase_content)
+
     except Exception as e:
         logger.error(f"Failed to update spec {spec_id} phase_data: {e}", exc_info=True)
+
+
+async def _sync_requirements_to_table(
+    db: DatabaseService,
+    spec_id: str,
+    requirements_output: dict,
+) -> int:
+    """
+    Sync requirements from phase output to spec_requirements table.
+
+    This function takes the requirements phase output and creates/updates
+    SpecRequirement records so they appear in the UI.
+
+    Args:
+        db: Database service
+        spec_id: Spec UUID
+        requirements_output: Dict containing 'requirements' list from phase output
+
+    Returns:
+        Number of requirements synced
+    """
+    requirements_list = requirements_output.get("requirements", [])
+    if not requirements_list:
+        logger.debug(f"No requirements in phase output for spec {spec_id}")
+        return 0
+
+    synced_count = 0
+    try:
+        async with db.get_async_session() as session:
+            for req_data in requirements_list:
+                # Extract fields from phase output format
+                req_id = req_data.get("id", f"req-{synced_count + 1}")
+                text = req_data.get("text", "")
+
+                # Parse EARS format: WHEN [trigger] THE SYSTEM SHALL [action]
+                # or: IF [condition] THEN THE SYSTEM SHALL [action]
+                # or: THE SYSTEM SHALL [action]
+                condition = ""
+                action = text
+
+                # Try to extract condition/trigger from EARS format
+                text_upper = text.upper()
+                if "WHEN " in text_upper and " THE SYSTEM SHALL " in text_upper:
+                    when_idx = text_upper.index("WHEN ") + 5
+                    shall_idx = text_upper.index(" THE SYSTEM SHALL ")
+                    condition = text[when_idx:shall_idx].strip()
+                    action = text[shall_idx + 18:].strip()
+                elif "IF " in text_upper and " THEN THE SYSTEM SHALL " in text_upper:
+                    if_idx = text_upper.index("IF ") + 3
+                    then_idx = text_upper.index(" THEN THE SYSTEM SHALL ")
+                    condition = text[if_idx:then_idx].strip()
+                    action = text[then_idx + 23:].strip()
+                elif " THE SYSTEM SHALL " in text_upper:
+                    shall_idx = text_upper.index(" THE SYSTEM SHALL ")
+                    action = text[shall_idx + 18:].strip()
+
+                # Create title from category + type or from ID
+                title = req_data.get("category", "") or req_id
+                req_type = req_data.get("type", "functional")
+
+                # Check if requirement already exists
+                existing = await session.execute(
+                    select(SpecRequirement).where(
+                        SpecRequirement.spec_id == spec_id,
+                        SpecRequirement.title == title
+                    )
+                )
+                existing_req = existing.scalar_one_or_none()
+
+                if existing_req:
+                    # Update existing
+                    existing_req.condition = condition or "General"
+                    existing_req.action = action
+                    existing_req.updated_at = utc_now()
+                else:
+                    # Create new
+                    new_req = SpecRequirement(
+                        spec_id=spec_id,
+                        title=title,
+                        condition=condition or "General",
+                        action=action,
+                        status="pending",
+                    )
+                    session.add(new_req)
+
+                    # Add acceptance criteria if present
+                    acceptance_criteria = req_data.get("acceptance_criteria", [])
+                    for crit_text in acceptance_criteria:
+                        criterion = SpecAcceptanceCriterion(
+                            requirement_id=new_req.id,
+                            text=crit_text,
+                            completed=False,
+                        )
+                        session.add(criterion)
+
+                synced_count += 1
+
+            await session.commit()
+            logger.info(f"Synced {synced_count} requirements for spec {spec_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to sync requirements for spec {spec_id}: {e}", exc_info=True)
+
+    return synced_count
+
+
+async def _sync_tasks_to_table(
+    db: DatabaseService,
+    spec_id: str,
+    tasks_output: dict,
+) -> int:
+    """
+    Sync tasks from phase output to spec_tasks table.
+
+    This function takes the tasks phase output and creates/updates
+    SpecTask records so they appear in the UI.
+
+    Args:
+        db: Database service
+        spec_id: Spec UUID
+        tasks_output: Dict containing 'tasks' list from phase output
+
+    Returns:
+        Number of tasks synced
+    """
+    tasks_list = tasks_output.get("tasks", [])
+    if not tasks_list:
+        logger.debug(f"No tasks in phase output for spec {spec_id}")
+        return 0
+
+    synced_count = 0
+    try:
+        async with db.get_async_session() as session:
+            for task_data in tasks_list:
+                task_id = task_data.get("id", f"task-{synced_count + 1}")
+                title = task_data.get("title", task_id)
+                description = task_data.get("description", "")
+
+                # Map fields
+                phase = task_data.get("phase", "Implementation")
+                priority = task_data.get("priority", "medium")
+                estimated_hours = task_data.get("estimated_hours")
+                dependencies = task_data.get("dependencies", [])
+
+                # Check if task already exists
+                existing = await session.execute(
+                    select(SpecTask).where(
+                        SpecTask.spec_id == spec_id,
+                        SpecTask.title == title
+                    )
+                )
+                existing_task = existing.scalar_one_or_none()
+
+                if existing_task:
+                    # Update existing
+                    existing_task.description = description
+                    existing_task.phase = phase
+                    existing_task.priority = priority
+                    existing_task.estimated_hours = estimated_hours
+                    existing_task.dependencies = dependencies
+                    existing_task.updated_at = utc_now()
+                else:
+                    # Create new
+                    new_task = SpecTask(
+                        spec_id=spec_id,
+                        title=title,
+                        description=description,
+                        phase=phase,
+                        priority=priority,
+                        status="pending",
+                        estimated_hours=estimated_hours,
+                        dependencies=dependencies,
+                    )
+                    session.add(new_task)
+
+                synced_count += 1
+
+            await session.commit()
+            logger.info(f"Synced {synced_count} tasks for spec {spec_id}")
+
+    except Exception as e:
+        logger.error(f"Failed to sync tasks for spec {spec_id}: {e}", exc_info=True)
+
+    return synced_count
+
+
+async def _sync_design_to_spec(
+    db: DatabaseService,
+    spec_id: str,
+    design_output: dict,
+) -> bool:
+    """
+    Sync design from phase output to spec.design JSONB field.
+
+    Args:
+        db: Database service
+        spec_id: Spec UUID
+        design_output: Dict containing design artifacts from phase output
+
+    Returns:
+        True if synced successfully
+    """
+    try:
+        async with db.get_async_session() as session:
+            result = await session.execute(
+                select(Spec).where(Spec.id == spec_id)
+            )
+            spec = result.scalar_one_or_none()
+
+            if not spec:
+                logger.warning(f"Spec {spec_id} not found for design sync")
+                return False
+
+            # Extract design components
+            spec.design = {
+                "architecture": design_output.get("architecture", {}),
+                "data_model": design_output.get("data_model", {}),
+                "api_spec": design_output.get("api_endpoints", []),
+                "components": design_output.get("components", []),
+                "error_handling": design_output.get("error_handling", {}),
+                "integration_points": design_output.get("integration_points", []),
+            }
+            spec.updated_at = utc_now()
+
+            await session.commit()
+            logger.info(f"Synced design for spec {spec_id}")
+            return True
+
+    except Exception as e:
+        logger.error(f"Failed to sync design for spec {spec_id}: {e}", exc_info=True)
+        return False
 
 
 # ============================================================================
