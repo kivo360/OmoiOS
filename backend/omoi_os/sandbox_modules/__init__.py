@@ -304,6 +304,7 @@ def get_spec_sandbox_dependencies_install_script() -> str:
     The spec-sandbox requires these packages:
     - httpx (for HTTPReporter)
     - pydantic, pydantic-settings (for config)
+    - pyyaml (for YAML parsing)
     - click (for CLI, though we don't use it in sandbox)
     - claude-agent-sdk (for executor)
 
@@ -315,8 +316,8 @@ def get_spec_sandbox_dependencies_install_script() -> str:
 
 # Try uv first (faster), fall back to pip
 if command -v uv &> /dev/null; then
-    uv pip install httpx pydantic pydantic-settings 2>/dev/null || pip install httpx pydantic pydantic-settings
+    uv pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || pip install httpx pydantic pydantic-settings pyyaml
 else
-    pip install httpx pydantic pydantic-settings
+    pip install httpx pydantic pydantic-settings pyyaml
 fi
 '''

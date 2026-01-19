@@ -1355,11 +1355,11 @@ class DaytonaSpawnerService:
                     else:
                         env_vars["PYTHONPATH"] = "/tmp/spec_sandbox_pkg"
 
-                    # Install spec-sandbox dependencies (httpx, pydantic, pydantic-settings)
+                    # Install spec-sandbox dependencies (httpx, pydantic, pydantic-settings, pyyaml)
                     # These are needed by the spec-sandbox but may not be in the sandbox
                     deps_install = (
-                        "uv pip install httpx pydantic pydantic-settings 2>/dev/null || "
-                        "pip install httpx pydantic pydantic-settings 2>/dev/null || "
+                        "uv pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || "
+                        "pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || "
                         "echo 'Dependencies may already be installed'"
                     )
                     sandbox.process.exec(deps_install, timeout=120)
