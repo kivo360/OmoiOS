@@ -1057,7 +1057,8 @@ async def post_sandbox_event(
                         f"event_type={event.event_type}, sandbox_id={sandbox_id}"
                     )
                     # Handle spec completion - update spec's phase_data
-                    if event.event_type == "agent.completed":
+                    # Also handle continuous.completed for defense in depth
+                    if event.event_type in ("agent.completed", "continuous.completed"):
                         phase_data = event.event_data.get("phase_data")
                         if phase_data:
                             await _update_spec_phase_data(

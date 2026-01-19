@@ -4305,6 +4305,87 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info(f"Loaded phase data for phases: {list(phase_data.keys())}")
         return phase_data
 
+    async def _run_spec_sandbox_subsystem(
+        self, reporter: Optional["EventReporter"] = None
+    ) -> Optional[int]:
+        """Run spec execution using the spec-sandbox subsystem.
+
+        The spec-sandbox subsystem is a standalone package that emits proper
+        spec.* events (spec.phase_started, spec.phase_completed, etc.) via
+        HTTPReporter. This is the preferred method for production spec execution.
+
+        Environment variables used by spec-sandbox:
+        - SPEC_ID: Spec identifier
+        - SPEC_PHASE: Current/starting phase
+        - REPORTER_MODE: 'http' for production
+        - CALLBACK_URL: Backend URL for HTTP events
+        - ANTHROPIC_API_KEY: Claude API key
+        - MODEL: Claude model to use
+        - WORKING_DIRECTORY: Workspace directory
+        - PHASE_CONTEXT_B64: Accumulated context from previous phases
+
+        Returns:
+            0 on success, 1 on failure, None if spec-sandbox not available
+        """
+        logger.info("=" * 60)
+        logger.info("SPEC-SANDBOX SUBSYSTEM: Starting Phase-Aware Execution")
+        logger.info("=" * 60)
+        logger.info(f"SPEC-SANDBOX: spec_id = {self.config.spec_id}")
+        logger.info(f"SPEC-SANDBOX: starting_phase = {self.config.spec_phase}")
+        logger.info(f"SPEC-SANDBOX: reporter_mode = {os.environ.get('REPORTER_MODE', 'not set')}")
+        logger.info(f"SPEC-SANDBOX: callback_url = {os.environ.get('CALLBACK_URL', 'not set')}")
+        logger.info(f"SPEC-SANDBOX: working_directory = {self.config.cwd}")
+
+        try:
+            # Import the spec-sandbox state machine (installed as standalone package)
+            from spec_sandbox.worker.state_machine import SpecStateMachine
+            from spec_sandbox.config import SpecSandboxSettings
+
+            logger.info("SPEC-SANDBOX: Successfully imported spec_sandbox package")
+
+            # The spec-sandbox reads settings from environment variables
+            # Ensure critical env vars are set
+            if not os.environ.get("SPEC_ID"):
+                os.environ["SPEC_ID"] = self.config.spec_id
+            if not os.environ.get("SPEC_PHASE") and self.config.spec_phase:
+                os.environ["SPEC_PHASE"] = self.config.spec_phase
+            if not os.environ.get("WORKING_DIRECTORY") and self.config.cwd:
+                os.environ["WORKING_DIRECTORY"] = self.config.cwd
+            if not os.environ.get("MODEL") and self.config.model:
+                os.environ["MODEL"] = self.config.model
+
+            # Load settings from environment
+            settings = SpecSandboxSettings()
+            logger.info(f"SPEC-SANDBOX: Settings loaded - reporter_mode={settings.reporter_mode}")
+            logger.info(f"SPEC-SANDBOX: Settings loaded - callback_url={settings.callback_url}")
+
+            # Create the state machine - it handles reporter creation internally
+            # When reporter_mode=http, it creates HTTPReporter with callback_url
+            state_machine = SpecStateMachine(settings=settings)
+
+            logger.info("SPEC-SANDBOX: Invoking state_machine.run()")
+            success = await state_machine.run()
+
+            if success:
+                logger.info("=" * 60)
+                logger.info("SPEC-SANDBOX: Completed Successfully")
+                logger.info("=" * 60)
+                return 0
+            else:
+                logger.error("=" * 60)
+                logger.error("SPEC-SANDBOX: Failed")
+                logger.error("=" * 60)
+                return 1
+
+        except ImportError as e:
+            logger.warning(f"SPEC-SANDBOX: spec_sandbox package not available: {e}")
+            logger.info("SPEC-SANDBOX: Falling back to omoi_os.workers.spec_state_machine")
+            # Return None to signal fallback to the backend's state machine
+            return None
+        except Exception as e:
+            logger.exception(f"SPEC-SANDBOX: Unexpected error: {e}")
+            return 1
+
     async def _run_spec_state_machine(
         self, reporter: Optional["EventReporter"] = None
     ) -> int:
@@ -4338,6 +4419,18 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info(f"SPEC STATE MACHINE: starting_phase = {self.config.spec_phase}")
         logger.info(f"SPEC STATE MACHINE: phase_data_keys = {list(self.config.phase_data.keys())}")
         logger.info(f"SPEC STATE MACHINE: working_directory = {self.config.cwd}")
+
+        # Check if we should use the spec-sandbox subsystem (standalone package)
+        # The spec-sandbox emits proper spec.* events via HTTPReporter
+        use_spec_sandbox = os.environ.get("USE_SPEC_SANDBOX", "").lower() == "true"
+
+        if use_spec_sandbox:
+            result = await self._run_spec_sandbox_subsystem(reporter)
+            # If spec-sandbox returned a result (0 or 1), use it
+            # If it returned None (package not available), fall back to backend's state machine
+            if result is not None:
+                return result
+            logger.info("SPEC STATE MACHINE: Falling back to omoi_os.workers.spec_state_machine")
 
         try:
             # Import the state machine (avoid circular imports at module level)
@@ -4947,10 +5040,18 @@ The following dependencies were automatically installed before you started:
 
                                 # Report continuous mode completion
                                 stop_reason = self._get_stop_reason()
+
+                                # Read phase data for spec sandboxes (defense in depth)
+                                spec_phase_data = {}
+                                if self.config.spec_id:
+                                    spec_phase_data = await self._read_spec_phase_data()
+
                                 await reporter.report(
                                     "continuous.completed",
                                     {
                                         "stop_reason": stop_reason,
+                                        "spec_id": self.config.spec_id,  # Include spec_id if present
+                                        "phase_data": spec_phase_data,  # Include phase_data for specs
                                         **self.iteration_state.to_event_data(),
                                     },
                                 )

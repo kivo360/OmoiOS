@@ -228,6 +228,8 @@ class PhaseProgressionService:
 
                 old_status = ticket.status
                 ticket.status = TicketStatus.BUILDING.value
+                # Sync phase_id to keep board column in sync
+                ticket.phase_id = "PHASE_IMPLEMENTATION"
                 ticket.updated_at = utc_now()
 
                 session.commit()
@@ -250,6 +252,7 @@ class PhaseProgressionService:
                         payload={
                             "from_status": old_status,
                             "to_status": TicketStatus.BUILDING.value,
+                            "phase_id": "PHASE_IMPLEMENTATION",
                             "reason": f"implement_feature task {task_id} started",
                             "task_id": task_id,
                         },
@@ -437,6 +440,8 @@ class PhaseProgressionService:
 
                 old_status = ticket.status
                 ticket.status = TicketStatus.DONE.value
+                # Sync phase_id to keep board column in sync
+                ticket.phase_id = "PHASE_DONE"
                 ticket.updated_at = utc_now()
 
                 session.commit()
@@ -459,6 +464,7 @@ class PhaseProgressionService:
                         payload={
                             "from_status": old_status,
                             "to_status": TicketStatus.DONE.value,
+                            "phase_id": "PHASE_DONE",
                             "reason": f"implement_feature task {task_id} completed",
                             "task_id": task_id,
                         },
