@@ -51,6 +51,9 @@ WORKDIR /app
 # Copy backend application code
 COPY --from=builder /app/backend /app
 
+# Copy subsystems (needed by sandbox_modules for spec-sandbox upload)
+COPY --from=builder /app/subsystems /app/subsystems
+
 # Copy startup script (from backend directory in build context)
 COPY backend/docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
