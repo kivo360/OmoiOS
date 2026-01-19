@@ -1122,6 +1122,12 @@ def _spec_to_response(spec: SpecModel) -> SpecResponse:
     if spec.execution:
         execution = SpecExecution(**spec.execution)
 
+    # Compute linked_tickets from spec_context if available
+    linked_tickets_count = spec.linked_tickets
+    if spec.spec_context and spec.spec_context.get("source_ticket_id"):
+        # At minimum, this spec is linked to its source ticket
+        linked_tickets_count = max(1, linked_tickets_count)
+
     return SpecResponse(
         id=spec.id,
         project_id=spec.project_id,
@@ -1132,7 +1138,7 @@ def _spec_to_response(spec: SpecModel) -> SpecResponse:
         progress=spec.progress,
         test_coverage=spec.test_coverage,
         active_agents=spec.active_agents,
-        linked_tickets=spec.linked_tickets,
+        linked_tickets=linked_tickets_count,
         requirements=requirements,
         design=design,
         tasks=tasks,
