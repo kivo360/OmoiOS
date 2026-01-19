@@ -35,6 +35,8 @@ class TestSyncStats:
         assert stats.criteria_skipped == 0
         assert stats.tasks_created == 0
         assert stats.tasks_skipped == 0
+        assert stats.tickets_created == 0
+        assert stats.tickets_skipped == 0
         assert stats.errors == []
 
     def test_to_dict(self):
@@ -43,6 +45,7 @@ class TestSyncStats:
             requirements_created=5,
             requirements_skipped=2,
             tasks_created=10,
+            tickets_created=10,
             errors=["error1"],
         )
         result = stats.to_dict()
@@ -50,6 +53,7 @@ class TestSyncStats:
         assert result["requirements_created"] == 5
         assert result["requirements_skipped"] == 2
         assert result["tasks_created"] == 10
+        assert result["tickets_created"] == 10
         assert result["errors"] == ["error1"]
 
     def test_accumulation(self):
