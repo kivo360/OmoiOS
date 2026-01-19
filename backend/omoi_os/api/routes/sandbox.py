@@ -1089,6 +1089,26 @@ async def post_sandbox_event(
                                 f"Received {event.event_type} for spec {spec_id} but phase_data is empty or missing. "
                                 f"event_data keys: {list(event.event_data.keys())}"
                             )
+                    # Handle incremental phase completion - sync phase_data as each phase finishes
+                    elif event.event_type == "spec.phase_completed":
+                        phase_name = event.event_data.get("phase")
+                        phase_output = event.event_data.get("phase_output")
+                        if phase_name and phase_output:
+                            logger.info(
+                                f"Incremental sync: spec {spec_id} phase {phase_name} completed"
+                            )
+                            await _update_spec_phase_data(
+                                db=db,
+                                spec_id=spec_id,
+                                phase_data={phase_name: phase_output},
+                                success=True,
+                            )
+                        else:
+                            # Log but don't warn - older sandboxes won't have phase_output
+                            logger.debug(
+                                f"spec.phase_completed for {spec_id} missing phase or phase_output: "
+                                f"phase={phase_name}, has_output={phase_output is not None}"
+                            )
                 else:
                     logger.warning(
                         f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
