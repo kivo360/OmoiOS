@@ -803,17 +803,23 @@ class DaytonaSpawnerService:
         resume_transcript: Optional[str] = None,
         extra_env: Optional[Dict[str, str]] = None,
     ) -> str:
-        """Spawn a Daytona sandbox for executing a spec phase.
+        """Spawn a Daytona sandbox for executing the full spec workflow.
 
-        This is optimized for the spec-driven state machine workflow, where
-        each phase (explore, requirements, design, tasks, sync) runs in
-        focused short sessions with checkpointing.
+        This spawns a sandbox that runs ALL phases in sequence:
+        explore → requirements → design → tasks → sync
+
+        The `phase` parameter is used for:
+        - Sandbox ID generation (for tracking/logging)
+        - Execution mode mapping (exploration vs implementation)
+
+        Note: The sandbox runs ALL phases regardless of which phase is passed.
+        The state machine orchestrates the full workflow internally.
 
         Args:
             spec_id: ID of the spec being processed
-            phase: Current phase (explore, requirements, design, tasks, sync)
+            phase: Starting phase indicator (used for naming/mode, not limiting execution)
             project_id: Project ID for the spec
-            phase_context: Accumulated context from previous phases (phase_data JSONB)
+            phase_context: Initial context (e.g., title, description from launch request)
             resume_transcript: Base64-encoded session transcript for resumption
             extra_env: Additional environment variables
 
@@ -858,7 +864,9 @@ class DaytonaSpawnerService:
 
         env_vars = {
             "SPEC_ID": spec_id,
-            "SPEC_PHASE": phase,
+            # Note: SPEC_PHASE is intentionally NOT set so the state machine runs ALL phases
+            # When SPEC_PHASE is set, the state machine runs only that single phase
+            # When SPEC_PHASE is not set, it runs explore → requirements → design → tasks → sync
             "PROJECT_ID": project_id,
             "EXECUTION_MODE": execution_mode,
             "MCP_SERVER_URL": self.mcp_server_url,
@@ -875,6 +883,10 @@ class DaytonaSpawnerService:
             "USE_SPEC_SANDBOX": "true",
             # Explicitly disable continuous mode - spec state machine handles iteration
             "CONTINUOUS_MODE": "false",
+            # Increase max turns per phase (default is 50, we increase to 100 for complex specs)
+            "MAX_TURNS": "100",
+            # Increase budget to allow for all 5 phases (default is $10)
+            "MAX_BUDGET_USD": "50.0",
         }
 
         # ==== GitHub Integration: Fetch credentials and repo info ====
