@@ -14,7 +14,7 @@ from typing import Optional, List, Any, Dict
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -740,6 +740,25 @@ class SpecTask(BaseModel):
     actual_hours: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_validator("dependencies", mode="before")
+    @classmethod
+    def normalize_dependencies(cls, v):
+        """Handle both list and dict formats for dependencies.
+
+        The spec-sandbox stores dependencies as a dict:
+        {'depends_on': [...], 'blocks': [...], 'blocked_by': [...]}
+
+        The API returns a simple list of dependency IDs.
+        """
+        if v is None:
+            return []
+        if isinstance(v, list):
+            return v
+        if isinstance(v, dict):
+            # Extract depends_on list from the dict
+            return v.get("depends_on", [])
+        return []
 
 
 class SpecExecution(BaseModel):
