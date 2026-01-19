@@ -864,9 +864,11 @@ class DaytonaSpawnerService:
 
         env_vars = {
             "SPEC_ID": spec_id,
-            # Note: SPEC_PHASE is intentionally NOT set so the state machine runs ALL phases
-            # When SPEC_PHASE is set, the state machine runs only that single phase
-            # When SPEC_PHASE is not set, it runs explore → requirements → design → tasks → sync
+            # SPEC_PHASE="all" tells the state machine to run ALL phases in sequence
+            # (explore → requirements → design → tasks → sync)
+            # This is required for the worker to trigger the spec state machine path
+            # (worker checks: if self.config.spec_phase and self.config.spec_id)
+            "SPEC_PHASE": "all",
             "PROJECT_ID": project_id,
             "EXECUTION_MODE": execution_mode,
             "MCP_SERVER_URL": self.mcp_server_url,
