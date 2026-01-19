@@ -60,6 +60,7 @@ export interface Spec {
   description: string | null
   status: string
   phase: string
+  current_phase: string  // State machine phase: explore, requirements, design, tasks, sync, complete
   progress: number
   test_coverage: number
   active_agents: number
@@ -596,4 +597,101 @@ export async function getSpecEvents(
   return apiRequest<SpecEventsResponse>(
     `/api/v1/specs/${specId}/events${query ? `?${query}` : ""}`
   )
+}
+
+// ============================================================================
+// Linked Tickets
+// ============================================================================
+
+export interface LinkedTicket {
+  id: string
+  title: string
+  description: string | null
+  status: string
+  priority: string
+  phase_id: string
+  created_at: string | null
+}
+
+export interface LinkTicketsRequest {
+  ticket_ids: string[]
+}
+
+export interface LinkTicketsResponse {
+  spec_id: string
+  linked_count: number
+  already_linked_count: number
+  ticket_ids: string[]
+}
+
+export interface LinkedTicketsResponse {
+  spec_id: string
+  tickets: LinkedTicket[]
+  total: number
+}
+
+/**
+ * Link tickets to a spec.
+ * Associates one or more tickets with this specification.
+ */
+export async function linkTicketsToSpec(
+  specId: string,
+  ticketIds: string[]
+): Promise<LinkTicketsResponse> {
+  return apiRequest<LinkTicketsResponse>(`/api/v1/specs/${specId}/link-tickets`, {
+    method: "POST",
+    body: { ticket_ids: ticketIds },
+  })
+}
+
+/**
+ * Unlink tickets from a spec.
+ * Removes the association between tickets and this specification.
+ */
+export async function unlinkTicketsFromSpec(
+  specId: string,
+  ticketIds: string[]
+): Promise<{ spec_id: string; unlinked_count: number }> {
+  return apiRequest<{ spec_id: string; unlinked_count: number }>(
+    `/api/v1/specs/${specId}/unlink-tickets`,
+    {
+      method: "POST",
+      body: { ticket_ids: ticketIds },
+    }
+  )
+}
+
+/**
+ * Get tickets linked to a spec.
+ * Returns all tickets that are associated with this specification.
+ */
+export async function getLinkedTickets(specId: string): Promise<LinkedTicketsResponse> {
+  return apiRequest<LinkedTicketsResponse>(`/api/v1/specs/${specId}/linked-tickets`)
+}
+
+// ============================================================================
+// Export
+// ============================================================================
+
+export type SpecExportFormat = "json" | "markdown"
+
+/**
+ * Export a spec in JSON or Markdown format.
+ * Returns the spec data in the requested format.
+ */
+export async function exportSpec(
+  specId: string,
+  format: SpecExportFormat = "json"
+): Promise<unknown> {
+  // For markdown, we need to handle it differently since it returns text
+  if (format === "markdown") {
+    const response = await fetch(`/api/v1/specs/${specId}/export?format=markdown`, {
+      credentials: "include",
+    })
+    if (!response.ok) {
+      throw new Error(`Failed to export spec: ${response.statusText}`)
+    }
+    return response.text()
+  }
+  return apiRequest<unknown>(`/api/v1/specs/${specId}/export?format=${format}`)
 }

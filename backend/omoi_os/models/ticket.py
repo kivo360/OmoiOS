@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from omoi_os.models.project import Project
     from omoi_os.models.ticket_pull_request import TicketPullRequest
     from omoi_os.models.ticket_commit import TicketCommit
+    from omoi_os.models.spec import Spec
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
@@ -131,9 +132,21 @@ class Ticket(Base):
         index=True,
     )
 
+    # Spec relationship (ticket can be linked to a spec)
+    spec_id: Mapped[Optional[str]] = mapped_column(
+        String,
+        ForeignKey("specs.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Linked specification for spec-driven development",
+    )
+
     # Relationships
     project: Mapped[Optional["Project"]] = relationship(
         "Project", back_populates="tickets"
+    )
+    spec: Mapped[Optional["Spec"]] = relationship(
+        "Spec", back_populates="tickets"
     )
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="ticket", cascade="all, delete-orphan"

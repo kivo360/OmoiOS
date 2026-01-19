@@ -21,8 +21,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ArrowLeft, Plus, FileText, Clock, CheckCircle, AlertCircle, PlayCircle, Loader2, FolderGit2 } from "lucide-react"
-import { useProjectSpecs, useCreateSpec } from "@/hooks/useSpecs"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Plus, FileText, Clock, CheckCircle, AlertCircle, Loader2, FolderGit2, Trash2, X } from "lucide-react"
+import { useProjectSpecs, useCreateSpec, useDeleteSpec } from "@/hooks/useSpecs"
 import { useProject } from "@/hooks/useProjects"
 
 interface SpecsPageProps {
@@ -43,6 +44,8 @@ export default function SpecsPage({ params }: SpecsPageProps) {
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newDescription, setNewDescription] = useState("")
+  const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set())
+  const [isDeleting, setIsDeleting] = useState(false)
 
   // Poll every 5s when any spec is executing to see status updates
   const { data, isLoading, error } = useProjectSpecs(projectId, {
@@ -53,8 +56,65 @@ export default function SpecsPage({ params }: SpecsPageProps) {
   })
   const { data: project } = useProject(projectId)
   const createMutation = useCreateSpec()
+  const deleteSpecMutation = useDeleteSpec()
 
   const specs = data?.specs || []
+
+  // Selection handlers
+  const toggleSelectSpec = (specId: string) => {
+    setSelectedSpecs(prev => {
+      const next = new Set(prev)
+      if (next.has(specId)) {
+        next.delete(specId)
+      } else {
+        next.add(specId)
+      }
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedSpecs.size === specs.length) {
+      setSelectedSpecs(new Set())
+    } else {
+      setSelectedSpecs(new Set(specs.map(s => s.id)))
+    }
+  }
+
+  const clearSelection = () => {
+    setSelectedSpecs(new Set())
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedSpecs.size === 0) return
+
+    const count = selectedSpecs.size
+    if (!confirm(`Are you sure you want to archive ${count} spec${count > 1 ? 's' : ''}? This action cannot be undone.`)) {
+      return
+    }
+
+    setIsDeleting(true)
+    let successCount = 0
+    let failCount = 0
+
+    for (const specId of selectedSpecs) {
+      try {
+        await deleteSpecMutation.mutateAsync({ specId, projectId })
+        successCount++
+      } catch {
+        failCount++
+      }
+    }
+
+    setIsDeleting(false)
+    setSelectedSpecs(new Set())
+
+    if (failCount === 0) {
+      toast.success(`Archived ${successCount} spec${successCount > 1 ? 's' : ''} successfully`)
+    } else {
+      toast.error(`Archived ${successCount}, failed ${failCount}`)
+    }
+  }
 
   const formatTimeAgo = (dateStr: string) => {
     const date = new Date(dateStr)
@@ -173,6 +233,49 @@ export default function SpecsPage({ params }: SpecsPageProps) {
         </Dialog>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {specs.length > 0 && (
+        <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg border">
+          <Checkbox
+            checked={selectedSpecs.size === specs.length && specs.length > 0}
+            onCheckedChange={toggleSelectAll}
+            aria-label="Select all specs"
+          />
+          <span className="text-sm text-muted-foreground">
+            {selectedSpecs.size > 0
+              ? `${selectedSpecs.size} of ${specs.length} selected`
+              : `${specs.length} spec${specs.length > 1 ? 's' : ''}`}
+          </span>
+          {selectedSpecs.size > 0 && (
+            <>
+              <div className="flex-1" />
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearSelection}
+                className="text-muted-foreground"
+              >
+                <X className="mr-1 h-4 w-4" />
+                Clear
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="mr-2 h-4 w-4" />
+                )}
+                Archive {selectedSpecs.size}
+              </Button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Specs List */}
       {specs.length > 0 ? (
         <div className="space-y-4">
@@ -181,26 +284,39 @@ export default function SpecsPage({ params }: SpecsPageProps) {
             const StatusIcon = config.icon
 
             return (
-              <Card key={spec.id} className="hover:border-primary/50 transition-colors">
+              <Card
+                key={spec.id}
+                className={`hover:border-primary/50 transition-colors ${selectedSpecs.has(spec.id) ? "border-primary bg-primary/5" : ""}`}
+              >
                 <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <CardTitle className="text-lg">
-                        <Link
-                          href={`/projects/${projectId}/specs/${spec.id}`}
-                          className="hover:underline"
-                        >
-                          {spec.title}
-                        </Link>
-                      </CardTitle>
-                      <CardDescription className="mt-1">
-                        {spec.description || "No description"}
-                      </CardDescription>
+                  <div className="flex items-start gap-3">
+                    <Checkbox
+                      checked={selectedSpecs.has(spec.id)}
+                      onCheckedChange={() => toggleSelectSpec(spec.id)}
+                      aria-label={`Select ${spec.title}`}
+                      className="mt-1"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <CardTitle className="text-lg">
+                            <Link
+                              href={`/projects/${projectId}/specs/${spec.id}`}
+                              className="hover:underline"
+                            >
+                              {spec.title}
+                            </Link>
+                          </CardTitle>
+                          <CardDescription className="mt-1">
+                            {spec.description || "No description"}
+                          </CardDescription>
+                        </div>
+                        <Badge variant={config.color as "default" | "secondary" | "destructive" | "outline"} className="shrink-0">
+                          <StatusIcon className={`mr-1 h-3 w-3 ${config.spinning ? "animate-spin" : ""}`} />
+                          {config.label}
+                        </Badge>
+                      </div>
                     </div>
-                    <Badge variant={config.color as "default" | "secondary" | "destructive" | "outline"}>
-                      <StatusIcon className={`mr-1 h-3 w-3 ${config.spinning ? "animate-spin" : ""}`} />
-                      {config.label}
-                    </Badge>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">

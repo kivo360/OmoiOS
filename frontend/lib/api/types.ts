@@ -395,6 +395,7 @@ export interface TicketListParams {
   status?: string
   priority?: string
   phase_id?: string
+  project_id?: string
   search?: string
 }
 
