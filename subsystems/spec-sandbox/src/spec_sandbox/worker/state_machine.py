@@ -323,6 +323,8 @@ class SpecStateMachine:
                             "eval_score": result.eval_score,
                             "duration_seconds": result.duration_seconds,
                             "retry_count": retry_count,
+                            # Include phase output for incremental sync to backend
+                            "phase_output": output,
                         },
                     )
 
