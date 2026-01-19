@@ -18,6 +18,7 @@ Phase 2 Fix:
 import os
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
@@ -406,8 +407,10 @@ async def _sync_requirements_to_table(
                     existing_req.action = action
                     existing_req.updated_at = utc_now()
                 else:
-                    # Create new
+                    # Create new - explicitly generate ID so criteria can reference it
+                    req_db_id = f"req-{uuid4()}"
                     new_req = SpecRequirement(
+                        id=req_db_id,
                         spec_id=spec_id,
                         title=title,
                         condition=condition or "General",
@@ -420,7 +423,7 @@ async def _sync_requirements_to_table(
                     acceptance_criteria = req_data.get("acceptance_criteria", [])
                     for crit_text in acceptance_criteria:
                         criterion = SpecAcceptanceCriterion(
-                            requirement_id=new_req.id,
+                            requirement_id=req_db_id,
                             text=crit_text,
                             completed=False,
                         )
