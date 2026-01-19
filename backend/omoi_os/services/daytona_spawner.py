@@ -873,6 +873,8 @@ class DaytonaSpawnerService:
             "REPORTER_MODE": "http",
             # Use spec-sandbox subsystem instead of omoi_os.workers.spec_state_machine
             "USE_SPEC_SANDBOX": "true",
+            # Explicitly disable continuous mode - spec state machine handles iteration
+            "CONTINUOUS_MODE": "false",
         }
 
         # ==== GitHub Integration: Fetch credentials and repo info ====
