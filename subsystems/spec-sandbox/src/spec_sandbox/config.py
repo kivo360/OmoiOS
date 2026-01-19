@@ -84,8 +84,8 @@ class SpecSandboxSettings(BaseSettings):
 
     # === Markdown Generation ===
     markdown_generator: str = Field(
-        default="claude",
-        description="Generator type: 'static' (template-based) or 'claude' (Claude Agent SDK)",
+        default="static",
+        description="Generator type: 'static' (template-based, fast) or 'claude' (Claude Agent SDK, slow)",
     )
 
     # === Phase Context (from previous phases) ===
