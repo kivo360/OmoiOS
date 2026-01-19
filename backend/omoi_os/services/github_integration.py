@@ -500,6 +500,8 @@ class GitHubIntegrationService:
             old_status = ticket.status
             if ticket.status != TicketStatus.DONE.value:
                 ticket.status = TicketStatus.DONE.value
+                # Sync phase_id to keep board column in sync
+                ticket.phase_id = "PHASE_DONE"
                 ticket.updated_at = utc_now()
 
                 # Publish ticket status change event
@@ -512,6 +514,7 @@ class GitHubIntegrationService:
                         payload={
                             "from_status": old_status,
                             "to_status": TicketStatus.DONE.value,
+                            "phase_id": "PHASE_DONE",
                             "reason": f"PR #{pr_number} merged",
                             "pr_number": pr_number,
                             "merge_commit_sha": merge_commit_sha,
