@@ -1181,9 +1181,48 @@ async def create_spec(
     # Verify user has access to the project
     await verify_project_access(spec.project_id, current_user, db)
 
+    # Get user input for title generation
+    # Use description if available, otherwise use title as the input
+    user_input = spec.description or spec.title
+
+    # Get project info for context
+    project_name = None
+    project_description = None
+    try:
+        async with db.get_async_session() as session:
+            project_result = await session.execute(
+                select(Project).filter(Project.id == spec.project_id)
+            )
+            project = project_result.scalar_one_or_none()
+            if project:
+                project_name = project.name
+                project_description = project.description
+    except Exception as e:
+        logger.warning(f"Failed to get project info for title generation: {e}")
+
+    # Generate clean title and description using LLM
+    spec_title = spec.title  # Fallback to provided title
+    spec_description = spec.description  # Fallback to provided description
+
+    try:
+        from omoi_os.services.title_generation_service import get_title_generation_service
+
+        title_service = get_title_generation_service()
+        generated = await title_service.generate_spec_title_and_description(
+            user_input=user_input,
+            project_name=project_name,
+            project_description=project_description,
+        )
+        spec_title = generated.title
+        # Use generated description, or fall back to user input if none generated
+        spec_description = generated.description or user_input
+        logger.info(f"Generated spec title: {spec_title}")
+    except Exception as e:
+        logger.warning(f"Failed to generate spec title, using provided values: {e}")
+
     # Use async database operations (non-blocking)
     new_spec = await _create_spec_async(
-        db, spec.project_id, spec.title, spec.description, user_id=current_user.id
+        db, spec.project_id, spec_title, spec_description, user_id=current_user.id
     )
 
     # Create initial version history entry
@@ -1191,7 +1230,7 @@ async def create_spec(
         db,
         new_spec.id,
         change_type="created",
-        change_summary=f"Specification '{spec.title}' created",
+        change_summary=f"Specification '{spec_title}' created",
         created_by=str(current_user.id),
     )
 
@@ -2809,12 +2848,51 @@ async def launch_spec(
         if not can_execute:
             raise HTTPException(status_code=402, detail=f"Execution blocked: {billing_reason}")
 
-    # 2. Create spec
+    # 1.5. Generate a clean title and description from user input
+    # The user's input is stored in request.description (the full prompt)
+    user_input = request.description
+
+    # Get project info for context
+    project_name = None
+    project_description = None
+    try:
+        async with db.get_async_session() as session:
+            project_result = await session.execute(
+                select(Project).filter(Project.id == request.project_id)
+            )
+            project = project_result.scalar_one_or_none()
+            if project:
+                project_name = project.name
+                project_description = project.description
+    except Exception as e:
+        logger.warning(f"Failed to get project info for title generation: {e}")
+
+    # Generate proper title and description using LLM
+    spec_title = request.title  # Fallback to request title
+    spec_description = request.description  # Fallback to request description
+
+    try:
+        from omoi_os.services.title_generation_service import get_title_generation_service
+
+        title_service = get_title_generation_service()
+        generated = await title_service.generate_spec_title_and_description(
+            user_input=user_input,
+            project_name=project_name,
+            project_description=project_description,
+        )
+        spec_title = generated.title
+        spec_description = generated.description or user_input
+        logger.info(f"Generated spec title: {spec_title}")
+    except Exception as e:
+        logger.warning(f"Failed to generate spec title, using fallback: {e}")
+        # Keep the fallback values
+
+    # 2. Create spec with generated title and description
     spec = await _create_spec_async(
         db=db,
         project_id=request.project_id,
-        title=request.title,
-        description=request.description,
+        title=spec_title,
+        description=spec_description,
         user_id=current_user.id,
     )
 
@@ -2849,8 +2927,10 @@ async def launch_spec(
             phase=spec.current_phase or "explore",
             project_id=request.project_id,
             phase_context={
-                "title": request.title,
-                "description": request.description,
+                # Pass the generated title but the ORIGINAL user input as description
+                # This ensures the sandbox gets the full user prompt for context
+                "title": spec_title,
+                "description": user_input,  # Full user input, not truncated
             },
         )
 
