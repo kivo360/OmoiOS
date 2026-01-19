@@ -5067,6 +5067,15 @@ The following dependencies were automatically installed before you started:
                                     },
                                 )
 
+                                # For spec sandboxes, exit after completion instead of waiting
+                                # This prevents the heartbeat loop from running indefinitely
+                                if self.config.spec_id:
+                                    logger.info(
+                                        "Spec sandbox completed - exiting",
+                                        extra={"spec_id": self.config.spec_id},
+                                    )
+                                    return 0
+
                             else:
                                 # =================================================
                                 # SINGLE-RUN MODE: Execute once (original behavior)
@@ -5102,12 +5111,29 @@ The following dependencies were automatically installed before you started:
                                                 "phase": "initial_task",
                                             },
                                         )
+
+                                # For spec sandboxes in single-run mode, exit after completion
+                                if self.config.spec_id:
+                                    logger.info(
+                                        "Spec sandbox (single-run) completed - exiting",
+                                        extra={"spec_id": self.config.spec_id},
+                                    )
+                                    return 0
+
                         else:
                             logger.warning(
                                 "No initial task provided - worker will wait for messages"
                             )
 
-                        # Report ready
+                        # For spec sandboxes, don't wait for messages - exit
+                        if self.config.spec_id:
+                            logger.info(
+                                "Spec sandbox has no more work - exiting",
+                                extra={"spec_id": self.config.spec_id},
+                            )
+                            return 0
+
+                        # Report ready (only for non-spec sandboxes that continue waiting)
                         await reporter.report(
                             "agent.waiting",
                             {"message": "Ready for messages"},
