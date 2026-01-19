@@ -108,10 +108,13 @@ class HTTPReporter(Reporter):
 
         for event in events_to_send:
             # Build event payload matching backend's SandboxEventCreate schema
-            event_data = event.data or {}
+            event_data = event.data.copy() if event.data else {}
             # Inject spec_id into event_data for spec-driven development tracking
             if self.spec_id:
                 event_data["spec_id"] = self.spec_id
+            # Include phase in event_data if present (for spec.phase_* events)
+            if event.phase:
+                event_data["phase"] = event.phase
 
             payload = {
                 "event_type": event.event_type,
