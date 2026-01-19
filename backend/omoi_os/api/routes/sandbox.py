@@ -1033,6 +1033,7 @@ async def post_sandbox_event(
         "spec.phase_completed",
         "spec.phase_failed",
         "spec.phase_retry",
+        "spec.execution_completed",  # Final spec completion
     ):
         try:
             db = get_db_service()
@@ -1359,6 +1360,20 @@ async def post_sandbox_event(
                                 f"spec.phase_completed for {spec_id} missing phase or phase_output: "
                                 f"phase={phase_name}, has_output={phase_output is not None}"
                             )
+                    # Handle spec execution completed - mark spec as completed
+                    elif event.event_type == "spec.execution_completed":
+                        logger.info(f"Spec {spec_id} execution completed")
+                        async with db.get_async_session() as session:
+                            result = await session.execute(
+                                select(Spec).where(Spec.id == spec_id)
+                            )
+                            spec = result.scalar_one_or_none()
+                            if spec:
+                                spec.status = "completed"
+                                spec.progress = 100.0
+                                spec.updated_at = utc_now()
+                                await session.commit()
+                                logger.info(f"Spec {spec_id} marked as completed (100%)")
                 else:
                     logger.warning(
                         f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"

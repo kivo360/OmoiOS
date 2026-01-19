@@ -223,13 +223,12 @@ class SpecStateMachine:
             if phase == SpecPhase.COMPLETE:
                 await self.mark_complete(spec)
                 logger.info(f"Spec {self.spec_id} completed successfully")
-                # Report completion as work event
+                # Report execution completed (matches spec-sandbox format)
                 await self._report_progress(
-                    "agent.tool_completed",
+                    "spec.execution_completed",
                     {
-                        "tool": "spec_state_machine",
-                        "action": "complete",
                         "spec_id": self.spec_id,
+                        "success": True,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
                     },
                 )
@@ -238,12 +237,10 @@ class SpecStateMachine:
             logger.info(f"Executing phase: {phase.value}")
             start_time = datetime.now(timezone.utc)
 
-            # Report phase start as work event
+            # Report phase start as spec event (matches spec-sandbox format)
             await self._report_progress(
-                "agent.tool_use",
+                "spec.phase_started",
                 {
-                    "tool": "spec_state_machine",
-                    "action": "phase_started",
                     "phase": phase.value,
                     "spec_id": self.spec_id,
                     "timestamp": start_time.isoformat(),
@@ -269,18 +266,22 @@ class SpecStateMachine:
                     f"Score: {result.eval_score:.2f}, Attempts: {result.attempts}"
                 )
 
-                # Report phase completion as work event
+                # Report phase completion as spec event
+                # IMPORTANT: Use "spec.phase_completed" event type (not agent.tool_completed)
+                # to match what the event handler in sandbox.py expects.
+                # Include phase_output so the handler can sync to related tables.
                 await self._report_progress(
-                    "agent.tool_completed",
+                    "spec.phase_completed",
                     {
-                        "tool": "spec_state_machine",
-                        "action": "phase_completed",
                         "phase": phase.value,
                         "spec_id": self.spec_id,
                         "duration_seconds": result.duration_seconds,
                         "eval_score": result.eval_score,
-                        "attempts": result.attempts,
+                        "retry_count": result.attempts - 1,  # Match spec-sandbox format
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        # Include phase output for incremental sync to backend
+                        # This enables requirements/tasks/design to show in UI
+                        "phase_output": result.data,
                     },
                 )
 
