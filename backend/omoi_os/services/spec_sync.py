@@ -27,6 +27,7 @@ from omoi_os.models.spec import (
     SpecRequirement,
     SpecTask,
 )
+from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.spec_dedup import (
@@ -48,6 +49,8 @@ class SyncStats:
     criteria_skipped: int = 0
     tasks_created: int = 0
     tasks_skipped: int = 0
+    tickets_created: int = 0
+    tickets_skipped: int = 0
     errors: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -59,6 +62,8 @@ class SyncStats:
             "criteria_skipped": self.criteria_skipped,
             "tasks_created": self.tasks_created,
             "tasks_skipped": self.tasks_skipped,
+            "tickets_created": self.tickets_created,
+            "tickets_skipped": self.tickets_skipped,
             "errors": self.errors,
         }
 
@@ -162,6 +167,10 @@ class SpecSyncService:
             tasks_data = spec.phase_data.get("tasks", {})
             if tasks_data:
                 await self._sync_tasks(sess, spec, tasks_data, stats)
+
+            # Update linked_tickets count on spec
+            if stats.tickets_created > 0:
+                spec.linked_tickets = (spec.linked_tickets or 0) + stats.tickets_created
 
             # Update spec embedding and hash for deduplication
             await self._update_spec_dedup_fields(sess, spec)
@@ -304,6 +313,9 @@ class SpecSyncService:
     ) -> None:
         """Sync tasks from phase data to database.
 
+        Creates both SpecTask records (for spec tracking) and Ticket records
+        (for kanban board visibility) in backlog status.
+
         Args:
             session: Async database session.
             spec: The spec being synced.
@@ -323,9 +335,18 @@ class SpecSyncService:
             session=session,
         )
 
-        # Create non-duplicate tasks
+        # Map spec task priority to ticket priority
+        priority_map = {
+            "critical": "CRITICAL",
+            "high": "HIGH",
+            "medium": "MEDIUM",
+            "low": "LOW",
+        }
+
+        # Create non-duplicate tasks and corresponding tickets
         for task_data in dedup_result.to_create:
             try:
+                # Create SpecTask for spec tracking
                 new_task = SpecTask(
                     spec_id=spec.id,
                     title=task_data.get("title", ""),
@@ -339,13 +360,41 @@ class SpecSyncService:
                     embedding_vector=task_data.get("embedding_vector"),
                 )
                 session.add(new_task)
+                await session.flush()  # Get the task ID
                 stats.tasks_created += 1
 
+                # Create Ticket for kanban board visibility
+                task_priority = task_data.get("priority", "medium").lower()
+                ticket_priority = priority_map.get(task_priority, "MEDIUM")
+
+                new_ticket = Ticket(
+                    title=task_data.get("title", ""),
+                    description=task_data.get("description"),
+                    phase_id="backlog",  # Start in backlog
+                    status="backlog",
+                    priority=ticket_priority,
+                    project_id=spec.project_id,
+                    context={
+                        "spec_id": spec.id,
+                        "spec_task_id": new_task.id,
+                        "source": "spec_sync",
+                        "workflow_mode": "spec_driven",
+                    },
+                )
+                session.add(new_ticket)
+                stats.tickets_created += 1
+
+                logger.debug(
+                    f"Created ticket for spec task: {new_task.title}",
+                    extra={"spec_id": spec.id, "task_id": new_task.id},
+                )
+
             except Exception as e:
-                logger.error(f"Failed to create task: {e}")
+                logger.error(f"Failed to create task/ticket: {e}")
                 stats.errors.append(f"Task creation failed: {e}")
 
         stats.tasks_skipped = len(dedup_result.to_skip)
+        stats.tickets_skipped = len(dedup_result.to_skip)
 
     async def _update_spec_dedup_fields(
         self,
