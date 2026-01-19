@@ -1,4 +1,4 @@
-"""Title generation service using a lightweight LLM for task titles and descriptions."""
+"""Title generation service using a lightweight LLM for task and spec titles."""
 
 from typing import Optional
 
@@ -33,8 +33,27 @@ class TaskTitleDescription(BaseModel):
     )
 
 
+class SpecTitleDescription(BaseModel):
+    """Structured output for spec title and description generation."""
+
+    title: str = Field(
+        ...,
+        max_length=100,
+        description="A concise, descriptive title for the specification (max 100 chars)",
+    )
+    description: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="A brief summary of what the spec covers (max 500 chars)",
+    )
+
+
 class TitleGenerationService:
-    """Service for generating human-readable task titles using a lightweight LLM.
+    """Service for generating human-readable titles using a lightweight LLM.
+
+    Supports generating titles and descriptions for:
+    - Tasks: Action-oriented titles for development tasks
+    - Specs: Professional titles for software specifications
 
     Uses Fireworks.ai gpt-oss-20b model (or configured alternative) for
     cost-effective title generation. This is separate from the main analytics
@@ -246,6 +265,134 @@ class TitleGenerationService:
             task_type=task_type,
             existing_description=description,
             context=context,
+        )
+        return result.title
+
+    # =========================================================================
+    # Spec Title Generation
+    # =========================================================================
+
+    async def generate_spec_title_and_description(
+        self,
+        user_input: str,
+        project_name: Optional[str] = None,
+        project_description: Optional[str] = None,
+    ) -> SpecTitleDescription:
+        """
+        Generate a human-readable title and description for a specification.
+
+        Takes the user's raw input (which may be verbose or unclear) and generates
+        a clean, professional title and description suitable for a spec.
+
+        Args:
+            user_input: The user's raw input describing what they want to build
+            project_name: Optional project name for context
+            project_description: Optional project description for context
+
+        Returns:
+            SpecTitleDescription with generated title and description
+        """
+        prompt = self._build_spec_prompt(user_input, project_name, project_description)
+
+        agent: Agent[None, SpecTitleDescription] = Agent(
+            model=self.model,
+            output_type=SpecTitleDescription,
+            system_prompt=(
+                "You are a technical writer that creates concise, professional titles "
+                "and descriptions for software specifications. "
+                "Titles should clearly describe the feature or system being specified. "
+                "Use sentence case. Be specific but brief. "
+                "Focus on what will be built, not how."
+            ),
+            output_retries=3,
+        )
+
+        try:
+            result = await agent.run(prompt)
+            generated = result.output
+
+            logger.debug(
+                "Generated spec title",
+                title=generated.title,
+                has_description=generated.description is not None,
+            )
+
+            return generated
+
+        except Exception as e:
+            logger.warning(
+                "Failed to generate spec title, using fallback",
+                error=str(e),
+            )
+            # Fallback: Use truncated user input as title
+            fallback_title = self._create_spec_fallback_title(user_input)
+            fallback_description = (
+                user_input[:500] if len(user_input) > 500 else user_input
+            )
+            return SpecTitleDescription(
+                title=fallback_title,
+                description=fallback_description,
+            )
+
+    def _build_spec_prompt(
+        self,
+        user_input: str,
+        project_name: Optional[str],
+        project_description: Optional[str],
+    ) -> str:
+        """Build prompt for spec title and description generation."""
+        parts = [
+            "Generate a concise title (max 100 chars) and brief description (max 500 chars) "
+            "for a software specification based on this user request:",
+            "",
+            f"User request: {user_input}",
+        ]
+        if project_name:
+            parts.append(f"Project: {project_name}")
+        if project_description:
+            parts.append(f"Project context: {project_description}")
+        parts.extend([
+            "",
+            "Guidelines:",
+            "- The title should be a clear, professional name for the feature/system",
+            "- Start with a noun or gerund (e.g., 'User authentication system', 'Real-time notifications')",
+            "- The description should summarize the key functionality in 1-2 sentences",
+            "- Do not include implementation details",
+        ])
+        return "\n".join(parts)
+
+    def _create_spec_fallback_title(self, user_input: str) -> str:
+        """Create a fallback title from user input."""
+        # Take first 100 chars, try to break at word boundary
+        if len(user_input) <= 100:
+            return user_input.strip()
+        truncated = user_input[:97]
+        last_space = truncated.rfind(" ")
+        if last_space > 50:
+            truncated = truncated[:last_space]
+        return truncated.strip() + "..."
+
+    async def generate_spec_title(
+        self,
+        user_input: str,
+        project_name: Optional[str] = None,
+        project_description: Optional[str] = None,
+    ) -> str:
+        """
+        Convenience method to just get the spec title.
+
+        Args:
+            user_input: The user's raw input describing what they want
+            project_name: Optional project name for context
+            project_description: Optional project description for context
+
+        Returns:
+            Generated title string
+        """
+        result = await self.generate_spec_title_and_description(
+            user_input=user_input,
+            project_name=project_name,
+            project_description=project_description,
         )
         return result.title
 
