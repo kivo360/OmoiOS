@@ -38,7 +38,13 @@ def create_reporter(settings: SpecSandboxSettings) -> Reporter:
     elif settings.reporter_mode == "http":
         if not settings.callback_url:
             raise ValueError("callback_url required for http reporter")
-        return HTTPReporter(settings.callback_url)
+        if not settings.sandbox_id:
+            raise ValueError("sandbox_id required for http reporter")
+        return HTTPReporter(
+            callback_url=settings.callback_url,
+            sandbox_id=settings.sandbox_id,
+            spec_id=settings.spec_id,
+        )
     else:
         raise ValueError(f"Unknown reporter mode: {settings.reporter_mode}")
 
