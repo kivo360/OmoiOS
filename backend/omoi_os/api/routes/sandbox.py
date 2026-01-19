@@ -1021,12 +1021,18 @@ async def post_sandbox_event(
     # Handle task status transitions based on event type
     # This includes: agent.started -> running, agent.completed/continuous.completed -> completed, agent.failed/error -> failed
     # NOTE: continuous.completed contains the actual validation result (validation_passed field)
+    # Also handles spec phase events for incremental spec sync
     if event.event_type in (
         "agent.started",
         "agent.completed",
         "continuous.completed",  # Contains validation_passed result
         "agent.failed",
         "agent.error",
+        # Spec phase events for incremental sync
+        "spec.phase_started",
+        "spec.phase_completed",
+        "spec.phase_failed",
+        "spec.phase_retry",
     ):
         try:
             db = get_db_service()
