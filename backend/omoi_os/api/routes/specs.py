@@ -749,9 +749,45 @@ class ApiEndpoint(BaseModel):
 
 
 class DesignArtifact(BaseModel):
+    """Design artifacts from spec design phase.
+
+    Handles various formats from spec-sandbox:
+    - Empty dicts {} should become None
+    - Strings are kept as-is
+    - Dicts with content may be serialized to JSON string
+    """
+
     architecture: Optional[str] = None
     data_model: Optional[str] = None
     api_spec: list[ApiEndpoint] = []
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_design_fields(cls, data):
+        """Convert empty dicts to None for string fields."""
+        if isinstance(data, dict):
+            # Handle architecture field
+            arch = data.get("architecture")
+            if isinstance(arch, dict):
+                if not arch:  # Empty dict
+                    data["architecture"] = None
+                else:
+                    # Non-empty dict - convert to JSON string
+                    import json
+                    data["architecture"] = json.dumps(arch)
+
+            # Handle data_model field
+            dm = data.get("data_model")
+            if isinstance(dm, dict):
+                if not dm:  # Empty dict
+                    data["data_model"] = None
+                else:
+                    # Non-empty dict - convert to JSON string
+                    import json
+                    data["data_model"] = json.dumps(dm)
+        return data
 
 
 class SpecTask(BaseModel):
