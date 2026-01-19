@@ -14,7 +14,7 @@ from typing import Optional, List, Any, Dict
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Depends, Query
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -716,9 +716,36 @@ class Requirement(BaseModel):
 
 
 class ApiEndpoint(BaseModel):
+    """API endpoint in design spec.
+
+    Handles both formats:
+    - Standard: {method, endpoint, description}
+    - spec-sandbox: {method, path, purpose, request_schema, response_schema}
+    """
+
     method: str
-    endpoint: str
-    description: str
+    endpoint: Optional[str] = None
+    description: Optional[str] = None
+    # Alternative field names from spec-sandbox design output
+    path: Optional[str] = None
+    purpose: Optional[str] = None
+    request_schema: Optional[dict] = None
+    response_schema: Optional[dict] = None
+
+    model_config = ConfigDict(extra="ignore")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_fields(cls, data):
+        """Map alternative field names to standard ones."""
+        if isinstance(data, dict):
+            # Map path -> endpoint if endpoint is missing
+            if not data.get("endpoint") and data.get("path"):
+                data["endpoint"] = data["path"]
+            # Map purpose -> description if description is missing
+            if not data.get("description") and data.get("purpose"):
+                data["description"] = data["purpose"]
+        return data
 
 
 class DesignArtifact(BaseModel):
