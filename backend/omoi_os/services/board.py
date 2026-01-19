@@ -49,26 +49,37 @@ class BoardService:
             .all()
         )
 
+        # Collect all phase IDs from all columns to fetch tickets in a single query
+        all_phase_ids: List[str] = []
+        for column in columns:
+            all_phase_ids.extend(column.phase_mapping)
+
+        # Fetch all tickets for all phases in a single query (fixes N+1)
+        tickets_by_phase: Dict[str, List[Ticket]] = {phase_id: [] for phase_id in all_phase_ids}
+
+        if all_phase_ids:
+            query = select(Ticket).where(Ticket.phase_id.in_(all_phase_ids))
+            if project_id is not None:
+                query = query.where(Ticket.project_id == project_id)
+            if user_id is not None:
+                query = query.where(Ticket.user_id == user_id)
+
+            all_tickets = session.execute(query).scalars().all()
+
+            # Group tickets by phase_id in memory
+            for ticket in all_tickets:
+                if ticket.phase_id in tickets_by_phase:
+                    tickets_by_phase[ticket.phase_id].append(ticket)
+
         # Build board view
         board = {"columns": [], "project_id": project_id}
 
         for column in columns:
-            # Get tickets in this column (match phase_id to column's phase_mapping)
+            # Get tickets in this column from pre-fetched data
             tickets_in_column = []
-
             for phase_id in column.phase_mapping:
-                query = select(Ticket).where(Ticket.phase_id == phase_id)
-                # Filter by project if specified
-                if project_id is not None:
-                    query = query.where(Ticket.project_id == project_id)
-                # Filter by user if specified (only show user's tickets)
-                if user_id is not None:
-                    query = query.where(Ticket.user_id == user_id)
+                tickets_in_column.extend(tickets_by_phase.get(phase_id, []))
 
-                tickets = session.execute(query).scalars().all()
-                tickets_in_column.extend(tickets)
-
-            # Count active tasks per ticket
             column_data = {
                 "id": column.id,
                 "name": column.name,
