@@ -216,3 +216,91 @@ export PYTHONPATH="{install_path}:$PYTHONPATH"
 # Verify the modules are importable
 python3 -c "from omoi_os.workers.spec_state_machine import SpecStateMachine; print('✅ SpecStateMachine imported successfully')" 2>/dev/null || echo "⚠️ SpecStateMachine import failed"
 '''
+
+
+def get_spec_sandbox_files(
+    install_path: str = "/tmp/spec_sandbox_pkg",
+) -> dict[str, str]:
+    """Get all files needed for the spec-sandbox subsystem to run in a sandbox.
+
+    The spec-sandbox is a standalone subsystem that emits proper spec.* events
+    via HTTPReporter. It's uploaded to the sandbox as a package that can be
+    imported as `spec_sandbox`.
+
+    This includes all files from subsystems/spec-sandbox/src/spec_sandbox/:
+    - config.py (settings from environment)
+    - worker/state_machine.py (main state machine)
+    - reporters/*.py (http, array, jsonl, console)
+    - schemas/*.py (events, spec, frontmatter)
+    - evaluators/*.py (phase evaluation)
+    - executor/*.py (Claude executor)
+    - generators/*.py (markdown generation)
+    - prompts/*.py (phase prompts)
+    - services/*.py (ticket creator)
+    - parsers/*.py (markdown parsing)
+    - sync/*.py (sync service)
+
+    Args:
+        install_path: Base path in sandbox where the package will be installed.
+
+    Returns:
+        Dict mapping sandbox file paths to file content.
+        Example: {"/tmp/spec_sandbox_pkg/spec_sandbox/config.py": "...content..."}
+    """
+    result = {}
+
+    # Base directory of spec-sandbox subsystem
+    # This file is at: backend/omoi_os/sandbox_modules/__init__.py
+    # spec-sandbox is at: subsystems/spec-sandbox/src/spec_sandbox/
+    backend_root = Path(__file__).parent.parent.parent  # backend/
+    monorepo_root = backend_root.parent  # senior_sandbox/
+    spec_sandbox_src = monorepo_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox"
+
+    if not spec_sandbox_src.exists():
+        # Try alternative path (when running from different locations)
+        import os
+        potential_paths = [
+            Path(os.getcwd()).parent / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox",
+            Path(os.getcwd()) / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox",
+        ]
+        for path in potential_paths:
+            if path.exists():
+                spec_sandbox_src = path
+                break
+
+    if not spec_sandbox_src.exists():
+        return {}
+
+    # Recursively collect all .py files
+    for py_file in spec_sandbox_src.rglob("*.py"):
+        relative_path = py_file.relative_to(spec_sandbox_src)
+        content = _read_file(py_file)
+        if content:
+            sandbox_path = f"{install_path}/spec_sandbox/{relative_path}"
+            result[sandbox_path] = content
+
+    return result
+
+
+def get_spec_sandbox_dependencies_install_script() -> str:
+    """Get a shell script to install spec-sandbox dependencies.
+
+    The spec-sandbox requires these packages:
+    - httpx (for HTTPReporter)
+    - pydantic, pydantic-settings (for config)
+    - click (for CLI, though we don't use it in sandbox)
+    - claude-agent-sdk (for executor)
+
+    Returns:
+        Shell script content that installs dependencies.
+    """
+    return '''#!/bin/bash
+# Install spec-sandbox dependencies
+
+# Try uv first (faster), fall back to pip
+if command -v uv &> /dev/null; then
+    uv pip install httpx pydantic pydantic-settings 2>/dev/null || pip install httpx pydantic pydantic-settings
+else
+    pip install httpx pydantic pydantic-settings
+fi
+'''
