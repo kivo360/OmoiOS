@@ -22,6 +22,7 @@ export async function listTickets(params?: TicketListParams): Promise<TicketList
   if (params?.status) searchParams.set("status", params.status)
   if (params?.priority) searchParams.set("priority", params.priority)
   if (params?.phase_id) searchParams.set("phase_id", params.phase_id)
+  if (params?.project_id) searchParams.set("project_id", params.project_id)
   if (params?.search) searchParams.set("search", params.search)
 
   const query = searchParams.toString()

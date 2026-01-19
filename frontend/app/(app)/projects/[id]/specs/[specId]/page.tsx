@@ -75,7 +75,15 @@ import {
   useCreateSpecBranch,
   useCreateSpecPR,
   useSpecEvents,
+  useDeleteSpec,
+  useUpdateSpec,
+  useLinkTickets,
+  useLinkedTickets,
+  useExportSpec,
 } from "@/hooks/useSpecs"
+import { useTickets } from "@/hooks/useTickets"
+import { Checkbox } from "@/components/ui/checkbox"
+import { useRouter } from "next/navigation"
 import { EventTimeline, PhaseProgress, PhaseProgressInline } from "@/components/spec"
 import { useProject } from "@/hooks/useProjects"
 import {
@@ -130,6 +138,18 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     status: string
     assigned_agent: string | null
   } | null>(null)
+
+  // Settings modal state
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [editSpecTitle, setEditSpecTitle] = useState("")
+  const [editSpecDescription, setEditSpecDescription] = useState("")
+
+  // Link tickets modal state
+  const [linkTicketsOpen, setLinkTicketsOpen] = useState(false)
+  const [linkedTicketIds, setLinkedTicketIds] = useState<Set<string>>(new Set())
+
+  // History modal state
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   // Form states
   const [newRequirement, setNewRequirement] = useState({ title: "", condition: "", action: "" })
@@ -214,6 +234,9 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     previousStatusRef.current = currentStatus
   }, [spec?.phase, spec?.status])
 
+  // Router for navigation after delete
+  const router = useRouter()
+
   // Mutations
   const approveReqMutation = useApproveRequirements(specId)
   const approveDesignMutation = useApproveDesign(specId)
@@ -226,6 +249,15 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const executeTasksMutation = useExecuteSpecTasks(specId)
   const createBranchMutation = useCreateSpecBranch(specId)
   const createPRMutation = useCreateSpecPR(specId)
+  const deleteSpecMutation = useDeleteSpec()
+  const updateSpecMutation = useUpdateSpec(specId)
+  const linkTicketsMutation = useLinkTickets(specId)
+  const exportSpecMutation = useExportSpec()
+
+  // Fetch project tickets for linking
+  const { data: projectTickets } = useTickets({ project_id: projectId })
+  // Fetch linked tickets
+  const { data: linkedTicketsData } = useLinkedTickets(specId)
 
   // Derive spec display data from API response with safe defaults
   const specData = useMemo(() => ({
@@ -234,6 +266,7 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     description: spec?.description || "",
     status: spec?.status || "draft",
     phase: spec?.phase || "Requirements",
+    currentPhase: spec?.current_phase || "explore",  // State machine phase
     progress: spec?.progress || 0,
     testCoverage: spec?.test_coverage || 0,
     activeAgents: spec?.active_agents || 0,
@@ -427,6 +460,111 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     }
   }
 
+  // Archive (delete) spec handler
+  const handleArchiveSpec = async () => {
+    if (!confirm("Are you sure you want to archive this spec? This action cannot be undone.")) {
+      return
+    }
+    try {
+      await deleteSpecMutation.mutateAsync({ specId, projectId })
+      toast.success("Spec archived successfully")
+      router.push(`/projects/${projectId}/specs`)
+    } catch {
+      toast.error("Failed to archive spec")
+    }
+  }
+
+  // Settings handler - opens settings dialog
+  const handleOpenSettings = () => {
+    setEditSpecTitle(spec?.title || "")
+    setEditSpecDescription(spec?.description || "")
+    setSettingsOpen(true)
+  }
+
+  // Save spec settings
+  const handleSaveSettings = async () => {
+    if (!editSpecTitle.trim()) {
+      toast.error("Title is required")
+      return
+    }
+    try {
+      await updateSpecMutation.mutateAsync({
+        title: editSpecTitle.trim(),
+        description: editSpecDescription.trim() || undefined,
+      })
+      toast.success("Spec updated successfully")
+      setSettingsOpen(false)
+    } catch {
+      toast.error("Failed to update spec")
+    }
+  }
+
+  // Link tickets handler - opens link tickets dialog
+  const handleLinkTickets = () => {
+    // Initialize with currently linked ticket IDs from the server
+    const currentlyLinked = linkedTicketsData?.tickets?.map(t => t.id) || []
+    setLinkedTicketIds(new Set(currentlyLinked))
+    setLinkTicketsOpen(true)
+  }
+
+  // Toggle ticket link
+  const toggleTicketLink = (ticketId: string) => {
+    setLinkedTicketIds(prev => {
+      const next = new Set(prev)
+      if (next.has(ticketId)) {
+        next.delete(ticketId)
+      } else {
+        next.add(ticketId)
+      }
+      return next
+    })
+  }
+
+  // Save linked tickets via API
+  const handleSaveLinkedTickets = async () => {
+    try {
+      const ticketIdsArray = Array.from(linkedTicketIds)
+      const result = await linkTicketsMutation.mutateAsync(ticketIdsArray)
+      toast.success("Tickets linked", {
+        description: `${result.linked_count} ticket(s) newly linked${result.already_linked_count > 0 ? `, ${result.already_linked_count} already linked` : ""}.`,
+      })
+      setLinkTicketsOpen(false)
+    } catch (error) {
+      toast.error("Failed to link tickets", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
+  }
+
+  // Export spec handler
+  const handleExport = async (format: "json" | "markdown") => {
+    try {
+      const data = await exportSpecMutation.mutateAsync({ specId, format })
+
+      // Create download
+      const blob = format === "markdown"
+        ? new Blob([data as string], { type: "text/markdown" })
+        : new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `${specData.title.replace(/[^a-z0-9]/gi, "_").toLowerCase()}.${format === "markdown" ? "md" : "json"}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      toast.success("Export completed", {
+        description: `Spec exported as ${format === "markdown" ? "Markdown" : "JSON"}`,
+      })
+    } catch (error) {
+      toast.error("Failed to export spec", {
+        description: error instanceof Error ? error.message : "Unknown error",
+      })
+    }
+  }
+
   if (specLoading) {
     return (
       <div className="flex h-[calc(100vh-3.5rem)] items-center justify-center">
@@ -565,14 +703,28 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" onClick={() => setHistoryOpen(true)}>
                 <History className="mr-2 h-4 w-4" />
                 History
               </Button>
-              <Button variant="outline" size="sm">
-                <Download className="mr-2 h-4 w-4" />
-                Export
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => handleExport("markdown")}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Export as Markdown
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleExport("json")}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Export as JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="icon">
@@ -580,18 +732,22 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleOpenSettings}>
                     <Settings className="mr-2 h-4 w-4" />
                     Settings
                   </DropdownMenuItem>
-                  <DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleLinkTickets}>
                     <LinkIcon className="mr-2 h-4 w-4" />
                     Link Tickets
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive">
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={handleArchiveSpec}
+                    disabled={deleteSpecMutation.isPending}
+                  >
                     <Trash2 className="mr-2 h-4 w-4" />
-                    Archive
+                    {deleteSpecMutation.isPending ? "Archiving..." : "Archive"}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -1747,22 +1903,22 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
             <div>
               <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Details</h3>
               <div className="space-y-2.5 text-sm">
-                {/* Phase Progress Inline */}
+                {/* Phase Progress Inline - uses current_phase from state machine */}
                 <div className="rounded-md border bg-muted/30 p-2">
                   <PhaseProgressInline
-                    currentPhase={specData.phase.toLowerCase()}
+                    currentPhase={specData.currentPhase}
                     status={specData.status}
                   />
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Phase</span>
-                  <Badge variant="outline" className="font-normal">{specData.phase}</Badge>
+                  <Badge variant="outline" className="font-normal capitalize">{specData.currentPhase}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Status</span>
                   <Badge
-                    variant={specData.status === "executing" ? "default" : "secondary"}
-                    className="font-normal capitalize"
+                    variant={specData.status === "executing" ? "default" : specData.status === "completed" ? "default" : "secondary"}
+                    className={`font-normal capitalize ${specData.status === "completed" ? "bg-green-500/10 text-green-600 border-green-500/30" : ""}`}
                   >
                     {specData.status}
                   </Badge>
@@ -1872,25 +2028,17 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
 
             <Separator />
 
-            {/* Quick Actions */}
-            <div>
-              <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">Quick Actions</h3>
-              <div className="space-y-1.5">
-                <Button variant="outline" size="sm" className="w-full justify-start h-8 text-xs">
-                  <Bot className="mr-2 h-3.5 w-3.5" />
-                  Run AI Analysis
-                </Button>
-              </div>
-            </div>
-
-            <Separator />
-
             {/* Version History */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Activity</h3>
                 {versionsData?.versions && versionsData.versions.length > 0 && (
-                  <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] px-2"
+                    onClick={() => setHistoryOpen(true)}
+                  >
                     View All
                   </Button>
                 )}
@@ -1938,6 +2086,208 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
           </div>
         </ScrollArea>
       </div>
+
+      {/* Settings Dialog */}
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Spec Settings</DialogTitle>
+            <DialogDescription>
+              Edit the title and description for this specification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="spec-title">Title</Label>
+              <Input
+                id="spec-title"
+                placeholder="Specification title"
+                value={editSpecTitle}
+                onChange={(e) => setEditSpecTitle(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="spec-description">Description</Label>
+              <Textarea
+                id="spec-description"
+                placeholder="Brief description of the specification..."
+                value={editSpecDescription}
+                onChange={(e) => setEditSpecDescription(e.target.value)}
+                rows={4}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSettingsOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveSettings} disabled={updateSpecMutation.isPending}>
+              {updateSpecMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Link Tickets Dialog */}
+      <Dialog open={linkTicketsOpen} onOpenChange={setLinkTicketsOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Link Tickets</DialogTitle>
+            <DialogDescription>
+              Select tickets from this project to link with this specification.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {projectTickets?.tickets && projectTickets.tickets.length > 0 ? (
+              <ScrollArea className="h-[300px] pr-4">
+                <div className="space-y-2">
+                  {projectTickets.tickets.map((ticket) => (
+                    <div
+                      key={ticket.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors cursor-pointer ${
+                        linkedTicketIds.has(ticket.id)
+                          ? "border-primary bg-primary/5"
+                          : "hover:bg-muted/50"
+                      }`}
+                      onClick={() => toggleTicketLink(ticket.id)}
+                    >
+                      <Checkbox
+                        checked={linkedTicketIds.has(ticket.id)}
+                        onCheckedChange={() => toggleTicketLink(ticket.id)}
+                        className="mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-sm truncate">{ticket.title}</span>
+                          <Badge variant="outline" className="text-[10px] shrink-0">
+                            {ticket.status}
+                          </Badge>
+                        </div>
+                        {ticket.description && (
+                          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                            {ticket.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            ) : (
+              <div className="text-center py-8">
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground">No tickets in this project yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Create tickets from the command page or board to link them here.
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-muted-foreground">
+                {linkedTicketIds.size} ticket{linkedTicketIds.size !== 1 ? "s" : ""} selected
+              </span>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setLinkTicketsOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSaveLinkedTickets}>
+                  Save Links
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* History Dialog */}
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle>Version History</DialogTitle>
+            <DialogDescription>
+              View the complete change history for this specification.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="h-[400px] pr-4">
+            {versionsData?.versions && versionsData.versions.length > 0 ? (
+              <div className="relative py-2">
+                {/* Timeline line */}
+                <div className="absolute left-[9px] top-4 bottom-4 w-px bg-border" />
+                <div className="space-y-4">
+                  {versionsData.versions.map((version, idx) => (
+                    <div
+                      key={version.id}
+                      className="relative pl-8"
+                    >
+                      {/* Timeline dot */}
+                      <div className={`absolute left-0 top-1.5 w-[19px] h-[19px] rounded-full border-2 flex items-center justify-center ${
+                        idx === 0
+                          ? "bg-primary border-primary"
+                          : "bg-background border-muted-foreground/30"
+                      }`}>
+                        {idx === 0 && <div className="w-2 h-2 rounded-full bg-primary-foreground" />}
+                      </div>
+                      <div className="bg-muted/30 rounded-lg p-3 border">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <Badge variant={idx === 0 ? "default" : "outline"} className="text-[10px] capitalize">
+                            {version.change_type.replace(/_/g, " ")}
+                          </Badge>
+                          <span className="text-[10px] text-muted-foreground">
+                            v{version.version_number}
+                          </span>
+                        </div>
+                        <p className="text-sm">
+                          {version.change_summary}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-2">
+                          {new Date(version.created_at).toLocaleString()}
+                        </p>
+                        {version.change_details && Object.keys(version.change_details).length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-border/50">
+                            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                              Changes
+                            </p>
+                            <div className="space-y-1">
+                              {Object.entries(version.change_details).map(([field, changes]) => (
+                                <div key={field} className="text-[11px]">
+                                  <span className="text-muted-foreground">{field}:</span>{" "}
+                                  <span className="text-red-500/70 line-through">
+                                    {String((changes as { old: unknown; new: unknown }).old || "empty")}
+                                  </span>
+                                  {" → "}
+                                  <span className="text-green-500/70">
+                                    {String((changes as { old: unknown; new: unknown }).new || "empty")}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <History className="h-12 w-12 mx-auto text-muted-foreground/30 mb-3" />
+                <p className="text-sm text-muted-foreground">No version history yet</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Changes to this specification will be tracked here.
+                </p>
+              </div>
+            )}
+          </ScrollArea>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
