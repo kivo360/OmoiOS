@@ -248,27 +248,43 @@ def get_spec_sandbox_files(
         Example: {"/tmp/spec_sandbox_pkg/spec_sandbox/config.py": "...content..."}
     """
     result = {}
+    import os
 
     # Base directory of spec-sandbox subsystem
     # This file is at: backend/omoi_os/sandbox_modules/__init__.py
-    # spec-sandbox is at: subsystems/spec-sandbox/src/spec_sandbox/
-    backend_root = Path(__file__).parent.parent.parent  # backend/
-    monorepo_root = backend_root.parent  # senior_sandbox/
-    spec_sandbox_src = monorepo_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox"
+    #
+    # In development (monorepo):
+    #   - This file: senior_sandbox/backend/omoi_os/sandbox_modules/__init__.py
+    #   - spec-sandbox: senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/
+    #
+    # In Docker:
+    #   - This file: /app/omoi_os/sandbox_modules/__init__.py
+    #   - spec-sandbox: /app/subsystems/spec-sandbox/src/spec_sandbox/
 
-    if not spec_sandbox_src.exists():
-        # Try alternative path (when running from different locations)
-        import os
-        potential_paths = [
-            Path(os.getcwd()).parent / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox",
-            Path(os.getcwd()) / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox",
-        ]
-        for path in potential_paths:
-            if path.exists():
-                spec_sandbox_src = path
-                break
+    # Try multiple paths to find spec-sandbox
+    potential_paths = []
 
-    if not spec_sandbox_src.exists():
+    # Path 1: Docker layout (/app/subsystems/...)
+    # In Docker, /app contains both the backend code AND subsystems
+    app_root = Path(__file__).parent.parent.parent  # /app or backend/
+    potential_paths.append(app_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+
+    # Path 2: Monorepo layout (backend/../subsystems/...)
+    monorepo_root = app_root.parent
+    potential_paths.append(monorepo_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+
+    # Path 3: cwd-relative paths
+    potential_paths.append(Path(os.getcwd()) / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+    potential_paths.append(Path(os.getcwd()).parent / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+
+    # Find the first path that exists
+    spec_sandbox_src = None
+    for path in potential_paths:
+        if path.exists():
+            spec_sandbox_src = path
+            break
+
+    if spec_sandbox_src is None:
         return {}
 
     # Recursively collect all .py files
