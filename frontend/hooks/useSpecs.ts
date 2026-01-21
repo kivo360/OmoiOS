@@ -110,6 +110,8 @@ export function useProjectSpecs(
  * @param specId - The spec ID to get
  * @param options.enabled - Whether to enable the query (default: true if specId provided)
  * @param options.refetchInterval - Polling interval in ms, or function that receives query and returns interval (default: false)
+ * @param options.refetchOnWindowFocus - Refetch when window regains focus (default: uses global QueryClient setting)
+ * @param options.staleTime - Time in ms before data is considered stale (default: uses global QueryClient setting)
  *
  * @example
  * // Poll every 5s when spec is executing to see task status updates
@@ -117,6 +119,8 @@ export function useProjectSpecs(
  *   refetchInterval: (query) => {
  *     return query.state.data?.status === "executing" ? 5000 : false
  *   },
+ *   refetchOnWindowFocus: true,
+ *   staleTime: 10_000, // Consider stale after 10s
  * })
  */
 export function useSpec(
@@ -124,6 +128,8 @@ export function useSpec(
   options?: {
     enabled?: boolean
     refetchInterval?: number | false | ((query: { state: { data: Spec | undefined } }) => number | false)
+    refetchOnWindowFocus?: boolean
+    staleTime?: number
   }
 ) {
   return useQuery<Spec>({
@@ -131,6 +137,8 @@ export function useSpec(
     queryFn: () => getSpec(specId!),
     enabled: options?.enabled ?? !!specId,
     refetchInterval: options?.refetchInterval as any, // TanStack Query supports function callback
+    refetchOnWindowFocus: options?.refetchOnWindowFocus,
+    staleTime: options?.staleTime,
   })
 }
 
