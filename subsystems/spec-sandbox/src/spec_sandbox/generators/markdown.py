@@ -24,17 +24,45 @@ class MarkdownGenerator:
     - Ticket files with task breakdown
     - Task files with implementation details
     - Spec summary with coverage matrix
+
+    Directory Structure (matches spec-driven-dev skill):
+    ```
+    .omoi_os/
+    ├── requirements/
+    │   └── REQ-{feature}.md
+    ├── designs/
+    │   └── {feature}.md
+    ├── tickets/
+    │   └── TKT-NNN.md
+    ├── tasks/
+    │   ├── index.md
+    │   └── TSK-NNN.md
+    └── SPEC_SUMMARY.md
+    ```
     """
 
-    def __init__(self, output_dir: Path, spec_id: str, spec_title: str) -> None:
-        self.output_dir = output_dir
+    def __init__(
+        self,
+        output_dir: Path,
+        spec_id: str,
+        spec_title: str,
+        use_omoi_os_structure: bool = True,
+    ) -> None:
+        self.base_output_dir = output_dir
+        # Use .omoi_os subdirectory by default (matches skill structure)
+        if use_omoi_os_structure:
+            self.output_dir = output_dir / ".omoi_os"
+        else:
+            self.output_dir = output_dir
         self.spec_id = spec_id
         self.spec_title = spec_title
         self.created_date = datetime.now().strftime("%Y-%m-%d")
+        self.use_omoi_os_structure = use_omoi_os_structure
 
     def generate_all(
         self,
         explore_output: Optional[Dict[str, Any]] = None,
+        prd_output: Optional[Dict[str, Any]] = None,
         requirements_output: Optional[Dict[str, Any]] = None,
         design_output: Optional[Dict[str, Any]] = None,
         tasks_output: Optional[Dict[str, Any]] = None,
@@ -45,6 +73,10 @@ class MarkdownGenerator:
         Returns dict mapping artifact type to file path.
         """
         artifacts: Dict[str, Path] = {}
+
+        if prd_output:
+            path = self._write_prd(prd_output, explore_output)
+            artifacts["prd"] = path
 
         if requirements_output:
             path = self._write_requirements(requirements_output, explore_output)
@@ -78,7 +110,10 @@ class MarkdownGenerator:
         output: Dict[str, Any],
         explore_output: Optional[Dict[str, Any]] = None,
     ) -> Path:
-        """Write requirements markdown document."""
+        """Write requirements markdown document.
+
+        Structure: .omoi_os/requirements/REQ-{feature}.md
+        """
         markdown = generate_requirements_markdown(
             output=output,
             spec_id=self.spec_id,
@@ -87,8 +122,47 @@ class MarkdownGenerator:
             explore_output=explore_output,
         )
 
-        path = self.output_dir / "requirements.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
+        # Use .omoi_os/requirements/ subdirectory (matches skill structure)
+        if self.use_omoi_os_structure:
+            requirements_dir = self.output_dir / "requirements"
+            requirements_dir.mkdir(parents=True, exist_ok=True)
+            # File naming: REQ-{feature}.md (matches skill)
+            safe_feature = self.spec_id.replace(" ", "-").lower()
+            path = requirements_dir / f"REQ-{safe_feature}.md"
+        else:
+            path = self.output_dir / "requirements.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+
+        path.write_text(markdown)
+        return path
+
+    def _write_prd(
+        self,
+        output: Dict[str, Any],
+        explore_output: Optional[Dict[str, Any]] = None,
+    ) -> Path:
+        """Write PRD markdown document.
+
+        Structure: .omoi_os/prd/{feature}.md
+        """
+        markdown = generate_prd_markdown(
+            output=output,
+            spec_id=self.spec_id,
+            spec_title=self.spec_title,
+            created_date=self.created_date,
+            explore_output=explore_output,
+        )
+
+        # Use .omoi_os/prd/ subdirectory
+        if self.use_omoi_os_structure:
+            prd_dir = self.output_dir / "prd"
+            prd_dir.mkdir(parents=True, exist_ok=True)
+            safe_feature = self.spec_id.replace(" ", "-").lower()
+            path = prd_dir / f"{safe_feature}.md"
+        else:
+            path = self.output_dir / "prd.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+
         path.write_text(markdown)
         return path
 
@@ -98,7 +172,10 @@ class MarkdownGenerator:
         explore_output: Optional[Dict[str, Any]] = None,
         requirements_output: Optional[Dict[str, Any]] = None,
     ) -> Path:
-        """Write design markdown document."""
+        """Write design markdown document.
+
+        Structure: .omoi_os/designs/{feature}.md
+        """
         markdown = generate_design_markdown(
             output=output,
             spec_id=self.spec_id,
@@ -108,8 +185,17 @@ class MarkdownGenerator:
             requirements_output=requirements_output,
         )
 
-        path = self.output_dir / "design.md"
-        path.parent.mkdir(parents=True, exist_ok=True)
+        # Use .omoi_os/designs/ subdirectory (matches skill structure)
+        if self.use_omoi_os_structure:
+            designs_dir = self.output_dir / "designs"
+            designs_dir.mkdir(parents=True, exist_ok=True)
+            # File naming: {feature}.md (matches skill)
+            safe_feature = self.spec_id.replace(" ", "-").lower()
+            path = designs_dir / f"{safe_feature}.md"
+        else:
+            path = self.output_dir / "design.md"
+            path.parent.mkdir(parents=True, exist_ok=True)
+
         path.write_text(markdown)
         return path
 
@@ -601,6 +687,301 @@ def generate_requirements_markdown(
     lines.append("| Version | Date | Author | Changes |\n")
     lines.append("|---------|------|--------|--------|\n")
     lines.append(f"| 1.0 | {created_date} | spec-sandbox | Initial draft |\n")
+
+    return "".join(lines)
+
+
+# =============================================================================
+# PRD MARKDOWN - Product Requirements Document
+# =============================================================================
+
+
+def generate_prd_markdown(
+    output: Dict[str, Any],
+    spec_id: str,
+    spec_title: str,
+    created_date: str,
+    explore_output: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Generate PRD markdown for product requirements document.
+
+    Includes overview, goals, users, user stories, scope,
+    assumptions, constraints, risks, and open questions.
+    """
+    overview = output.get("overview", {})
+    goals = output.get("goals", {})
+    users = output.get("users", {})
+    user_stories = output.get("user_stories", [])
+    scope = output.get("scope", {})
+    assumptions = output.get("assumptions", [])
+    constraints = output.get("constraints", {})
+    risks = output.get("risks", [])
+    open_questions = output.get("open_questions", [])
+
+    # Build frontmatter
+    feature_name = overview.get("feature_name", spec_title)
+    frontmatter = {
+        "id": f"PRD-{spec_id.upper()}",
+        "title": f"{feature_name} PRD",
+        "feature": spec_id,
+        "created": created_date,
+        "updated": created_date,
+        "status": "draft",
+        "version": "1.0",
+    }
+
+    lines = [_yaml_frontmatter(frontmatter)]
+
+    # ==========================================================================
+    # DOCUMENT HEADER
+    # ==========================================================================
+    lines.append(f"# {feature_name}\n\n")
+
+    # One-liner
+    one_liner = overview.get("one_liner", "")
+    if one_liner:
+        lines.append(f"> {one_liner}\n\n")
+
+    lines.append("---\n\n")
+
+    # ==========================================================================
+    # OVERVIEW
+    # ==========================================================================
+    lines.append("## Overview\n\n")
+
+    # Problem Statement
+    problem = overview.get("problem_statement", "")
+    if problem:
+        lines.append("### Problem Statement\n\n")
+        lines.append(f"{problem}\n\n")
+
+    # Solution Summary
+    solution = overview.get("solution_summary", "")
+    if solution:
+        lines.append("### Solution Summary\n\n")
+        lines.append(f"{solution}\n\n")
+
+    lines.append("---\n\n")
+
+    # ==========================================================================
+    # GOALS
+    # ==========================================================================
+    lines.append("## Goals\n\n")
+
+    # Primary Goals
+    primary_goals = goals.get("primary", [])
+    if primary_goals:
+        lines.append("### Primary Goals\n\n")
+        for goal in primary_goals:
+            lines.append(f"- {goal}\n")
+        lines.append("\n")
+
+    # Secondary Goals
+    secondary_goals = goals.get("secondary", [])
+    if secondary_goals:
+        lines.append("### Secondary Goals\n\n")
+        for goal in secondary_goals:
+            lines.append(f"- {goal}\n")
+        lines.append("\n")
+
+    # Success Metrics
+    success_metrics = goals.get("success_metrics", [])
+    if success_metrics:
+        lines.append("### Success Metrics\n\n")
+        lines.append("| Metric | Target | How to Measure |\n")
+        lines.append("|--------|--------|----------------|\n")
+        for metric in success_metrics:
+            if isinstance(metric, dict):
+                name = metric.get("metric", "")
+                target = metric.get("target", "")
+                measurement = metric.get("measurement", "")
+                lines.append(f"| {name} | {target} | {measurement} |\n")
+            else:
+                lines.append(f"| {metric} | - | - |\n")
+        lines.append("\n")
+
+    lines.append("---\n\n")
+
+    # ==========================================================================
+    # USERS
+    # ==========================================================================
+    lines.append("## Users\n\n")
+
+    # Primary Users
+    primary_users = users.get("primary", [])
+    if primary_users:
+        lines.append("### Primary Users\n\n")
+        for user in primary_users:
+            if isinstance(user, dict):
+                role = user.get("role", "User")
+                description = user.get("description", "")
+                needs = user.get("needs", [])
+
+                lines.append(f"#### {role}\n\n")
+                if description:
+                    lines.append(f"{description}\n\n")
+                if needs:
+                    lines.append("**Needs:**\n")
+                    for need in needs:
+                        lines.append(f"- {need}\n")
+                    lines.append("\n")
+            else:
+                lines.append(f"- {user}\n")
+        lines.append("\n")
+
+    # Secondary Users
+    secondary_users = users.get("secondary", [])
+    if secondary_users:
+        lines.append("### Secondary Users\n\n")
+        for user in secondary_users:
+            if isinstance(user, dict):
+                role = user.get("role", "User")
+                description = user.get("description", "")
+                lines.append(f"- **{role}**: {description}\n")
+            else:
+                lines.append(f"- {user}\n")
+        lines.append("\n")
+
+    lines.append("---\n\n")
+
+    # ==========================================================================
+    # USER STORIES
+    # ==========================================================================
+    lines.append("## User Stories\n\n")
+
+    if user_stories:
+        for story in user_stories:
+            if not isinstance(story, dict):
+                continue
+
+            story_id = story.get("id", "US-001")
+            role = story.get("role", "user")
+            want = story.get("want", "")
+            benefit = story.get("benefit", "")
+            priority = story.get("priority", "should")
+            acceptance_criteria = story.get("acceptance_criteria", [])
+
+            lines.append(f"### {story_id}\n\n")
+            lines.append(f"**As a** {role},  \n")
+            lines.append(f"**I want** {want},  \n")
+            lines.append(f"**So that** {benefit}.\n\n")
+            lines.append(f"**Priority**: {priority.upper()}\n\n")
+
+            if acceptance_criteria:
+                lines.append("**Acceptance Criteria:**\n")
+                for criterion in acceptance_criteria:
+                    lines.append(f"- [ ] {criterion}\n")
+                lines.append("\n")
+
+            lines.append("---\n\n")
+    else:
+        lines.append("*No user stories defined yet.*\n\n")
+
+    # ==========================================================================
+    # SCOPE
+    # ==========================================================================
+    lines.append("## Scope\n\n")
+
+    # In Scope
+    in_scope = scope.get("in_scope", [])
+    if in_scope:
+        lines.append("### In Scope\n\n")
+        for item in in_scope:
+            lines.append(f"- ✅ {item}\n")
+        lines.append("\n")
+
+    # Out of Scope
+    out_of_scope = scope.get("out_of_scope", [])
+    if out_of_scope:
+        lines.append("### Out of Scope\n\n")
+        for item in out_of_scope:
+            lines.append(f"- ❌ {item}\n")
+        lines.append("\n")
+
+    # Dependencies
+    dependencies = scope.get("dependencies", [])
+    if dependencies:
+        lines.append("### Dependencies\n\n")
+        for dep in dependencies:
+            lines.append(f"- {dep}\n")
+        lines.append("\n")
+
+    lines.append("---\n\n")
+
+    # ==========================================================================
+    # ASSUMPTIONS
+    # ==========================================================================
+    if assumptions:
+        lines.append("## Assumptions\n\n")
+        for assumption in assumptions:
+            lines.append(f"- {assumption}\n")
+        lines.append("\n---\n\n")
+
+    # ==========================================================================
+    # CONSTRAINTS
+    # ==========================================================================
+    if constraints:
+        lines.append("## Constraints\n\n")
+
+        technical = constraints.get("technical", [])
+        if technical:
+            lines.append("### Technical Constraints\n\n")
+            for constraint in technical:
+                lines.append(f"- {constraint}\n")
+            lines.append("\n")
+
+        business = constraints.get("business", [])
+        if business:
+            lines.append("### Business Constraints\n\n")
+            for constraint in business:
+                lines.append(f"- {constraint}\n")
+            lines.append("\n")
+
+        lines.append("---\n\n")
+
+    # ==========================================================================
+    # RISKS
+    # ==========================================================================
+    if risks:
+        lines.append("## Risks\n\n")
+        lines.append("| Risk | Impact | Probability | Mitigation |\n")
+        lines.append("|------|--------|-------------|------------|\n")
+
+        for risk in risks:
+            if isinstance(risk, dict):
+                description = risk.get("description", "")
+                impact = risk.get("impact", "medium")
+                probability = risk.get("probability", "medium")
+                mitigation = risk.get("mitigation", "")
+                lines.append(f"| {description} | {impact} | {probability} | {mitigation} |\n")
+            else:
+                lines.append(f"| {risk} | - | - | - |\n")
+
+        lines.append("\n---\n\n")
+
+    # ==========================================================================
+    # OPEN QUESTIONS
+    # ==========================================================================
+    if open_questions:
+        lines.append("## Open Questions\n\n")
+        for question in open_questions:
+            lines.append(f"- [ ] {question}\n")
+        lines.append("\n---\n\n")
+
+    # ==========================================================================
+    # RELATED DOCUMENTS
+    # ==========================================================================
+    lines.append("## Related Documents\n\n")
+    lines.append(f"- [Requirements](../requirements/REQ-{spec_id.replace(' ', '-').lower()}.md)\n")
+    lines.append(f"- [Design](../designs/{spec_id.replace(' ', '-').lower()}.md)\n")
+    lines.append(f"- [Tasks](../tasks/index.md)\n\n")
+
+    lines.append("---\n\n")
+
+    lines.append("## Revision History\n\n")
+    lines.append("| Version | Date | Author | Changes |\n")
+    lines.append("|---------|------|--------|--------|\n")
+    lines.append(f"| 1.0 | {created_date} | spec-sandbox | Initial PRD |\n")
 
     return "".join(lines)
 

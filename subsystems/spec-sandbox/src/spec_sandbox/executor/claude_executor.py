@@ -186,6 +186,7 @@ class ClaudeExecutor:
 
         # Build context strings for each previous phase
         explore_context = json.dumps(context.get("explore", {}), indent=2)
+        prd_context = json.dumps(context.get("prd", {}), indent=2)
         requirements_context = json.dumps(context.get("requirements", {}), indent=2)
         design_context = json.dumps(context.get("design", {}), indent=2)
         tasks_context = json.dumps(context.get("tasks", {}), indent=2)
@@ -195,6 +196,7 @@ class ClaudeExecutor:
             spec_title=spec_title,
             spec_description=spec_description,
             explore_context=explore_context,
+            prd_context=prd_context,
             requirements_context=requirements_context,
             design_context=design_context,
             tasks_context=tasks_context,
@@ -439,6 +441,7 @@ Start by exploring, then write the JSON output file.
         """Mock execution when SDK not available.
 
         Mock outputs are designed to pass evaluators with reasonable scores.
+        These outputs include all fields required by the enhanced evaluators.
         """
         await asyncio.sleep(0.1)  # Simulate work
 
@@ -459,11 +462,218 @@ Start by exploring, then write the JSON output file.
                 "entry_points": ["src/main.py"],
                 "test_structure": "pytest in tests/ with fixtures in conftest.py",
                 "notes": "Mock exploration - SDK not available",
+                # New fields required by enhanced evaluators
+                "structure": {
+                    "api": ["src/api/"],
+                    "services": ["src/services/"],
+                    "models": ["src/models/"],
+                    "tests": ["tests/"],
+                },
+                "discovery_questions": {
+                    "problem_value": [
+                        "What specific problem does this feature solve?",
+                        "Who experiences this problem most acutely?",
+                        "What is the cost of not solving this problem?",
+                    ],
+                    "users_journeys": [
+                        "Who are the primary users of this feature?",
+                        "What is their current workflow without this feature?",
+                        "What would the ideal user journey look like?",
+                    ],
+                    "scope_boundaries": [
+                        "What is explicitly out of scope for this implementation?",
+                        "Are there any hard constraints we must work within?",
+                        "What is the minimum viable version of this feature?",
+                    ],
+                    "technical_context": [
+                        "What existing systems does this need to integrate with?",
+                        "Are there performance requirements we need to meet?",
+                        "What data migrations might be required?",
+                    ],
+                    "risks_tradeoffs": [
+                        "What are the biggest technical risks?",
+                        "What tradeoffs are we willing to make?",
+                        "What would cause this project to fail?",
+                    ],
+                },
+                "feature_summary": {
+                    "name": spec_title,
+                    "scope_in": ["Core functionality", "Basic validation", "API endpoints"],
+                    "scope_out": ["Advanced analytics", "Mobile support", "Third-party integrations"],
+                    "problem_statement": f"Users need {spec_title} to improve their workflow efficiency",
+                    "technical_constraints": ["Must work with existing auth system", "Database schema backward compatible"],
+                },
+                "conventions": {
+                    "naming": "snake_case for Python, camelCase for API",
+                    "testing": "pytest with fixtures, 80% coverage target",
+                    "patterns": ["Repository pattern", "Service layer", "Dependency injection"],
+                },
+            },
+            SpecPhase.PRD: {
+                "overview": {
+                    "feature_name": spec_title,
+                    "one_liner": f"A comprehensive solution for {spec_title} that improves user workflow efficiency",
+                    "problem_statement": f"Users currently lack an efficient way to handle {spec_title}. This causes delays, errors, and frustration in their daily workflows. Without a proper solution, productivity suffers and user satisfaction decreases.",
+                    "solution_summary": f"We will implement {spec_title} as a robust, user-friendly feature that integrates seamlessly with existing systems. The solution includes a clean API, proper validation, and comprehensive error handling to ensure a smooth user experience.",
+                },
+                "goals": {
+                    "primary": [
+                        f"Enable users to efficiently perform {spec_title} operations",
+                        "Reduce time spent on manual workflows by 50%",
+                        "Provide clear feedback and error handling for all operations",
+                    ],
+                    "secondary": [
+                        "Lay groundwork for future feature extensions",
+                        "Improve overall system reliability",
+                        "Enhance user satisfaction with the platform",
+                    ],
+                    "success_metrics": [
+                        {
+                            "metric": "Task completion time",
+                            "target": "50% reduction from baseline",
+                            "measurement": "Average time tracked via analytics",
+                        },
+                        {
+                            "metric": "Error rate",
+                            "target": "< 1% of operations",
+                            "measurement": "Error logs and user reports",
+                        },
+                        {
+                            "metric": "User satisfaction",
+                            "target": "> 4.0/5.0 rating",
+                            "measurement": "Post-feature survey",
+                        },
+                    ],
+                },
+                "users": {
+                    "primary": [
+                        {
+                            "role": "End User",
+                            "description": "Regular users who need to perform daily operations efficiently",
+                            "needs": [
+                                "Quick access to core functionality",
+                                "Clear feedback on operation status",
+                                "Minimal learning curve",
+                            ],
+                        },
+                    ],
+                    "secondary": [
+                        {
+                            "role": "Administrator",
+                            "description": "Users who manage system configuration and user access",
+                            "needs": [
+                                "Ability to configure feature settings",
+                                "Access to usage analytics",
+                                "User management capabilities",
+                            ],
+                        },
+                    ],
+                },
+                "user_stories": [
+                    {
+                        "id": "US-001",
+                        "role": "End User",
+                        "want": f"to quickly initiate {spec_title} operations",
+                        "benefit": "I can complete my work faster and with fewer errors",
+                        "priority": "must",
+                        "acceptance_criteria": [
+                            "User can access the feature from the main navigation",
+                            "Operation can be initiated with 3 or fewer clicks",
+                            "Clear confirmation is shown upon completion",
+                        ],
+                    },
+                    {
+                        "id": "US-002",
+                        "role": "End User",
+                        "want": "to receive clear feedback when operations fail",
+                        "benefit": "I can understand what went wrong and how to fix it",
+                        "priority": "must",
+                        "acceptance_criteria": [
+                            "Error messages are displayed in plain language",
+                            "Suggested remediation steps are provided",
+                            "User can retry the operation easily",
+                        ],
+                    },
+                    {
+                        "id": "US-003",
+                        "role": "Administrator",
+                        "want": "to view usage statistics for the feature",
+                        "benefit": "I can understand adoption and identify issues",
+                        "priority": "should",
+                        "acceptance_criteria": [
+                            "Dashboard shows daily/weekly/monthly usage",
+                            "Error rates are visible and filterable",
+                            "Data can be exported for reporting",
+                        ],
+                    },
+                ],
+                "scope": {
+                    "in_scope": [
+                        f"Core {spec_title} functionality",
+                        "API endpoints for all operations",
+                        "Input validation and error handling",
+                        "Basic usage logging",
+                        "Unit and integration tests",
+                    ],
+                    "out_of_scope": [
+                        "Mobile application support",
+                        "Real-time notifications",
+                        "Third-party integrations",
+                        "Advanced analytics dashboard",
+                        "Internationalization (i18n)",
+                    ],
+                    "dependencies": [
+                        "Existing authentication system",
+                        "PostgreSQL database",
+                        "Redis cache (optional optimization)",
+                    ],
+                },
+                "assumptions": [
+                    "Users have valid authentication credentials",
+                    "Database is available and performant",
+                    "Existing API patterns will be followed",
+                    "Feature will be deployed to existing infrastructure",
+                ],
+                "constraints": {
+                    "technical": [
+                        "Must work with Python 3.12+",
+                        "Must use existing FastAPI framework",
+                        "Database schema must be backward compatible",
+                        "API must follow existing REST conventions",
+                    ],
+                    "business": [
+                        "Must be completed within planned timeline",
+                        "Must not require additional infrastructure costs",
+                        "Must maintain existing SLA commitments",
+                    ],
+                },
+                "risks": [
+                    {
+                        "description": "Integration complexity with existing systems",
+                        "impact": "medium",
+                        "mitigation": "Early integration testing and incremental rollout",
+                    },
+                    {
+                        "description": "Performance degradation under load",
+                        "impact": "high",
+                        "mitigation": "Load testing before release and caching strategy",
+                    },
+                    {
+                        "description": "User adoption challenges",
+                        "impact": "medium",
+                        "mitigation": "Clear documentation and gradual feature introduction",
+                    },
+                ],
+                "open_questions": [
+                    "Should we support bulk operations in the initial release?",
+                    "What is the expected peak load for this feature?",
+                    "Are there any compliance requirements we need to consider?",
+                ],
             },
             SpecPhase.REQUIREMENTS: {
                 "requirements": [
                     {
-                        "id": "REQ-001",
+                        "id": "REQ-FEAT-CORE-001",
                         "type": "functional",
                         "category": "Core",
                         "text": f"WHEN a user requests {spec_title}, THE SYSTEM SHALL process the request and return the expected result",
@@ -476,7 +686,7 @@ Start by exploring, then write the JSON output file.
                         "dependencies": [],
                     },
                     {
-                        "id": "REQ-002",
+                        "id": "REQ-FEAT-PERF-002",
                         "type": "non_functional",
                         "category": "Performance",
                         "text": "THE SYSTEM SHALL respond to requests within 500ms under normal load",
@@ -485,15 +695,26 @@ Start by exploring, then write the JSON output file.
                             "P95 latency under 500ms",
                             "Handles 100 concurrent requests",
                         ],
-                        "dependencies": ["REQ-001"],
+                        "dependencies": ["REQ-FEAT-CORE-001"],
                     },
                 ],
                 "assumptions": [
                     "SDK available in production",
                     "Database connection is reliable",
                 ],
-                "out_of_scope": ["UI components"],
+                "out_of_scope": ["UI components", "Mobile application", "Real-time notifications"],
                 "open_questions": [],
+                # New fields required by enhanced evaluators
+                "traceability": {
+                    "REQ-FEAT-CORE-001": {
+                        "source": "discovery_questions.problem_value",
+                        "stakeholder": "Product Owner",
+                    },
+                    "REQ-FEAT-PERF-002": {
+                        "source": "technical_constraints",
+                        "stakeholder": "Engineering Lead",
+                    },
+                },
             },
             SpecPhase.DESIGN: {
                 "architecture_overview": f"The design for {spec_title} follows a layered architecture with clear separation between API, service, and data layers. The API layer handles HTTP concerns, the service layer contains business logic, and the data layer manages persistence.",
@@ -520,6 +741,8 @@ Start by exploring, then write the JSON output file.
                         "name": "Feature",
                         "fields": {"id": "uuid", "name": "str", "created_at": "datetime"},
                         "purpose": "Main feature entity",
+                        "indexes": ["id", "created_at"],
+                        "constraints": ["name NOT NULL", "id PRIMARY KEY"],
                     },
                 ],
                 "api_endpoints": [
@@ -529,10 +752,25 @@ Start by exploring, then write the JSON output file.
                         "purpose": "Create new feature",
                         "request_schema": {"name": "str"},
                         "response_schema": {"id": "uuid", "name": "str"},
+                        "auth_required": True,
+                        "rate_limit": "100/minute",
                     },
                 ],
-                "integration_points": ["Database", "Cache"],
-                "error_handling": "Standard exception handling with custom error types",
+                "integration_points": [
+                    {"system": "Database", "protocol": "PostgreSQL", "purpose": "Data persistence"},
+                    {"system": "Cache", "protocol": "Redis", "purpose": "Response caching"},
+                ],
+                "error_handling": {
+                    "strategy": "Exception hierarchy with custom error types",
+                    "error_types": ["ValidationError", "NotFoundError", "AuthorizationError"],
+                    "logging": "Structured JSON logging to stdout",
+                },
+                "security_considerations": [
+                    "Input validation on all endpoints",
+                    "Authentication required for write operations",
+                    "Rate limiting to prevent abuse",
+                    "SQL injection prevention via parameterized queries",
+                ],
                 "testing_strategy": "Unit tests for services, integration tests for API endpoints, using pytest fixtures for test data",
                 "migration_plan": None,
             },
@@ -543,7 +781,7 @@ Start by exploring, then write the JSON output file.
                         "title": "Core Feature Implementation",
                         "description": f"Implement the core functionality for {spec_title} including data models, service layer, and API endpoints",
                         "priority": "HIGH",
-                        "requirements": ["REQ-001", "REQ-002"],
+                        "requirements": ["REQ-FEAT-CORE-001", "REQ-FEAT-PERF-002"],
                         "tasks": ["TSK-001", "TSK-002", "TSK-003"],
                         "dependencies": [],
                     },
@@ -559,7 +797,7 @@ Start by exploring, then write the JSON output file.
                         "files_to_modify": [],
                         "files_to_create": ["src/models/feature.py"],
                         "dependencies": {"depends_on": []},
-                        "requirements_addressed": ["REQ-001"],
+                        "requirements_addressed": ["REQ-FEAT-CORE-001"],
                         "acceptance_criteria": ["Model has all required fields", "Migrations run successfully"],
                         "estimated_hours": 2,
                     },
@@ -573,7 +811,7 @@ Start by exploring, then write the JSON output file.
                         "files_to_modify": [],
                         "files_to_create": ["src/services/feature.py"],
                         "dependencies": {"depends_on": ["TSK-001"]},
-                        "requirements_addressed": ["REQ-001"],
+                        "requirements_addressed": ["REQ-FEAT-CORE-001"],
                         "acceptance_criteria": ["Service handles all use cases", "Unit tests pass"],
                         "estimated_hours": 3,
                     },
@@ -587,13 +825,14 @@ Start by exploring, then write the JSON output file.
                         "files_to_modify": ["src/api/routes.py"],
                         "files_to_create": [],
                         "dependencies": {"depends_on": ["TSK-002"]},
-                        "requirements_addressed": ["REQ-001", "REQ-002"],
+                        "requirements_addressed": ["REQ-FEAT-CORE-001", "REQ-FEAT-PERF-002"],
                         "acceptance_criteria": ["Endpoint returns correct response", "Integration tests pass"],
                         "estimated_hours": 2,
                     },
                 ],
                 "total_estimated_hours": 7,
                 "critical_path": ["TSK-001", "TSK-002", "TSK-003"],
+                "parallel_tracks": [],
             },
             SpecPhase.SYNC: {
                 "validation_results": {
@@ -605,12 +844,12 @@ Start by exploring, then write the JSON output file.
                 },
                 "coverage_matrix": [
                     {
-                        "requirement_id": "REQ-001",
+                        "requirement_id": "REQ-FEAT-CORE-001",
                         "covered_by_tasks": ["TSK-001", "TSK-002", "TSK-003"],
                         "status": "fully_covered",
                     },
                     {
-                        "requirement_id": "REQ-002",
+                        "requirement_id": "REQ-FEAT-PERF-002",
                         "covered_by_tasks": ["TSK-003"],
                         "status": "fully_covered",
                     },
@@ -637,6 +876,17 @@ Start by exploring, then write the JSON output file.
                         "requirements": [],
                     },
                 },
+                "dependency_analysis": {
+                    "critical_path_length": 3,
+                    "parallelizable_tasks": 0,
+                    "blocking_tasks": ["TSK-001"],
+                    "risk_assessment": "Low - linear dependency chain with no complex interdependencies",
+                },
+                "recommendations": [
+                    "Consider adding integration tests for API endpoints early",
+                    "Database migrations should be tested in staging first",
+                    "Monitor performance metrics after deployment",
+                ],
                 "spec_summary": {
                     "total_requirements": 2,
                     "total_tickets": 1,

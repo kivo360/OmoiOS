@@ -143,10 +143,10 @@ export function EventTimeline({
   const previousEventsRef = useRef<Set<string>>(new Set())
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Poll every 2s when executing and not paused
+  // Poll every 1.5s when executing and not paused for faster updates
   const { data: eventsData, isLoading } = useSpecEvents(specId, {
     enabled: true,
-    refetchInterval: isExecuting && !isPaused ? 2000 : false,
+    refetchInterval: isExecuting && !isPaused ? 1500 : false,
     limit: 100,
   })
 

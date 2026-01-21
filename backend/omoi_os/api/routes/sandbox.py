@@ -1487,6 +1487,38 @@ async def post_sandbox_event(
                                 f"Received {event.event_type} for spec {spec_id} but phase_data is empty or missing. "
                                 f"event_data keys: {list(event.event_data.keys())}"
                             )
+                    # Handle phase started - update current_phase and progress immediately for real-time UI sync
+                    elif event.event_type == "spec.phase_started":
+                        phase_name = event.event_data.get("phase")
+                        if phase_name:
+                            logger.info(
+                                f"Phase started: spec {spec_id} now in phase {phase_name}"
+                            )
+                            # Calculate progress based on phase order
+                            # Phases: explore (0%), requirements (20%), design (40%), tasks (60%), sync (80%)
+                            # Progress shows "starting this phase", completion adds the final 20%
+                            phase_progress = {
+                                "explore": 0.0,
+                                "requirements": 20.0,
+                                "design": 40.0,
+                                "tasks": 60.0,
+                                "sync": 80.0,
+                            }
+                            new_progress = phase_progress.get(phase_name, 0.0)
+
+                            async with db.get_async_session() as session:
+                                result = await session.execute(
+                                    select(Spec).where(Spec.id == spec_id)
+                                )
+                                spec = result.scalar_one_or_none()
+                                if spec:
+                                    spec.current_phase = phase_name
+                                    spec.progress = new_progress
+                                    spec.updated_at = utc_now()
+                                    await session.commit()
+                                    logger.info(
+                                        f"Spec {spec_id} current_phase={phase_name}, progress={new_progress}%"
+                                    )
                     # Handle incremental phase completion - sync phase_data as each phase finishes
                     elif event.event_type == "spec.phase_completed":
                         phase_name = event.event_data.get("phase")

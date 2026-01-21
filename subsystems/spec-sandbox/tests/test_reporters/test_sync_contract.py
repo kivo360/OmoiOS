@@ -30,7 +30,7 @@ class TestSyncSummaryFormat:
     @pytest.mark.asyncio
     async def test_sync_summary_contains_required_fields(self):
         """Sync summary must contain all fields expected by backend."""
-        reporter = HTTPReporter(callback_url="http://localhost:8000")
+        reporter = HTTPReporter(callback_url="http://localhost:8000", sandbox_id="test-sandbox-123")
 
         # Sample sync output from SpecStateMachine
         sync_output = {
@@ -87,40 +87,50 @@ class TestSyncSummaryFormat:
             url = call_args[0][0]
             payload = call_args[1]["json"]
 
-            # URL should be the sync-summary endpoint
-            assert url.endswith("/api/v1/sandbox/sync-summary")
+            # URL should be the sandbox events endpoint
+            assert "/api/v1/sandboxes/" in url
+            assert url.endswith("/events")
 
-            # Required fields
-            assert payload["spec_id"] == "test-spec-123"
-            assert payload["status"] in ["completed", "blocked"]
+            # Event format
+            assert payload["event_type"] == "agent.completed"
+            assert payload["source"] == "agent"
+
+            # Event data contains sync_summary
+            event_data = payload["event_data"]
+            assert event_data["spec_id"] == "test-spec-123"
+
+            # Sync summary within event_data
+            sync_summary = event_data["sync_summary"]
+            assert sync_summary["spec_id"] == "test-spec-123"
+            assert sync_summary["status"] in ["completed", "blocked"]
 
             # Traceability section
-            assert "traceability" in payload
-            assert "requirements" in payload["traceability"]
-            assert "tasks" in payload["traceability"]
-            assert "orphans" in payload["traceability"]
+            assert "traceability" in sync_summary
+            assert "requirements" in sync_summary["traceability"]
+            assert "tasks" in sync_summary["traceability"]
+            assert "orphans" in sync_summary["traceability"]
 
             # Validation section
-            assert "validation" in payload
-            assert "all_requirements_covered" in payload["validation"]
-            assert "all_components_have_tasks" in payload["validation"]
-            assert "dependency_order_valid" in payload["validation"]
-            assert "issues" in payload["validation"]
+            assert "validation" in sync_summary
+            assert "all_requirements_covered" in sync_summary["validation"]
+            assert "all_components_have_tasks" in sync_summary["validation"]
+            assert "dependency_order_valid" in sync_summary["validation"]
+            assert "issues" in sync_summary["validation"]
 
             # Summary section
-            assert "summary" in payload
-            assert "total_requirements" in payload["summary"]
-            assert "total_tasks" in payload["summary"]
-            assert "total_estimated_hours" in payload["summary"]
+            assert "summary" in sync_summary
+            assert "total_requirements" in sync_summary["summary"]
+            assert "total_tasks" in sync_summary["summary"]
+            assert "total_estimated_hours" in sync_summary["summary"]
 
             # Phase data for backend Spec model update
-            assert "phase_data" in payload
-            assert payload["phase_data"] == phase_data
+            assert "phase_data" in event_data
+            assert event_data["phase_data"] == phase_data
 
     @pytest.mark.asyncio
     async def test_sync_summary_status_blocked_when_not_ready(self):
         """Sync summary status should be 'blocked' when ready_for_execution is False."""
-        reporter = HTTPReporter(callback_url="http://localhost:8000")
+        reporter = HTTPReporter(callback_url="http://localhost:8000", sandbox_id="test-sandbox-123")
 
         sync_output = {
             "ready_for_execution": False,  # Not ready
@@ -144,13 +154,14 @@ class TestSyncSummaryFormat:
             )
 
             payload = mock_client.post.call_args[1]["json"]
-            assert payload["status"] == "blocked"
-            assert "Missing coverage" in payload["blockers"][0]
+            sync_summary = payload["event_data"]["sync_summary"]
+            assert sync_summary["status"] == "blocked"
+            assert "Missing coverage" in sync_summary["blockers"][0]
 
     @pytest.mark.asyncio
     async def test_sync_summary_stored_for_inspection(self):
         """Sync summary should be stored on reporter for test inspection."""
-        reporter = HTTPReporter(callback_url="http://localhost:8000")
+        reporter = HTTPReporter(callback_url="http://localhost:8000", sandbox_id="test-sandbox-123")
 
         sync_output = {
             "ready_for_execution": True,
@@ -417,12 +428,12 @@ class TestAgentCompletedEvent:
 
 
 class TestHTTPReporterBatching:
-    """Test that HTTPReporter batches events correctly for backend."""
+    """Test that HTTPReporter sends events to backend when batch size reached."""
 
     @pytest.mark.asyncio
-    async def test_events_batched_as_array(self):
-        """Events should be sent as JSON array to backend."""
-        reporter = HTTPReporter(callback_url="http://localhost:8000", batch_size=2)
+    async def test_events_sent_on_batch_size(self):
+        """Events should be sent individually when batch size is reached."""
+        reporter = HTTPReporter(callback_url="http://localhost:8000", sandbox_id="test-sandbox-123", batch_size=2)
 
         events = [
             Event(event_type="a", spec_id="test"),
@@ -436,25 +447,22 @@ class TestHTTPReporterBatching:
             mock_client.post = AsyncMock(return_value=mock_response)
             mock_get_client.return_value = mock_client
 
-            # Report two events (triggers batch due to batch_size=2)
+            # Report two events (triggers flush due to batch_size=2)
             await reporter.report(events[0])
             await reporter.report(events[1])
 
-            # Should have sent a batch
-            assert mock_client.post.called
-            call_args = mock_client.post.call_args
-            payload = call_args[1]["json"]
+            # Should have sent events (one call per event)
+            assert mock_client.post.call_count == 2
 
-            # Payload should be a list of event dicts
-            assert isinstance(payload, list)
-            assert len(payload) == 2
-            assert payload[0]["event_type"] == "a"
-            assert payload[1]["event_type"] == "b"
+            # Verify both events were sent
+            call_args_list = mock_client.post.call_args_list
+            assert call_args_list[0][1]["json"]["event_type"] == "a"
+            assert call_args_list[1][1]["json"]["event_type"] == "b"
 
     @pytest.mark.asyncio
     async def test_flush_sends_remaining_events(self):
         """flush() should send any remaining buffered events."""
-        reporter = HTTPReporter(callback_url="http://localhost:8000", batch_size=10)
+        reporter = HTTPReporter(callback_url="http://localhost:8000", sandbox_id="test-sandbox-123", batch_size=10)
 
         event = Event(event_type="single", spec_id="test")
 
@@ -473,8 +481,7 @@ class TestHTTPReporterBatching:
             # Now sent
             assert mock_client.post.called
             payload = mock_client.post.call_args[1]["json"]
-            assert len(payload) == 1
-            assert payload[0]["event_type"] == "single"
+            assert payload["event_type"] == "single"
 
 
 # ============================================================================

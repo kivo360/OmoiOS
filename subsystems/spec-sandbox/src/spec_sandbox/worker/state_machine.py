@@ -1,6 +1,6 @@
 """Spec State Machine - orchestrates spec-driven development phases.
 
-Phases: EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC → COMPLETE
+Phases: EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC → COMPLETE
 
 All events are emitted through the reporter, which can be:
 - ArrayReporter: In-memory (tests)
@@ -52,7 +52,7 @@ def create_reporter(settings: SpecSandboxSettings) -> Reporter:
 class SpecStateMachine:
     """Spec-driven development state machine.
 
-    Orchestrates phases: EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC
+    Orchestrates phases: EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC
 
     All events are emitted through the reporter abstraction.
     """
@@ -60,6 +60,7 @@ class SpecStateMachine:
     # Default phase order
     PHASES = [
         SpecPhase.EXPLORE,
+        SpecPhase.PRD,
         SpecPhase.REQUIREMENTS,
         SpecPhase.DESIGN,
         SpecPhase.TASKS,
@@ -524,6 +525,7 @@ class SpecStateMachine:
 
         # Collect outputs from successful phases
         explore_output = self.context.get("explore")
+        prd_output = self.context.get("prd")
         requirements_output = self.context.get("requirements")
         design_output = self.context.get("design")
         tasks_output = self.context.get("tasks")
@@ -535,6 +537,7 @@ class SpecStateMachine:
                 # Use Claude Agent SDK-based generator (async)
                 self.markdown_artifacts = await self._claude_generator.generate_all(
                     explore_output=explore_output,
+                    prd_output=prd_output,
                     requirements_output=requirements_output,
                     design_output=design_output,
                     tasks_output=tasks_output,
@@ -544,6 +547,7 @@ class SpecStateMachine:
                 # Use static template-based generator (sync)
                 self.markdown_artifacts = self._markdown_generator.generate_all(
                     explore_output=explore_output,
+                    prd_output=prd_output,
                     requirements_output=requirements_output,
                     design_output=design_output,
                     tasks_output=tasks_output,
@@ -586,6 +590,7 @@ class SpecStateMachine:
             # Collect all phase data for the summary
             phase_data = {
                 "explore": self.context.get("explore", {}),
+                "prd": self.context.get("prd", {}),
                 "requirements": self.context.get("requirements", {}),
                 "design": self.context.get("design", {}),
                 "tasks": self.context.get("tasks", {}),
