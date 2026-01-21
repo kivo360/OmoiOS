@@ -301,9 +301,9 @@ async def _update_spec_phase_data(
                 if "sync" in existing_phase_data:
                     # All phases complete - mark as completed
                     spec.status = "completed"
-                elif spec.status == "executing":
-                    # Still in progress - change to draft
-                    spec.status = "draft"
+                # Keep status as "executing" during incremental updates
+                # This ensures frontend continues polling for real-time updates
+                # Status only changes to "completed" or "failed", never to "draft" mid-execution
             else:
                 spec.status = "failed"
 
