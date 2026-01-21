@@ -160,12 +160,15 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   // Fetch project and spec data
   const { data: project } = useProject(projectId)
   // Poll spec every 5s when executing to see real-time task status updates
+  // Also refetch on window focus to ensure fresh data when user returns
   const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId, {
     refetchInterval: (query) => {
       // Enable polling only when spec is executing
       const specData = query.state.data
       return specData?.status === "executing" ? 5000 : false
     },
+    refetchOnWindowFocus: true,
+    staleTime: 10_000, // Consider data stale after 10s for this page
   })
   const { data: allSpecs } = useProjectSpecs(projectId)
   const { data: versionsData } = useSpecVersions(specId, 10)
