@@ -269,7 +269,7 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     title: spec?.title || "Loading...",
     description: spec?.description || "",
     status: spec?.status || "draft",
-    phase: spec?.phase || "Requirements",
+    phase: spec?.current_phase || "explore",  // Use state machine phase for PhaseProgress
     currentPhase: spec?.current_phase || "explore",  // State machine phase
     progress: spec?.progress || 0,
     testCoverage: spec?.test_coverage || 0,
