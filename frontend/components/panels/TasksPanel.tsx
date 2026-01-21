@@ -7,10 +7,19 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Search, Filter, SortAsc, Plus, AlertCircle } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Search, Filter, ArrowUpDown, Plus, AlertCircle, Check } from "lucide-react"
 import { TaskCard, type TaskStatus } from "@/components/custom/TaskCard"
 import { TimeGroupHeader } from "@/components/custom"
 import { useSandboxTasks, useFailTask } from "@/hooks/useTasks"
+
+type SortOption = "status" | "newest" | "oldest" | "name"
 
 function formatTimeAgo(dateStr: string): string {
   const date = new Date(dateStr)
@@ -59,6 +68,7 @@ interface TasksPanelProps {
 
 export function TasksPanel({ pathname }: TasksPanelProps) {
   const [searchQuery, setSearchQuery] = useState("")
+  const [sortOption, setSortOption] = useState<SortOption>("status")
   const { data: tasks, isLoading, error } = useSandboxTasks({ limit: 50 })
   const failTaskMutation = useFailTask()
 
@@ -85,7 +95,9 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
 
   const filteredTasks = useMemo(() => {
     if (!tasks) return []
-    return tasks.filter((task) => {
+
+    // First filter by search query
+    let filtered = tasks.filter((task) => {
       const searchLower = searchQuery.toLowerCase()
       return (
         (task.title?.toLowerCase().includes(searchLower) ?? false) ||
@@ -93,7 +105,25 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
         task.id.toLowerCase().includes(searchLower)
       )
     })
-  }, [tasks, searchQuery])
+
+    // Then sort based on sortOption (only for non-status sorting)
+    if (sortOption !== "status") {
+      filtered = [...filtered].sort((a, b) => {
+        switch (sortOption) {
+          case "newest":
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          case "oldest":
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+          case "name":
+            return (a.title || "").localeCompare(b.title || "")
+          default:
+            return 0
+        }
+      })
+    }
+
+    return filtered
+  }, [tasks, searchQuery, sortOption])
 
   // Group tasks by status
   const runningTasks = filteredTasks.filter((t) => {
@@ -138,9 +168,25 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
           <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0">
             <Filter className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0">
-            <SortAsc className="h-4 w-4" />
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={sortOption !== "status" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-9 w-9 shrink-0"
+              >
+                <ArrowUpDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuRadioGroup value={sortOption} onValueChange={(v) => setSortOption(v as SortOption)}>
+                <DropdownMenuRadioItem value="status">By Status</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="newest">Newest First</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="oldest">Oldest First</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="name">By Name</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Button className="w-full" size="sm" asChild>
           <Link href="/command">
@@ -163,7 +209,12 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
               <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
               Failed to load tasks
             </div>
-          ) : (
+          ) : filteredTasks.length === 0 ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No tasks found
+            </div>
+          ) : sortOption === "status" ? (
+            // Grouped by status view
             <>
               {runningTasks.length > 0 && (
                 <div className="space-y-1">
@@ -274,13 +325,25 @@ export function TasksPanel({ pathname }: TasksPanelProps) {
                   ))}
                 </div>
               )}
-
-              {filteredTasks.length === 0 && (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  No tasks found
-                </div>
-              )}
             </>
+          ) : (
+            // Flat sorted list view - stacked cards with full text
+            <div className="space-y-2">
+              {filteredTasks.map((task) => (
+                <TaskCard
+                  key={task.id}
+                  id={task.id}
+                  sandboxId={task.sandbox_id}
+                  title={task.title}
+                  taskType={task.task_type}
+                  status={normalizeStatus(task.status)}
+                  timeAgo={task.started_at ? formatTimeAgo(task.started_at) : formatTimeAgo(task.created_at)}
+                  isSelected={task.sandbox_id === selectedSandboxId}
+                  onMarkFailed={normalizeStatus(task.status) === "running" || normalizeStatus(task.status) === "pending" ? handleMarkFailed : undefined}
+                  compact={false}
+                />
+              ))}
+            </div>
           )}
         </div>
       </ScrollArea>

@@ -23,6 +23,8 @@ interface TaskCardProps {
   isSelected?: boolean
   className?: string
   onMarkFailed?: (taskId: string) => void
+  /** When false, shows full text without truncation. Default true */
+  compact?: boolean
 }
 
 const statusConfig = {
@@ -73,9 +75,10 @@ export function TaskCard({
   isSelected,
   className,
   onMarkFailed,
+  compact = true,
 }: TaskCardProps) {
   const normalizedStatus = normalizeStatus(status)
-  const { icon: StatusIcon, iconClass } = statusConfig[normalizedStatus]
+  const { icon: StatusIcon, iconClass, label: statusLabel } = statusConfig[normalizedStatus]
 
   // Display title if available, otherwise fall back to task type
   const displayName = title || taskType || "Untitled Task"
@@ -86,6 +89,64 @@ export function TaskCard({
   // Can mark as failed if running, assigned, or pending
   const canMarkFailed = onMarkFailed && ["running", "assigned", "pending"].includes(normalizedStatus)
 
+  // Expanded (non-compact) view
+  if (!compact) {
+    return (
+      <div
+        className={cn(
+          "group relative rounded-lg border bg-card p-3 transition-colors duration-150 hover:bg-accent",
+          isSelected && "bg-accent border-l-2 border-l-primary",
+          className
+        )}
+      >
+        <Link href={href} className="block">
+          {/* Row 1: Status badge + Time */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1.5">
+              <StatusIcon className={cn("h-3.5 w-3.5", iconClass)} />
+              <span className="text-xs font-medium text-muted-foreground">{statusLabel}</span>
+            </div>
+            <span className="text-xs text-muted-foreground">{timeAgo}</span>
+          </div>
+          {/* Row 2: Full task title */}
+          <p className="text-sm font-medium text-foreground leading-relaxed">
+            {displayName}
+          </p>
+        </Link>
+
+        {/* Action menu for running/pending tasks */}
+        {canMarkFailed && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => e.preventDefault()}
+              >
+                <MoreVertical className="h-3.5 w-3.5" />
+                <span className="sr-only">Task actions</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.preventDefault()
+                  onMarkFailed(id)
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <X className="mr-2 h-4 w-4" />
+                Mark as Failed
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
+    )
+  }
+
+  // Compact view (default)
   return (
     <div
       className={cn(
