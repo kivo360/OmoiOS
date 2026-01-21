@@ -41,11 +41,11 @@ async def test_full_spec_flow_with_jsonl(tmp_path):
     assert EventTypes.SPEC_STARTED in event_types
     assert EventTypes.SPEC_COMPLETED in event_types
 
-    # Verify all phases completed
+    # Verify all phases completed (6 phases including PRD)
     phase_completed_count = sum(
         1 for e in events if e.event_type == EventTypes.PHASE_COMPLETED
     )
-    assert phase_completed_count == 5
+    assert phase_completed_count == 6
 
 
 @pytest.mark.asyncio
@@ -85,9 +85,12 @@ async def test_spec_context_passed_between_phases(tmp_path):
 
     await machine.run()
 
-    # Context should have outputs from all phases
+    # Context should have outputs from all phases (including PRD)
     assert "explore" in machine.context
     assert "codebase_summary" in machine.context["explore"]
+
+    assert "prd" in machine.context
+    assert "overview" in machine.context["prd"]
 
     assert "requirements" in machine.context
     assert "requirements" in machine.context["requirements"]

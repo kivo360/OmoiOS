@@ -29,3 +29,7 @@ htmlcov/
 # OS
 .DS_Store
 .spec_sandbox_output/
+
+# Environment
+.env
+.env.*
