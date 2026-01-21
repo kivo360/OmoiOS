@@ -6,12 +6,197 @@ import yaml
 
 from spec_sandbox.generators.markdown import (
     MarkdownGenerator,
+    generate_prd_markdown,
     generate_requirements_markdown,
     generate_design_markdown,
     generate_tasks_index_markdown,
     generate_task_markdown,
     generate_spec_summary_markdown,
 )
+
+
+class TestGeneratePrdMarkdown:
+    """Tests for PRD markdown generation."""
+
+    def test_generates_frontmatter(self):
+        """Should generate YAML frontmatter with PRD fields."""
+        output = {
+            "overview": {
+                "feature_name": "webhook-notifications",
+                "one_liner": "Enable real-time event notifications",
+                "problem_statement": "Users need real-time updates",
+                "solution_summary": "Implement webhook delivery system",
+            },
+            "goals": {
+                "primary": ["Enable real-time delivery"],
+                "secondary": ["Reduce polling"],
+                "success_metrics": [
+                    {"metric": "Delivery rate", "target": ">99%", "measurement": "Success/Total"}
+                ],
+            },
+            "users": {
+                "primary": [
+                    {"role": "Developer", "description": "Builds integrations", "needs": ["Real-time data"]}
+                ],
+                "secondary": [],
+            },
+            "user_stories": [
+                {
+                    "id": "US-001",
+                    "role": "Developer",
+                    "want": "register webhooks",
+                    "benefit": "receive events",
+                    "priority": "must",
+                    "acceptance_criteria": ["Can register URL"],
+                }
+            ],
+            "scope": {
+                "in_scope": ["Core delivery"],
+                "out_of_scope": ["Mobile"],
+                "dependencies": ["EventBus"],
+            },
+            "assumptions": ["Endpoints respond quickly"],
+            "constraints": {"technical": ["Must use existing DB"], "business": ["Q1 deadline"]},
+            "risks": [{"description": "Slow endpoints", "impact": "high", "mitigation": "Timeouts"}],
+            "open_questions": ["Support batching?"],
+        }
+
+        markdown = generate_prd_markdown(
+            output=output,
+            spec_id="webhook-notifications",
+            spec_title="Webhook Notifications",
+            created_date="2024-01-15",
+        )
+
+        # Should have frontmatter delimiters
+        assert markdown.startswith("---\n")
+        assert "\n---\n\n" in markdown
+
+        # Extract frontmatter
+        parts = markdown.split("---\n")
+        frontmatter = yaml.safe_load(parts[1])
+
+        # Title uses feature_name from output, not spec_title
+        assert frontmatter["title"] == "webhook-notifications PRD"
+        assert frontmatter["feature"] == "webhook-notifications"
+        assert frontmatter["status"] == "draft"
+
+    def test_includes_overview_section(self):
+        """Should include problem statement and solution summary."""
+        output = {
+            "overview": {
+                "feature_name": "test-feature",
+                "one_liner": "A test feature",
+                "problem_statement": "Users struggle with X",
+                "solution_summary": "We will build Y to solve X",
+            },
+            "goals": {"primary": [], "secondary": [], "success_metrics": []},
+            "users": {"primary": [], "secondary": []},
+            "user_stories": [],
+            "scope": {"in_scope": [], "out_of_scope": [], "dependencies": []},
+        }
+
+        markdown = generate_prd_markdown(
+            output=output,
+            spec_id="test",
+            spec_title="Test",
+            created_date="2024-01-15",
+        )
+
+        assert "## Overview" in markdown
+        assert "Users struggle with X" in markdown
+        assert "We will build Y to solve X" in markdown
+
+    def test_includes_user_stories_with_acceptance_criteria(self):
+        """Should include user stories with checkboxes for acceptance criteria."""
+        output = {
+            "overview": {"feature_name": "test", "one_liner": "Test"},
+            "goals": {"primary": [], "secondary": [], "success_metrics": []},
+            "users": {"primary": [], "secondary": []},
+            "user_stories": [
+                {
+                    "id": "US-001",
+                    "role": "User",
+                    "want": "do something",
+                    "benefit": "achieve goal",
+                    "priority": "must",
+                    "acceptance_criteria": ["Criterion A", "Criterion B"],
+                }
+            ],
+            "scope": {"in_scope": [], "out_of_scope": [], "dependencies": []},
+        }
+
+        markdown = generate_prd_markdown(
+            output=output,
+            spec_id="test",
+            spec_title="Test",
+            created_date="2024-01-15",
+        )
+
+        assert "## User Stories" in markdown
+        assert "US-001" in markdown
+        # Actual format uses "**As a** User" not "As a **User**"
+        assert "**As a** User" in markdown
+        assert "**I want** do something" in markdown
+        assert "- [ ] Criterion A" in markdown
+        assert "- [ ] Criterion B" in markdown
+
+    def test_includes_scope_sections(self):
+        """Should include in-scope, out-of-scope, and dependencies."""
+        output = {
+            "overview": {"feature_name": "test", "one_liner": "Test"},
+            "goals": {"primary": [], "secondary": [], "success_metrics": []},
+            "users": {"primary": [], "secondary": []},
+            "user_stories": [],
+            "scope": {
+                "in_scope": ["Feature A", "Feature B"],
+                "out_of_scope": ["Feature C"],
+                "dependencies": ["Service X"],
+            },
+        }
+
+        markdown = generate_prd_markdown(
+            output=output,
+            spec_id="test",
+            spec_title="Test",
+            created_date="2024-01-15",
+        )
+
+        assert "## Scope" in markdown
+        assert "### In Scope" in markdown
+        assert "✅ Feature A" in markdown
+        assert "### Out of Scope" in markdown
+        assert "❌ Feature C" in markdown
+        assert "### Dependencies" in markdown
+        assert "Service X" in markdown
+
+    def test_includes_risks_table(self):
+        """Should include risks in table format."""
+        output = {
+            "overview": {"feature_name": "test", "one_liner": "Test"},
+            "goals": {"primary": [], "secondary": [], "success_metrics": []},
+            "users": {"primary": [], "secondary": []},
+            "user_stories": [],
+            "scope": {"in_scope": [], "out_of_scope": [], "dependencies": []},
+            "risks": [
+                {"description": "Risk 1", "impact": "high", "mitigation": "Mitigate 1"},
+                {"description": "Risk 2", "impact": "medium", "mitigation": "Mitigate 2"},
+            ],
+        }
+
+        markdown = generate_prd_markdown(
+            output=output,
+            spec_id="test",
+            spec_title="Test",
+            created_date="2024-01-15",
+        )
+
+        assert "## Risks" in markdown
+        # Actual table has Probability column
+        assert "| Risk | Impact | Probability | Mitigation |" in markdown
+        assert "Risk 1" in markdown
+        assert "high" in markdown
+        assert "Mitigate 1" in markdown
 
 
 class TestGenerateRequirementsMarkdown:
