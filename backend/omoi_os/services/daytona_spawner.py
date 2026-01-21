@@ -889,6 +889,10 @@ class DaytonaSpawnerService:
             "MAX_TURNS": "100",
             # Increase budget to allow for all 5 phases (default is $10)
             "MAX_BUDGET_USD": "50.0",
+            # CWD tells spec-sandbox where the cloned codebase is located
+            # This is critical - without it, the agent explores from /root instead of /workspace
+            # and acceptance criteria point to generic paths instead of actual codebase files
+            "CWD": "/workspace",
         }
 
         # ==== GitHub Integration: Fetch credentials and repo info ====
