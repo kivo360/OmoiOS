@@ -2002,8 +2002,8 @@ export function EventRenderer({ event, className }: EventRendererProps) {
     // Edit tool - construct a diff from oldString/newString
     if (tool === "Edit") {
       const filePath = getString(toolInput, "filePath") || getString(toolInput, "file_path") || ""
-      const oldString = getString(toolInput, "oldString") || ""
-      const newString = getString(toolInput, "newString") || ""
+      const oldString = getString(toolInput, "oldString") || getString(toolInput, "old_string") || ""
+      const newString = getString(toolInput, "newString") || getString(toolInput, "new_string") || ""
       
       // Create a simple unified diff format
       const oldLines = oldString.split("\n")
