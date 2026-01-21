@@ -1136,6 +1136,7 @@ def _spec_to_response(spec: SpecModel) -> SpecResponse:
         description=spec.description,
         status=spec.status,
         phase=spec.phase,
+        current_phase=spec.current_phase or "explore",  # State machine phase
         progress=spec.progress,
         test_coverage=spec.test_coverage,
         active_agents=spec.active_agents,
