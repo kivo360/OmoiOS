@@ -502,6 +502,27 @@ async def create_ticket(
         # Store the embedding for later use
         embedding = dedup_result.embedding
 
+    # Generate a clean title for quick mode using LLM
+    # This converts user prompts like "add a button to logout" into proper titles like "Add Logout Button"
+    ticket_title = ticket_data.title
+    if ticket_data.workflow_mode == "quick":
+        try:
+            from omoi_os.services.title_generation_service import get_title_generation_service
+
+            title_service = get_title_generation_service()
+            # Use description (the full prompt) as context for better title generation
+            generated = await title_service.generate_title(
+                task_type="implement_feature",
+                description=ticket_data.description,
+                context=f"User request: {ticket_data.title}",
+            )
+            ticket_title = generated
+        except Exception as e:
+            # Fallback to provided title if generation fails
+            import structlog
+            logger = structlog.get_logger()
+            logger.warning(f"Failed to generate ticket title, using provided value: {e}")
+
     # Use async session for ticket creation
     async with db.get_async_session() as session:
         # Build ticket context with workflow_mode if specified
@@ -510,7 +531,7 @@ async def create_ticket(
             ticket_context = {"workflow_mode": ticket_data.workflow_mode}
 
         ticket = Ticket(
-            title=ticket_data.title,
+            title=ticket_title,
             description=ticket_data.description,
             phase_id=ticket_data.phase_id or "PHASE_BACKLOG",
             status=TicketStatus.BACKLOG.value,  # Start in backlog per REQ-TKT-SM-001
@@ -563,7 +584,7 @@ async def create_ticket(
         should_create_task = ApprovalStatus.can_proceed(ticket.approval_status)
         ticket_id_for_task = ticket.id
         phase_for_task = ticket_data.phase_id
-        title_for_task = ticket_data.title
+        title_for_task = ticket.title  # Use the (potentially generated) ticket title
         priority_for_task = ticket_data.priority
         workflow_mode_for_task = ticket_data.workflow_mode
 
@@ -595,8 +616,8 @@ async def create_ticket(
             queue.enqueue_task(
                 ticket_id=ticket_id_for_task,
                 phase_id=phase_for_task,
-                task_type="analyze_requirements",
-                description=f"Analyze requirements for: {title_for_task}",
+                task_type="implement_feature" if workflow_mode_for_task == "quick" else "analyze_requirements",
+                description=f"Implement: {title_for_task}" if workflow_mode_for_task == "quick" else f"Analyze requirements for: {title_for_task}",
                 priority=priority_for_task,
                 session=None,  # Creates own session, ticket already committed
                 execution_config=execution_config,
