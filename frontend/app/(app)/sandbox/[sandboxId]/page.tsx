@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState, useRef, useEffect, useMemo } from "react"
+import { use, useState, useRef, useEffect, useMemo, useCallback } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -27,6 +27,7 @@ import {
 import { useSandboxMonitor, useSandboxTask } from "@/hooks/useSandbox"
 import { EventRenderer } from "@/components/sandbox"
 import { Markdown } from "@/components/ui/markdown"
+import { useInfiniteScrollTop } from "@/hooks/useInfiniteScrollTop"
 
 interface SandboxDetailPageProps {
   params: Promise<{ sandboxId: string }>
@@ -119,10 +120,13 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
   const { sandboxId } = use(params)
   const [messageInput, setMessageInput] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
-  
+  // Track the previous event count to detect new realtime events vs loaded historical events
+  const prevEventCountRef = useRef<number>(0)
+  const isLoadingMoreRef = useRef<boolean>(false)
+
   // Fetch task info for this sandbox
   const { data: task, isLoading: isLoadingTask, error: taskError } = useSandboxTask(sandboxId)
-  
+
   // Monitor sandbox events
   const {
     events,
@@ -136,6 +140,11 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     isLoadingMore,
     loadMoreEvents,
   } = useSandboxMonitor(sandboxId)
+
+  // Track loading state for scroll position preservation
+  useEffect(() => {
+    isLoadingMoreRef.current = isLoadingMore
+  }, [isLoadingMore])
 
   // Filter and sort events, deduplicating redundant events
   const visibleEvents = useMemo(() => {
@@ -224,12 +233,59 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
   }, [events])
 
-  // Auto-scroll to bottom when new events arrive
+  // Infinite scroll hook for loading older events
+  const {
+    sentinelRef,
+    viewportRef,
+    isInCooldown,
+    restoreScrollPosition,
+  } = useInfiniteScrollTop({
+    hasMore,
+    isLoading: isLoadingMore,
+    onLoadMore: loadMoreEvents,
+    cooldownMs: 2000, // 2 second cooldown between loads
+    enabled: !isLoadingHistory, // Disable during initial load
+    rootMargin: "200px", // Start loading when within 200px of sentinel
+  })
+
+  // Restore scroll position after loading older events
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    // When loading finishes (isLoadingMore goes from true to false)
+    // restore the scroll position so user stays at the same visual spot
+    if (!isLoadingMore && isLoadingMoreRef.current) {
+      // Small delay to let DOM update
+      requestAnimationFrame(() => {
+        restoreScrollPosition()
+      })
     }
-  }, [visibleEvents.length])
+  }, [isLoadingMore, restoreScrollPosition])
+
+  // Auto-scroll to bottom ONLY for new realtime events
+  // Not when loading older historical events
+  useEffect(() => {
+    const currentCount = visibleEvents.length
+
+    // Only auto-scroll if:
+    // 1. New events were added (count increased)
+    // 2. Not currently loading older events
+    // 3. Events were added at the end (realtime), not prepended (historical)
+    if (
+      currentCount > prevEventCountRef.current &&
+      !isLoadingMore &&
+      viewportRef.current
+    ) {
+      // Check if we're near the bottom before auto-scrolling
+      // This prevents jumping when user is reading older events
+      const { scrollTop, scrollHeight, clientHeight } = viewportRef.current
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 200
+
+      if (isNearBottom || prevEventCountRef.current === 0) {
+        viewportRef.current.scrollTop = viewportRef.current.scrollHeight
+      }
+    }
+
+    prevEventCountRef.current = currentCount
+  }, [visibleEvents.length, isLoadingMore, viewportRef])
 
   // Handle sending a message
   const handleSendMessage = async () => {
@@ -351,28 +407,26 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
 
             <TabsContent value="events" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden">
               {/* Events scroll area */}
-              <ScrollArea className="flex-1" ref={scrollRef}>
+              <ScrollArea className="flex-1" ref={scrollRef} viewportRef={viewportRef}>
                 <div className="p-4 space-y-3">
-                  {/* Load More button at top for loading older events */}
-                  {hasMore && (
-                    <div className="flex justify-center pb-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={loadMoreEvents}
-                        disabled={isLoadingMore}
-                      >
-                        {isLoadingMore ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Loading...
-                          </>
-                        ) : (
-                          "Load older events"
-                        )}
-                      </Button>
+                  {/* Sentinel element for infinite scroll - triggers load when visible */}
+                  <div ref={sentinelRef} className="h-1" aria-hidden="true" />
+
+                  {/* Loading indicator at top when fetching older events */}
+                  {(isLoadingMore || (hasMore && isInCooldown)) && (
+                    <div className="flex items-center justify-center py-2 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <span className="text-sm">Loading older events...</span>
                     </div>
                   )}
+
+                  {/* Show indicator when there are more events but not loading */}
+                  {hasMore && !isLoadingMore && !isInCooldown && (
+                    <div className="flex items-center justify-center py-1 text-muted-foreground">
+                      <span className="text-xs">Scroll up for older events</span>
+                    </div>
+                  )}
+
                   {isLoadingHistory ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />

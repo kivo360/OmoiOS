@@ -1,0 +1,37 @@
+# Ralphy Configuration
+# https://github.com/michaelshimeles/ralphy
+
+# Project info (auto-detected, edit if needed)
+project:
+  name: "omoios"
+  language: "TypeScript+Python"
+  framework: "FastAPI+Next.js"
+  description: "OmoiOS is a platform for building and managing AI agents."  # Add a brief description
+
+# Commands (auto-detected from package.json/pyproject.toml)
+commands:
+  test: ""
+  lint: ""
+  build: ""
+
+# Rules - instructions the AI MUST follow
+# These are injected into every prompt
+rules: []
+  # Examples:
+  # - "Always use TypeScript strict mode"
+  # - "Follow the error handling pattern in src/utils/errors.ts"
+  # - "All API endpoints must have input validation with Zod"
+  # - "Use server actions instead of API routes in Next.js"
+
+# Boundaries - files/folders the AI should not modify
+boundaries:
+  never_touch: [
+    ".ralphy/**",
+    ".github/**",
+    ".vscode/**",
+    
+  ]
+    # Examples:
+    # - "src/legacy/**"
+    # - "migrations/**"
+    # - "*.lock"
