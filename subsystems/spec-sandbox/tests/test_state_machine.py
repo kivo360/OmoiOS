@@ -44,16 +44,16 @@ async def test_state_machine_emits_phase_events():
 
     await machine.run()
 
-    # Should have 5 phase starts and 5 phase completions
+    # Should have 6 phase starts and 6 phase completions (including PRD)
     phase_starts = reporter.get_events_by_type(EventTypes.PHASE_STARTED)
     phase_completions = reporter.get_events_by_type(EventTypes.PHASE_COMPLETED)
 
-    assert len(phase_starts) == 5
-    assert len(phase_completions) == 5
+    assert len(phase_starts) == 6
+    assert len(phase_completions) == 6
 
     # Verify all phases were run
     phases_started = {e.phase for e in phase_starts}
-    assert phases_started == {"explore", "requirements", "design", "tasks", "sync"}
+    assert phases_started == {"explore", "prd", "requirements", "design", "tasks", "sync"}
 
 
 @pytest.mark.asyncio
@@ -91,8 +91,8 @@ async def test_state_machine_stores_phase_results():
 
     await machine.run()
 
-    # All phases should have results
-    assert len(machine.phase_results) == 5
+    # All phases should have results (6 phases including PRD)
+    assert len(machine.phase_results) == 6
 
     # Check explore phase result
     explore_result = machine.phase_results[SpecPhase.EXPLORE]
@@ -114,8 +114,9 @@ async def test_state_machine_accumulates_context():
 
     await machine.run()
 
-    # Context should have outputs from all phases
+    # Context should have outputs from all phases (including PRD)
     assert "explore" in machine.context
+    assert "prd" in machine.context
     assert "requirements" in machine.context
     assert "design" in machine.context
     assert "tasks" in machine.context
@@ -213,9 +214,10 @@ async def test_state_machine_emits_agent_completed_with_phase_data():
     assert agent_completed.data["success"] is True
     assert "phase_data" in agent_completed.data
 
-    # phase_data should contain all phases
+    # phase_data should contain all phases (including PRD)
     phase_data = agent_completed.data["phase_data"]
     assert "explore" in phase_data
+    assert "prd" in phase_data
     assert "requirements" in phase_data
     assert "design" in phase_data
     assert "tasks" in phase_data
@@ -223,7 +225,7 @@ async def test_state_machine_emits_agent_completed_with_phase_data():
 
     # phases_completed should also be present
     assert "phases_completed" in agent_completed.data
-    assert len(agent_completed.data["phases_completed"]) == 5
+    assert len(agent_completed.data["phases_completed"]) == 6
 
 
 @pytest.mark.asyncio

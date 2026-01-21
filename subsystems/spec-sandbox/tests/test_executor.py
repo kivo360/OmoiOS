@@ -247,8 +247,11 @@ class TestPromptBuilding:
         assert "codebase_summary" in prompt
 
     def test_requirements_prompt_includes_explore_context(self, executor):
-        """Test REQUIREMENTS prompt includes EXPLORE context."""
-        context = {"explore": {"tech_stack": ["Python", "FastAPI"]}}
+        """Test REQUIREMENTS prompt includes EXPLORE and PRD context."""
+        context = {
+            "explore": {"tech_stack": ["Python", "FastAPI"]},
+            "prd": {"overview": {"feature_name": "Test Feature"}},
+        }
 
         prompt = executor._build_prompt(
             phase=SpecPhase.REQUIREMENTS,
@@ -260,11 +263,13 @@ class TestPromptBuilding:
         assert "Python" in prompt
         assert "FastAPI" in prompt
         assert "EARS" in prompt  # Requirements format
+        assert "Test Feature" in prompt  # PRD context
 
     def test_tasks_prompt_includes_all_prior_context(self, executor):
         """Test TASKS prompt includes all prior phase context."""
         context = {
             "explore": {"project_type": "web_app"},
+            "prd": {"overview": {"feature_name": "Task Feature"}},
             "requirements": {"requirements": [{"id": "REQ-001"}]},
             "design": {"components": [{"name": "API"}]},
         }

@@ -1,0 +1,132 @@
+{
+    "$schema": "Phase output for REQUIREMENTS phase - save to .omoi_os/phase_data/requirements.json",
+    "$description": "This JSON captures structured requirements for the feature using EARS format",
+
+    "requirements": [
+        {
+            "id": "REQ-WEBHOOK-FUNC-001",
+            "title": "Webhook Subscription Creation",
+            "category": "functional",
+            "priority": "HIGH",
+            "condition": "WHEN a user submits a valid webhook subscription request",
+            "action": "THE SYSTEM SHALL create the subscription and return a unique subscription ID within 500ms",
+            "acceptance_criteria": [
+                "Subscription is persisted to database",
+                "Unique ID is generated and returned",
+                "Response includes subscription details",
+                "Invalid URLs are rejected with 400 error"
+            ],
+            "prd_section": "User Stories #1",
+            "notes": "URL validation should check for HTTPS in production"
+        },
+        {
+            "id": "REQ-WEBHOOK-FUNC-002",
+            "title": "Event Delivery",
+            "category": "functional",
+            "priority": "HIGH",
+            "condition": "WHEN a subscribed event occurs",
+            "action": "THE SYSTEM SHALL deliver the webhook payload to all active subscribers within 5 seconds",
+            "acceptance_criteria": [
+                "Payload includes event type, timestamp, and data",
+                "HMAC signature is included in headers",
+                "Delivery attempt is recorded",
+                "Failed deliveries are queued for retry"
+            ],
+            "prd_section": "User Stories #2",
+            "notes": null
+        },
+        {
+            "id": "REQ-WEBHOOK-FUNC-003",
+            "title": "Retry Logic",
+            "category": "functional",
+            "priority": "HIGH",
+            "condition": "WHEN a webhook delivery fails",
+            "action": "THE SYSTEM SHALL retry up to 3 times with exponential backoff (1s, 2s, 4s base delays)",
+            "acceptance_criteria": [
+                "Retries use exponential backoff with jitter",
+                "Each attempt is logged with status code",
+                "After max retries, subscription is marked for review",
+                "Manual retry is available via API"
+            ],
+            "prd_section": "User Stories #3",
+            "notes": "Jitter prevents thundering herd on recovery"
+        },
+        {
+            "id": "REQ-WEBHOOK-PERF-001",
+            "title": "Delivery Latency",
+            "category": "performance",
+            "priority": "MEDIUM",
+            "condition": null,
+            "action": "THE SYSTEM SHALL deliver webhooks with P95 latency under 2 seconds",
+            "acceptance_criteria": [
+                "P50 latency < 500ms",
+                "P95 latency < 2000ms",
+                "P99 latency < 5000ms"
+            ],
+            "prd_section": "Performance Requirements",
+            "notes": "Measured from event occurrence to first delivery attempt"
+        },
+        {
+            "id": "REQ-WEBHOOK-SEC-001",
+            "title": "Signature Verification",
+            "category": "security",
+            "priority": "HIGH",
+            "condition": "WHEN delivering a webhook",
+            "action": "THE SYSTEM SHALL include an HMAC-SHA256 signature in the X-OmoiOS-Signature header",
+            "acceptance_criteria": [
+                "Signature uses subscription-specific secret",
+                "Signature covers entire payload body",
+                "Timestamp is included to prevent replay attacks",
+                "Documentation includes verification examples"
+            ],
+            "prd_section": "Security Requirements",
+            "notes": "Follow Stripe's webhook signature pattern"
+        }
+    ],
+
+    "total_count": 5,
+
+    "categories": {
+        "functional": 3,
+        "performance": 1,
+        "security": 1
+    },
+
+    "priority_distribution": {
+        "HIGH": 4,
+        "MEDIUM": 1,
+        "LOW": 0
+    },
+
+    "traceability": [
+        {
+            "requirement_id": "REQ-WEBHOOK-FUNC-001",
+            "prd_section": "User Stories #1",
+            "design_component": "WebhookSubscriptionService",
+            "ticket": "TKT-001"
+        },
+        {
+            "requirement_id": "REQ-WEBHOOK-FUNC-002",
+            "prd_section": "User Stories #2",
+            "design_component": "WebhookDeliveryService",
+            "ticket": "TKT-001"
+        },
+        {
+            "requirement_id": "REQ-WEBHOOK-FUNC-003",
+            "prd_section": "User Stories #3",
+            "design_component": "WebhookDeliveryService",
+            "ticket": "TKT-001"
+        }
+    ],
+
+    "_metadata": {
+        "phase": "REQUIREMENTS",
+        "spec_id": "550e8400-e29b-41d4-a716-446655440000",
+        "generated_at": "2025-01-10T12:15:00Z",
+        "evaluator_passed": true,
+        "prior_phase": {
+            "phase": "EXPLORE",
+            "file": ".omoi_os/phase_data/explore.json"
+        }
+    }
+}

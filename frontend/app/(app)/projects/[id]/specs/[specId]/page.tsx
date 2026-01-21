@@ -160,16 +160,16 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   // Fetch project and spec data
   const { data: project } = useProject(projectId)
   // Always poll spec data to ensure UI stays in sync:
-  // - 3s when executing (fast updates for real-time progress)
-  // - 15s otherwise (catch status changes without excessive requests)
+  // - 1.5s when executing (fast updates for real-time progress)
+  // - 10s otherwise (catch status changes without excessive requests)
   const { data: spec, isLoading: specLoading, error: specError } = useSpec(specId, {
     refetchInterval: (query) => {
       const specData = query.state.data
       // Fast polling during execution, slower polling otherwise
-      return specData?.status === "executing" ? 3000 : 15000
+      return specData?.status === "executing" ? 1500 : 10000
     },
     refetchOnWindowFocus: true,
-    staleTime: 5_000, // Consider data stale after 5s for this page
+    staleTime: 2_000, // Consider data stale after 2s for this page
   })
   const { data: allSpecs } = useProjectSpecs(projectId)
   const { data: versionsData } = useSpecVersions(specId, 10)
@@ -178,11 +178,11 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
   const isExecuting = spec?.status === "executing"
   const { data: executionStatus } = useExecutionStatus(specId, {
     enabled: !!specId,
-    refetchInterval: isExecuting ? 3000 : 15000,
+    refetchInterval: isExecuting ? 1500 : 10000,
   })
   const { data: criteriaStatus } = useCriteriaStatus(specId, {
     enabled: !!specId,
-    refetchInterval: isExecuting ? 3000 : 15000,
+    refetchInterval: isExecuting ? 1500 : 10000,
   })
 
   // Track phase changes for toast notifications

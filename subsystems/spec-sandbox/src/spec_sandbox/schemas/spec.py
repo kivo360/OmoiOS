@@ -7,9 +7,20 @@ from pydantic import BaseModel, Field
 
 
 class SpecPhase(str, Enum):
-    """Spec execution phases."""
+    """Spec execution phases.
+
+    Phase order: EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC
+
+    - EXPLORE: Discover codebase structure, patterns, and context
+    - PRD: Define product vision, goals, success metrics, and user stories
+    - REQUIREMENTS: Translate PRD into formal EARS-format requirements
+    - DESIGN: Create technical architecture and API specifications
+    - TASKS: Break design into implementable tickets and tasks
+    - SYNC: Validate traceability and coverage across all phases
+    """
 
     EXPLORE = "explore"
+    PRD = "prd"
     REQUIREMENTS = "requirements"
     DESIGN = "design"
     TASKS = "tasks"

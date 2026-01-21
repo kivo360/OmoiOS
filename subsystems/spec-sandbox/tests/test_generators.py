@@ -367,12 +367,13 @@ class TestMarkdownGenerator:
         assert "task:TASK-001" in artifacts
         assert "spec_summary" in artifacts
 
-        # Check files exist
-        assert (tmp_path / "requirements.md").exists()
-        assert (tmp_path / "design.md").exists()
-        assert (tmp_path / "tasks" / "index.md").exists()
-        assert (tmp_path / "tasks" / "TASK-001.md").exists()
-        assert (tmp_path / "SPEC_SUMMARY.md").exists()
+        # Check files exist (now in .omoi_os/ structure)
+        omoi_os = tmp_path / ".omoi_os"
+        assert (omoi_os / "requirements" / "REQ-test-spec.md").exists()
+        assert (omoi_os / "designs" / "test-spec.md").exists()
+        assert (omoi_os / "tasks" / "index.md").exists()
+        assert (omoi_os / "tasks" / "TASK-001.md").exists()
+        assert (omoi_os / "SPEC_SUMMARY.md").exists()
 
     def test_generates_valid_yaml_frontmatter(self, tmp_path):
         """All generated files should have valid YAML frontmatter."""
@@ -388,8 +389,9 @@ class TestMarkdownGenerator:
 
         artifacts = generator.generate_all(requirements_output=requirements)
 
-        # Read and parse frontmatter
-        content = (tmp_path / "requirements.md").read_text()
+        # Read and parse frontmatter (now in .omoi_os/ structure)
+        omoi_os = tmp_path / ".omoi_os"
+        content = (omoi_os / "requirements" / "REQ-test-spec.md").read_text()
         parts = content.split("---\n")
         frontmatter = yaml.safe_load(parts[1])
 

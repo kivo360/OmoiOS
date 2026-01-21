@@ -1,0 +1,231 @@
+{
+    "$schema": "Phase output for DESIGN phase - save to .omoi_os/phase_data/design.json",
+    "$description": "This JSON captures the technical design including APIs, data models, and components",
+
+    "api_endpoints": [
+        {
+            "method": "POST",
+            "path": "/api/v1/webhooks/subscriptions",
+            "description": "Create a new webhook subscription",
+            "auth_required": true,
+            "request_schema": "WebhookSubscriptionCreate",
+            "response_schema": "WebhookSubscription",
+            "request_example": {
+                "url": "https://example.com/webhook",
+                "event_types": ["task_completed", "agent_stuck"],
+                "secret": "whsec_abc123..."
+            },
+            "response_example": {
+                "id": "sub_550e8400-e29b-41d4-a716-446655440000",
+                "url": "https://example.com/webhook",
+                "event_types": ["task_completed", "agent_stuck"],
+                "status": "active",
+                "created_at": "2025-01-10T12:00:00Z"
+            },
+            "error_responses": {
+                "400": "Invalid URL or event types",
+                "401": "Unauthorized",
+                "409": "Subscription already exists for this URL"
+            }
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/webhooks/subscriptions",
+            "description": "List all webhook subscriptions",
+            "auth_required": true,
+            "query_params": {
+                "status": "Filter by status (active, paused, disabled)",
+                "limit": "Max results (default 20, max 100)",
+                "offset": "Pagination offset"
+            },
+            "response_schema": "WebhookSubscriptionList"
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/webhooks/subscriptions/{id}",
+            "description": "Get subscription details",
+            "auth_required": true,
+            "path_params": ["id"],
+            "response_schema": "WebhookSubscription"
+        },
+        {
+            "method": "DELETE",
+            "path": "/api/v1/webhooks/subscriptions/{id}",
+            "description": "Delete a subscription",
+            "auth_required": true,
+            "path_params": ["id"],
+            "response_example": {"success": true}
+        },
+        {
+            "method": "GET",
+            "path": "/api/v1/webhooks/deliveries",
+            "description": "List delivery attempts for debugging",
+            "auth_required": true,
+            "query_params": {
+                "subscription_id": "Filter by subscription",
+                "status": "Filter by status (success, failed, pending)",
+                "since": "ISO timestamp filter"
+            },
+            "response_schema": "WebhookDeliveryList"
+        },
+        {
+            "method": "POST",
+            "path": "/api/v1/webhooks/deliveries/{id}/retry",
+            "description": "Manually retry a failed delivery",
+            "auth_required": true,
+            "path_params": ["id"],
+            "response_schema": "WebhookDelivery"
+        }
+    ],
+
+    "data_models": [
+        {
+            "name": "WebhookSubscription",
+            "table_name": "webhook_subscriptions",
+            "description": "Stores webhook subscription configurations",
+            "fields": [
+                {"name": "id", "type": "uuid", "primary_key": true, "description": "Unique subscription ID"},
+                {"name": "project_id", "type": "uuid", "nullable": false, "foreign_key": "projects.id", "description": "Owning project"},
+                {"name": "url", "type": "string(2048)", "nullable": false, "description": "Webhook endpoint URL"},
+                {"name": "secret", "type": "string(256)", "nullable": false, "description": "HMAC signing secret"},
+                {"name": "event_types", "type": "jsonb", "nullable": false, "description": "Array of subscribed event types"},
+                {"name": "status", "type": "enum", "values": ["active", "paused", "disabled"], "default": "active"},
+                {"name": "failure_count", "type": "integer", "default": 0, "description": "Consecutive failure count"},
+                {"name": "last_delivery_at", "type": "timestamp", "nullable": true},
+                {"name": "created_at", "type": "timestamp", "default": "now()"},
+                {"name": "updated_at", "type": "timestamp", "default": "now()"}
+            ],
+            "indexes": [
+                {"columns": ["project_id"], "name": "idx_webhook_subscriptions_project"},
+                {"columns": ["status"], "name": "idx_webhook_subscriptions_status"}
+            ]
+        },
+        {
+            "name": "WebhookDelivery",
+            "table_name": "webhook_deliveries",
+            "description": "Records each delivery attempt for audit and debugging",
+            "fields": [
+                {"name": "id", "type": "uuid", "primary_key": true},
+                {"name": "subscription_id", "type": "uuid", "nullable": false, "foreign_key": "webhook_subscriptions.id"},
+                {"name": "event_type", "type": "string(100)", "nullable": false},
+                {"name": "event_id", "type": "uuid", "nullable": false, "description": "ID of the triggering event"},
+                {"name": "payload", "type": "jsonb", "nullable": false},
+                {"name": "status", "type": "enum", "values": ["pending", "success", "failed"], "default": "pending"},
+                {"name": "attempt_count", "type": "integer", "default": 0},
+                {"name": "response_status", "type": "integer", "nullable": true},
+                {"name": "response_body", "type": "text", "nullable": true},
+                {"name": "error_message", "type": "text", "nullable": true},
+                {"name": "next_retry_at", "type": "timestamp", "nullable": true},
+                {"name": "created_at", "type": "timestamp", "default": "now()"},
+                {"name": "completed_at", "type": "timestamp", "nullable": true}
+            ],
+            "indexes": [
+                {"columns": ["subscription_id"], "name": "idx_webhook_deliveries_subscription"},
+                {"columns": ["status", "next_retry_at"], "name": "idx_webhook_deliveries_retry"},
+                {"columns": ["event_id"], "name": "idx_webhook_deliveries_event"}
+            ]
+        }
+    ],
+
+    "components": [
+        {
+            "name": "WebhookSubscriptionService",
+            "layer": "service",
+            "file": "omoi_os/services/webhook_subscription.py",
+            "responsibilities": [
+                "CRUD operations for subscriptions",
+                "URL validation",
+                "Secret generation",
+                "Status management"
+            ],
+            "dependencies": ["DatabaseService"]
+        },
+        {
+            "name": "WebhookDeliveryService",
+            "layer": "service",
+            "file": "omoi_os/services/webhook_delivery.py",
+            "responsibilities": [
+                "HTTP delivery with retries",
+                "HMAC signature generation",
+                "Exponential backoff logic",
+                "Delivery recording"
+            ],
+            "dependencies": ["DatabaseService", "httpx.AsyncClient"]
+        },
+        {
+            "name": "WebhookEventHandler",
+            "layer": "service",
+            "file": "omoi_os/services/webhook_event_handler.py",
+            "responsibilities": [
+                "Listen to EventBusService",
+                "Match events to subscriptions",
+                "Queue deliveries"
+            ],
+            "dependencies": ["EventBusService", "WebhookDeliveryService"]
+        },
+        {
+            "name": "SlackFormatter",
+            "layer": "formatter",
+            "file": "omoi_os/services/formatters/slack.py",
+            "responsibilities": ["Format payloads for Slack webhook format"]
+        },
+        {
+            "name": "DiscordFormatter",
+            "layer": "formatter",
+            "file": "omoi_os/services/formatters/discord.py",
+            "responsibilities": ["Format payloads for Discord webhook format"]
+        }
+    ],
+
+    "architecture": {
+        "flow": [
+            "1. Event occurs in system (e.g., task_completed)",
+            "2. EventBusService publishes event",
+            "3. WebhookEventHandler receives event",
+            "4. Handler queries active subscriptions for event type",
+            "5. For each subscription, WebhookDeliveryService.deliver() is called",
+            "6. Delivery attempts are recorded in webhook_deliveries table",
+            "7. Failed deliveries are queued for retry with backoff"
+        ],
+        "diagram_mermaid": "sequenceDiagram\n    participant System\n    participant EventBus\n    participant Handler\n    participant Delivery\n    participant External\n    \n    System->>EventBus: publish(event)\n    EventBus->>Handler: on_event(event)\n    Handler->>Handler: find_subscriptions(event_type)\n    loop For each subscription\n        Handler->>Delivery: deliver(subscription, event)\n        Delivery->>External: POST webhook\n        alt Success\n            External-->>Delivery: 200 OK\n            Delivery->>Delivery: record_success()\n        else Failure\n            External-->>Delivery: error\n            Delivery->>Delivery: schedule_retry()\n        end\n    end"
+    },
+
+    "configuration": {
+        "webhook_timeout_seconds": {"default": 30, "range": "5-60", "description": "HTTP timeout per delivery attempt"},
+        "webhook_max_retries": {"default": 3, "range": "0-10", "description": "Maximum retry attempts"},
+        "webhook_backoff_base": {"default": 1.0, "range": "0.5-5.0", "description": "Base delay in seconds for exponential backoff"},
+        "webhook_batch_size": {"default": 10, "range": "1-100", "description": "Max concurrent deliveries"}
+    },
+
+    "integration_points": [
+        {
+            "system": "EventBusService",
+            "type": "internal",
+            "purpose": "Subscribe to system events for webhook triggering"
+        },
+        {
+            "system": "External Webhook Endpoints",
+            "type": "external",
+            "protocol": "HTTPS POST",
+            "purpose": "Deliver event payloads to subscriber endpoints"
+        }
+    ],
+
+    "_metadata": {
+        "phase": "DESIGN",
+        "spec_id": "550e8400-e29b-41d4-a716-446655440000",
+        "generated_at": "2025-01-10T12:30:00Z",
+        "evaluator_passed": true,
+        "requirements_covered": [
+            "REQ-WEBHOOK-FUNC-001",
+            "REQ-WEBHOOK-FUNC-002",
+            "REQ-WEBHOOK-FUNC-003",
+            "REQ-WEBHOOK-PERF-001",
+            "REQ-WEBHOOK-SEC-001"
+        ],
+        "prior_phases": {
+            "explore": ".omoi_os/phase_data/explore.json",
+            "requirements": ".omoi_os/phase_data/requirements.json"
+        }
+    }
+}
