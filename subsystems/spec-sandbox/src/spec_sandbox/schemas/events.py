@@ -63,8 +63,19 @@ class EventTypes:
     SYNC_COMPLETED = "spec.sync_completed"
     TASKS_QUEUED = "spec.tasks_queued"
 
-    # Ticket creation events
+    # Ticket/task CRUD events
     TICKETS_CREATION_STARTED = "spec.tickets_creation_started"
     TICKETS_CREATION_COMPLETED = "spec.tickets_creation_completed"
     TICKET_CREATED = "spec.ticket_created"
+    TICKET_UPDATED = "spec.ticket_updated"
     TASK_CREATED = "spec.task_created"
+    TASK_UPDATED = "spec.task_updated"
+
+    # Requirements/design sync events
+    REQUIREMENTS_SYNC_STARTED = "spec.requirements_sync_started"
+    REQUIREMENTS_SYNC_COMPLETED = "spec.requirements_sync_completed"
+    REQUIREMENT_CREATED = "spec.requirement_created"
+    REQUIREMENT_UPDATED = "spec.requirement_updated"
+    DESIGN_SYNC_STARTED = "spec.design_sync_started"
+    DESIGN_SYNC_COMPLETED = "spec.design_sync_completed"
+    DESIGN_UPDATED = "spec.design_updated"

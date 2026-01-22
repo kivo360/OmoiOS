@@ -1,0 +1,2496 @@
+{
+  "title": "Spec Output Quality Improvement",
+  "description": "\nImprove the spec-sandbox to generate higher quality requirements and designs.\n\nThe current spec-sandbox generates generic placeholder content. We need it to:\n1. Actually explore the codebase using tools (Read, Glob, Grep)\n2. Generate contextual requirements based on real code patterns\n3. Create design documents with accurate architecture diagrams\n4. Produce tasks that reference actual files and components\n\nThis should match the quality of the /spec-driven-dev skill which produces:\n- EARS-format requirements with 60+ acceptance criteria\n- Mermaid diagrams showing real architecture\n- Tasks that reference specific files like \"backend/omoi_os/services/webhook.py\"\n",
+  "phases": [
+    "explore",
+    "prd",
+    "requirements",
+    "design",
+    "tasks",
+    "sync"
+  ],
+  "results": {
+    "explore": {
+      "success": true,
+      "output": {
+        "codebase_summary": "A monorepo containing a FastAPI backend (omoi_os), Next.js 15 frontend, and an isolated spec-sandbox subsystem. The spec-sandbox implements a state machine-based workflow that orchestrates 6 phases (explore \u2192 prd \u2192 requirements \u2192 design \u2192 tasks \u2192 sync) using Claude Agent SDK to automatically generate comprehensive specifications from feature descriptions.",
+        "project_type": "Python Monorepo: FastAPI backend + Next.js 15 frontend + Spec-Sandbox CLI tool",
+        "tech_stack": [
+          "Python 3.12+",
+          "FastAPI 0.104+",
+          "Next.js 15",
+          "React 18.3+",
+          "TypeScript",
+          "Pydantic 2.7+",
+          "Claude Agent SDK 0.1.0+",
+          "SQLAlchemy 2.0+",
+          "PostgreSQL",
+          "Redis",
+          "Taskiq",
+          "Anthropic SDK",
+          "OpenAI SDK",
+          "PydanticAI",
+          "Instructor",
+          "httpx 0.27+",
+          "Click 8.1+",
+          "pytest 8.0+",
+          "uv (package manager)",
+          "pnpm (frontend)",
+          "Supabase",
+          "Daytona SDK",
+          "OpenTelemetry",
+          "Logfire",
+          "Sentry",
+          "PostHog"
+        ],
+        "structure": {
+          "spec_sandbox_root": "senior_sandbox/subsystems/spec-sandbox/",
+          "spec_sandbox_src": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/",
+          "spec_sandbox_cli": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/cli.py",
+          "spec_sandbox_worker": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/",
+          "spec_sandbox_prompts": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/",
+          "spec_sandbox_tests": "senior_sandbox/subsystems/spec-sandbox/tests/",
+          "backend": "senior_sandbox/backend/omoi_os/",
+          "backend_api": "senior_sandbox/backend/omoi_os/api/",
+          "backend_models": "senior_sandbox/backend/omoi_os/models/",
+          "backend_services": "senior_sandbox/backend/omoi_os/services/",
+          "backend_workers": "senior_sandbox/backend/omoi_os/workers/",
+          "frontend": "senior_sandbox/frontend/",
+          "frontend_src": "senior_sandbox/frontend/src/",
+          "docs": "senior_sandbox/docs/"
+        },
+        "key_files": [
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py",
+            "purpose": "Core state machine orchestrating the 6-phase spec workflow with retry logic, evaluation, and context accumulation"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py",
+            "purpose": "1619-line file containing all phase prompts - the PRIMARY target for quality improvements. Contains detailed instructions, examples, and quality checklists for each phase"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/executor/claude_executor.py",
+            "purpose": "Wraps Claude Agent SDK for phase execution with tool configuration, cost tracking, and mock mode support"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/",
+            "purpose": "Phase-specific evaluators that validate output quality and provide feedback for retries - key to improving output quality"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/generators/",
+            "purpose": "Static and Claude-based markdown generators for artifacts - could be enhanced to use actual codebase exploration"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/config.py",
+            "purpose": "Pydantic Settings with 40+ configuration options controlling behavior, paths, API keys, and limits"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/",
+            "purpose": "Pydantic schemas for events, specs, phases, and frontmatter validation"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/cli.py",
+            "purpose": "Click-based CLI tool providing commands: run, run-phase, inspect, create-tickets, sync-markdown"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/sync/service.py",
+            "purpose": "Syncs generated markdown artifacts to backend API with create/update/skip logic and retry handling"
+          },
+          {
+            "path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/reporters/",
+            "purpose": "Event reporting implementations (array/jsonl/http) for observability across environments"
+          }
+        ],
+        "relevant_patterns": [
+          {
+            "pattern": "State Machine Pattern",
+            "description": "Orchestrates phase transitions with retry logic, evaluation, and context accumulation across 6 phases",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/spec.py"
+            ]
+          },
+          {
+            "pattern": "Strategy Pattern (Reporters)",
+            "description": "Abstract Reporter base class with multiple implementations for different environments (array/jsonl/http)",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/reporters/base.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/reporters/array_reporter.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/reporters/jsonl_reporter.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/reporters/http_reporter.py"
+            ]
+          },
+          {
+            "pattern": "Strategy Pattern (Evaluators)",
+            "description": "Abstract BaseEvaluator with phase-specific implementations for validating output quality",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/base.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/explore_evaluator.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/requirements_evaluator.py"
+            ]
+          },
+          {
+            "pattern": "Adapter Pattern",
+            "description": "Claude executor wraps Claude Agent SDK to provide unified interface with mock mode support",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/executor/claude_executor.py"
+            ]
+          },
+          {
+            "pattern": "Service Layer Pattern",
+            "description": "Business logic separated into service classes in backend",
+            "files": [
+              "senior_sandbox/backend/omoi_os/services/",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/sync/service.py"
+            ]
+          },
+          {
+            "pattern": "Event-Driven Architecture",
+            "description": "All actions emit events through reporter abstraction for observability and debugging",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py",
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/events.py"
+            ]
+          },
+          {
+            "pattern": "Pipeline Pattern",
+            "description": "Sequential phase execution with context accumulation - each phase adds to context for next phases",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py"
+            ]
+          },
+          {
+            "pattern": "Settings Pattern",
+            "description": "Pydantic Settings with environment variable support and extra='ignore' for flexibility",
+            "files": [
+              "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/config.py",
+              "senior_sandbox/backend/omoi_os/config.py"
+            ]
+          }
+        ],
+        "existing_models": [
+          {
+            "name": "Event",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/events.py",
+            "fields": [
+              "event_type",
+              "timestamp",
+              "spec_id",
+              "phase",
+              "data"
+            ]
+          },
+          {
+            "name": "PhaseResult",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/spec.py",
+            "fields": [
+              "phase",
+              "success",
+              "eval_score",
+              "duration_seconds",
+              "output",
+              "error",
+              "retry_count"
+            ]
+          },
+          {
+            "name": "SpecPhase",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/spec.py",
+            "fields": [
+              "EXPLORE",
+              "PRD",
+              "REQUIREMENTS",
+              "DESIGN",
+              "TASKS",
+              "SYNC"
+            ]
+          },
+          {
+            "name": "TicketFrontmatter",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/frontmatter.py",
+            "fields": [
+              "id",
+              "title",
+              "priority",
+              "status",
+              "tags"
+            ]
+          },
+          {
+            "name": "TaskFrontmatter",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/frontmatter.py",
+            "fields": [
+              "id",
+              "title",
+              "type",
+              "files",
+              "dependencies"
+            ]
+          }
+        ],
+        "conventions": {
+          "naming": "snake_case for Python (functions, variables, files), PascalCase for classes, UPPER_CASE for constants, camelCase for TypeScript/frontend",
+          "testing": "pytest with pytest-asyncio for async tests, fixtures in conftest.py, mock mode for testing without API calls",
+          "patterns": [
+            "State Machine pattern for workflow orchestration",
+            "Strategy pattern for pluggable implementations (reporters, evaluators)",
+            "Service Layer pattern for business logic",
+            "Event-driven architecture with pluggable reporters",
+            "Pydantic for all data validation and settings",
+            "Type hints throughout codebase",
+            "Async/await for I/O operations",
+            "Abstract base classes for extensibility"
+          ],
+          "id_conventions": {
+            "requirements": "REQ-{FEATURE}-{CATEGORY}-{NNN} (e.g., REQ-WEBHOOK-FUNC-001)",
+            "tickets": "TKT-NNN (e.g., TKT-001)",
+            "tasks": "TSK-NNN (e.g., TSK-001)",
+            "user_stories": "US-NNN"
+          },
+          "requirements_format": "EARS format: WHEN [trigger/event], THE SYSTEM SHALL [action/behavior]",
+          "markdown_structure": "YAML frontmatter + markdown body for all artifacts (tickets, tasks, requirements)"
+        },
+        "entry_points": [
+          "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/cli.py (CLI tool: spec-sandbox)",
+          "senior_sandbox/backend/main.py (FastAPI server)",
+          "senior_sandbox/backend/worker.py (Taskiq background worker)",
+          "senior_sandbox/frontend/src/app/page.tsx (Next.js frontend)"
+        ],
+        "test_structure": "Tests in subsystems/spec-sandbox/tests/ directory with conftest.py for shared fixtures. Unit tests for individual components, integration tests for full workflows. Pytest with pytest-asyncio, coverage reporting with pytest-cov. Mock executor for testing without API calls.",
+        "discovery_questions": [
+          {
+            "category": "Problem & Value",
+            "questions": [
+              "What specific quality problems exist in the current spec-sandbox output? Can you provide examples of generic vs desired output?",
+              "What does 'higher quality' mean quantitatively? What's the acceptance criteria (e.g., '60+ EARS-format requirements', 'references 10+ actual files')?",
+              "How will we measure success? Should evaluators score based on actual codebase references vs generic placeholders?",
+              "What is the user pain when they receive generic placeholder content? How does this block their workflow?",
+              "What happens if we DON'T fix this? Is the spec-sandbox currently unusable or just suboptimal?"
+            ]
+          },
+          {
+            "category": "Users & Journeys",
+            "questions": [
+              "Who are the primary users of spec-sandbox? (Developers? Product managers? AI agents executing tasks?)",
+              "What's the expected user journey? Do they review and edit the generated specs or use them directly?",
+              "How do users currently work around the generic output problem? Do they manually edit the files?",
+              "What's the ideal end state from a user perspective? What would delight them?",
+              "Are there different user personas with different quality expectations (e.g., junior devs need more detail vs senior devs)?"
+            ]
+          },
+          {
+            "category": "Scope & Boundaries",
+            "questions": [
+              "Which phases need improvement? All 6 (explore, prd, requirements, design, tasks, sync) or specific ones?",
+              "Should the explore phase actually USE the Read/Glob/Grep tools to scan the codebase, or just instruct later phases to do so?",
+              "Is improving prompts in prompts/phases.py IN scope, or do we need architectural changes to the executor/state machine?",
+              "Should we enhance evaluators to reject outputs with generic placeholders and force retries?",
+              "Is the /spec-driven-dev skill a separate codebase we should reference, or does it use the same spec-sandbox code?",
+              "Are markdown generators (static vs Claude) IN scope for improvement, or just the core phase outputs?",
+              "Should we add new tools to the Claude executor (e.g., database schema inspection, API endpoint discovery)?"
+            ]
+          },
+          {
+            "category": "Technical Context",
+            "questions": [
+              "Does the Claude Agent SDK in executor/claude_executor.py already support Read/Glob/Grep tools, or do we need to configure them?",
+              "What's the current working directory when Claude executes? Is it the spec-sandbox root or the repo root?",
+              "How much does comprehensive codebase exploration cost in API tokens? Is there a budget constraint?",
+              "Should exploration results be cached between phases or re-read each time for freshness?",
+              "What's the current max_turns setting for Claude? Does it have enough turns to explore thoroughly?",
+              "Are there existing services/utilities for codebase analysis we should leverage (e.g., AST parsing, dependency graphs)?",
+              "Should we store exploration results in context for all subsequent phases, or just key findings?",
+              "How does the mock executor mode work? Can it simulate tool usage for testing improved prompts?"
+            ]
+          },
+          {
+            "category": "Trade-offs & Risks",
+            "questions": [
+              "Approach A: Enhance prompts to instruct Claude to explore. Approach B: Pre-process codebase and inject context. Which is better?",
+              "Should we prioritize prompt engineering (fast, cheap) or architectural changes (more robust, more work)?",
+              "What's the risk of over-exploration? Could Claude waste tokens on irrelevant files?",
+              "Should evaluators be strict (reject generic output, force retries) or lenient (accept suboptimal output to avoid infinite loops)?",
+              "What's the timeline/priority for this feature? Is this blocking other work?",
+              "Could comprehensive exploration exceed token budgets? Should we implement exploration budgets per phase?",
+              "What happens if the codebase is huge (100K+ files)? Do we need sampling strategies?",
+              "Should we test improvements against real codebases or synthetic examples first?"
+            ]
+          }
+        ],
+        "feature_summary": {
+          "name": "spec-output-quality-improvement",
+          "one_liner": "Enhance spec-sandbox to generate contextual, high-quality specifications by actually exploring the codebase instead of producing generic placeholder content",
+          "problem_statement": "The current spec-sandbox generates generic placeholder content (e.g., 'Component X', 'Service Y') instead of referencing actual code patterns, files, and architecture. This makes the generated specifications less useful and requires manual editing. Users expect the tool to produce production-ready specs with 60+ EARS-format requirements, accurate Mermaid diagrams, and tasks referencing real files like 'backend/omoi_os/services/webhook.py', matching the quality of the /spec-driven-dev skill.",
+          "scope_in": [
+            "Enhance explore phase to actually use Read, Glob, Grep tools to scan codebase",
+            "Update prompts in prompts/phases.py to instruct Claude to reference actual code discoveries",
+            "Improve evaluators to detect and reject generic placeholder content",
+            "Ensure requirements phase generates 60+ EARS-format acceptance criteria based on real patterns",
+            "Ensure design phase includes Mermaid diagrams with actual component names from codebase",
+            "Ensure tasks phase references specific file paths found during exploration",
+            "Configure Claude executor to provide necessary tools (Read, Glob, Grep) for exploration",
+            "Add context accumulation so exploration results flow to all subsequent phases"
+          ],
+          "scope_out": [
+            "Changing the 6-phase workflow structure (explore \u2192 prd \u2192 requirements \u2192 design \u2192 tasks \u2192 sync)",
+            "Modifying the state machine retry logic or event emission",
+            "Changing markdown generators (static vs Claude) - focus on core phase outputs",
+            "Adding new phases beyond the existing 6",
+            "UI/UX changes to the CLI tool",
+            "Backend API changes for ticket/task sync",
+            "Integration with external code analysis tools (AST parsers, dependency analyzers) - use built-in tools only",
+            "Performance optimizations unrelated to quality",
+            "Cost optimization (acceptable to spend more tokens for higher quality)"
+          ],
+          "technical_constraints": [
+            "Must use existing Claude Agent SDK in executor/claude_executor.py",
+            "Must maintain compatibility with mock executor mode for testing",
+            "Must not break existing event emission and reporter contracts",
+            "Must preserve Pydantic schema structures for events and phase results",
+            "Must maintain backward compatibility with existing configuration options",
+            "Must work within Claude's token limits (may need to implement exploration budgets)",
+            "Must use uv workspace structure - spec-sandbox is an isolated subsystem",
+            "Must not require changes to backend API or frontend"
+          ],
+          "risks_identified": [
+            "Risk: Over-exploration could exceed token budgets or max_turns limits. Mitigation: Implement exploration budgets per phase.",
+            "Risk: Large codebases (100K+ files) could overwhelm Claude. Mitigation: Implement smart file filtering and sampling strategies.",
+            "Risk: Strict evaluators could cause infinite retry loops if quality threshold is unreachable. Mitigation: Cap retries and degrade gracefully.",
+            "Risk: Improved prompts could increase API costs significantly. Mitigation: Monitor costs and add budget controls in config.",
+            "Risk: Breaking changes to prompts could reduce quality in some cases. Mitigation: A/B test against existing prompts with real examples.",
+            "Risk: Tool configuration errors could prevent Claude from accessing Read/Glob/Grep. Mitigation: Test tool availability in mock mode first."
+          ],
+          "success_metrics": [
+            "Generated requirements include 60+ specific EARS-format acceptance criteria (vs current generic count)",
+            "Generated design documents include Mermaid diagrams with 10+ actual component names from codebase",
+            "Generated tasks reference specific file paths (e.g., 'backend/omoi_os/services/webhook.py') with 90%+ accuracy",
+            "Evaluator scores improve from baseline (measure avg eval_score across phases before/after)",
+            "User satisfaction: Manual editing time reduced by 50%+ (measure through user feedback)",
+            "Zero placeholders: 0 instances of generic 'Component X', 'Service Y' patterns in outputs",
+            "Test coverage: All improved prompts tested with real codebase examples, not just mocks"
+          ]
+        },
+        "related_to_feature": [
+          {
+            "name": "SpecStateMachine",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py",
+            "relevance": "Orchestrates all phases - needs to ensure exploration context flows to subsequent phases"
+          },
+          {
+            "name": "ClaudeExecutor",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/executor/claude_executor.py",
+            "relevance": "Must be configured to provide Read/Glob/Grep tools to Claude during phase execution"
+          },
+          {
+            "name": "Phase Prompts",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py",
+            "relevance": "PRIMARY improvement target - 1619 lines of prompts that need enhancement to instruct Claude to explore and reference actual code"
+          },
+          {
+            "name": "ExploreEvaluator",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/explore_evaluator.py",
+            "relevance": "Must validate that exploration phase actually discovered real files, not placeholders"
+          },
+          {
+            "name": "RequirementsEvaluator",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/requirements_evaluator.py",
+            "relevance": "Must validate EARS format and check for specific, contextual requirements vs generic ones"
+          },
+          {
+            "name": "DesignEvaluator",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/design_evaluator.py",
+            "relevance": "Must validate that Mermaid diagrams reference actual components discovered in exploration"
+          },
+          {
+            "name": "TasksEvaluator",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/tasks_evaluator.py",
+            "relevance": "Must validate that tasks reference specific file paths from the actual codebase"
+          },
+          {
+            "name": "SpecSandboxSettings",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/config.py",
+            "relevance": "May need new configuration options for exploration depth, file limits, or tool budgets"
+          },
+          {
+            "name": "EventTypes",
+            "file": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/schemas/events.py",
+            "relevance": "May need new event types for exploration progress tracking (files_discovered, patterns_identified)"
+          }
+        ],
+        "notes": "The spec-sandbox is a well-architected system with clear extension points. The PRIMARY improvement area is the prompts/phases.py file (1619 lines of detailed prompts). The current prompts likely instruct Claude to generate examples but don't emphasize USING the Read/Glob/Grep tools to explore the actual codebase first. The evaluators provide a quality gate with retry logic, so enhancing them to detect generic placeholders will force higher quality outputs. The executor/claude_executor.py wraps Claude Agent SDK and needs verification that it's configured to provide the necessary tools for codebase exploration. The state machine's context accumulation pattern is perfect for flowing exploration results to all subsequent phases. Consider comparing current prompts/evaluators with the /spec-driven-dev skill implementation to identify specific quality gaps.",
+        "_output_source": "file"
+      }
+    },
+    "prd": {
+      "success": true,
+      "output": {
+        "prd_version": "1.0",
+        "feature_name": "spec-output-quality-improvement",
+        "overview": {
+          "one_liner": "Transform spec-sandbox from generating generic placeholder content to producing contextual, production-ready specifications by actively exploring the actual codebase",
+          "problem_statement": "The current spec-sandbox generates generic placeholder content (e.g., 'Component X', 'Service Y', 'Module Z') instead of referencing actual code patterns, files, and architecture discovered from the codebase. This produces specifications that require extensive manual editing to be useful. Users expect production-ready outputs with 60+ EARS-format requirements, accurate Mermaid diagrams showing real components, and tasks referencing specific file paths like 'backend/omoi_os/services/webhook.py' - matching the quality demonstrated by the /spec-driven-dev skill.",
+          "solution_summary": "Enhance the spec-sandbox system to actively explore the codebase using Read, Glob, and Grep tools during the explore phase. Update phase prompts in prompts/phases.py to instruct Claude to reference actual discoveries. Strengthen evaluators to detect and reject generic placeholders, forcing retries until outputs reference real code. Ensure exploration context flows through all subsequent phases (PRD \u2192 Requirements \u2192 Design \u2192 Tasks) so every artifact is grounded in the actual codebase architecture."
+        },
+        "goals": {
+          "primary": "Generate contextual, production-ready specifications that reference actual codebase components, patterns, and file paths instead of generic placeholders",
+          "secondary": [
+            "Reduce manual editing time for generated specifications by 50%+",
+            "Achieve 60+ specific EARS-format acceptance criteria in requirements phase",
+            "Generate Mermaid diagrams with 10+ actual component names from codebase",
+            "Reference specific file paths in 90%+ of generated tasks",
+            "Establish spec-sandbox as the authoritative tool for automated specification generation"
+          ],
+          "success_metrics": [
+            {
+              "metric": "Contextual Requirements Count",
+              "target": ">= 60 EARS-format requirements per feature",
+              "measurement": "Count requirements in generated requirements.md that reference actual code entities"
+            },
+            {
+              "metric": "Zero Generic Placeholders",
+              "target": "0 instances of 'Component X', 'Service Y', 'Module Z' patterns",
+              "measurement": "Automated regex scan of all generated artifacts for generic placeholder patterns"
+            },
+            {
+              "metric": "Accurate File References",
+              "target": ">= 90% of task file paths exist in codebase",
+              "measurement": "Validate all file paths in generated tasks.md against actual filesystem"
+            },
+            {
+              "metric": "Diagram Component Accuracy",
+              "target": ">= 10 real component names per Mermaid diagram",
+              "measurement": "Parse Mermaid diagrams and validate component names against codebase discoveries"
+            },
+            {
+              "metric": "Evaluator Score Improvement",
+              "target": ">= 20% improvement in average eval_score",
+              "measurement": "Compare average eval_score across all phases before/after implementation"
+            },
+            {
+              "metric": "Manual Editing Reduction",
+              "target": ">= 50% reduction in editing time",
+              "measurement": "User survey: time spent editing generated specs before/after"
+            },
+            {
+              "metric": "Codebase Discovery Rate",
+              "target": ">= 20 relevant files discovered per explore phase",
+              "measurement": "Count unique file paths in explore phase output JSON"
+            }
+          ]
+        },
+        "users": {
+          "primary": {
+            "role": "Software Engineer",
+            "description": "Engineers using spec-sandbox to generate specifications for new features they're implementing",
+            "needs": [
+              "Accurate specifications that reference actual codebase patterns",
+              "Minimal manual editing required",
+              "Tasks that identify specific files to modify",
+              "Requirements that reflect real system constraints",
+              "Architecture diagrams showing actual components"
+            ]
+          },
+          "secondary": [
+            {
+              "role": "Product Manager",
+              "description": "PMs using spec-sandbox to document feature requirements",
+              "needs": [
+                "Comprehensive acceptance criteria based on existing patterns",
+                "Clear scope boundaries informed by codebase structure",
+                "Risk identification based on actual dependencies"
+              ]
+            },
+            {
+              "role": "Engineering Manager",
+              "description": "Managers using specs for planning and estimation",
+              "needs": [
+                "Accurate task breakdowns with file-level granularity",
+                "Realistic estimates based on codebase complexity",
+                "Dependency mapping to existing systems"
+              ]
+            },
+            {
+              "role": "AI Agent",
+              "description": "Autonomous agents executing tasks from generated specifications",
+              "needs": [
+                "Precise file paths to operate on",
+                "Accurate component references for navigation",
+                "Clear acceptance criteria for validation"
+              ]
+            }
+          ]
+        },
+        "user_stories": [
+          {
+            "id": "US-001",
+            "role": "Software Engineer",
+            "want": "the explore phase to discover and analyze actual files in my codebase",
+            "benefit": "subsequent phases generate specifications grounded in my project's real architecture",
+            "priority": "must",
+            "acceptance_criteria": [
+              "Explore phase uses Glob tool to discover relevant files based on feature description",
+              "Explore phase uses Grep tool to search for patterns and keywords in discovered files",
+              "Explore phase uses Read tool to examine key files in detail",
+              "Explore output JSON includes 20+ specific file paths from actual codebase",
+              "Explore output JSON includes identified patterns, conventions, and architectural insights",
+              "Exploration results are included in context for all subsequent phases"
+            ]
+          },
+          {
+            "id": "US-002",
+            "role": "Software Engineer",
+            "want": "requirements that reference actual models, services, and APIs from my codebase",
+            "benefit": "I don't waste time replacing generic placeholders with real component names",
+            "priority": "must",
+            "acceptance_criteria": [
+              "Requirements phase references at least 10 actual file paths discovered during exploration",
+              "Requirements use real class names, function names, and module names from codebase",
+              "EARS-format requirements include 60+ specific, contextual acceptance criteria",
+              "Zero instances of generic placeholders like 'Component X', 'Service Y', 'Module Z'",
+              "Requirements reference actual database models, API endpoints, and services"
+            ]
+          },
+          {
+            "id": "US-003",
+            "role": "Software Engineer",
+            "want": "design documents with Mermaid diagrams showing my actual system architecture",
+            "benefit": "I can immediately see how the new feature integrates with existing components",
+            "priority": "must",
+            "acceptance_criteria": [
+              "Mermaid diagrams include 10+ actual component names from codebase",
+              "Diagrams show real file paths or module paths",
+              "Architecture reflects discovered patterns (e.g., service layer, state machine, event-driven)",
+              "Component relationships map to actual imports and dependencies",
+              "Sequence diagrams reference real function/method names"
+            ]
+          },
+          {
+            "id": "US-004",
+            "role": "Software Engineer",
+            "want": "tasks that specify exactly which files I need to create or modify",
+            "benefit": "I can start implementing immediately without detective work",
+            "priority": "must",
+            "acceptance_criteria": [
+              "90%+ of file paths in tasks reference actual existing files",
+              "New file paths follow discovered naming conventions",
+              "Tasks specify exact directories using discovered structure",
+              "File references include full paths from repository root",
+              "Tasks group by logical component based on codebase architecture"
+            ]
+          },
+          {
+            "id": "US-005",
+            "role": "Software Engineer",
+            "want": "evaluators to reject generic placeholder content and force retries",
+            "benefit": "I receive high-quality output without manual quality checks",
+            "priority": "must",
+            "acceptance_criteria": [
+              "Evaluators detect generic patterns ('Component X', 'Service Y', etc.)",
+              "Evaluators verify file path references exist in codebase",
+              "Evaluators check for minimum threshold of contextual references",
+              "Failed evaluations trigger retry with improved prompts",
+              "Evaluation scores reflect contextual accuracy, not just format compliance"
+            ]
+          },
+          {
+            "id": "US-006",
+            "role": "Software Engineer",
+            "want": "the PRD to reflect my codebase's actual constraints and patterns",
+            "benefit": "scope and technical constraints are realistic, not generic",
+            "priority": "must",
+            "acceptance_criteria": [
+              "PRD references actual tech stack discovered in codebase",
+              "Technical constraints mention real frameworks, libraries, and patterns",
+              "User stories reflect actual user roles from the system",
+              "Success metrics align with existing monitoring/observability patterns",
+              "Dependencies list actual services, databases, and APIs"
+            ]
+          },
+          {
+            "id": "US-007",
+            "role": "Product Manager",
+            "want": "comprehensive acceptance criteria based on real system behavior patterns",
+            "benefit": "requirements capture edge cases and error handling that exist in the codebase",
+            "priority": "should",
+            "acceptance_criteria": [
+              "Acceptance criteria reference actual error handling patterns",
+              "Requirements include validation rules discovered in existing code",
+              "Success metrics align with existing observability (Logfire, Sentry, PostHog)",
+              "Scope boundaries reflect actual service boundaries"
+            ]
+          },
+          {
+            "id": "US-008",
+            "role": "Engineering Manager",
+            "want": "task estimates informed by codebase complexity analysis",
+            "benefit": "planning and sprint sizing is more accurate",
+            "priority": "should",
+            "acceptance_criteria": [
+              "Tasks note complexity of files to modify (LOC, dependencies)",
+              "Estimates consider existing test patterns and coverage requirements",
+              "Dependencies mapped to actual service interactions"
+            ]
+          },
+          {
+            "id": "US-009",
+            "role": "Software Engineer",
+            "want": "prompts that explicitly instruct Claude to explore before generating",
+            "benefit": "consistent high-quality output across all spec-sandbox runs",
+            "priority": "must",
+            "acceptance_criteria": [
+              "Explore phase prompt emphasizes mandatory tool usage (Read, Glob, Grep)",
+              "All phase prompts reference 'use discoveries from explore phase'",
+              "Prompts include examples of good (contextual) vs bad (generic) output",
+              "Prompts specify minimum thresholds (e.g., '20+ files', '60+ requirements')",
+              "Quality checklists in prompts verify contextual accuracy"
+            ]
+          },
+          {
+            "id": "US-010",
+            "role": "Software Engineer",
+            "want": "the Claude executor to provide all necessary tools for codebase exploration",
+            "benefit": "Claude has the capabilities it needs to discover and analyze code",
+            "priority": "must",
+            "acceptance_criteria": [
+              "ClaudeExecutor configured with Read, Glob, Grep tools enabled",
+              "Working directory set to repository root for tool access",
+              "max_turns sufficient for comprehensive exploration (50+ turns)",
+              "Tool usage tracked in events for debugging",
+              "Mock executor mode simulates tool responses for testing"
+            ]
+          },
+          {
+            "id": "US-011",
+            "role": "Software Engineer",
+            "want": "exploration results to flow through all subsequent phases via context",
+            "benefit": "every phase builds on discovered codebase insights",
+            "priority": "must",
+            "acceptance_criteria": [
+              "State machine accumulates context from explore phase",
+              "PRD phase receives exploration results as input",
+              "Requirements phase has access to all discoveries",
+              "Design and tasks phases reference the same context",
+              "Context size monitored to avoid token limit issues"
+            ]
+          },
+          {
+            "id": "US-012",
+            "role": "Software Engineer",
+            "want": "smart file filtering during exploration to avoid irrelevant files",
+            "benefit": "exploration is focused and doesn't waste tokens on unrelated code",
+            "priority": "should",
+            "acceptance_criteria": [
+              "Exploration targets files relevant to feature description keywords",
+              "Common ignore patterns applied (node_modules, .git, __pycache__)",
+              "Large files (>5000 lines) sampled rather than read fully",
+              "Test files explored separately with lower priority",
+              "Configuration limits exploration scope (max files, max tokens)"
+            ]
+          },
+          {
+            "id": "US-013",
+            "role": "Software Engineer",
+            "want": "error handling when codebase exploration fails or finds nothing",
+            "benefit": "graceful degradation rather than complete failure",
+            "priority": "should",
+            "acceptance_criteria": [
+              "If exploration finds <5 files, warning emitted but phases continue",
+              "If tools unavailable, clear error message guides troubleshooting",
+              "Partial exploration results still passed to subsequent phases",
+              "Retry logic for transient tool failures",
+              "Documentation explains minimum codebase requirements"
+            ]
+          },
+          {
+            "id": "US-014",
+            "role": "AI Agent",
+            "want": "unambiguous file paths with no relative path ambiguity",
+            "benefit": "I can navigate to exact locations without guessing",
+            "priority": "must",
+            "acceptance_criteria": [
+              "All file paths are absolute or explicitly from repository root",
+              "Path format consistent across all phases",
+              "Paths validated against actual filesystem during evaluation",
+              "No broken symlinks or non-existent paths in output"
+            ]
+          },
+          {
+            "id": "US-015",
+            "role": "Software Engineer",
+            "want": "cost visibility for enhanced exploration with token budgets",
+            "benefit": "I can control API costs while maintaining quality",
+            "priority": "could",
+            "acceptance_criteria": [
+              "Configuration option for exploration depth (shallow, medium, deep)",
+              "Token usage tracked and reported per phase",
+              "Warning if exploration exceeds configured budget",
+              "Cost-quality tradeoff documented",
+              "Ability to cache exploration results for similar features"
+            ]
+          }
+        ],
+        "scope": {
+          "in_scope": [
+            "Enhance explore phase prompt in prompts/phases.py to mandate Read, Glob, Grep tool usage",
+            "Update PRD, requirements, design, and tasks phase prompts to reference exploration discoveries",
+            "Modify ExploreEvaluator to validate actual file discovery (minimum 20 files)",
+            "Modify RequirementsEvaluator to detect generic placeholders and verify contextual references",
+            "Modify DesignEvaluator to validate Mermaid diagrams contain real component names",
+            "Modify TasksEvaluator to verify 90%+ of file paths exist in actual codebase",
+            "Configure ClaudeExecutor to enable Read, Glob, Grep tools with proper working directory",
+            "Ensure state machine context accumulation includes full exploration results",
+            "Add quality checklist examples to prompts showing good vs bad outputs",
+            "Test improvements against real codebase examples (spec-sandbox itself, backend, frontend)",
+            "Update configuration with exploration depth settings (max_files, max_exploration_tokens)",
+            "Add file filtering logic to focus exploration on relevant directories",
+            "Emit exploration progress events (files_discovered, patterns_identified)",
+            "Document expected quality improvements in README/docs"
+          ],
+          "out_of_scope": [
+            "Changing the 6-phase workflow structure or phase sequencing",
+            "Modifying state machine retry logic or max_retries limits",
+            "Changing markdown generators (static vs Claude) - focus on core phase outputs",
+            "Adding new phases beyond explore/PRD/requirements/design/tasks/sync",
+            "UI/UX changes to the CLI tool interface",
+            "Backend API changes for ticket/task sync endpoints",
+            "Frontend integration or dashboard for spec viewing",
+            "Integration with external code analysis tools (AST parsers, dependency graphs, Sourcegraph)",
+            "Performance optimizations unrelated to quality (caching, parallelization)",
+            "Cost optimization (acceptable to increase token usage for quality)",
+            "Multi-repository or monorepo-awareness (assume single codebase root)",
+            "Git history analysis or blame information",
+            "Real-time collaboration or multi-user spec editing",
+            "Webhook/API triggers for automated spec generation",
+            "Custom evaluation criteria or user-defined quality thresholds (use fixed thresholds)"
+          ],
+          "dependencies": [
+            "Claude Agent SDK 0.1.0+ must support Read, Glob, Grep tools",
+            "ClaudeExecutor must have filesystem access to codebase root",
+            "Anthropic API must be available with sufficient rate limits",
+            "Python 3.12+ with required dependencies (httpx, click, pydantic)",
+            "Codebase must be present at configured PROJECT_ROOT path",
+            "Existing phase prompts in prompts/phases.py must be modifiable",
+            "Evaluator framework must support custom validation logic",
+            "Event reporter system must support new event types"
+          ]
+        },
+        "assumptions": [
+          "Claude Agent SDK's Read, Glob, Grep tools are functional and performant",
+          "Codebase is structured and not obfuscated (readable Python/TypeScript)",
+          "Feature descriptions provided to spec-sandbox include relevant keywords for discovery",
+          "Users have sufficient Anthropic API budget for enhanced exploration (estimate 2-3x current usage)",
+          "Codebase size is manageable (< 100K files) for exploration within token limits",
+          "Users value quality over speed and accept increased generation time",
+          "Existing evaluator retry logic (max 3 retries) is sufficient for quality enforcement",
+          "Mock executor mode can simulate tool responses for testing without real API calls",
+          "Users will test against their own codebases and provide feedback on quality improvements"
+        ],
+        "constraints": {
+          "technical": [
+            "Must use existing Claude Agent SDK in executor/claude_executor.py without forking",
+            "Must maintain compatibility with mock executor mode for testing",
+            "Must not break existing event emission and reporter contracts",
+            "Must preserve Pydantic schema structures for Event, PhaseResult, SpecPhase",
+            "Must maintain backward compatibility with existing SpecSandboxSettings configuration",
+            "Must work within Claude's context window limits (200K tokens input)",
+            "Must respect Claude's max_turns limit (configure appropriately, e.g., 50 turns)",
+            "Must use uv workspace structure - spec-sandbox is isolated subsystem",
+            "Must not require changes to backend API (omoi_os) or frontend",
+            "Must work with both local development and CI/CD environments",
+            "Must support Python 3.12+ only (no legacy version compatibility)",
+            "File system access must be read-only (no writes during exploration)"
+          ],
+          "business": [
+            "Must not increase API costs by more than 3x for typical feature",
+            "Must not increase total generation time by more than 50% for typical feature",
+            "Cannot break existing specs or workflows using current version",
+            "Must launch within Q1 2026 (current date: 2026-01-21)",
+            "Must provide clear migration path if prompt changes affect quality",
+            "Must document cost-quality tradeoffs for users to make informed decisions"
+          ]
+        },
+        "risks": [
+          {
+            "risk": "Over-exploration exceeds token budgets or max_turns limits",
+            "impact": "high",
+            "likelihood": "medium",
+            "mitigation": "Implement exploration budgets (max_files=100, max_exploration_tokens=50K). Add configuration options for shallow/medium/deep exploration. Prioritize files matching feature keywords. Skip large files (>5K lines) or sample them."
+          },
+          {
+            "risk": "Large codebases (100K+ files) overwhelm Claude during Glob operations",
+            "impact": "high",
+            "likelihood": "medium",
+            "mitigation": "Implement smart file filtering with ignore patterns (node_modules, .git, __pycache__, dist, build). Focus exploration on relevant directories based on feature type. Add max_files limit with clear error messaging. Document codebase size limits."
+          },
+          {
+            "risk": "Strict evaluators cause infinite retry loops if quality threshold unreachable",
+            "impact": "high",
+            "likelihood": "low",
+            "mitigation": "Cap retries at existing max (3 attempts). Degrade gracefully - on final retry, accept best effort output with warning. Log evaluation failures for analysis. Provide clear feedback to Claude on what's missing."
+          },
+          {
+            "risk": "Improved prompts increase API costs 3-5x, exceeding user budgets",
+            "impact": "high",
+            "likelihood": "high",
+            "mitigation": "Add configuration for exploration depth (shallow=1.5x cost, medium=2.5x, deep=4x). Track and report token usage per phase. Document cost implications. Consider caching exploration results for similar features. Provide cost estimation before running."
+          },
+          {
+            "risk": "Prompt changes reduce quality in some cases or introduce regressions",
+            "impact": "high",
+            "likelihood": "medium",
+            "mitigation": "A/B test new prompts against 10+ real feature examples. Maintain test suite with golden examples. Version prompts and allow rollback. Collect user feedback via survey. Gradual rollout with feature flag."
+          },
+          {
+            "risk": "Tool configuration errors prevent Claude from accessing Read/Glob/Grep",
+            "impact": "high",
+            "likelihood": "medium",
+            "mitigation": "Verify tool availability at executor initialization. Test tool access in mock mode before live runs. Provide clear error messages with troubleshooting steps. Add health check command to CLI. Document tool requirements."
+          },
+          {
+            "risk": "Exploration discovers sensitive files (secrets, credentials, PII)",
+            "impact": "high",
+            "likelihood": "low",
+            "mitigation": "Implement ignore patterns for sensitive files (.env, *.key, *.pem, secrets.*, credentials.*). Read-only file system access. Document security best practices. Add warning if sensitive patterns detected."
+          },
+          {
+            "risk": "Context accumulation across phases exceeds token limits",
+            "impact": "medium",
+            "likelihood": "medium",
+            "mitigation": "Summarize exploration results before passing to later phases. Keep only key discoveries (top 20 files, main patterns). Monitor context size in state machine. Implement context pruning strategy if needed."
+          },
+          {
+            "risk": "Generated specs reference outdated code if codebase changes during generation",
+            "impact": "low",
+            "likelihood": "medium",
+            "mitigation": "Document that specs are point-in-time snapshots. Add timestamp to exploration results. Recommend re-running if codebase changes significantly. Future: add git commit SHA to outputs."
+          },
+          {
+            "risk": "Users have codebases in languages other than Python/TypeScript",
+            "impact": "medium",
+            "likelihood": "medium",
+            "mitigation": "Start with Python/TypeScript focus (covers this project). Document language support limitations. Design prompts to be language-agnostic where possible. Future: extend to Java, Go, Rust based on demand."
+          }
+        ],
+        "open_questions": [
+          "Should we implement exploration result caching to avoid re-scanning unchanged codebases for similar features?",
+          "What's the optimal balance between exploration depth and cost? Should we default to 'medium' exploration?",
+          "Do we need separate exploration strategies for different project types (monorepo vs microservices vs library)?",
+          "Should evaluators have configurable strictness levels, or fixed thresholds for consistency?",
+          "How do we handle codebases with non-standard structures (e.g., no clear backend/frontend split)?",
+          "Should the explore phase output include a dependency graph or just file lists?",
+          "Do we need a dry-run mode that estimates exploration cost before executing?",
+          "Should we add telemetry to track which exploration patterns lead to highest quality outputs?",
+          "How do we version control prompts if we want to A/B test or roll back changes?",
+          "Should we create a benchmark suite with 10+ real features for regression testing?",
+          "Do we need configuration per project type, or one-size-fits-all prompts?",
+          "Should we support incremental exploration (explore more if initial results insufficient)?",
+          "How do we handle monorepos where feature only touches one subsystem?",
+          "Should we emit intermediate exploration results for streaming UI updates (future)?",
+          "Do we need to support remote codebases (GitHub, GitLab) or only local?"
+        ],
+        "related_features": [
+          {
+            "name": "SpecStateMachine",
+            "relationship": "depends_on",
+            "notes": "Core orchestration engine - must ensure exploration context flows to all phases via context accumulation"
+          },
+          {
+            "name": "ClaudeExecutor",
+            "relationship": "depends_on",
+            "notes": "Must configure to enable Read, Glob, Grep tools with proper working directory and sufficient max_turns"
+          },
+          {
+            "name": "Phase Prompts (prompts/phases.py)",
+            "relationship": "modifies",
+            "notes": "PRIMARY target for improvements - 1619 lines of prompts need enhancement to mandate exploration and reference discoveries"
+          },
+          {
+            "name": "ExploreEvaluator",
+            "relationship": "modifies",
+            "notes": "Must validate minimum file discovery threshold (20+ files) and reject generic summaries"
+          },
+          {
+            "name": "RequirementsEvaluator",
+            "relationship": "modifies",
+            "notes": "Must detect generic placeholders, validate EARS format, and verify contextual references to real code"
+          },
+          {
+            "name": "DesignEvaluator",
+            "relationship": "modifies",
+            "notes": "Must validate Mermaid diagrams contain real component names (10+) from exploration discoveries"
+          },
+          {
+            "name": "TasksEvaluator",
+            "relationship": "modifies",
+            "notes": "Must verify 90%+ of file paths exist in actual codebase and reject generic placeholders"
+          },
+          {
+            "name": "SpecSandboxSettings (config.py)",
+            "relationship": "extends",
+            "notes": "May need new config options: max_exploration_files, max_exploration_tokens, exploration_depth, enable_strict_evaluation"
+          },
+          {
+            "name": "Event System (schemas/events.py)",
+            "relationship": "extends",
+            "notes": "Add new event types: exploration_progress, files_discovered, patterns_identified for observability"
+          },
+          {
+            "name": "/spec-driven-dev Skill",
+            "relationship": "references",
+            "notes": "Gold standard for quality - analyze its implementation to identify gaps in current spec-sandbox"
+          },
+          {
+            "name": "Mock Executor Mode",
+            "relationship": "depends_on",
+            "notes": "Must support simulated tool responses for testing improved prompts without API costs"
+          },
+          {
+            "name": "Reporter System",
+            "relationship": "uses",
+            "notes": "Emit events for exploration progress tracking and debugging"
+          }
+        ],
+        "revision_history": [
+          {
+            "version": "1.0",
+            "date": "2026-01-21",
+            "author": "spec-sandbox-prd-agent",
+            "changes": "Initial PRD created based on explore phase codebase analysis. Defined 15 user stories, 7 success metrics, 10 risks with mitigations, and comprehensive scope boundaries."
+          }
+        ],
+        "_output_source": "file"
+      }
+    },
+    "requirements": {
+      "success": true,
+      "output": {
+        "feature_name": "spec-output-quality-improvement",
+        "requirements": [
+          {
+            "id": "REQ-SPECQUAL-FUNC-001",
+            "title": "Codebase Exploration via Glob Tool",
+            "type": "functional",
+            "category": "Exploration",
+            "priority": "HIGH",
+            "text": "WHEN the explore phase executes, THE SYSTEM SHALL use the Glob tool to discover relevant files based on feature description keywords and project structure patterns.",
+            "acceptance_criteria": [
+              "Glob patterns target relevant directories (backend, frontend, subsystems)",
+              "Common ignore patterns are applied (node_modules, .git, __pycache__, dist, build, .venv)",
+              "File discovery is filtered based on feature description keywords",
+              "At least 20 relevant files are discovered for typical features",
+              "Discovery results include full file paths from repository root",
+              "Large directories (>1000 files) are sampled rather than exhaustively scanned"
+            ],
+            "dependencies": [],
+            "notes": "Maps to US-001. Foundation for all subsequent contextual output generation."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-002",
+            "title": "Codebase Pattern Search via Grep Tool",
+            "type": "functional",
+            "category": "Exploration",
+            "priority": "HIGH",
+            "text": "WHEN the explore phase executes, THE SYSTEM SHALL use the Grep tool to search for patterns, keywords, and architectural conventions within discovered files.",
+            "acceptance_criteria": [
+              "Grep searches target feature-relevant keywords from description",
+              "Pattern searches identify naming conventions (snake_case, PascalCase, etc.)",
+              "Architectural patterns are detected (State Machine, Service Layer, Strategy, etc.)",
+              "Model/class/function definitions are extracted",
+              "API endpoints and database models are identified",
+              "Search results include file paths and matched content snippets"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-001"
+            ],
+            "notes": "Maps to US-001. Enables discovery of existing code patterns to reference."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-003",
+            "title": "Detailed File Analysis via Read Tool",
+            "type": "functional",
+            "category": "Exploration",
+            "priority": "HIGH",
+            "text": "WHEN the explore phase identifies key files, THE SYSTEM SHALL use the Read tool to examine their contents in detail for architectural understanding.",
+            "acceptance_criteria": [
+              "At least 10 key files are read in full during exploration",
+              "Files larger than 5000 lines are sampled (first 1000, last 1000, middle 1000)",
+              "Read operations extract imports, class definitions, function signatures",
+              "Configuration files (config.py, settings files) are prioritized for reading",
+              "Entry points and main modules are read to understand architecture",
+              "Read results are structured and added to exploration context"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-001",
+              "REQ-SPECQUAL-FUNC-002"
+            ],
+            "notes": "Maps to US-001. Provides deep understanding of implementation patterns."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-004",
+            "title": "Exploration Results Contextualization",
+            "type": "functional",
+            "category": "Exploration",
+            "priority": "HIGH",
+            "text": "WHEN the explore phase completes, THE SYSTEM SHALL generate a structured JSON output containing all discovered files, patterns, conventions, and architectural insights.",
+            "acceptance_criteria": [
+              "Output JSON includes minimum 20 specific file paths from codebase",
+              "Output includes identified naming conventions and patterns",
+              "Output includes discovered architectural patterns (with file references)",
+              "Output includes tech stack and framework versions found",
+              "Output includes key models, services, and API structures",
+              "Output is structured for consumption by subsequent phases"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-001",
+              "REQ-SPECQUAL-FUNC-002",
+              "REQ-SPECQUAL-FUNC-003"
+            ],
+            "notes": "Maps to US-001. Creates the foundation for all contextual outputs."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-005",
+            "title": "Context Propagation to Subsequent Phases",
+            "type": "functional",
+            "category": "State Management",
+            "priority": "HIGH",
+            "text": "WHEN exploration completes successfully, THE SYSTEM SHALL accumulate exploration results in the state machine context and pass them to all subsequent phases (PRD, Requirements, Design, Tasks).",
+            "acceptance_criteria": [
+              "SpecStateMachine includes full exploration JSON in context for PRD phase",
+              "PRD phase has access to all discovered files and patterns",
+              "Requirements phase receives exploration context via state machine",
+              "Design phase can reference all exploration discoveries",
+              "Tasks phase has access to complete file path inventory",
+              "Context size is monitored to avoid exceeding token limits"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-004"
+            ],
+            "notes": "Maps to US-011. Critical for ensuring all phases build on codebase discoveries."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-006",
+            "title": "Contextual PRD Generation",
+            "type": "functional",
+            "category": "PRD Phase",
+            "priority": "HIGH",
+            "text": "WHEN the PRD phase executes, THE SYSTEM SHALL generate a Product Requirements Document that references actual tech stack, constraints, and patterns discovered during exploration.",
+            "acceptance_criteria": [
+              "PRD references actual tech stack from codebase (frameworks, libraries, versions)",
+              "Technical constraints mention real patterns (State Machine, Service Layer, etc.)",
+              "User stories reflect actual user roles from the system",
+              "Success metrics align with existing observability (Logfire, Sentry, PostHog)",
+              "Dependencies list actual services, databases, and APIs found in code",
+              "Zero instances of generic placeholders like 'Component X', 'Service Y'"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-005"
+            ],
+            "notes": "Maps to US-006. Ensures PRD is grounded in actual codebase reality."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-007",
+            "title": "EARS-Format Requirements with Contextual References",
+            "type": "functional",
+            "category": "Requirements Phase",
+            "priority": "HIGH",
+            "text": "WHEN the requirements phase executes, THE SYSTEM SHALL generate at least 60 EARS-format requirements that reference actual models, services, APIs, and file paths discovered during exploration.",
+            "acceptance_criteria": [
+              "Minimum 60 requirements in EARS format (WHEN/SHALL pattern)",
+              "Requirements reference at least 10 actual file paths from exploration",
+              "Requirements use real class names, function names, module names",
+              "Requirements reference actual database models (e.g., Pydantic schemas)",
+              "Requirements reference actual API endpoints and services",
+              "Each requirement has 2+ specific acceptance criteria",
+              "Zero instances of generic placeholders ('Component X', 'Service Y', 'Module Z')"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-005",
+              "REQ-SPECQUAL-FUNC-006"
+            ],
+            "notes": "Maps to US-002, US-009. Core quality improvement for requirements generation."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-008",
+            "title": "Contextual Architecture Diagrams",
+            "type": "functional",
+            "category": "Design Phase",
+            "priority": "HIGH",
+            "text": "WHEN the design phase executes, THE SYSTEM SHALL generate Mermaid diagrams that include at least 10 actual component names, file paths, and architectural patterns discovered during exploration.",
+            "acceptance_criteria": [
+              "Mermaid diagrams include minimum 10 actual component names from codebase",
+              "Diagrams show real file paths or module paths where applicable",
+              "Architecture reflects discovered patterns (e.g., State Machine, Service Layer, Event-Driven)",
+              "Component relationships map to actual imports and dependencies",
+              "Sequence diagrams reference real function/method names",
+              "Class diagrams show actual model fields and relationships",
+              "Zero generic component names like 'Component1', 'ServiceA'"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-005",
+              "REQ-SPECQUAL-FUNC-007"
+            ],
+            "notes": "Maps to US-003. Ensures design documents reflect actual system architecture."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-009",
+            "title": "File-Specific Task Generation",
+            "type": "functional",
+            "category": "Tasks Phase",
+            "priority": "HIGH",
+            "text": "WHEN the tasks phase executes, THE SYSTEM SHALL generate implementation tasks where at least 90% of file path references point to actual existing files in the codebase.",
+            "acceptance_criteria": [
+              "90% or more of referenced file paths exist in actual codebase",
+              "New file paths follow discovered naming conventions",
+              "Tasks specify exact directories using discovered structure",
+              "File references include full paths from repository root",
+              "Tasks are grouped by logical component based on codebase architecture",
+              "Each task specifies whether file is to be created or modified",
+              "Zero generic file references like 'components/feature.py' without context"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-005",
+              "REQ-SPECQUAL-FUNC-008"
+            ],
+            "notes": "Maps to US-004, US-014. Critical for actionable task specifications."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-010",
+            "title": "Exploration Depth Configuration",
+            "type": "functional",
+            "category": "Configuration",
+            "priority": "MEDIUM",
+            "text": "THE SYSTEM SHALL support configurable exploration depth settings (shallow, medium, deep) to balance quality versus API cost.",
+            "acceptance_criteria": [
+              "Configuration option 'exploration_depth' accepts: 'shallow', 'medium', 'deep'",
+              "Shallow mode: explore max 50 files, use Glob only, minimal Grep",
+              "Medium mode (default): explore max 100 files, balanced Glob+Grep+Read",
+              "Deep mode: explore max 200 files, comprehensive Grep+Read analysis",
+              "Depth setting affects max_exploration_tokens budget",
+              "Configuration is documented with cost-quality tradeoffs"
+            ],
+            "dependencies": [],
+            "notes": "Maps to US-015. Allows users to control cost vs quality tradeoff."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-011",
+            "title": "Smart File Filtering During Exploration",
+            "type": "functional",
+            "category": "Exploration",
+            "priority": "MEDIUM",
+            "text": "WHEN the explore phase executes, THE SYSTEM SHALL apply smart filtering to focus exploration on relevant files and avoid common noise directories.",
+            "acceptance_criteria": [
+              "Ignore patterns exclude: node_modules, .git, __pycache__, dist, build, .venv, .pytest_cache",
+              "Exploration prioritizes files matching feature description keywords",
+              "Test files are explored with lower priority than source files",
+              "Configuration files (config.py, settings.py, *.config.js) are prioritized",
+              "Binary files and images are excluded from exploration",
+              "Maximum file size limit (default 5000 lines) with sampling for larger files"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-001"
+            ],
+            "notes": "Maps to US-012. Optimizes exploration efficiency and cost."
+          },
+          {
+            "id": "REQ-SPECQUAL-FUNC-012",
+            "title": "Exploration Progress Event Emission",
+            "type": "functional",
+            "category": "Observability",
+            "priority": "LOW",
+            "text": "WHEN the explore phase discovers files or identifies patterns, THE SYSTEM SHALL emit progress events for observability and debugging.",
+            "acceptance_criteria": [
+              "Event 'exploration_started' emitted at phase start with feature description",
+              "Event 'files_discovered' emitted with count and sample paths",
+              "Event 'patterns_identified' emitted with discovered conventions",
+              "Event 'exploration_completed' emitted with summary statistics",
+              "Events include timestamp, spec_id, and phase name",
+              "Events are routed through configured reporter (array/jsonl/http)"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-004"
+            ],
+            "notes": "Enhances debugging and monitoring of exploration quality."
+          },
+          {
+            "id": "REQ-SPECQUAL-EVAL-001",
+            "title": "Exploration Quality Validation",
+            "type": "functional",
+            "category": "Evaluation",
+            "priority": "HIGH",
+            "text": "WHEN the explore phase completes, THE ExploreEvaluator SHALL validate that at least 20 relevant files were discovered and reject outputs with insufficient exploration.",
+            "acceptance_criteria": [
+              "Evaluator checks exploration output JSON contains >= 20 file paths",
+              "Evaluator verifies file paths are absolute or relative to repo root",
+              "Evaluator rejects outputs with generic summaries lacking specific discoveries",
+              "Evaluator scores based on: file count (40%), pattern discovery (30%), architecture insights (30%)",
+              "Failed evaluation triggers retry with enhanced exploration prompt",
+              "Evaluation score >= 0.7 required to pass",
+              "Evaluation feedback indicates what's missing (e.g., 'Only 12 files found, need 20+')"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-004"
+            ],
+            "notes": "Maps to US-005. Enforces minimum exploration quality threshold."
+          },
+          {
+            "id": "REQ-SPECQUAL-EVAL-002",
+            "title": "Requirements Contextual Reference Validation",
+            "type": "functional",
+            "category": "Evaluation",
+            "priority": "HIGH",
+            "text": "WHEN the requirements phase completes, THE RequirementsEvaluator SHALL validate that requirements reference actual codebase entities and reject generic placeholder content.",
+            "acceptance_criteria": [
+              "Evaluator detects generic patterns: 'Component X', 'Service Y', 'Module Z', 'FeatureA'",
+              "Evaluator verifies at least 10 file paths are referenced in requirements",
+              "Evaluator checks for minimum 60 EARS-format requirements",
+              "Evaluator validates EARS syntax (WHEN/WHILE/IF + SHALL pattern)",
+              "Evaluator scores: EARS compliance (25%), contextual refs (50%), acceptance criteria quality (25%)",
+              "Failed evaluation triggers retry with feedback on missing context",
+              "Evaluation score >= 0.75 required to pass"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-007"
+            ],
+            "notes": "Maps to US-005, US-002. Rejects generic requirements output."
+          },
+          {
+            "id": "REQ-SPECQUAL-EVAL-003",
+            "title": "Design Diagram Component Validation",
+            "type": "functional",
+            "category": "Evaluation",
+            "priority": "HIGH",
+            "text": "WHEN the design phase completes, THE DesignEvaluator SHALL validate that Mermaid diagrams contain at least 10 actual component names from codebase discoveries.",
+            "acceptance_criteria": [
+              "Evaluator parses Mermaid diagram syntax to extract component names",
+              "Evaluator cross-references component names against exploration discoveries",
+              "Evaluator checks for minimum 10 real component/file/class names in diagrams",
+              "Evaluator detects generic names: 'Component1', 'ServiceA', 'Module1', 'Handler'",
+              "Evaluator validates diagram types are appropriate (class, sequence, flowchart)",
+              "Evaluator scores: component accuracy (60%), diagram completeness (40%)",
+              "Evaluation score >= 0.7 required to pass"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-008"
+            ],
+            "notes": "Maps to US-005, US-003. Ensures diagrams reflect actual architecture."
+          },
+          {
+            "id": "REQ-SPECQUAL-EVAL-004",
+            "title": "Tasks File Path Existence Validation",
+            "type": "functional",
+            "category": "Evaluation",
+            "priority": "HIGH",
+            "text": "WHEN the tasks phase completes, THE TasksEvaluator SHALL validate that at least 90% of file path references exist in the actual codebase.",
+            "acceptance_criteria": [
+              "Evaluator extracts all file path references from task descriptions",
+              "Evaluator checks each file path against actual filesystem",
+              "Evaluator calculates accuracy: (existing_paths / total_paths) >= 0.90",
+              "Evaluator validates new file paths follow discovered naming conventions",
+              "Evaluator detects generic paths: 'src/feature.py', 'components/new_feature.tsx'",
+              "Failed evaluation provides list of non-existent paths for debugging",
+              "Evaluation score >= 0.75 required to pass"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-009"
+            ],
+            "notes": "Maps to US-005, US-004. Ensures tasks reference real, actionable files."
+          },
+          {
+            "id": "REQ-SPECQUAL-PROMPT-001",
+            "title": "Explore Phase Prompt Enhancement",
+            "type": "functional",
+            "category": "Prompts",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL update the explore phase prompt in prompts/phases.py to mandate comprehensive tool usage (Glob, Grep, Read) with specific quality thresholds.",
+            "acceptance_criteria": [
+              "Prompt explicitly requires Glob tool usage to discover 20+ files",
+              "Prompt explicitly requires Grep tool usage to identify patterns and conventions",
+              "Prompt explicitly requires Read tool usage for 10+ key files",
+              "Prompt includes examples of good exploration output (contextual) vs bad (generic)",
+              "Prompt specifies file filtering strategies (ignore patterns, size limits)",
+              "Prompt emphasizes extracting: tech stack, patterns, models, services, APIs",
+              "Prompt includes quality checklist that evaluator will use"
+            ],
+            "dependencies": [],
+            "notes": "Maps to US-009. Primary intervention point for quality improvement."
+          },
+          {
+            "id": "REQ-SPECQUAL-PROMPT-002",
+            "title": "Requirements Phase Prompt Enhancement",
+            "type": "functional",
+            "category": "Prompts",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL update the requirements phase prompt in prompts/phases.py to mandate referencing exploration discoveries and generating 60+ contextual EARS-format requirements.",
+            "acceptance_criteria": [
+              "Prompt requires minimum 60 EARS-format requirements",
+              "Prompt instructs to reference at least 10 specific file paths from exploration",
+              "Prompt provides EARS format examples with real component names",
+              "Prompt emphasizes using actual class/function/model names discovered",
+              "Prompt includes anti-patterns: 'Component X', 'Service Y', 'generic placeholders'",
+              "Prompt specifies each requirement needs 2+ acceptance criteria",
+              "Prompt references exploration context explicitly: 'use discoveries from explore phase'"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-PROMPT-001"
+            ],
+            "notes": "Maps to US-009, US-002. Drives contextual requirements generation."
+          },
+          {
+            "id": "REQ-SPECQUAL-PROMPT-003",
+            "title": "Design Phase Prompt Enhancement",
+            "type": "functional",
+            "category": "Prompts",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL update the design phase prompt in prompts/phases.py to mandate Mermaid diagrams with 10+ actual component names from exploration discoveries.",
+            "acceptance_criteria": [
+              "Prompt requires Mermaid diagrams with minimum 10 real component names",
+              "Prompt instructs to use actual file paths, class names, service names",
+              "Prompt provides diagram examples using real components (not generic)",
+              "Prompt specifies diagram types: class diagrams, sequence diagrams, architecture diagrams",
+              "Prompt emphasizes showing discovered patterns (State Machine, Service Layer, etc.)",
+              "Prompt includes quality checklist for diagram validation",
+              "Prompt references exploration and requirements context"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-PROMPT-002"
+            ],
+            "notes": "Maps to US-009, US-003. Ensures design reflects actual architecture."
+          },
+          {
+            "id": "REQ-SPECQUAL-PROMPT-004",
+            "title": "Tasks Phase Prompt Enhancement",
+            "type": "functional",
+            "category": "Prompts",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL update the tasks phase prompt in prompts/phases.py to mandate specific file path references with 90%+ accuracy against actual codebase.",
+            "acceptance_criteria": [
+              "Prompt requires all file paths to be absolute or from repository root",
+              "Prompt instructs to verify file paths exist in exploration discoveries",
+              "Prompt requires specifying whether file is to be created or modified",
+              "Prompt requires grouping tasks by component/service based on architecture",
+              "Prompt provides examples of specific vs generic task descriptions",
+              "Prompt specifies following discovered naming conventions for new files",
+              "Prompt includes quality checklist: 90%+ file paths must exist"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-PROMPT-003"
+            ],
+            "notes": "Maps to US-009, US-004. Generates actionable, file-specific tasks."
+          },
+          {
+            "id": "REQ-SPECQUAL-PROMPT-005",
+            "title": "PRD Phase Prompt Enhancement",
+            "type": "functional",
+            "category": "Prompts",
+            "priority": "MEDIUM",
+            "text": "THE SYSTEM SHALL update the PRD phase prompt in prompts/phases.py to mandate referencing actual tech stack, patterns, and constraints from exploration.",
+            "acceptance_criteria": [
+              "Prompt requires listing actual tech stack from exploration (frameworks, versions)",
+              "Prompt requires referencing discovered architectural patterns",
+              "Prompt requires technical constraints based on actual code structure",
+              "Prompt requires user stories reflecting actual system roles",
+              "Prompt instructs to align success metrics with existing observability tools",
+              "Prompt includes examples of contextual vs generic PRD sections"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-PROMPT-001"
+            ],
+            "notes": "Maps to US-006. Grounds PRD in codebase reality."
+          },
+          {
+            "id": "REQ-SPECQUAL-EXEC-001",
+            "title": "Claude Executor Tool Configuration",
+            "type": "functional",
+            "category": "Executor",
+            "priority": "HIGH",
+            "text": "THE ClaudeExecutor SHALL be configured to enable Read, Glob, and Grep tools for all phase executions with proper working directory and sufficient turn limits.",
+            "acceptance_criteria": [
+              "ClaudeExecutor enables Read tool in tool configuration",
+              "ClaudeExecutor enables Glob tool in tool configuration",
+              "ClaudeExecutor enables Grep tool in tool configuration",
+              "Working directory is set to PROJECT_ROOT for filesystem access",
+              "max_turns is set to at least 50 to allow comprehensive exploration",
+              "Tool availability is verified at executor initialization",
+              "Clear error message emitted if tools are unavailable",
+              "Mock executor mode simulates tool responses for testing"
+            ],
+            "dependencies": [],
+            "notes": "Maps to US-010. Technical prerequisite for codebase exploration."
+          },
+          {
+            "id": "REQ-SPECQUAL-EXEC-002",
+            "title": "Exploration Budget Enforcement",
+            "type": "functional",
+            "category": "Executor",
+            "priority": "MEDIUM",
+            "text": "THE ClaudeExecutor SHALL enforce exploration budgets (max_files, max_exploration_tokens) to prevent excessive API costs during exploration.",
+            "acceptance_criteria": [
+              "Configuration option 'max_exploration_files' (default: 100)",
+              "Configuration option 'max_exploration_tokens' (default: 50000)",
+              "Executor tracks file read count during exploration",
+              "Executor estimates and tracks token usage during exploration",
+              "Warning emitted if budget threshold (80%) approached",
+              "Exploration continues with best-effort if budget exceeded",
+              "Budget usage reported in phase result metadata"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-010"
+            ],
+            "notes": "Mitigates cost risk while allowing quality exploration."
+          },
+          {
+            "id": "REQ-SPECQUAL-CONFIG-001",
+            "title": "Exploration Configuration Options",
+            "type": "functional",
+            "category": "Configuration",
+            "priority": "MEDIUM",
+            "text": "THE SpecSandboxSettings SHALL include configuration options for exploration depth, file limits, token budgets, and strict evaluation mode.",
+            "acceptance_criteria": [
+              "Setting 'exploration_depth': Literal['shallow', 'medium', 'deep'] (default: 'medium')",
+              "Setting 'max_exploration_files': int (default: 100)",
+              "Setting 'max_exploration_tokens': int (default: 50000)",
+              "Setting 'enable_strict_evaluation': bool (default: True)",
+              "Setting 'exploration_ignore_patterns': List[str] (default: standard patterns)",
+              "Setting 'max_file_size_lines': int (default: 5000)",
+              "All settings have descriptions and validation",
+              "Settings are documented in README/configuration guide"
+            ],
+            "dependencies": [],
+            "notes": "Provides user control over exploration behavior and costs."
+          },
+          {
+            "id": "REQ-SPECQUAL-PERF-001",
+            "title": "Exploration Performance Threshold",
+            "type": "performance",
+            "category": "Performance",
+            "priority": "MEDIUM",
+            "text": "THE explore phase SHALL complete within 5 minutes for codebases up to 10,000 files using medium exploration depth.",
+            "acceptance_criteria": [
+              "P95 exploration time <= 5 minutes for 10K file codebase",
+              "File discovery via Glob completes in < 30 seconds",
+              "Grep operations complete within exploration budget",
+              "Read operations are parallelized where possible (via Claude)",
+              "Progress is visible via emitted events during execution",
+              "Timeout warnings emitted if exploration exceeds 4 minutes"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-001",
+              "REQ-SPECQUAL-FUNC-002",
+              "REQ-SPECQUAL-FUNC-003"
+            ],
+            "notes": "Ensures reasonable user experience for exploration phase."
+          },
+          {
+            "id": "REQ-SPECQUAL-PERF-002",
+            "title": "Context Size Management",
+            "type": "performance",
+            "category": "Performance",
+            "priority": "MEDIUM",
+            "text": "THE SpecStateMachine SHALL monitor accumulated context size and implement summarization if context approaches token limits (180K tokens of 200K limit).",
+            "acceptance_criteria": [
+              "Context size is tracked after each phase completion",
+              "Warning emitted if context exceeds 180,000 tokens",
+              "Exploration results are summarized if full context exceeds threshold",
+              "Summarization retains: top 20 files, key patterns, critical architecture insights",
+              "Context pruning prioritizes recent phase outputs over older ones",
+              "Context size reported in phase result metadata"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-005"
+            ],
+            "notes": "Prevents context overflow while maintaining quality."
+          },
+          {
+            "id": "REQ-SPECQUAL-REL-001",
+            "title": "Graceful Degradation on Exploration Failure",
+            "type": "reliability",
+            "category": "Reliability",
+            "priority": "MEDIUM",
+            "text": "IF exploration discovers fewer than 5 files OR tools are unavailable, THE SYSTEM SHALL emit a warning and continue with best-effort output generation rather than failing completely.",
+            "acceptance_criteria": [
+              "Warning event emitted if file discovery < 5 files",
+              "Warning event emitted if Read/Glob/Grep tools fail",
+              "Subsequent phases receive partial exploration results",
+              "Evaluators adjust thresholds for degraded mode (accept lower quality)",
+              "Clear user-facing message explains quality limitations",
+              "Documentation explains minimum codebase requirements",
+              "Retry logic applied for transient tool failures (max 3 attempts)"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-004",
+              "REQ-SPECQUAL-EXEC-001"
+            ],
+            "notes": "Maps to US-013. Ensures robustness in edge cases."
+          },
+          {
+            "id": "REQ-SPECQUAL-REL-002",
+            "title": "Evaluation Retry Loop Prevention",
+            "type": "reliability",
+            "category": "Reliability",
+            "priority": "HIGH",
+            "text": "WHILE strict evaluation is enabled, THE SYSTEM SHALL cap retries at 3 attempts per phase and accept best-effort output on final retry to prevent infinite loops.",
+            "acceptance_criteria": [
+              "Maximum 3 retry attempts per phase (existing behavior maintained)",
+              "On third retry, evaluator accepts output even if score < threshold",
+              "Warning emitted if final output doesn't meet quality threshold",
+              "Evaluation feedback improves with each retry (more specific)",
+              "Retry count tracked in PhaseResult for observability",
+              "Option to disable strict evaluation for testing (enable_strict_evaluation=False)"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-EVAL-001",
+              "REQ-SPECQUAL-EVAL-002",
+              "REQ-SPECQUAL-EVAL-003",
+              "REQ-SPECQUAL-EVAL-004"
+            ],
+            "notes": "Prevents risk of unreachable quality thresholds causing failures."
+          },
+          {
+            "id": "REQ-SPECQUAL-SEC-001",
+            "title": "Sensitive File Exclusion During Exploration",
+            "type": "security",
+            "category": "Security",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL exclude sensitive files from exploration to prevent accidental exposure of secrets, credentials, or personally identifiable information.",
+            "acceptance_criteria": [
+              "Ignore patterns exclude: .env, *.env.*, .env.local, .env.production",
+              "Ignore patterns exclude: *secret*, *credential*, *.key, *.pem, *.p12",
+              "Ignore patterns exclude: id_rsa, id_dsa, *.cert, *.crt",
+              "Ignore patterns exclude: *.db (SQLite databases may contain PII)",
+              "Warning emitted if sensitive pattern detected in discovered files",
+              "Read operations are read-only (no write access during exploration)",
+              "Documentation includes security best practices for spec-sandbox usage"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-FUNC-011"
+            ],
+            "notes": "Mitigates risk of sensitive data exposure during exploration."
+          },
+          {
+            "id": "REQ-SPECQUAL-SEC-002",
+            "title": "Read-Only Filesystem Access",
+            "type": "security",
+            "category": "Security",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL enforce read-only filesystem access during all exploration and phase execution to prevent accidental modification of the codebase.",
+            "acceptance_criteria": [
+              "ClaudeExecutor configured with read-only tool permissions",
+              "Write, Edit, Delete tools are NOT enabled during spec generation",
+              "File system modifications are prevented at executor level",
+              "Attempt to write files results in clear error message",
+              "Documentation clarifies that spec-sandbox is read-only",
+              "Only markdown output files are written (to .spec_sandbox_output/)"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-EXEC-001"
+            ],
+            "notes": "Ensures codebase integrity during spec generation."
+          },
+          {
+            "id": "REQ-SPECQUAL-USE-001",
+            "title": "Quality Improvement Documentation",
+            "type": "usability",
+            "category": "Documentation",
+            "priority": "MEDIUM",
+            "text": "THE SYSTEM SHALL include documentation explaining the quality improvements, configuration options, cost implications, and best practices for optimal results.",
+            "acceptance_criteria": [
+              "README includes section on 'Quality Improvements' with before/after examples",
+              "Configuration guide documents all exploration settings with cost implications",
+              "Best practices guide explains optimal exploration_depth for different project sizes",
+              "Examples show contextual output vs generic output comparisons",
+              "Troubleshooting guide covers common exploration issues",
+              "Migration guide explains changes from previous version",
+              "Cost estimation guide helps users predict API costs"
+            ],
+            "dependencies": [],
+            "notes": "Enables users to understand and optimize quality improvements."
+          },
+          {
+            "id": "REQ-SPECQUAL-TEST-001",
+            "title": "Improved Prompt Testing with Real Codebases",
+            "type": "functional",
+            "category": "Testing",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL be tested with at least 10 real feature examples across different project types to validate quality improvements before release.",
+            "acceptance_criteria": [
+              "Test suite includes 10+ real feature descriptions",
+              "Features tested against: spec-sandbox, backend (omoi_os), frontend, mixed",
+              "Tests validate: 60+ requirements, 10+ diagram components, 90%+ file accuracy",
+              "Regression tests ensure existing functionality not broken",
+              "Mock executor mode tests prompt improvements without API costs",
+              "A/B comparison of old vs new prompts on same features",
+              "Test results document quality score improvements"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-PROMPT-001",
+              "REQ-SPECQUAL-PROMPT-002",
+              "REQ-SPECQUAL-PROMPT-003",
+              "REQ-SPECQUAL-PROMPT-004"
+            ],
+            "notes": "Validates improvements and prevents regressions."
+          },
+          {
+            "id": "REQ-SPECQUAL-TEST-002",
+            "title": "Evaluator Unit Testing",
+            "type": "functional",
+            "category": "Testing",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL include unit tests for all enhanced evaluators to validate detection of generic placeholders and contextual reference verification.",
+            "acceptance_criteria": [
+              "ExploreEvaluator tests: file count validation, pattern detection",
+              "RequirementsEvaluator tests: generic placeholder detection, EARS format validation",
+              "DesignEvaluator tests: Mermaid parsing, component name validation",
+              "TasksEvaluator tests: file path existence checking, accuracy calculation",
+              "Tests include positive cases (high quality) and negative cases (generic output)",
+              "Tests verify evaluation scoring is consistent and deterministic",
+              "Tests cover edge cases: empty output, malformed JSON, missing context"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-EVAL-001",
+              "REQ-SPECQUAL-EVAL-002",
+              "REQ-SPECQUAL-EVAL-003",
+              "REQ-SPECQUAL-EVAL-004"
+            ],
+            "notes": "Ensures evaluators reliably enforce quality standards."
+          },
+          {
+            "id": "REQ-SPECQUAL-CON-001",
+            "title": "Backward Compatibility with Existing Configurations",
+            "type": "constraint",
+            "category": "Compatibility",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL maintain backward compatibility with existing SpecSandboxSettings configurations, using sensible defaults for new settings.",
+            "acceptance_criteria": [
+              "Existing configuration files work without modification",
+              "New settings have defaults that maintain current behavior if not specified",
+              "Pydantic extra='ignore' allows unknown settings (existing pattern)",
+              "No breaking changes to Event, PhaseResult, or SpecPhase schemas",
+              "Existing reporter implementations continue to work",
+              "Mock executor mode remains functional",
+              "Migration guide explains optional new settings"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-CONFIG-001"
+            ],
+            "notes": "Ensures smooth upgrade path for existing users."
+          },
+          {
+            "id": "REQ-SPECQUAL-CON-002",
+            "title": "Claude Agent SDK Compatibility",
+            "type": "constraint",
+            "category": "Technical",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL use Claude Agent SDK 0.1.0+ without modifications or forks, relying only on supported tool configurations.",
+            "acceptance_criteria": [
+              "No custom modifications to Claude Agent SDK code",
+              "Only use SDK-provided tool configuration APIs",
+              "Tool enablement uses documented SDK interfaces",
+              "Working directory configuration uses SDK-supported methods",
+              "max_turns configuration uses SDK parameters",
+              "Version pinned to >= 0.1.0 in dependencies",
+              "Compatibility tested with SDK 0.1.0 and latest version"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-EXEC-001"
+            ],
+            "notes": "Ensures maintainability and future SDK compatibility."
+          },
+          {
+            "id": "REQ-SPECQUAL-CON-003",
+            "title": "Cost Increase Limitation",
+            "type": "constraint",
+            "category": "Business",
+            "priority": "HIGH",
+            "text": "THE SYSTEM SHALL limit API cost increases to maximum 3x current costs for typical features when using default (medium) exploration depth.",
+            "acceptance_criteria": [
+              "Medium exploration depth targets <= 2.5x current API cost",
+              "Deep exploration depth capped at <= 4x current API cost",
+              "Shallow exploration depth targets <= 1.5x current API cost",
+              "Cost tracking logs token usage per phase for analysis",
+              "Documentation provides cost estimates for different depths",
+              "Warning emitted if single phase exceeds expected budget by 50%",
+              "Configuration allows users to set hard token limits"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-EXEC-002",
+              "REQ-SPECQUAL-FUNC-010"
+            ],
+            "notes": "Balances quality improvement with cost constraints."
+          },
+          {
+            "id": "REQ-SPECQUAL-CON-004",
+            "title": "Generation Time Increase Limitation",
+            "type": "constraint",
+            "category": "Business",
+            "priority": "MEDIUM",
+            "text": "THE SYSTEM SHALL limit total generation time increases to maximum 50% for typical features when using default (medium) exploration depth.",
+            "acceptance_criteria": [
+              "Medium exploration depth targets <= 40% time increase over current",
+              "Deep exploration allowed up to 100% time increase",
+              "Shallow exploration targets <= 20% time increase",
+              "Total generation time for typical feature <= 15 minutes (medium depth)",
+              "Progress events provide time estimates during execution",
+              "Timeout warnings if any phase exceeds expected duration by 2x",
+              "Documentation sets time expectations for different depths"
+            ],
+            "dependencies": [
+              "REQ-SPECQUAL-PERF-001"
+            ],
+            "notes": "Ensures reasonable user experience despite enhanced exploration."
+          }
+        ],
+        "assumptions": [
+          "Claude Agent SDK 0.1.0+ supports Read, Glob, Grep tools with proper configuration",
+          "ClaudeExecutor has filesystem read access to codebase at PROJECT_ROOT path",
+          "Anthropic API is available with sufficient rate limits for enhanced exploration",
+          "Python 3.12+ environment with all required dependencies installed",
+          "Codebase is present and accessible at configured PROJECT_ROOT during execution",
+          "Feature descriptions provided to spec-sandbox include relevant keywords for discovery",
+          "Users have sufficient Anthropic API budget for 2-3x increased token usage",
+          "Codebase size is manageable (< 100K files) for exploration within token limits",
+          "Codebase is structured and readable (Python/TypeScript/JavaScript), not obfuscated",
+          "Users value quality over speed and accept increased generation time",
+          "Existing evaluator retry logic (max 3 retries) is sufficient for quality enforcement",
+          "Mock executor mode can simulate Read/Glob/Grep tool responses for testing",
+          "Users will test against their own codebases and provide quality feedback",
+          "Repository root is identifiable and contains primary source code directories",
+          "File system performance allows reading 100+ files within reasonable time"
+        ],
+        "out_of_scope": [
+          "Changing the 6-phase workflow structure (explore \u2192 PRD \u2192 requirements \u2192 design \u2192 tasks \u2192 sync)",
+          "Modifying state machine retry logic or max_retries configuration",
+          "Changing markdown generators (static vs Claude) - focus on core phase outputs",
+          "Adding new phases beyond existing 6 (explore, PRD, requirements, design, tasks, sync)",
+          "UI/UX changes to CLI tool interface (remain CLI-focused)",
+          "Backend API changes for ticket/task sync endpoints",
+          "Frontend integration or dashboard for spec viewing",
+          "Integration with external code analysis tools (AST parsers, Sourcegraph, dependency graphs)",
+          "Performance optimizations unrelated to quality (caching, parallelization beyond Claude's native capabilities)",
+          "Advanced cost optimization strategies (beyond budget limits and depth settings)",
+          "Multi-repository or complex monorepo-awareness (assume single codebase root)",
+          "Git history analysis, blame information, or commit archaeology",
+          "Real-time collaboration or multi-user spec editing capabilities",
+          "Webhook/API triggers for automated spec generation on git events",
+          "Custom evaluation criteria or user-defined quality thresholds (use fixed, validated thresholds)",
+          "Support for non-standard codebase structures (focus on typical backend/frontend/subsystems layout)",
+          "Language-specific AST parsing for deep semantic analysis",
+          "Automated refactoring or code modification during exploration",
+          "Integration with project management tools (Jira, Linear, etc.) beyond existing sync",
+          "Custom report formats beyond existing markdown artifacts",
+          "Exploration result caching between spec runs (deferred to future enhancement)"
+        ],
+        "open_questions": [
+          "Should we implement exploration result caching to avoid re-scanning unchanged codebases for similar features?",
+          "What's the optimal default exploration_depth? Should we default to 'medium' or allow users to specify on first run?",
+          "Do we need separate exploration strategies for different project types (monorepo vs microservices vs library)?",
+          "Should evaluators have configurable strictness levels per user/project, or fixed thresholds for consistency?",
+          "How do we handle codebases with non-standard structures (e.g., no clear backend/frontend split)? Special handling or documentation only?",
+          "Should the explore phase output include a dependency graph/call graph, or just file lists and patterns?",
+          "Do we need a dry-run mode that estimates exploration cost before executing? Would users use this?",
+          "Should we add telemetry to track which exploration patterns lead to highest quality outputs for continuous improvement?",
+          "How do we version control prompts if we want to A/B test or roll back changes? Separate prompt files per version?",
+          "Should we create a benchmark suite with 10+ real features for automated regression testing?",
+          "Do we need per-project-type configuration presets, or is one-size-fits-all prompts sufficient?",
+          "Should we support incremental exploration (explore more if initial results insufficient)? Or always front-load exploration?",
+          "How do we handle monorepos where feature only touches one subsystem? Should exploration scope to relevant subsystem only?",
+          "Should we emit intermediate exploration results for streaming UI updates in future? Or batch at phase end?",
+          "Do we need to support remote codebases (GitHub, GitLab API) or only local filesystem access?",
+          "What's the priority order for reading files during exploration? Entry points first? Config first? Most recently modified?",
+          "Should large file sampling (>5000 lines) be smart (key sections) or simple (head/middle/tail)?",
+          "How do we communicate cost-quality tradeoffs to users who may not understand token budgets?",
+          "Should there be a 'quick' mode for rapid iteration with lower quality but faster results?",
+          "Do we need special handling for generated code (migrations, OpenAPI specs) vs hand-written code?"
+        ],
+        "traceability": {
+          "prd_sections": [
+            "User Stories US-001 (Codebase Exploration)",
+            "User Stories US-002 (Contextual Requirements)",
+            "User Stories US-003 (Architecture Diagrams)",
+            "User Stories US-004 (File-Specific Tasks)",
+            "User Stories US-005 (Evaluator Quality Gates)",
+            "User Stories US-006 (Contextual PRD)",
+            "User Stories US-009 (Enhanced Prompts)",
+            "User Stories US-010 (Tool Configuration)",
+            "User Stories US-011 (Context Propagation)",
+            "User Stories US-012 (Smart File Filtering)",
+            "User Stories US-013 (Error Handling)",
+            "User Stories US-015 (Cost Visibility)",
+            "Success Metrics: Contextual Requirements Count",
+            "Success Metrics: Zero Generic Placeholders",
+            "Success Metrics: Accurate File References",
+            "Success Metrics: Diagram Component Accuracy",
+            "Risks: Over-exploration exceeds budgets",
+            "Risks: Large codebases overwhelm Claude",
+            "Risks: Strict evaluators cause infinite loops",
+            "Risks: Improved prompts increase costs"
+          ],
+          "design_components": [
+            "SpecStateMachine (worker/state_machine.py)",
+            "ClaudeExecutor (executor/claude_executor.py)",
+            "Phase Prompts (prompts/phases.py)",
+            "ExploreEvaluator (evaluators/explore_evaluator.py)",
+            "RequirementsEvaluator (evaluators/requirements_evaluator.py)",
+            "DesignEvaluator (evaluators/design_evaluator.py)",
+            "TasksEvaluator (evaluators/tasks_evaluator.py)",
+            "SpecSandboxSettings (config.py)",
+            "Event System (schemas/events.py)",
+            "Reporter System (reporters/)"
+          ],
+          "explore_discoveries": [
+            "State Machine Pattern in state_machine.py",
+            "Strategy Pattern for Evaluators",
+            "Pydantic Settings Pattern in config.py",
+            "Event-Driven Architecture with Reporters",
+            "Context Accumulation in State Machine",
+            "Retry Logic with Evaluation Feedback",
+            "Mock Executor Mode for Testing",
+            "EARS Format Convention for Requirements",
+            "ID Conventions: REQ-{FEATURE}-{CATEGORY}-{NNN}",
+            "Markdown with YAML Frontmatter Structure"
+          ]
+        },
+        "_output_source": "file"
+      }
+    },
+    "design": {
+      "success": true,
+      "output": {
+        "feature_name": "spec-output-quality-improvement",
+        "architecture_overview": "## Overview\n\nThe spec output quality improvement enhances the existing 6-phase spec-sandbox workflow to generate contextual, production-ready specifications by actually exploring the codebase instead of producing generic placeholder content.\n\n## Current vs Enhanced Architecture\n\n**Current State:**\n- Explore phase produces generic summaries without deep codebase analysis\n- Subsequent phases (PRD, Requirements, Design, Tasks) generate placeholder content\n- Evaluators validate structure but not contextual accuracy\n- Prompts don't emphasize using discovered files/patterns\n\n**Enhanced State:**\n- Explore phase uses Read/Glob/Grep tools extensively to discover 20+ files, patterns, models\n- Context accumulation passes discoveries to all subsequent phases\n- Requirements reference actual files (e.g., 'backend/omoi_os/services/webhook.py')\n- Design diagrams include real component names from codebase\n- Tasks specify exact file paths with 90%+ accuracy\n- Evaluators detect and reject generic placeholders\n\n## Architecture Diagram\n\n```mermaid\nflowchart TD\n    START[Spec Input] --> EXPLORE[Explore Phase Enhanced]\n    \n    subgraph \"Enhanced Exploration\"\n        EXPLORE --> GLOB[Glob Tool: Discover Files]\n        EXPLORE --> GREP[Grep Tool: Find Patterns]\n        EXPLORE --> READ[Read Tool: Analyze Key Files]\n        GLOB --> CONTEXT[Exploration Context]\n        GREP --> CONTEXT\n        READ --> CONTEXT\n    end\n    \n    CONTEXT --> EVAL_EXPLORE[ExploreEvaluator Enhanced]\n    EVAL_EXPLORE -->|score >= 0.7| PRD[PRD Phase]\n    EVAL_EXPLORE -->|score < 0.7| RETRY_EXPLORE[Retry with Feedback]\n    RETRY_EXPLORE --> EXPLORE\n    \n    PRD --> EVAL_PRD[PRDEvaluator]\n    EVAL_PRD -->|pass| REQ[Requirements Phase Enhanced]\n    \n    REQ --> EVAL_REQ[RequirementsEvaluator Enhanced]\n    EVAL_REQ -->|pass| DESIGN[Design Phase Enhanced]\n    \n    DESIGN --> EVAL_DESIGN[DesignEvaluator Enhanced]\n    EVAL_DESIGN -->|pass| TASKS[Tasks Phase Enhanced]\n    \n    TASKS --> EVAL_TASKS[TasksEvaluator Enhanced]\n    EVAL_TASKS -->|pass| SYNC[Sync Phase]\n    \n    SYNC --> OUTPUT[Contextual Spec Output]\n    \n    subgraph \"State Machine Context Flow\"\n        CONTEXT -.exploration results.-> PRD\n        PRD -.tech stack & constraints.-> REQ\n        REQ -.EARS requirements.-> DESIGN\n        DESIGN -.architecture & models.-> TASKS\n    end\n    \n    subgraph \"Configuration\"\n        CONFIG[SpecSandboxSettings] -.controls.-> EXPLORE\n        CONFIG -.exploration_depth: shallow/medium/deep.-> EXPLORE\n        CONFIG -.max_exploration_files: 100.-> EXPLORE\n        CONFIG -.max_exploration_tokens: 50000.-> EXPLORE\n    end\n```\n\n## Key Architectural Changes\n\n### 1. Enhanced Exploration Engine\n- **Glob Tool Usage**: Discover 20-200 files based on exploration_depth\n- **Grep Tool Usage**: Identify patterns, conventions, architectural structures\n- **Read Tool Usage**: Analyze 10+ key files in detail\n- **Smart Filtering**: Exclude node_modules, .git, __pycache__, sensitive files\n- **Budget Enforcement**: Track file reads and token usage to prevent cost overruns\n\n### 2. Prompt Engineering Enhancements\n- **Explicit Tool Instructions**: Prompts mandate using Glob/Grep/Read with quality thresholds\n- **Anti-Pattern Examples**: Show generic vs contextual outputs side-by-side\n- **Quality Checklists**: Embedded validation criteria that evaluators will check\n- **Context References**: Explicitly instruct phases to reference prior discoveries\n\n### 3. Evaluator Intelligence Upgrades\n- **Generic Placeholder Detection**: Regex patterns for 'Component X', 'Service Y', 'Module Z'\n- **File Path Validation**: Cross-check task file paths against actual filesystem\n- **Component Name Verification**: Validate Mermaid diagrams use real discovered names\n- **Contextual Reference Scoring**: Weight evaluations based on actual codebase references\n\n### 4. Context Accumulation Pipeline\n- **Exploration Results Propagation**: Full discovery JSON flows to all subsequent phases\n- **Incremental Context Building**: Each phase adds structured output to state machine context\n- **Context Size Management**: Summarize if approaching 180K token limit (90% of 200K)\n- **Selective Context Pruning**: Retain top 20 files, key patterns, critical architecture\n\n## Component Interactions\n\n```mermaid\nsequenceDiagram\n    participant SM as SpecStateMachine\n    participant EX as ClaudeExecutor\n    participant CLAUDE as Claude Agent SDK\n    participant FS as Filesystem (Read/Glob/Grep)\n    participant EV as Evaluators\n    \n    SM->>EX: execute_phase(EXPLORE, enhanced_prompt)\n    EX->>CLAUDE: run_agent(tools=[Read,Glob,Grep])\n    \n    loop Exploration\n        CLAUDE->>FS: Glob('**/*.py', ignore=['node_modules'])\n        FS-->>CLAUDE: [file1.py, file2.py, ...]\n        CLAUDE->>FS: Grep('class.*Service', type='py')\n        FS-->>CLAUDE: [matches with paths]\n        CLAUDE->>FS: Read('backend/omoi_os/config.py')\n        FS-->>CLAUDE: [file contents]\n    end\n    \n    CLAUDE->>EX: write_json('exploration_output.json')\n    EX->>SM: PhaseResult(output={discoveries})\n    SM->>EV: evaluate(exploration_output)\n    \n    alt Quality Check Passes\n        EV-->>SM: score=0.85 (>= 0.7 threshold)\n        SM->>SM: context['explore'] = output\n        SM->>EX: execute_phase(PRD, context=context)\n    else Quality Check Fails\n        EV-->>SM: score=0.5, feedback=\"Only 8 files found, need 20+\"\n        SM->>EX: retry_phase(EXPLORE, eval_feedback=feedback)\n    end\n```\n\n## Data Flow Architecture\n\n1. **Input**: Spec title, description, working_directory\n2. **Explore Phase**: Produces structured JSON with 20+ files, patterns, tech stack\n3. **Context Accumulation**: State machine stores exploration in context dict\n4. **PRD Phase**: References actual tech stack, patterns from exploration\n5. **Requirements Phase**: Uses discovered models/services to write 60+ EARS requirements\n6. **Design Phase**: Creates Mermaid diagrams with 10+ real component names\n7. **Tasks Phase**: Specifies exact file paths with 90%+ existence accuracy\n8. **Sync Phase**: Validates traceability and coverage\n9. **Output**: Markdown artifacts + backend API sync\n\n## Configuration-Driven Behavior\n\n### Exploration Depth Modes\n\n| Mode | Max Files | Tools | Typical Cost | Typical Time |\n|------|-----------|-------|--------------|-------------|\n| **shallow** | 50 | Glob only, minimal Grep | 1.5x baseline | +20% time |\n| **medium** (default) | 100 | Balanced Glob+Grep+Read | 2.5x baseline | +40% time |\n| **deep** | 200 | Comprehensive analysis | 4x baseline | +100% time |\n\n### Budget Controls\n\n- `max_exploration_files`: Hard limit on files to read (default: 100)\n- `max_exploration_tokens`: Budget per phase (default: 50,000)\n- Warning at 80% budget threshold\n- Best-effort continuation if budget exceeded\n\n## Error Handling Strategy\n\n### Graceful Degradation\n\n1. **Tool Unavailability**: If Read/Glob/Grep fail, emit warning and continue with partial context\n2. **Insufficient Discovery**: If < 5 files found, lower evaluator thresholds and proceed\n3. **Retry Loop Prevention**: Max 3 retries per phase, accept best-effort on final attempt\n4. **Context Overflow**: Summarize exploration results if approaching 180K tokens\n\n### Retry Intelligence\n\n- Evaluator provides specific feedback (e.g., \"Only 12 files found, need 20+\")\n- Enhanced prompt on retry includes eval_feedback\n- Exponential backoff: 2^retry_count seconds between attempts\n- Final retry accepts output even if below threshold (prevents infinite loops)\n\n## Security Considerations\n\n### Read-Only Enforcement\n\n- ClaudeExecutor configured with **only** Read, Glob, Grep tools\n- Write, Edit, Delete tools **disabled** during all phases\n- Prevents accidental codebase modification\n- Only markdown outputs written to `.spec_sandbox_output/`\n\n### Sensitive File Exclusion\n\n- Ignore patterns: `.env*`, `*secret*`, `*credential*`, `*.key`, `*.pem`, `*.cert`\n- No database files (`.db`) - may contain PII\n- Warning emitted if sensitive pattern detected\n- Documentation includes security best practices\n\n## Performance Targets\n\n- **Exploration**: < 5 minutes for 10K file codebase (P95)\n- **File Discovery**: < 30 seconds (Glob operations)\n- **Total Generation**: < 15 minutes for typical feature (medium depth)\n- **Context Size**: Monitor and summarize at 180K tokens\n\n## Testing Strategy\n\n### Unit Tests\n- Evaluator placeholder detection (generic patterns)\n- File path existence validation\n- EARS format validation\n- Mermaid diagram parsing\n- Budget tracking and enforcement\n\n### Integration Tests\n- Full 6-phase workflow with real feature examples\n- 10+ test features across different project types\n- A/B comparison: old prompts vs new prompts\n- Mock executor mode (no API costs)\n\n### Regression Tests\n- Existing functionality not broken\n- Backward compatibility with old configurations\n- Event emission contracts maintained\n\n## Migration Path\n\n### Phase 1: Prompt Enhancements (Low Risk)\n1. Update `prompts/phases.py` with enhanced instructions\n2. Add quality checklists and anti-pattern examples\n3. Test with mock executor (no API costs)\n\n### Phase 2: Evaluator Upgrades (Medium Risk)\n1. Enhance ExploreEvaluator to check file count >= 20\n2. Add placeholder detection to RequirementsEvaluator\n3. Add component name validation to DesignEvaluator\n4. Add file path checking to TasksEvaluator\n\n### Phase 3: Configuration Options (Low Risk)\n1. Add exploration_depth setting\n2. Add max_exploration_files, max_exploration_tokens\n3. Add enable_strict_evaluation flag\n\n### Phase 4: Executor Configuration (Low Risk)\n1. Verify Read/Glob/Grep tools enabled (already available)\n2. Set working_directory to PROJECT_ROOT\n3. Increase max_turns to 50 if needed\n\n### Rollback Strategy\n\n- Prompts are backwards compatible (enhanced, not breaking)\n- Configuration uses defaults (existing configs still work)\n- Feature flag: `enable_strict_evaluation=False` disables new evaluators\n\n## Success Metrics\n\n1. **Contextual Requirements**: 60+ EARS requirements (measured by count)\n2. **Zero Placeholders**: 0 instances of 'Component X' patterns (regex detection)\n3. **File Accuracy**: 90%+ task file paths exist (filesystem validation)\n4. **Diagram Quality**: 10+ real component names in Mermaid (parsing + validation)\n5. **Eval Scores**: Average evaluation score improvement from baseline\n6. **User Satisfaction**: 50%+ reduction in manual editing time (user feedback)",
+        "architecture_diagram": "```mermaid\ngraph TB\n    subgraph \"Enhanced Spec-Sandbox Architecture\"\n        INPUT[Spec Input: Title + Description]\n        \n        subgraph \"State Machine Orchestration\"\n            SM[SpecStateMachine]\n            CONTEXT[(Accumulated Context)]\n        end\n        \n        subgraph \"Phase 1: Enhanced Exploration\"\n            EXPLORE[Explore Phase]\n            GLOB[Glob Tool]\n            GREP[Grep Tool]\n            READ[Read Tool]\n            FILTER[Smart File Filter]\n            BUDGET[Budget Tracker]\n            \n            EXPLORE --> GLOB\n            EXPLORE --> GREP\n            EXPLORE --> READ\n            GLOB --> FILTER\n            GREP --> FILTER\n            READ --> BUDGET\n        end\n        \n        subgraph \"Phase 2-5: Contextual Generation\"\n            PRD[PRD Phase]\n            REQ[Requirements Phase]\n            DESIGN[Design Phase]\n            TASKS[Tasks Phase]\n        end\n        \n        subgraph \"Enhanced Evaluators\"\n            EVAL_EX[ExploreEvaluator<br/>Check: 20+ files]\n            EVAL_REQ[RequirementsEvaluator<br/>Check: No placeholders]\n            EVAL_DESIGN[DesignEvaluator<br/>Check: Real components]\n            EVAL_TASKS[TasksEvaluator<br/>Check: 90% file accuracy]\n        end\n        \n        subgraph \"Configuration\"\n            CONFIG[SpecSandboxSettings]\n            DEPTH[exploration_depth:<br/>shallow/medium/deep]\n            LIMITS[max_exploration_files<br/>max_exploration_tokens]\n            STRICT[enable_strict_evaluation]\n        end\n        \n        subgraph \"Executor Layer\"\n            EXECUTOR[ClaudeExecutor]\n            CLAUDE[Claude Agent SDK]\n            TOOLS[Tools: Read, Glob, Grep]\n        end\n        \n        INPUT --> SM\n        CONFIG --> SM\n        DEPTH --> EXPLORE\n        LIMITS --> BUDGET\n        STRICT --> EVAL_EX\n        \n        SM --> EXECUTOR\n        EXECUTOR --> CLAUDE\n        CLAUDE --> TOOLS\n        TOOLS --> EXPLORE\n        \n        EXPLORE --> EVAL_EX\n        EVAL_EX -->|pass| CONTEXT\n        EVAL_EX -->|fail| EXPLORE\n        \n        CONTEXT --> PRD\n        PRD --> REQ\n        REQ --> EVAL_REQ\n        EVAL_REQ -->|pass| DESIGN\n        EVAL_REQ -->|fail| REQ\n        \n        DESIGN --> EVAL_DESIGN\n        EVAL_DESIGN -->|pass| TASKS\n        EVAL_DESIGN -->|fail| DESIGN\n        \n        TASKS --> EVAL_TASKS\n        EVAL_TASKS -->|pass| OUTPUT[Contextual Spec Output]\n        EVAL_TASKS -->|fail| TASKS\n    end\n```",
+        "components": [
+          {
+            "name": "EnhancedExplorePrompt",
+            "type": "prompt_template",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py",
+            "description": "## Purpose\n\nProvides the enhanced system prompt for the explore phase that mandates comprehensive codebase exploration using Read, Glob, and Grep tools.\n\n## Responsibility\n\nInstructs the Claude agent to:\n1. Use **Glob tool** to discover 20+ relevant files\n2. Use **Grep tool** to identify patterns, conventions, and architectural structures\n3. Use **Read tool** to analyze 10+ key files in detail\n4. Apply smart filtering (ignore node_modules, .git, sensitive files)\n5. Produce structured JSON with actual file paths and discoveries\n\n## Key Enhancements\n\n### Explicit Tool Mandates\n\n```markdown\nYou MUST use the following tools to explore the codebase:\n\n1. **Glob Tool**: Discover files matching patterns\n   - Find at least 20 relevant files based on feature keywords\n   - Apply ignore patterns: node_modules, .git, __pycache__, dist, build, .venv\n   - Example: Glob('**/*.py') or Glob('backend/**/*.ts')\n\n2. **Grep Tool**: Search for patterns and keywords\n   - Search for feature-relevant keywords from description\n   - Identify naming conventions (snake_case, PascalCase)\n   - Find architectural patterns (State Machine, Service Layer)\n   - Example: Grep('class.*Service', type='py')\n\n3. **Read Tool**: Analyze key files in detail\n   - Read at least 10 important files (config, main modules, key services)\n   - Extract: imports, class definitions, function signatures\n   - For files > 5000 lines, sample strategically\n```\n\n### Quality Checklist\n\n```markdown\nYour output will be evaluated on:\n- \u2713 At least 20 specific file paths discovered\n- \u2713 File paths are absolute or relative to repository root\n- \u2713 Tech stack includes versions where found\n- \u2713 Patterns include specific file references\n- \u2713 Conventions extracted from actual code examples\n- \u2713 No generic descriptions - all contextual to this codebase\n```\n\n### Anti-Pattern Examples\n\n```markdown\n\u274c BAD (Generic):\n\"key_files\": [{\"path\": \"src/component.py\", \"purpose\": \"Main component\"}]\n\n\u2705 GOOD (Contextual):\n\"key_files\": [{\n  \"path\": \"senior_sandbox/backend/omoi_os/services/webhook.py\",\n  \"purpose\": \"WebhookService handles HTTP delivery with retry logic and HMAC signing\"\n}]\n```\n\n## Integration\n\nThis enhanced prompt is injected into the explore phase execution via `ClaudeExecutor.execute()` with the exploration context and configuration settings.",
+            "responsibility": "Instructs Claude agent to perform comprehensive codebase exploration using tools",
+            "interfaces": [
+              {
+                "method": "get_explore_prompt",
+                "inputs": {
+                  "spec_title": "str",
+                  "spec_description": "str",
+                  "exploration_depth": "str"
+                },
+                "outputs": {
+                  "prompt": "str"
+                },
+                "description": "Generates the enhanced explore phase prompt with tool instructions"
+              }
+            ],
+            "dependencies": [
+              "ClaudeExecutor"
+            ]
+          },
+          {
+            "name": "EnhancedRequirementsPrompt",
+            "type": "prompt_template",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py",
+            "description": "## Purpose\n\nProvides enhanced prompt for requirements phase that mandates referencing exploration discoveries and generating 60+ contextual EARS-format requirements.\n\n## Responsibility\n\nInstructs Claude to:\n1. Generate minimum 60 EARS-format requirements\n2. Reference at least 10 specific file paths from exploration\n3. Use actual class/function/model names discovered\n4. Avoid generic placeholders ('Component X', 'Service Y')\n5. Include 2+ acceptance criteria per requirement\n\n## Key Enhancements\n\n### Context Usage Instructions\n\n```markdown\nYou have access to exploration results with:\n- {num_files} discovered files with paths\n- Tech stack: {tech_stack}\n- Architectural patterns: {patterns}\n- Key models: {models}\n- Existing services: {services}\n\nYou MUST reference these actual discoveries in your requirements.\n```\n\n### EARS Format with Examples\n\n```markdown\n\u274c BAD (Generic):\nREQ-FEAT-FUNC-001: \"WHEN user clicks button, THE SYSTEM SHALL process the action\"\n\n\u2705 GOOD (Contextual):\nREQ-WEBHOOK-FUNC-001: \"WHEN WebhookNotificationService receives a task.created event, THE SYSTEM SHALL invoke WebhookDeliveryService.deliver() with the event payload and matching subscriptions from webhook_subscriptions table\"\n```\n\n### Quality Thresholds\n\n```markdown\nREQUIRED:\n- Minimum 60 requirements in EARS format\n- Reference at least 10 specific file paths from exploration\n- Use actual discovered class/function/model names\n- Each requirement has 2+ specific acceptance criteria\n- Zero instances of: 'Component X', 'Service Y', 'Module Z', 'FeatureA'\n```\n\n## Integration\n\nReceives exploration context from SpecStateMachine and injects discovered files, patterns, and architecture into the prompt template.",
+            "responsibility": "Generates contextual EARS-format requirements referencing actual codebase discoveries",
+            "interfaces": [
+              {
+                "method": "get_requirements_prompt",
+                "inputs": {
+                  "spec_title": "str",
+                  "spec_description": "str",
+                  "explore_context": "dict",
+                  "prd_context": "dict"
+                },
+                "outputs": {
+                  "prompt": "str"
+                },
+                "description": "Generates requirements prompt with exploration discoveries injected"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine",
+              "ExplorePhase"
+            ]
+          },
+          {
+            "name": "EnhancedDesignPrompt",
+            "type": "prompt_template",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py",
+            "description": "## Purpose\n\nProvides enhanced prompt for design phase that mandates Mermaid diagrams with 10+ actual component names from exploration discoveries.\n\n## Responsibility\n\nInstructs Claude to:\n1. Create Mermaid diagrams with minimum 10 real component names\n2. Use actual file paths, class names, service names from exploration\n3. Show discovered architectural patterns (State Machine, Service Layer)\n4. Reference specific models and their relationships\n5. Provide rich markdown descriptions for UI display\n\n## Key Enhancements\n\n### Component Discovery Reference\n\n```markdown\nYou have discovered the following components in the codebase:\n- Services: {service_list}\n- Models: {model_list}\n- API Endpoints: {endpoint_list}\n- Architectural Patterns: {pattern_list}\n\nYour Mermaid diagrams MUST use these actual component names.\n```\n\n### Diagram Quality Requirements\n\n```markdown\nREQUIRED:\n- Minimum 10 actual component names in diagrams\n- Use real file paths where applicable (e.g., backend/omoi_os/services/webhook.py)\n- Show discovered patterns: State Machine, Service Layer, Strategy, etc.\n- Reference actual model fields and relationships\n- No generic names: 'Component1', 'ServiceA', 'Handler'\n```\n\n### Rich Markdown Examples\n\n```markdown\nAll component descriptions MUST be rich markdown suitable for UI display:\n\n## Component: WebhookDeliveryService\n\n### Purpose\nHandles HTTP delivery of webhook payloads with retry logic and HMAC signing.\n\n### File Location\n`backend/omoi_os/services/webhook_delivery.py`\n\n### Key Methods\n\n#### `deliver(subscription, event_type, payload) -> WebhookDelivery`\nDelivers webhook with exponential backoff retry logic.\n\n**Example:**\n```python\ndelivery = await webhook_service.deliver(\n    subscription=sub,\n    event_type='task.created',\n    payload={'task_id': '123'}\n)\n```\n```\n\n## Integration\n\nReceives full exploration context, requirements context, and generates architecture design grounded in actual codebase structure.",
+            "responsibility": "Generates architecture diagrams and component designs using real codebase discoveries",
+            "interfaces": [
+              {
+                "method": "get_design_prompt",
+                "inputs": {
+                  "spec_title": "str",
+                  "spec_description": "str",
+                  "explore_context": "dict",
+                  "requirements_context": "dict"
+                },
+                "outputs": {
+                  "prompt": "str"
+                },
+                "description": "Generates design prompt with discovered components and patterns"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine",
+              "ExplorePhase",
+              "RequirementsPhase"
+            ]
+          },
+          {
+            "name": "EnhancedTasksPrompt",
+            "type": "prompt_template",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py",
+            "description": "## Purpose\n\nProvides enhanced prompt for tasks phase that mandates specific file path references with 90%+ accuracy against actual codebase.\n\n## Responsibility\n\nInstructs Claude to:\n1. Specify file paths that are absolute or from repository root\n2. Verify file paths exist in exploration discoveries before referencing\n3. Follow discovered naming conventions for new files\n4. Group tasks by component/service based on architecture\n5. Achieve 90%+ file path existence accuracy\n\n## Key Enhancements\n\n### File Path Validation Instructions\n\n```markdown\nYou have discovered {num_files} existing files. When specifying file paths:\n\n1. For EXISTING files: Use exact paths from exploration discoveries\n2. For NEW files: Follow discovered naming conventions\n3. ALL paths must be from repository root (e.g., 'backend/omoi_os/services/new_service.py')\n4. Specify whether file is to be CREATED or MODIFIED\n\nTarget: 90%+ of referenced file paths should exist in the actual codebase.\n```\n\n### Task Grouping by Architecture\n\n```markdown\nGroup tasks by discovered components:\n- Services: {service_files}\n- Models: {model_files}\n- API Routes: {api_files}\n- Tests: {test_files}\n\nEach task group should be cohesive and follow the codebase structure.\n```\n\n### Quality Requirements\n\n```markdown\nREQUIRED:\n- All file paths absolute or from repo root\n- 90%+ of referenced paths exist (verify against exploration)\n- New file paths follow discovered conventions (snake_case for Python, etc.)\n- Each task specifies: files_to_create OR files_to_modify\n- Zero generic paths like 'src/feature.py' without context\n```\n\n### Example Task\n\n```markdown\n\u274c BAD (Generic):\n\"files_to_modify\": [\"services/webhook.py\"]\n\n\u2705 GOOD (Specific):\n\"files_to_modify\": [\"senior_sandbox/backend/omoi_os/services/webhook_delivery.py\"]\n\"files_to_create\": [\"senior_sandbox/backend/omoi_os/models/webhook_subscription.py\"]\n```\n\n## Integration\n\nReceives exploration file inventory, design component specifications, and generates tasks with accurate file path references.",
+            "responsibility": "Generates implementation tasks with 90%+ accurate file path references",
+            "interfaces": [
+              {
+                "method": "get_tasks_prompt",
+                "inputs": {
+                  "spec_title": "str",
+                  "spec_description": "str",
+                  "explore_context": "dict",
+                  "design_context": "dict"
+                },
+                "outputs": {
+                  "prompt": "str"
+                },
+                "description": "Generates tasks prompt with file inventory for path validation"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine",
+              "ExplorePhase",
+              "DesignPhase"
+            ]
+          },
+          {
+            "name": "ExploreEvaluatorEnhanced",
+            "type": "evaluator",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/explore_evaluator.py",
+            "description": "## Purpose\n\nValidates that the explore phase discovered at least 20 relevant files and rejects outputs with insufficient exploration.\n\n## Responsibility\n\nEvaluates exploration output on:\n1. **File Discovery**: Minimum 20 file paths discovered\n2. **File Path Quality**: Paths are absolute or relative to repo root\n3. **Pattern Discovery**: Architectural patterns identified with file references\n4. **Tech Stack**: Specific frameworks and versions\n5. **No Generic Content**: Rejects vague summaries without specifics\n\n## Evaluation Criteria\n\n### File Count Validation\n\n```python\ndef _check_file_count(self, output: dict) -> tuple[bool, float]:\n    \"\"\"Checks that at least 20 files were discovered.\"\"\"\n    key_files = output.get('key_files', [])\n    related_files = output.get('related_to_feature', [])\n    \n    total_files = len(key_files) + len(related_files)\n    \n    if total_files >= 20:\n        return True, 1.0\n    elif total_files >= 10:\n        return False, total_files / 20.0  # Partial credit\n    else:\n        return False, 0.0\n```\n\n### File Path Quality Check\n\n```python\ndef _check_file_paths(self, output: dict) -> tuple[bool, float]:\n    \"\"\"Validates file paths are specific, not generic.\"\"\"\n    key_files = output.get('key_files', [])\n    \n    score = 0.0\n    for file_obj in key_files:\n        path = file_obj.get('path', '')\n        \n        # Check for absolute or repo-relative path\n        if '/' in path and len(path) > 10:\n            score += 1.0\n        # Penalize generic paths\n        elif any(generic in path for generic in ['src/', 'component', 'feature']):\n            score += 0.3\n        else:\n            score += 0.0\n    \n    return score >= len(key_files) * 0.8, score / max(len(key_files), 1)\n```\n\n## Scoring Weights\n\n- **file_count** (40%): At least 20 files discovered\n- **file_path_quality** (30%): Paths are specific, not generic\n- **pattern_discovery** (15%): Architectural patterns identified\n- **tech_stack** (15%): Specific technologies with versions\n\n**Threshold**: 0.7 (70%) to pass\n\n## Feedback Generation\n\n```python\ndef _generate_feedback(self, score: float, checks: dict) -> str:\n    \"\"\"Provides specific feedback for retry.\"\"\"\n    feedback = []\n    \n    if not checks['file_count']:\n        feedback.append(\n            f\"Only {checks['total_files']} files discovered. \"\n            f\"Use Glob tool more extensively to find at least 20 relevant files.\"\n        )\n    \n    if not checks['file_path_quality']:\n        feedback.append(\n            \"File paths are too generic. Use full paths from repository root \"\n            \"(e.g., 'backend/omoi_os/services/webhook.py').\"\n        )\n    \n    return '\\n'.join(feedback)\n```\n\n## Integration\n\nCalled by SpecStateMachine after explore phase execution. Returns EvaluationResult with score and feedback for retry logic.",
+            "responsibility": "Validates exploration discovered 20+ files and rejects generic summaries",
+            "interfaces": [
+              {
+                "method": "evaluate",
+                "inputs": {
+                  "output": "dict"
+                },
+                "outputs": {
+                  "result": "EvaluationResult (score: float, passed: bool, feedback: str)"
+                },
+                "description": "Evaluates exploration output quality"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine"
+            ]
+          },
+          {
+            "name": "RequirementsEvaluatorEnhanced",
+            "type": "evaluator",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/requirements_evaluator.py",
+            "description": "## Purpose\n\nValidates that requirements reference actual codebase entities and rejects generic placeholder content.\n\n## Responsibility\n\nEvaluates requirements output on:\n1. **Placeholder Detection**: Zero instances of 'Component X', 'Service Y', 'Module Z'\n2. **File References**: At least 10 specific file paths referenced\n3. **EARS Format**: Minimum 60 requirements in proper EARS syntax\n4. **Acceptance Criteria**: 2+ criteria per requirement\n5. **Contextual Names**: Uses actual class/function/model names\n\n## Evaluation Criteria\n\n### Generic Placeholder Detection\n\n```python\nGENERIC_PATTERNS = [\n    r'Component [A-Z]',\n    r'Service [A-Z]',\n    r'Module [A-Z]',\n    r'Feature[A-Z]',\n    r'Handler[A-Z]',\n    r'Component\\d+',\n    r'Service\\d+',\n]\n\ndef _detect_placeholders(self, output: dict) -> tuple[bool, list[str]]:\n    \"\"\"Detects generic placeholder patterns in requirements.\"\"\"\n    requirements = output.get('requirements', [])\n    placeholders_found = []\n    \n    for req in requirements:\n        text = req.get('text', '') + ' ' + ' '.join(req.get('acceptance_criteria', []))\n        \n        for pattern in GENERIC_PATTERNS:\n            matches = re.findall(pattern, text)\n            if matches:\n                placeholders_found.extend(matches)\n    \n    return len(placeholders_found) == 0, placeholders_found\n```\n\n### File Reference Counting\n\n```python\ndef _count_file_references(self, output: dict) -> int:\n    \"\"\"Counts specific file path references in requirements.\"\"\"\n    requirements = output.get('requirements', [])\n    file_paths = set()\n    \n    # Pattern to match file paths: some/path/to/file.ext\n    path_pattern = r'[a-zA-Z_][a-zA-Z0-9_/.-]*\\.[a-z]{2,4}'\n    \n    for req in requirements:\n        text = req.get('text', '') + ' ' + ' '.join(req.get('acceptance_criteria', []))\n        matches = re.findall(path_pattern, text)\n        file_paths.update(matches)\n    \n    return len(file_paths)\n```\n\n## Scoring Weights\n\n- **no_placeholders** (50%): Zero generic patterns detected\n- **file_references** (25%): At least 10 file paths referenced\n- **ears_format** (15%): Proper EARS syntax (WHEN/SHALL)\n- **acceptance_criteria** (10%): 2+ criteria per requirement\n\n**Threshold**: 0.75 (75%) to pass\n\n## Feedback Generation\n\n```python\ndef _generate_feedback(self, score: float, checks: dict) -> str:\n    feedback = []\n    \n    if checks['placeholders_found']:\n        feedback.append(\n            f\"Generic placeholders detected: {checks['placeholders_found'][:5]}. \"\n            f\"Use actual component names from exploration (e.g., WebhookService, TaskRepository).\"\n        )\n    \n    if checks['file_ref_count'] < 10:\n        feedback.append(\n            f\"Only {checks['file_ref_count']} file references found. \"\n            f\"Reference at least 10 specific files from exploration discoveries.\"\n        )\n    \n    return '\\n'.join(feedback)\n```\n\n## Integration\n\nReceives requirements output and exploration context to validate contextual accuracy. Triggers retry with specific feedback if quality insufficient.",
+            "responsibility": "Detects generic placeholders and validates contextual file references",
+            "interfaces": [
+              {
+                "method": "evaluate",
+                "inputs": {
+                  "output": "dict",
+                  "context": "dict (exploration results)"
+                },
+                "outputs": {
+                  "result": "EvaluationResult"
+                },
+                "description": "Evaluates requirements for contextual accuracy"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine",
+              "ExplorePhase"
+            ]
+          },
+          {
+            "name": "DesignEvaluatorEnhanced",
+            "type": "evaluator",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/design_evaluator.py",
+            "description": "## Purpose\n\nValidates that Mermaid diagrams contain at least 10 actual component names from codebase discoveries.\n\n## Responsibility\n\nEvaluates design output on:\n1. **Component Name Validation**: 10+ real component names in diagrams\n2. **Mermaid Syntax**: Proper diagram parsing\n3. **Generic Detection**: No 'Component1', 'ServiceA', 'Handler' patterns\n4. **File References**: Diagrams reference actual file paths where applicable\n5. **Pattern Representation**: Shows discovered architectural patterns\n\n## Evaluation Criteria\n\n### Mermaid Diagram Parsing\n\n```python\ndef _parse_mermaid_components(self, diagram: str) -> list[str]:\n    \"\"\"Extracts component names from Mermaid diagram.\"\"\"\n    components = []\n    \n    # Pattern for node definitions: NodeID[Label] or NodeID(Label)\n    patterns = [\n        r'(\\w+)\\[([^\\]]+)\\]',  # Square brackets\n        r'(\\w+)\\(([^\\)]+)\\)',  # Parentheses\n        r'(\\w+)\\{([^\\}]+)\\}',  # Curly braces\n    ]\n    \n    for pattern in patterns:\n        matches = re.findall(pattern, diagram)\n        for node_id, label in matches:\n            # Use label as component name (more semantic)\n            components.append(label.strip())\n    \n    return components\n```\n\n### Component Name Validation\n\n```python\ndef _validate_component_names(self, components: list[str], exploration: dict) -> tuple[int, int]:\n    \"\"\"Validates component names against exploration discoveries.\"\"\"\n    discovered_names = set()\n    \n    # Extract discovered component names from exploration\n    for file_obj in exploration.get('key_files', []):\n        path = file_obj.get('path', '')\n        # Extract class/service names from file paths\n        if '/' in path:\n            filename = path.split('/')[-1].replace('.py', '').replace('.ts', '')\n            discovered_names.add(filename)\n    \n    for pattern in exploration.get('relevant_patterns', []):\n        # Extract pattern names (e.g., \"WebhookService\", \"TaskRepository\")\n        if 'pattern' in pattern:\n            discovered_names.add(pattern['pattern'])\n    \n    # Count how many diagram components are real vs generic\n    real_count = 0\n    for comp in components:\n        # Check if component name matches discovered names (fuzzy match)\n        if any(disc.lower() in comp.lower() or comp.lower() in disc.lower() \n               for disc in discovered_names):\n            real_count += 1\n    \n    return real_count, len(components)\n```\n\n### Generic Pattern Detection\n\n```python\nGENERIC_DIAGRAM_PATTERNS = [\n    r'Component[A-Z0-9]',\n    r'Service[A-Z]',\n    r'Module[A-Z]',\n    r'Handler[A-Z]',\n]\n\ndef _detect_generic_components(self, components: list[str]) -> list[str]:\n    \"\"\"Detects generic component names in diagrams.\"\"\"\n    generic_found = []\n    for comp in components:\n        for pattern in GENERIC_DIAGRAM_PATTERNS:\n            if re.search(pattern, comp):\n                generic_found.append(comp)\n    return generic_found\n```\n\n## Scoring Weights\n\n- **real_component_count** (60%): At least 10 real component names\n- **no_generic_names** (25%): Zero generic patterns\n- **diagram_completeness** (15%): Has architecture overview, component descriptions\n\n**Threshold**: 0.7 (70%) to pass\n\n## Integration\n\nParses Mermaid diagrams from architecture_overview and cross-references against exploration discoveries to validate authenticity.",
+            "responsibility": "Validates Mermaid diagrams contain real component names from codebase",
+            "interfaces": [
+              {
+                "method": "evaluate",
+                "inputs": {
+                  "output": "dict",
+                  "context": "dict (exploration + requirements)"
+                },
+                "outputs": {
+                  "result": "EvaluationResult"
+                },
+                "description": "Evaluates design diagram quality and component accuracy"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine",
+              "ExplorePhase"
+            ]
+          },
+          {
+            "name": "TasksEvaluatorEnhanced",
+            "type": "evaluator",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/evaluators/tasks_evaluator.py",
+            "description": "## Purpose\n\nValidates that at least 90% of file path references exist in the actual codebase.\n\n## Responsibility\n\nEvaluates tasks output on:\n1. **File Path Existence**: 90%+ of referenced paths exist on filesystem\n2. **File Path Format**: Absolute or from repository root\n3. **Convention Compliance**: New files follow discovered naming conventions\n4. **Specificity**: No generic paths like 'src/feature.py'\n\n## Evaluation Criteria\n\n### File Path Extraction\n\n```python\ndef _extract_file_paths(self, output: dict) -> list[str]:\n    \"\"\"Extracts all file paths from tasks.\"\"\"\n    file_paths = []\n    \n    for task in output.get('tasks', []):\n        # Extract from files_to_create and files_to_modify\n        file_paths.extend(task.get('files_to_create', []))\n        file_paths.extend(task.get('files_to_modify', []))\n    \n    return file_paths\n```\n\n### File Existence Validation\n\n```python\nimport os\nfrom pathlib import Path\n\ndef _validate_file_existence(self, file_paths: list[str], project_root: str) -> tuple[float, dict]:\n    \"\"\"Checks which file paths exist on filesystem.\"\"\"\n    existing_count = 0\n    missing_paths = []\n    \n    for path in file_paths:\n        # Try both absolute and relative to project root\n        full_path = Path(project_root) / path if not os.path.isabs(path) else Path(path)\n        \n        if full_path.exists():\n            existing_count += 1\n        else:\n            missing_paths.append(path)\n    \n    accuracy = existing_count / max(len(file_paths), 1)\n    \n    return accuracy, {\n        'existing_count': existing_count,\n        'total_count': len(file_paths),\n        'accuracy': accuracy,\n        'missing_paths': missing_paths[:10]  # Sample of missing\n    }\n```\n\n### Naming Convention Validation\n\n```python\ndef _validate_naming_conventions(self, new_file_paths: list[str], exploration: dict) -> float:\n    \"\"\"Validates new file paths follow discovered conventions.\"\"\"\n    conventions = exploration.get('conventions', {})\n    naming = conventions.get('naming', '')\n    \n    score = 0.0\n    for path in new_file_paths:\n        filename = path.split('/')[-1]\n        \n        # Python files should use snake_case\n        if path.endswith('.py') and 'snake_case' in naming:\n            if re.match(r'^[a-z_][a-z0-9_]*\\.py$', filename):\n                score += 1.0\n        \n        # TypeScript files should use camelCase or kebab-case\n        elif path.endswith('.ts') or path.endswith('.tsx'):\n            if re.match(r'^[a-z][a-zA-Z0-9-]*\\.(ts|tsx)$', filename):\n                score += 1.0\n    \n    return score / max(len(new_file_paths), 1)\n```\n\n## Scoring Weights\n\n- **file_existence_accuracy** (70%): 90%+ paths exist\n- **naming_conventions** (20%): New files follow conventions\n- **path_specificity** (10%): No generic 'src/feature.py' patterns\n\n**Threshold**: 0.75 (75%) to pass\n\n## Feedback Generation\n\n```python\ndef _generate_feedback(self, score: float, checks: dict) -> str:\n    feedback = []\n    \n    if checks['accuracy'] < 0.9:\n        feedback.append(\n            f\"File path accuracy: {checks['accuracy']*100:.1f}% (need 90%+). \"\n            f\"Missing paths: {checks['missing_paths'][:5]}. \"\n            f\"Verify file paths against exploration discoveries before referencing.\"\n        )\n    \n    return '\\n'.join(feedback)\n```\n\n## Integration\n\nAccesses filesystem to validate file paths. Requires project_root from configuration to resolve relative paths.",
+            "responsibility": "Validates 90%+ of task file paths exist in actual codebase",
+            "interfaces": [
+              {
+                "method": "evaluate",
+                "inputs": {
+                  "output": "dict",
+                  "context": "dict (exploration for conventions)",
+                  "project_root": "str"
+                },
+                "outputs": {
+                  "result": "EvaluationResult"
+                },
+                "description": "Validates file path existence accuracy"
+              }
+            ],
+            "dependencies": [
+              "SpecStateMachine",
+              "ExplorePhase",
+              "Filesystem"
+            ]
+          },
+          {
+            "name": "SpecSandboxSettingsEnhanced",
+            "type": "configuration",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/config.py",
+            "description": "## Purpose\n\nExtends existing SpecSandboxSettings with new configuration options for exploration depth, file limits, token budgets, and strict evaluation mode.\n\n## New Configuration Fields\n\n### Exploration Configuration\n\n```python\nfrom pydantic import BaseSettings, Field\nfrom typing import Literal\n\nclass SpecSandboxSettings(BaseSettings):\n    # ... existing fields ...\n    \n    # NEW: Exploration depth control\n    exploration_depth: Literal['shallow', 'medium', 'deep'] = Field(\n        default='medium',\n        description=\"Exploration depth: shallow (50 files), medium (100 files), deep (200 files)\"\n    )\n    \n    # NEW: File discovery limits\n    max_exploration_files: int = Field(\n        default=100,\n        ge=10,\n        le=500,\n        description=\"Maximum number of files to discover during exploration\"\n    )\n    \n    # NEW: Token budget per phase\n    max_exploration_tokens: int = Field(\n        default=50000,\n        ge=10000,\n        le=150000,\n        description=\"Maximum tokens to spend on exploration phase\"\n    )\n    \n    # NEW: Strict evaluation mode\n    enable_strict_evaluation: bool = Field(\n        default=True,\n        description=\"Enable strict evaluators that reject generic placeholders\"\n    )\n    \n    # NEW: File size limit for reading\n    max_file_size_lines: int = Field(\n        default=5000,\n        ge=100,\n        le=10000,\n        description=\"Maximum lines to read from a single file (larger files sampled)\"\n    )\n    \n    # NEW: Ignore patterns for exploration\n    exploration_ignore_patterns: list[str] = Field(\n        default_factory=lambda: [\n            'node_modules/**',\n            '.git/**',\n            '__pycache__/**',\n            'dist/**',\n            'build/**',\n            '.venv/**',\n            '*.pyc',\n            '.env*',\n            '*secret*',\n            '*credential*',\n        ],\n        description=\"Glob patterns to ignore during exploration\"\n    )\n```\n\n## Depth-Based Configuration\n\n```python\ndef get_exploration_config(self) -> dict:\n    \"\"\"Returns exploration configuration based on depth setting.\"\"\"\n    configs = {\n        'shallow': {\n            'max_files': 50,\n            'max_tokens': 25000,\n            'tools': ['Glob'],  # Glob only, minimal Grep\n            'read_limit': 5,  # Read only 5 key files\n        },\n        'medium': {\n            'max_files': 100,\n            'max_tokens': 50000,\n            'tools': ['Glob', 'Grep', 'Read'],\n            'read_limit': 10,\n        },\n        'deep': {\n            'max_files': 200,\n            'max_tokens': 100000,\n            'tools': ['Glob', 'Grep', 'Read'],\n            'read_limit': 20,\n        },\n    }\n    return configs[self.exploration_depth]\n```\n\n## Environment Variables\n\nAll settings support environment variable overrides:\n\n```bash\nEXPLORATION_DEPTH=deep\nMAX_EXPLORATION_FILES=150\nMAX_EXPLORATION_TOKENS=75000\nENABLE_STRICT_EVALUATION=true\n```\n\n## Backward Compatibility\n\n```python\nclass Config:\n    env_prefix = 'SPEC_SANDBOX_'\n    extra = 'ignore'  # Allows unknown fields (backward compatible)\n```\n\nExisting configurations work without modification. New fields use sensible defaults.\n\n## Integration\n\nSettings passed to ClaudeExecutor, evaluators, and prompts to control exploration behavior and quality thresholds.",
+            "responsibility": "Provides configuration options for exploration depth, budgets, and evaluation strictness",
+            "interfaces": [
+              {
+                "method": "get_exploration_config",
+                "inputs": {},
+                "outputs": {
+                  "config": "dict (max_files, max_tokens, tools, read_limit)"
+                },
+                "description": "Returns exploration configuration based on depth setting"
+              }
+            ],
+            "dependencies": []
+          },
+          {
+            "name": "ClaudeExecutorEnhanced",
+            "type": "executor",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/executor/claude_executor.py",
+            "description": "## Purpose\n\nConfigures Claude Agent SDK to enable Read, Glob, and Grep tools with proper working directory and sufficient turn limits for exploration.\n\n## Current State\n\nThe executor already enables these tools:\n- \u2705 Read tool (enabled)\n- \u2705 Glob tool (enabled)\n- \u2705 Grep tool (enabled)\n- \u2705 max_turns: 45 (sufficient)\n- \u2705 Working directory: configurable via `cwd` parameter\n\n## Required Enhancements\n\n### 1. Budget Tracking\n\n```python\nclass BudgetTracker:\n    \"\"\"Tracks exploration resource usage.\"\"\"\n    \n    def __init__(self, max_files: int, max_tokens: int):\n        self.max_files = max_files\n        self.max_tokens = max_tokens\n        self.files_read = 0\n        self.tokens_used = 0\n        self.warnings_emitted = []\n    \n    def track_file_read(self):\n        self.files_read += 1\n        if self.files_read >= self.max_files * 0.8 and 'files' not in self.warnings_emitted:\n            self.warnings_emitted.append('files')\n            logger.warning(f\"Approaching file limit: {self.files_read}/{self.max_files}\")\n    \n    def track_tokens(self, count: int):\n        self.tokens_used += count\n        if self.tokens_used >= self.max_tokens * 0.8 and 'tokens' not in self.warnings_emitted:\n            self.warnings_emitted.append('tokens')\n            logger.warning(f\"Approaching token limit: {self.tokens_used}/{self.max_tokens}\")\n    \n    def is_budget_exceeded(self) -> bool:\n        return self.files_read >= self.max_files or self.tokens_used >= self.max_tokens\n```\n\n### 2. Working Directory Configuration\n\n```python\ndef execute(\n    self,\n    phase: SpecPhase,\n    prompt: str,\n    output_file: Path,\n    settings: SpecSandboxSettings,\n) -> ExecutionResult:\n    \"\"\"Execute phase with proper working directory.\"\"\"\n    \n    # Set working directory to PROJECT_ROOT for filesystem access\n    working_dir = settings.cwd or settings.working_directory or os.getcwd()\n    \n    # Initialize budget tracker for explore phase\n    budget_tracker = None\n    if phase == SpecPhase.EXPLORE:\n        exploration_config = settings.get_exploration_config()\n        budget_tracker = BudgetTracker(\n            max_files=exploration_config['max_files'],\n            max_tokens=exploration_config['max_tokens'],\n        )\n    \n    # Execute with Claude Agent SDK\n    result = self._run_claude_agent(\n        prompt=prompt,\n        output_file=output_file,\n        cwd=working_dir,\n        max_turns=settings.max_turns,\n        budget_tracker=budget_tracker,\n    )\n    \n    return result\n```\n\n### 3. Tool Configuration\n\nNo changes needed - tools already enabled:\n\n```python\n# From existing claude_executor.py\nfrom claude_code_beta.tools import (\n    bash,\n    edit,\n    glob,\n    grep,\n    read,\n    write,\n    task,\n    explore,\n)\n\n# All tools passed to Agent SDK\ntools = [bash, edit, glob, grep, read, write, task, explore]\n```\n\n### 4. Max Turns Configuration\n\nCurrent: 45 turns (sufficient for exploration)\n\nOptional enhancement:\n\n```python\n# Increase for deep exploration mode\nmax_turns = 50 if settings.exploration_depth == 'deep' else 45\n```\n\n## Integration\n\nExecutor receives SpecSandboxSettings and configures execution parameters based on exploration_depth, max_exploration_files, and max_exploration_tokens.",
+            "responsibility": "Executes phases with proper tool configuration and budget tracking",
+            "interfaces": [
+              {
+                "method": "execute",
+                "inputs": {
+                  "phase": "SpecPhase",
+                  "prompt": "str",
+                  "output_file": "Path",
+                  "settings": "SpecSandboxSettings"
+                },
+                "outputs": {
+                  "result": "ExecutionResult (success, output, cost_usd, duration_ms)"
+                },
+                "description": "Executes phase with Claude Agent SDK and tracks budget"
+              }
+            ],
+            "dependencies": [
+              "Claude Agent SDK",
+              "SpecSandboxSettings"
+            ]
+          },
+          {
+            "name": "SpecStateMachineEnhanced",
+            "type": "orchestrator",
+            "file_path": "senior_sandbox/subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py",
+            "description": "## Purpose\n\nOrchestrates the enhanced 6-phase workflow with context accumulation and context size management.\n\n## Enhancements Needed\n\n### 1. Context Size Tracking\n\n```python\nimport json\n\nclass SpecStateMachine:\n    def __init__(self, settings: SpecSandboxSettings):\n        self.context = {}\n        self.context_size_tokens = 0  # NEW: Track context size\n        self.settings = settings\n    \n    def _estimate_token_count(self, text: str) -> int:\n        \"\"\"Rough estimate: 1 token \u2248 4 characters.\"\"\"\n        return len(text) // 4\n    \n    def _add_to_context(self, phase: SpecPhase, output: dict):\n        \"\"\"Adds phase output to context with size tracking.\"\"\"\n        self.context[phase.value] = output\n        \n        # Estimate context size\n        context_json = json.dumps(self.context)\n        self.context_size_tokens = self._estimate_token_count(context_json)\n        \n        # Warning if approaching limit (180K of 200K)\n        if self.context_size_tokens > 180000:\n            logger.warning(\n                f\"Context size approaching limit: {self.context_size_tokens} tokens. \"\n                f\"Consider summarizing exploration results.\"\n            )\n            self._summarize_context()\n    \n    def _summarize_context(self):\n        \"\"\"Summarizes exploration results if context too large.\"\"\"\n        if 'explore' in self.context:\n            explore = self.context['explore']\n            \n            # Keep only top 20 files, key patterns, critical architecture\n            summarized = {\n                'codebase_summary': explore.get('codebase_summary'),\n                'project_type': explore.get('project_type'),\n                'tech_stack': explore.get('tech_stack'),\n                'key_files': explore.get('key_files', [])[:20],  # Top 20\n                'relevant_patterns': explore.get('relevant_patterns', [])[:10],\n                'conventions': explore.get('conventions'),\n                '_summarized': True,\n            }\n            \n            self.context['explore'] = summarized\n            logger.info(\"Exploration context summarized to reduce size.\")\n```\n\n### 2. Enhanced Evaluator Integration\n\n```python\nasync def _execute_phase(\n    self,\n    phase: SpecPhase,\n    retry_count: int = 0,\n    eval_feedback: str = None,\n) -> PhaseResult:\n    \"\"\"Execute phase with enhanced evaluators.\"\"\"\n    \n    # Get evaluator (enhanced version)\n    evaluator = self._get_evaluator(phase)\n    \n    # Execute with executor\n    exec_result = await self.executor.execute(\n        phase=phase,\n        prompt=self._get_prompt(phase, eval_feedback),\n        output_file=self.output_dir / f\"{phase.value}_output.json\",\n        settings=self.settings,\n    )\n    \n    # Evaluate with context\n    if self.settings.enable_strict_evaluation:\n        eval_result = evaluator.evaluate(\n            output=exec_result.output,\n            context=self.context,  # Pass full context\n            project_root=self.settings.working_directory,  # For file validation\n        )\n    else:\n        # Lenient mode: accept output without strict checks\n        eval_result = EvaluationResult(score=1.0, passed=True, feedback=\"\")\n    \n    # Handle evaluation result\n    if eval_result.passed:\n        self._add_to_context(phase, exec_result.output)\n        return PhaseResult(success=True, output=exec_result.output, ...)\n    elif retry_count < 3:\n        # Retry with feedback\n        return await self._execute_phase(phase, retry_count + 1, eval_result.feedback)\n    else:\n        # Max retries: accept best-effort\n        logger.warning(f\"Phase {phase.value} failed quality check after 3 retries. Accepting best-effort output.\")\n        self._add_to_context(phase, exec_result.output)\n        return PhaseResult(success=True, output=exec_result.output, ...)\n```\n\n### 3. Context Propagation\n\n```python\ndef _get_prompt(self, phase: SpecPhase, eval_feedback: str = None) -> str:\n    \"\"\"Generates phase prompt with accumulated context.\"\"\"\n    \n    if phase == SpecPhase.EXPLORE:\n        return get_explore_prompt(\n            spec_title=self.settings.spec_title,\n            spec_description=self.settings.spec_description,\n            exploration_depth=self.settings.exploration_depth,\n        )\n    \n    elif phase == SpecPhase.PRD:\n        return get_prd_prompt(\n            spec_title=self.settings.spec_title,\n            spec_description=self.settings.spec_description,\n            explore_context=self.context.get('explore', {}),  # Pass exploration\n        )\n    \n    elif phase == SpecPhase.REQUIREMENTS:\n        return get_requirements_prompt(\n            spec_title=self.settings.spec_title,\n            spec_description=self.settings.spec_description,\n            explore_context=self.context.get('explore', {}),\n            prd_context=self.context.get('prd', {}),\n            eval_feedback=eval_feedback,  # Include retry feedback\n        )\n    \n    # ... similar for DESIGN, TASKS, SYNC phases\n```\n\n## Integration\n\nNo breaking changes to existing state machine. Enhancements are additive:\n- Context size tracking (new feature)\n- Enhanced evaluator calls with context (enhanced)\n- Strict evaluation mode (configurable via settings)\n- Retry with feedback (existing, enhanced with better feedback)",
+            "responsibility": "Orchestrates 6-phase workflow with context accumulation and size management",
+            "interfaces": [
+              {
+                "method": "run",
+                "inputs": {},
+                "outputs": {
+                  "spec_result": "SpecResult (all phase results, context, success)"
+                },
+                "description": "Executes full spec generation workflow"
+              },
+              {
+                "method": "_execute_phase",
+                "inputs": {
+                  "phase": "SpecPhase",
+                  "retry_count": "int",
+                  "eval_feedback": "str"
+                },
+                "outputs": {
+                  "phase_result": "PhaseResult"
+                },
+                "description": "Executes single phase with retry logic"
+              }
+            ],
+            "dependencies": [
+              "ClaudeExecutor",
+              "Evaluators",
+              "SpecSandboxSettings"
+            ]
+          }
+        ],
+        "data_models": [],
+        "api_endpoints": [],
+        "integration_points": [
+          {
+            "system": "Claude Agent SDK",
+            "type": "external",
+            "description": "Primary execution engine for all phases. Provides Read, Glob, Grep, and other tools for codebase exploration."
+          },
+          {
+            "system": "Filesystem",
+            "type": "internal",
+            "description": "TasksEvaluator validates file path existence by checking actual filesystem. Read-only access enforced."
+          },
+          {
+            "system": "Backend API (omoi_os)",
+            "type": "internal",
+            "description": "Sync phase creates tickets via backend API. No changes needed for this feature."
+          },
+          {
+            "system": "Reporter System",
+            "type": "internal",
+            "description": "Event emission through ArrayReporter (tests), JSONLReporter (local), HTTPReporter (production). No changes needed."
+          }
+        ],
+        "error_handling": {
+          "strategy": "Graceful degradation with retry intelligence",
+          "scenarios": [
+            {
+              "scenario": "Tool Unavailability (Read/Glob/Grep fail)",
+              "handling": "Emit warning event, continue with partial context, lower evaluator thresholds",
+              "retry": "Max 3 attempts with exponential backoff for transient failures"
+            },
+            {
+              "scenario": "Insufficient File Discovery (< 5 files)",
+              "handling": "Emit warning, proceed with degraded mode, accept lower quality outputs",
+              "retry": "Retry exploration with enhanced Glob patterns"
+            },
+            {
+              "scenario": "Evaluation Failure (score < threshold)",
+              "handling": "Provide specific feedback to agent, retry up to 3 times",
+              "retry": "Max 3 retries, accept best-effort on final attempt"
+            },
+            {
+              "scenario": "Context Size Overflow (> 180K tokens)",
+              "handling": "Summarize exploration results: keep top 20 files, key patterns, critical architecture",
+              "retry": "Not applicable - automatic summarization"
+            },
+            {
+              "scenario": "Budget Exceeded (files or tokens)",
+              "handling": "Emit warning at 80% threshold, continue best-effort if exceeded, log final usage",
+              "retry": "Not applicable - budget is hard limit"
+            },
+            {
+              "scenario": "Sensitive File Detected",
+              "handling": "Emit warning, skip file from exploration, document in exploration output",
+              "retry": "Not applicable - security enforcement"
+            }
+          ],
+          "max_retries": 3,
+          "backoff_strategy": "Exponential: 2^retry_count seconds",
+          "final_retry_behavior": "Accept best-effort output to prevent infinite loops"
+        },
+        "testing_strategy": {
+          "unit_tests": [
+            "ExploreEvaluatorEnhanced: File count validation (20+ files)",
+            "ExploreEvaluatorEnhanced: File path quality checks",
+            "RequirementsEvaluatorEnhanced: Generic placeholder detection (regex patterns)",
+            "RequirementsEvaluatorEnhanced: File reference counting (10+ paths)",
+            "DesignEvaluatorEnhanced: Mermaid diagram parsing",
+            "DesignEvaluatorEnhanced: Component name validation against exploration",
+            "TasksEvaluatorEnhanced: File path existence checking (90%+ accuracy)",
+            "TasksEvaluatorEnhanced: Naming convention validation",
+            "BudgetTracker: File and token tracking with warnings",
+            "SpecStateMachine: Context size estimation and summarization",
+            "PromptTemplates: Verify tool instructions and quality checklists"
+          ],
+          "integration_tests": [
+            "Full 6-phase workflow with real feature: 'Add webhook notifications'",
+            "Full workflow with different exploration depths (shallow/medium/deep)",
+            "Retry logic with evaluation feedback (simulate failing evaluator)",
+            "Context accumulation: verify exploration results flow to all phases",
+            "Budget enforcement: simulate exceeding file/token limits",
+            "Graceful degradation: simulate tool failures and insufficient discovery",
+            "A/B comparison: old prompts vs new prompts on same feature (quality diff)",
+            "10+ real feature examples across project types (spec-sandbox, backend, frontend)",
+            "Mock executor mode: test all prompts without API costs"
+          ],
+          "regression_tests": [
+            "Existing 6-phase workflow still works with old configurations",
+            "Event emission contracts maintained (PHASE_STARTED, PHASE_COMPLETED, etc.)",
+            "Backward compatibility: old SpecSandboxSettings work without new fields",
+            "Reporter implementations (array/jsonl/http) continue to work",
+            "Mock executor mode still functional for testing",
+            "Markdown generation (static vs Claude) unaffected",
+            "Backend API sync still works (no breaking changes)"
+          ],
+          "test_data": [
+            {
+              "feature": "Add webhook notifications to backend",
+              "expected_files": "20+ files from backend/omoi_os/",
+              "expected_requirements": "60+ EARS requirements",
+              "expected_components": "10+ in Mermaid: WebhookService, EventBus, etc."
+            },
+            {
+              "feature": "Implement dark mode toggle in frontend",
+              "expected_files": "20+ files from frontend/src/",
+              "expected_requirements": "60+ EARS requirements",
+              "expected_components": "10+ in Mermaid: ThemeProvider, useTheme, etc."
+            },
+            {
+              "feature": "Improve spec-sandbox to use actual codebase exploration",
+              "expected_files": "20+ files from subsystems/spec-sandbox/",
+              "expected_requirements": "60+ EARS requirements",
+              "expected_components": "10+ in Mermaid: ClaudeExecutor, Evaluators, etc."
+            }
+          ],
+          "quality_metrics": [
+            "Contextual requirements: >= 60 EARS requirements",
+            "Zero placeholders: 0 instances of 'Component X' patterns",
+            "File accuracy: >= 90% task file paths exist",
+            "Diagram quality: >= 10 real component names in Mermaid",
+            "Evaluation scores: Average score improvement > 0.15 from baseline"
+          ]
+        },
+        "security_considerations": [
+          {
+            "concern": "Accidental Codebase Modification",
+            "mitigation": "ClaudeExecutor configured with Read, Glob, Grep only. Write/Edit/Delete tools disabled during all phases.",
+            "validation": "Unit test: Verify tool configuration excludes write operations"
+          },
+          {
+            "concern": "Sensitive File Exposure",
+            "mitigation": "Exploration ignore patterns exclude: .env*, *secret*, *credential*, *.key, *.pem, *.cert, *.db",
+            "validation": "Integration test: Verify sensitive files are excluded from discovery"
+          },
+          {
+            "concern": "PII in Database Files",
+            "mitigation": "Exclude *.db files from exploration. Warning emitted if database pattern detected.",
+            "validation": "Unit test: Verify .db files are ignored"
+          },
+          {
+            "concern": "API Key Leakage in Logs",
+            "mitigation": "Executor does not log file contents. Only file paths and metadata logged.",
+            "validation": "Code review: Verify no sensitive data in log statements"
+          },
+          {
+            "concern": "Filesystem Access Scope",
+            "mitigation": "Working directory scoped to PROJECT_ROOT. No access outside project boundaries.",
+            "validation": "Integration test: Verify cannot access files outside PROJECT_ROOT"
+          }
+        ],
+        "migration_plan": {
+          "phase_1": {
+            "name": "Prompt Enhancements (Week 1)",
+            "tasks": [
+              "Update explore phase prompt with explicit tool usage instructions",
+              "Add quality checklists to all phase prompts",
+              "Add anti-pattern examples (generic vs contextual)",
+              "Update requirements prompt to mandate file references",
+              "Update design prompt to require real component names",
+              "Update tasks prompt to require file path validation",
+              "Test all enhanced prompts in mock executor mode (no API costs)"
+            ],
+            "risk": "Low - prompts are backwards compatible",
+            "validation": "Mock executor tests pass, prompts generate expected instructions"
+          },
+          "phase_2": {
+            "name": "Evaluator Enhancements (Week 2)",
+            "tasks": [
+              "Enhance ExploreEvaluator with file count check (>= 20)",
+              "Add placeholder detection to RequirementsEvaluator",
+              "Add component name validation to DesignEvaluator",
+              "Add file path checking to TasksEvaluator",
+              "Write unit tests for all evaluator enhancements",
+              "Test retry logic with evaluation feedback"
+            ],
+            "risk": "Medium - may cause more retries initially",
+            "validation": "Unit tests pass, integration test shows retry with feedback works"
+          },
+          "phase_3": {
+            "name": "Configuration & Budget Tracking (Week 2)",
+            "tasks": [
+              "Add new fields to SpecSandboxSettings (exploration_depth, max_exploration_files, etc.)",
+              "Implement BudgetTracker class in ClaudeExecutor",
+              "Add context size tracking to SpecStateMachine",
+              "Implement context summarization logic",
+              "Test with different exploration depths (shallow/medium/deep)",
+              "Validate backward compatibility with old configs"
+            ],
+            "risk": "Low - new fields have defaults, extra='ignore' maintains compatibility",
+            "validation": "Existing configs work, new configs control behavior correctly"
+          },
+          "phase_4": {
+            "name": "Integration & Testing (Week 3)",
+            "tasks": [
+              "Run 10+ real feature examples across project types",
+              "A/B comparison: old vs new prompts on same features",
+              "Measure quality metrics: requirements count, placeholder detection, file accuracy",
+              "Test graceful degradation scenarios (tool failures, insufficient discovery)",
+              "Performance testing: ensure < 15 min for typical feature (medium depth)",
+              "Cost analysis: verify <= 3x baseline API costs",
+              "Update documentation with configuration guide and best practices"
+            ],
+            "risk": "Medium - may discover edge cases or quality issues",
+            "validation": "All quality metrics met, cost within budget, performance acceptable"
+          },
+          "rollback": {
+            "procedure": "Set enable_strict_evaluation=False in configuration to disable new evaluators. Old prompts still available in git history if needed. No database migrations or breaking changes.",
+            "data_loss": "None - all changes are code-level, no data schema changes"
+          }
+        },
+        "performance_targets": {
+          "exploration_phase": {
+            "target": "< 5 minutes for 10K file codebase (P95)",
+            "breakdown": {
+              "file_discovery_glob": "< 30 seconds",
+              "pattern_search_grep": "< 60 seconds",
+              "file_reading": "< 180 seconds (10-20 files)",
+              "claude_processing": "< 90 seconds"
+            }
+          },
+          "total_generation": {
+            "shallow": "< 10 minutes (+20% over baseline)",
+            "medium": "< 15 minutes (+40% over baseline)",
+            "deep": "< 25 minutes (+100% over baseline)"
+          },
+          "context_size": {
+            "monitor_threshold": "180,000 tokens (90% of 200K limit)",
+            "summarization_trigger": "Automatic at threshold",
+            "post_summarization_target": "< 100,000 tokens"
+          },
+          "api_cost": {
+            "shallow": "1.5x baseline cost",
+            "medium": "2.5x baseline cost",
+            "deep": "4.0x baseline cost",
+            "budget_warning": "Emit warning at 80% of max_exploration_tokens"
+          }
+        },
+        "success_metrics": {
+          "contextual_requirements": {
+            "metric": "Requirements count with file references",
+            "baseline": "30-40 generic requirements",
+            "target": "60+ requirements with 10+ file references",
+            "measurement": "RequirementsEvaluator counts requirements and extracts file paths"
+          },
+          "zero_placeholders": {
+            "metric": "Generic placeholder detection",
+            "baseline": "5-10 instances of 'Component X' patterns",
+            "target": "0 instances",
+            "measurement": "Regex pattern matching across all outputs"
+          },
+          "file_accuracy": {
+            "metric": "Task file path existence",
+            "baseline": "50-60% of paths are generic or non-existent",
+            "target": "90%+ of paths exist in actual codebase",
+            "measurement": "TasksEvaluator filesystem validation"
+          },
+          "diagram_quality": {
+            "metric": "Real component names in Mermaid diagrams",
+            "baseline": "2-3 real component names",
+            "target": "10+ real component names",
+            "measurement": "DesignEvaluator parsing and cross-reference with exploration"
+          },
+          "eval_scores": {
+            "metric": "Average evaluation score across phases",
+            "baseline": "0.7-0.75 (passing threshold)",
+            "target": "0.85+ (high quality)",
+            "measurement": "Track eval_score from PhaseResult across all phases"
+          },
+          "user_satisfaction": {
+            "metric": "Manual editing time reduction",
+            "baseline": "60-90 minutes manual editing per spec",
+            "target": "30-45 minutes (50% reduction)",
+            "measurement": "User survey and time tracking (qualitative)"
+          }
+        },
+        "monitoring_and_observability": {
+          "events_to_emit": [
+            {
+              "event": "exploration.files_discovered",
+              "data": {
+                "file_count": "int",
+                "sample_paths": "list[str]"
+              }
+            },
+            {
+              "event": "exploration.patterns_identified",
+              "data": {
+                "pattern_count": "int",
+                "patterns": "list[str]"
+              }
+            },
+            {
+              "event": "exploration.budget_warning",
+              "data": {
+                "resource": "str (files|tokens)",
+                "used": "int",
+                "limit": "int"
+              }
+            },
+            {
+              "event": "evaluation.placeholder_detected",
+              "data": {
+                "phase": "str",
+                "placeholders": "list[str]"
+              }
+            },
+            {
+              "event": "evaluation.file_accuracy",
+              "data": {
+                "phase": "tasks",
+                "accuracy": "float",
+                "missing_count": "int"
+              }
+            },
+            {
+              "event": "context.size_warning",
+              "data": {
+                "tokens": "int",
+                "limit": "int"
+              }
+            },
+            {
+              "event": "context.summarized",
+              "data": {
+                "original_tokens": "int",
+                "new_tokens": "int"
+              }
+            }
+          ],
+          "metrics_to_track": [
+            "exploration.files_discovered_count",
+            "exploration.tokens_used",
+            "evaluation.score_by_phase",
+            "evaluation.placeholder_count",
+            "evaluation.file_accuracy_percent",
+            "context.size_tokens",
+            "phase.duration_seconds",
+            "phase.retry_count"
+          ],
+          "dashboards": [
+            "Quality Metrics Dashboard: Track eval scores, placeholder counts, file accuracy over time",
+            "Cost Dashboard: Track API costs per depth mode, budget warnings, cost per feature",
+            "Performance Dashboard: Track phase durations, total generation time by depth"
+          ]
+        },
+        "_output_source": "file"
+      }
+    },
+    "tasks": {
+      "success": false,
+      "output": {}
+    }
+  },
+  "timestamp": "2026-01-22T00:12:16.281865"
+}
