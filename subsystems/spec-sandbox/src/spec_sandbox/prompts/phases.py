@@ -14,6 +14,59 @@ Phases:
 Output Directory: All artifacts go in `.omoi_os/`
 """
 
+# =============================================================================
+# INCREMENTAL WORK PATTERN - Applied to all phases
+# =============================================================================
+# This instruction block is prepended to phase prompts to ensure incremental
+# progress is saved even if the agent gets stuck or times out.
+
+INCREMENTAL_WORK_INSTRUCTION = """
+## ⚠️ CRITICAL: Incremental Work Pattern (MUST FOLLOW)
+
+You MUST work incrementally to ensure progress is saved. DO NOT attempt to write
+everything in one massive operation.
+
+### Rules for Incremental Work:
+
+1. **Write Early, Write Often**: After completing each logical section, write it to disk immediately.
+   - Don't wait until you have the "complete" output
+   - Partial progress is better than no progress
+
+2. **Use Edit Over Write for Updates**: When adding to existing files:
+   - Use the Edit tool to append/modify sections
+   - Don't rewrite the entire file each time
+   - This preserves previous work if something fails
+
+3. **Checkpoint Your Progress**:
+   - After every 3-5 items (requirements, components, tasks), save to disk
+   - Example: Write first 5 requirements, then add next 5, etc.
+
+4. **Structure for Resumability**:
+   - Each section should be self-contained
+   - Use clear delimiters between sections
+   - If you get stuck, at least partial work is preserved
+
+### Example Pattern:
+
+```
+# WRONG - One massive write at the end
+[... do all analysis ...]
+[... generate all 20 requirements in memory ...]
+Write(entire_file)  # If this fails, everything is lost!
+
+# CORRECT - Incremental writes
+[... analyze first area ...]
+Write(file, first_5_requirements)
+[... analyze second area ...]
+Edit(file, append next_5_requirements)
+[... analyze third area ...]
+Edit(file, append next_5_requirements)
+# Even if we fail here, we have 15 requirements saved!
+```
+
+This pattern is MANDATORY. Failure to follow it risks losing all work.
+"""
+
 from spec_sandbox.schemas.spec import SpecPhase
 
 # =============================================================================
@@ -551,6 +604,27 @@ Examples:
 - `REQ-WEBHOOK-SEC-001` - First security requirement
 - `REQ-WEBHOOK-PERF-001` - First performance requirement
 
+### Requirement Titles (CRITICAL)
+
+Each requirement MUST have a descriptive title that:
+- **Describes the capability**: Not the category (never use "API", "Data Model", "Business Logic")
+- **Is action-oriented**: Uses verbs that describe what the system does
+- **Is specific**: Unique enough to distinguish from other requirements
+- **Is concise**: 3-6 words maximum
+
+**Examples of GOOD titles:**
+- "Webhook Subscription Creation"
+- "Event Delivery with Retry Logic"
+- "HMAC Signature Verification"
+- "Rate Limit Enforcement"
+
+**Examples of BAD titles (NEVER USE THESE):**
+- "Data Model" (too generic, this is a category not a title)
+- "API" (too vague)
+- "Business Logic" (describes implementation, not capability)
+- "Functional Requirement" (describes type, not capability)
+- "REQ-001" (ID, not a title)
+
 ## Required Output Format
 
 When complete, you MUST write a JSON file with this structure:
@@ -647,6 +721,7 @@ When complete, you MUST write a JSON file with this structure:
 ### Quality Checklist
 
 Before finalizing, verify:
+- [ ] Every requirement has a DESCRIPTIVE title (not "Data Model", "API", or other generic terms)
 - [ ] Every requirement uses EARS format (WHEN/SHALL pattern)
 - [ ] Every requirement has 2+ acceptance criteria
 - [ ] Every requirement has a unique ID following the convention
@@ -1332,11 +1407,13 @@ Use the Write tool to create this JSON file at the path specified in your instru
 """
 
 
-def get_phase_prompt(phase: SpecPhase) -> str:
+def get_phase_prompt(phase: SpecPhase, include_incremental_instruction: bool = True) -> str:
     """Get the prompt template for a specific phase.
 
     Args:
         phase: The spec phase to get prompt for
+        include_incremental_instruction: Whether to prepend the incremental work
+            instruction. Default True. Set False for testing or special cases.
 
     Returns:
         The prompt template string with placeholders
@@ -1356,4 +1433,11 @@ def get_phase_prompt(phase: SpecPhase) -> str:
     if phase not in prompts:
         raise ValueError(f"Unknown phase: {phase}")
 
-    return prompts[phase]
+    base_prompt = prompts[phase]
+
+    # Prepend incremental work instruction to ensure progress is saved
+    # even if the agent gets stuck or times out
+    if include_incremental_instruction:
+        return INCREMENTAL_WORK_INSTRUCTION + "\n" + base_prompt
+
+    return base_prompt
