@@ -214,59 +214,94 @@ def mock_authenticated_client(
 
 @pytest.fixture(scope="session")
 def test_database_url() -> str:
-    """Get test database URL from environment or use default."""
-    return os.getenv(
-        "DATABASE_URL_TEST",
-        "postgresql+psycopg://postgres:postgres@localhost:15432/app_db",
-    )
+    """Get test database URL from environment or pydantic settings.
+
+    Priority:
+    1. DATABASE_URL_TEST env var (explicit test override)
+    2. get_app_settings().database.url (from .env/.env.local - Railway in production)
+    3. Local fallback (localhost:15432)
+
+    Using get_app_settings() allows tests to automatically use the Railway
+    database configured in .env.local without needing Docker locally.
+    """
+    # First check explicit test override
+    explicit_url = os.getenv("DATABASE_URL_TEST")
+    if explicit_url:
+        return explicit_url
+
+    # Try to get from pydantic settings (loads .env/.env.local)
+    try:
+        from omoi_os.config import get_app_settings
+        settings = get_app_settings()
+        if settings.database.url and "localhost" not in settings.database.url:
+            # Use remote database from settings
+            return settings.database.url
+    except Exception:
+        pass
+
+    # Fallback to local
+    return "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
+
+
+def _is_remote_database(url: str) -> bool:
+    """Check if URL points to a remote (non-localhost) database."""
+    return "localhost" not in url and "127.0.0.1" not in url
 
 
 @pytest.fixture(scope="function")
 def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]:
     """
-    Create a fresh database service for each test.
+    Create a database service for testing.
 
-    Creates tables before test, drops them after.
-    Uses session-isolated data - tests run in transactions that are rolled back.
+    For local databases: Creates tables before test
+    For remote databases: Assumes tables already exist (shared Railway database)
+
+    Note: Tests should clean up their own data or use unique IDs to avoid conflicts.
     """
-    # Extract database name from URL and create it if it doesn't exist
-    from urllib.parse import urlparse
     from sqlalchemy import text
 
-    parsed = urlparse(test_database_url)
-    db_name = parsed.path.lstrip("/")
+    is_remote = _is_remote_database(test_database_url)
 
-    # Connect to postgres database to create test database
-    admin_url = test_database_url.rsplit("/", 1)[0] + "/postgres"
-    admin_db = None
-    try:
-        admin_db = DatabaseService(admin_url)
-        with admin_db.get_session() as session:
-            # Check if database exists, create if not
-            result = session.execute(
-                text(f"SELECT 1 FROM pg_database WHERE datname = '{db_name}'")
-            ).fetchone()
-            if not result:
-                session.execute(text(f'CREATE DATABASE "{db_name}"'))
-                session.commit()
-    except Exception:
-        # If we can't create the database, try to proceed anyway
-        # (database might already exist or we don't have permissions)
-        pass
-    finally:
-        # Dispose admin connection
-        if admin_db:
-            admin_db.engine.dispose()
+    # For local databases, try to create the database if needed
+    if not is_remote:
+        from urllib.parse import urlparse
+        parsed = urlparse(test_database_url)
+        db_name = parsed.path.lstrip("/")
+
+        # Connect to postgres database to create test database
+        admin_url = test_database_url.rsplit("/", 1)[0] + "/postgres"
+        admin_db = None
+        try:
+            admin_db = DatabaseService(admin_url)
+            with admin_db.get_session() as session:
+                # Check if database exists, create if not
+                result = session.execute(
+                    text(f"SELECT 1 FROM pg_database WHERE datname = '{db_name}'")
+                ).fetchone()
+                if not result:
+                    session.execute(text(f'CREATE DATABASE "{db_name}"'))
+                    session.commit()
+        except Exception:
+            # If we can't create the database, try to proceed anyway
+            # (database might already exist or we don't have permissions)
+            pass
+        finally:
+            # Dispose admin connection
+            if admin_db:
+                admin_db.engine.dispose()
 
     db = DatabaseService(test_database_url)
-    db.create_tables()
+
+    # Only create tables for local databases
+    # Remote databases (Railway) already have tables from migrations
+    if not is_remote:
+        db.create_tables()
+
     try:
         yield db
     finally:
-        # Clean up: dispose engine first (releases connections), then drop
+        # Clean up: dispose engine to release connections
         db.engine.dispose()
-        # Skip drop_tables to avoid blocking on lock wait
-        # Tables will be recreated fresh via create_tables() in next test
 
 
 @pytest.fixture
@@ -277,8 +312,30 @@ def task_queue_service(db_service: DatabaseService) -> TaskQueueService:
 
 @pytest.fixture
 def redis_url() -> str:
-    """Get Redis URL from environment or use fakeredis."""
-    return os.getenv("REDIS_URL_TEST", "redis://localhost:16379")
+    """Get Redis URL from environment or pydantic settings.
+
+    Priority:
+    1. REDIS_URL_TEST env var (explicit test override)
+    2. get_app_settings().redis.url (from .env/.env.local - Railway in production)
+    3. Local fallback (localhost:16379)
+    """
+    # First check explicit test override
+    explicit_url = os.getenv("REDIS_URL_TEST")
+    if explicit_url:
+        return explicit_url
+
+    # Try to get from pydantic settings (loads .env/.env.local)
+    try:
+        from omoi_os.config import get_app_settings
+        settings = get_app_settings()
+        if settings.redis.url and "localhost" not in settings.redis.url:
+            # Use remote Redis from settings
+            return settings.redis.url
+    except Exception:
+        pass
+
+    # Fallback to local
+    return "redis://localhost:16379"
 
 
 @pytest.fixture

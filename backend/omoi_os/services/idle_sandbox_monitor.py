@@ -8,6 +8,21 @@ This service detects sandboxes that:
 These idle sandboxes waste Daytona resources and should be terminated.
 
 See docs/design/sandbox-agents/02_gap_analysis.md for design details.
+
+DESIGN PRINCIPLE (2025-01 refactor):
+Instead of maintaining an allowlist of "work events" (which is fragile and requires
+constant updates as new event types are added), we use an INVERTED approach:
+
+1. Define a small BLOCKLIST of events that are explicitly NOT work:
+   - Heartbeats (just keepalive signals)
+   - Started events (initialization, not actual work)
+   - Error events (failures, not progress)
+   - Waiting events (ready state, not doing work)
+
+2. ANY event NOT in the blocklist is considered work.
+
+This means new event types are automatically treated as work, preventing premature
+sandbox termination when new features are added.
 """
 
 from __future__ import annotations
@@ -31,75 +46,49 @@ logger = get_logger("idle_sandbox_monitor")
 class IdleSandboxMonitor:
     """Detects and terminates idle sandboxes that show no work progress.
 
-    Work Events (indicate actual progress):
+    INVERTED LOGIC: Instead of allowlisting work events, we blocklist non-work events.
+    Any event NOT in the blocklist is considered work, which is safer for new event types.
 
-    Agent Events (Claude Agent SDK):
-    - agent.file_edited
-    - agent.tool_completed
-    - agent.subagent_completed
-    - agent.skill_completed
-    - agent.completed
-    - agent.assistant_message
-    - agent.tool_use
-    - agent.tool_result
+    Non-Work Events (explicitly excluded from work detection):
+    - Heartbeats: agent.heartbeat, spec.heartbeat (keepalive signals, not work)
+    - Started events: agent.started (initialization, not actual work)
+    - Error events: agent.error, agent.stream_error, spec.phase_failed, spec.execution_failed
+    - Waiting events: agent.waiting (ready state, not doing work)
+    - Shutdown events: agent.shutdown (cleanup, not work)
 
-    Spec Events (spec-sandbox phases):
-    - spec.execution_started, spec.execution_completed
-    - spec.phase_started, spec.phase_completed, spec.phase_retry
-    - spec.progress, spec.artifact_created
-    - spec.requirements_generated, spec.design_generated, spec.tasks_generated
-    - spec.sync_started, spec.sync_completed, spec.tasks_queued
-    - spec.ticket_created, spec.task_created, etc.
-
-    Non-Work Events (don't indicate progress):
-    - agent.heartbeat, spec.heartbeat
-    - agent.started
-    - agent.thinking
-    - agent.error, spec.phase_failed, spec.execution_failed
+    Everything else is considered work, including but not limited to:
+    - Tool events: agent.tool_use, agent.tool_result, agent.tool_completed
+    - File events: agent.file_edited
+    - Message events: agent.message, agent.assistant_message, agent.thinking
+    - Subagent/skill events: agent.subagent_*, agent.skill_*
+    - Iteration events: iteration.*, continuous.*
+    - Spec events: spec.phase_*, spec.execution_*, spec.*_generated, etc.
     """
 
-    # Events that indicate actual work is being done
-    # Includes both agent.* events (Claude Agent SDK) and spec.* events (spec-sandbox)
-    WORK_EVENT_TYPES: Set[str] = {
-        # Agent events (Claude Agent SDK)
-        "agent.file_edited",
-        "agent.tool_completed",
-        "agent.subagent_completed",
-        "agent.skill_completed",
-        "agent.completed",
-        "agent.assistant_message",
-        "agent.tool_use",
-        "agent.tool_result",
-        # Spec events (spec-sandbox phases) - CRITICAL: These indicate spec generation progress
-        # Without these, idle monitor may terminate sandboxes that are actively generating specs
-        "spec.execution_started",
-        "spec.execution_completed",
-        "spec.phase_started",
-        "spec.phase_completed",
-        "spec.phase_retry",
-        "spec.progress",
-        "spec.artifact_created",
-        "spec.requirements_generated",
-        "spec.design_generated",
-        "spec.tasks_generated",
-        "spec.sync_started",
-        "spec.sync_completed",
-        "spec.tasks_queued",
-        # Ticket/task CRUD events from spec-sandbox
-        "spec.tickets_creation_started",
-        "spec.tickets_creation_completed",
-        "spec.ticket_created",
-        "spec.ticket_updated",
-        "spec.task_created",
-        "spec.task_updated",
-        # Requirements/design sync events
-        "spec.requirements_sync_started",
-        "spec.requirements_sync_completed",
-        "spec.requirement_created",
-        "spec.requirement_updated",
-        "spec.design_sync_started",
-        "spec.design_sync_completed",
-        "spec.design_updated",
+    # ==========================================================================
+    # NON-WORK EVENTS (Blocklist)
+    # ==========================================================================
+    # Events that do NOT indicate actual work progress.
+    # ANY event NOT in this set is considered work.
+    # This inverted approach is safer - new event types are automatically treated as work.
+    NON_WORK_EVENT_TYPES: Set[str] = {
+        # Heartbeats - just keepalive signals, not actual work
+        "agent.heartbeat",
+        "spec.heartbeat",
+        # Started events - initialization phase, not actual work yet
+        "agent.started",
+        # Error events - failures don't indicate forward progress
+        "agent.error",
+        "agent.stream_error",
+        "spec.phase_failed",
+        "spec.execution_failed",
+        "iteration.failed",
+        # Waiting events - ready state, but not actively working
+        "agent.waiting",
+        # Shutdown events - cleanup, not productive work
+        "agent.shutdown",
+        # Interrupted events - work was stopped, not progress
+        "agent.interrupted",
     }
 
     # Default idle threshold (10 minutes - if only heartbeats for this long, sandbox is idle)
@@ -180,12 +169,14 @@ class IdleSandboxMonitor:
             - idle_duration_seconds: How long the sandbox has been idle
         """
         with self.db.get_session() as session:
-            # Get last work event
+            # Get last work event using INVERTED logic:
+            # Any event NOT in the blocklist is considered work.
+            # This is safer than allowlisting - new event types are automatically treated as work.
             last_work = (
                 session.query(SandboxEvent)
                 .filter(
                     SandboxEvent.sandbox_id == sandbox_id,
-                    SandboxEvent.event_type.in_(self.WORK_EVENT_TYPES),
+                    SandboxEvent.event_type.notin_(self.NON_WORK_EVENT_TYPES),
                 )
                 .order_by(SandboxEvent.created_at.desc())
                 .first()
@@ -264,8 +255,10 @@ class IdleSandboxMonitor:
                         "sandbox_not_idle_agent_completed",
                         sandbox_id=sandbox_id,
                     )
-                # If agent reports itself as 'running', check for stuck condition
-                elif heartbeat_status == "running":
+                # If agent reports itself as 'running' or 'alive', check for stuck condition
+                # 'running' = spec state machine actively running
+                # 'alive' = regular agent worker actively processing
+                elif heartbeat_status in ("running", "alive"):
                     # Check if agent is "stuck running" - reports running but no work
                     if last_work:
                         work_age = now - last_work.created_at
