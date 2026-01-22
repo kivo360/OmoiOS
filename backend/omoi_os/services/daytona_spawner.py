@@ -1170,6 +1170,7 @@ class DaytonaSpawnerService:
                     ephemeral=True,  # Auto-delete when stopped
                     public=False,
                     resources=resources,
+                    auto_stop_interval=0,  # Disable Daytona auto-stop (we have our own idle detection)
                 )
             else:
                 logger.info(
@@ -1183,6 +1184,7 @@ class DaytonaSpawnerService:
                     ephemeral=True,  # Auto-delete when stopped
                     public=False,
                     resources=resources,
+                    auto_stop_interval=0,  # Disable Daytona auto-stop (we have our own idle detection)
                 )
 
             sandbox = daytona.create(params=params, timeout=120)
