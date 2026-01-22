@@ -397,8 +397,18 @@ async def _sync_requirements_to_table(
                     shall_idx = text_upper.index(" THE SYSTEM SHALL ")
                     action = text[shall_idx + 18:].strip()
 
-                # Create title from category + type or from ID
-                title = req_data.get("category", "") or req_id
+                # Extract title - prioritize explicit title, then use ID as fallback
+                # Never use category as title (category is for grouping, not display)
+                title = req_data.get("title", "")
+                if not title:
+                    # Generate a meaningful title from the action if available
+                    if action:
+                        # Take first 60 chars of action as title
+                        title = action[:60].strip()
+                        if len(action) > 60:
+                            title = title.rsplit(' ', 1)[0] + "..."
+                    else:
+                        title = req_id
                 req_type = req_data.get("type", "functional")
 
                 # Check if requirement already exists
