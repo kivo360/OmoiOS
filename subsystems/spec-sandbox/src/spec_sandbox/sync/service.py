@@ -4,11 +4,18 @@ The sync service:
 1. Reads markdown files with frontmatter from a directory
 2. Validates frontmatter against Pydantic schemas
 3. Converts frontmatter + body to API payloads
-4. Creates tickets/tasks via the backend API
+4. Creates or updates tickets/tasks via the backend API
 5. Emits events for progress tracking
+
+Sync Behavior:
+- CREATE: New tickets/tasks are created if they don't exist
+- UPDATE: If item exists but description differs, update it
+- SKIP: If item exists with same description, skip
+- FAILED: If sync operation fails
 """
 
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -23,6 +30,15 @@ from spec_sandbox.parsers.markdown import (
 from spec_sandbox.reporters.base import Reporter
 from spec_sandbox.schemas.events import Event, EventTypes
 from spec_sandbox.schemas.frontmatter import TaskFrontmatter, TicketFrontmatter
+
+
+class SyncAction(Enum):
+    """Action taken during sync."""
+
+    CREATED = "created"
+    UPDATED = "updated"
+    SKIPPED = "skipped"
+    FAILED = "failed"
 
 
 @dataclass
@@ -44,9 +60,11 @@ class SyncResult:
     """Result of syncing a single item."""
 
     local_id: str
+    action: SyncAction = SyncAction.FAILED
     api_id: Optional[str] = None
     success: bool = False
     error: Optional[str] = None
+    message: str = ""
     file_path: Optional[Path] = None
 
 
@@ -54,26 +72,118 @@ class SyncResult:
 class SyncSummary:
     """Summary of sync operation."""
 
-    tickets_synced: int = 0
+    tickets_created: int = 0
+    tickets_updated: int = 0
+    tickets_skipped: int = 0
     tickets_failed: int = 0
-    tasks_synced: int = 0
+    tasks_created: int = 0
+    tasks_updated: int = 0
+    tasks_skipped: int = 0
     tasks_failed: int = 0
+    requirements_created: int = 0
+    requirements_updated: int = 0
+    requirements_skipped: int = 0
+    requirements_failed: int = 0
+    design_updated: bool = False
+    design_skipped: bool = False
+    design_failed: bool = False
     ticket_results: List[SyncResult] = field(default_factory=list)
     task_results: List[SyncResult] = field(default_factory=list)
+    requirement_results: List[SyncResult] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     ticket_id_map: Dict[str, str] = field(default_factory=dict)
     task_id_map: Dict[str, str] = field(default_factory=dict)
+    requirement_id_map: Dict[str, str] = field(default_factory=dict)
+
+    # Backwards compatibility properties
+    @property
+    def tickets_synced(self) -> int:
+        """Total tickets successfully synced (created + updated)."""
+        return self.tickets_created + self.tickets_updated
+
+    @property
+    def tasks_synced(self) -> int:
+        """Total tasks successfully synced (created + updated)."""
+        return self.tasks_created + self.tasks_updated
+
+    @property
+    def requirements_synced(self) -> int:
+        """Total requirements successfully synced (created + updated)."""
+        return self.requirements_created + self.requirements_updated
+
+    def add_ticket_result(self, result: SyncResult) -> None:
+        """Add a ticket result and update counters."""
+        self.ticket_results.append(result)
+        if result.action == SyncAction.CREATED:
+            self.tickets_created += 1
+        elif result.action == SyncAction.UPDATED:
+            self.tickets_updated += 1
+        elif result.action == SyncAction.SKIPPED:
+            self.tickets_skipped += 1
+        elif result.action == SyncAction.FAILED:
+            self.tickets_failed += 1
+            if result.error:
+                self.errors.append(f"Ticket {result.local_id}: {result.error}")
+        if result.api_id:
+            self.ticket_id_map[result.local_id] = result.api_id
+
+    def add_task_result(self, result: SyncResult) -> None:
+        """Add a task result and update counters."""
+        self.task_results.append(result)
+        if result.action == SyncAction.CREATED:
+            self.tasks_created += 1
+        elif result.action == SyncAction.UPDATED:
+            self.tasks_updated += 1
+        elif result.action == SyncAction.SKIPPED:
+            self.tasks_skipped += 1
+        elif result.action == SyncAction.FAILED:
+            self.tasks_failed += 1
+            if result.error:
+                self.errors.append(f"Task {result.local_id}: {result.error}")
+        if result.api_id:
+            self.task_id_map[result.local_id] = result.api_id
+
+    def add_requirement_result(self, result: SyncResult) -> None:
+        """Add a requirement result and update counters."""
+        self.requirement_results.append(result)
+        if result.action == SyncAction.CREATED:
+            self.requirements_created += 1
+        elif result.action == SyncAction.UPDATED:
+            self.requirements_updated += 1
+        elif result.action == SyncAction.SKIPPED:
+            self.requirements_skipped += 1
+        elif result.action == SyncAction.FAILED:
+            self.requirements_failed += 1
+            if result.error:
+                self.errors.append(f"Requirement {result.local_id}: {result.error}")
+        if result.api_id:
+            self.requirement_id_map[result.local_id] = result.api_id
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for event payload."""
         return {
-            "tickets_synced": self.tickets_synced,
+            "tickets_created": self.tickets_created,
+            "tickets_updated": self.tickets_updated,
+            "tickets_skipped": self.tickets_skipped,
             "tickets_failed": self.tickets_failed,
-            "tasks_synced": self.tasks_synced,
+            "tickets_synced": self.tickets_synced,
+            "tasks_created": self.tasks_created,
+            "tasks_updated": self.tasks_updated,
+            "tasks_skipped": self.tasks_skipped,
             "tasks_failed": self.tasks_failed,
+            "tasks_synced": self.tasks_synced,
+            "requirements_created": self.requirements_created,
+            "requirements_updated": self.requirements_updated,
+            "requirements_skipped": self.requirements_skipped,
+            "requirements_failed": self.requirements_failed,
+            "requirements_synced": self.requirements_synced,
+            "design_updated": self.design_updated,
+            "design_skipped": self.design_skipped,
+            "design_failed": self.design_failed,
             "errors": self.errors,
             "ticket_ids": list(self.ticket_id_map.values()),
             "task_ids": list(self.task_id_map.values()),
+            "requirement_ids": list(self.requirement_id_map.values()),
         }
 
 
@@ -152,8 +262,8 @@ class MarkdownSyncService:
         json: Optional[Dict[str, Any]] = None,
     ) -> tuple[int, Optional[Dict[str, Any]]]:
         """Make HTTP request to API."""
-        if self.config.dry_run:
-            # Simulate successful creation in dry-run mode
+        if self.config.dry_run and method != "GET":
+            # Simulate successful creation/update in dry-run mode (but allow GET)
             return 201, {"id": f"dry-run-{endpoint.split('/')[-1]}"}
 
         client = await self._get_client()
@@ -177,8 +287,98 @@ class MarkdownSyncService:
 
         return 0, {"error": "Unknown error"}
 
+    async def _list_tickets(self) -> List[Dict[str, Any]]:
+        """Fetch existing tickets from API for the project."""
+        status, data = await self._request(
+            "GET", f"/api/v1/tickets?project_id={self.config.project_id}"
+        )
+        if status == 200 and isinstance(data, list):
+            return data
+        elif status == 200 and isinstance(data, dict):
+            # Handle paginated response
+            return data.get("items", data.get("tickets", []))
+        return []
+
+    async def _list_tasks(self) -> List[Dict[str, Any]]:
+        """Fetch existing tasks from API."""
+        status, data = await self._request("GET", "/api/v1/tasks")
+        if status == 200 and isinstance(data, list):
+            return data
+        elif status == 200 and isinstance(data, dict):
+            return data.get("items", data.get("tasks", []))
+        return []
+
+    async def _update_ticket(
+        self, ticket_id: str, payload: Dict[str, Any]
+    ) -> tuple[int, Optional[Dict[str, Any]]]:
+        """Update an existing ticket."""
+        return await self._request("PATCH", f"/api/v1/tickets/{ticket_id}", json=payload)
+
+    async def _update_task(
+        self, task_id: str, payload: Dict[str, Any]
+    ) -> tuple[int, Optional[Dict[str, Any]]]:
+        """Update an existing task."""
+        return await self._request("PATCH", f"/api/v1/tasks/{task_id}", json=payload)
+
+    # =========================================================================
+    # Spec Requirements and Design API Methods
+    # =========================================================================
+
+    async def _get_spec(self) -> Optional[Dict[str, Any]]:
+        """Fetch the spec with requirements and design."""
+        status, data = await self._request(
+            "GET", f"/api/v1/specs/{self.config.spec_id}"
+        )
+        if status == 200 and isinstance(data, dict):
+            return data
+        return None
+
+    async def _list_spec_requirements(self) -> List[Dict[str, Any]]:
+        """Fetch existing requirements for the spec."""
+        spec = await self._get_spec()
+        if spec:
+            return spec.get("requirements", [])
+        return []
+
+    async def _get_spec_design(self) -> Optional[Dict[str, Any]]:
+        """Fetch existing design for the spec."""
+        spec = await self._get_spec()
+        if spec:
+            return spec.get("design")
+        return None
+
+    async def _create_requirement(
+        self, payload: Dict[str, Any]
+    ) -> tuple[int, Optional[Dict[str, Any]]]:
+        """Create a new requirement for the spec."""
+        return await self._request(
+            "POST", f"/api/v1/specs/{self.config.spec_id}/requirements", json=payload
+        )
+
+    async def _update_requirement(
+        self, req_id: str, payload: Dict[str, Any]
+    ) -> tuple[int, Optional[Dict[str, Any]]]:
+        """Update an existing requirement."""
+        return await self._request(
+            "PATCH", f"/api/v1/specs/{self.config.spec_id}/requirements/{req_id}",
+            json=payload
+        )
+
+    async def _update_design(
+        self, design: Dict[str, Any]
+    ) -> tuple[int, Optional[Dict[str, Any]]]:
+        """Update the spec design."""
+        return await self._request(
+            "PUT", f"/api/v1/specs/{self.config.spec_id}/design", json=design
+        )
+
     async def sync_directory(self, output_dir: Path) -> SyncSummary:
         """Sync all markdown files from a directory.
+
+        Behavior:
+        - CREATE: If ticket/task doesn't exist (by title match)
+        - UPDATE: If exists but description differs
+        - SKIP: If exists with same description
 
         Args:
             output_dir: Directory containing tickets/ and tasks/ subdirectories
@@ -204,13 +404,21 @@ class MarkdownSyncService:
             },
         )
 
+        # Fetch existing items for comparison (create/update/skip logic)
+        existing_tickets = await self._list_tickets()
+        existing_tasks = await self._list_tasks()
+
+        # Build lookup by title for comparison
+        ticket_by_title = {t.get("title", ""): t for t in existing_tickets}
+        task_by_title = {t.get("title", ""): t for t in existing_tasks}
+
         # Sync tickets first (tasks depend on ticket IDs)
         if tickets_dir.exists():
-            await self._sync_tickets(tickets_dir, summary)
+            await self._sync_tickets(tickets_dir, summary, ticket_by_title)
 
         # Sync tasks (using ticket ID map for parent resolution)
         if tasks_dir.exists():
-            await self._sync_tasks(tasks_dir, summary)
+            await self._sync_tasks(tasks_dir, summary, task_by_title)
 
         await self._emit(
             EventTypes.SYNC_COMPLETED,
@@ -219,42 +427,114 @@ class MarkdownSyncService:
 
         return summary
 
-    async def _sync_tickets(self, tickets_dir: Path, summary: SyncSummary) -> None:
-        """Sync all ticket markdown files."""
+    async def _sync_tickets(
+        self,
+        tickets_dir: Path,
+        summary: SyncSummary,
+        existing_tickets: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """Sync all ticket markdown files with create/update/skip logic."""
         for ticket_file in sorted(tickets_dir.glob("TKT-*.md")):
-            result = await self._sync_ticket_file(ticket_file)
-            summary.ticket_results.append(result)
+            result = await self._sync_ticket_file(ticket_file, existing_tickets)
+            summary.add_ticket_result(result)
 
-            if result.success and result.api_id:
-                summary.tickets_synced += 1
-                summary.ticket_id_map[result.local_id] = result.api_id
-            else:
-                summary.tickets_failed += 1
-                if result.error:
-                    summary.errors.append(f"Ticket {result.local_id}: {result.error}")
-
-    async def _sync_ticket_file(self, file_path: Path) -> SyncResult:
-        """Sync a single ticket markdown file."""
+    async def _sync_ticket_file(
+        self,
+        file_path: Path,
+        existing_tickets: Dict[str, Dict[str, Any]],
+    ) -> SyncResult:
+        """Sync a single ticket markdown file with create/update/skip logic."""
         try:
             ticket, body = parse_ticket_markdown(file_path)
         except MarkdownParseError as e:
             return SyncResult(
                 local_id=file_path.stem,
+                action=SyncAction.FAILED,
                 success=False,
                 error=str(e),
                 file_path=file_path,
             )
 
-        # Convert to API payload
+        # Check if ticket already exists by title
+        existing = existing_tickets.get(ticket.title)
+
+        if existing:
+            # Ticket exists - check if we need to update description
+            existing_desc = (existing.get("description") or "").strip()
+            new_desc = body.strip()
+
+            if existing_desc == new_desc:
+                # Same description - skip
+                return SyncResult(
+                    local_id=ticket.id,
+                    action=SyncAction.SKIPPED,
+                    api_id=existing.get("id"),
+                    success=True,
+                    message="Already exists with same description",
+                    file_path=file_path,
+                )
+            else:
+                # Different description - update
+                if self.config.dry_run:
+                    return SyncResult(
+                        local_id=ticket.id,
+                        action=SyncAction.UPDATED,
+                        api_id=existing.get("id"),
+                        success=True,
+                        message="Would update description (dry run)",
+                        file_path=file_path,
+                    )
+
+                status, data = await self._update_ticket(
+                    existing["id"], {"description": body}
+                )
+                if status in (200, 201) and data:
+                    api_id = data.get("id", existing.get("id"))
+                    await self._emit(
+                        EventTypes.TICKET_UPDATED,
+                        data={
+                            "local_id": ticket.id,
+                            "api_id": api_id,
+                            "title": ticket.title,
+                        },
+                    )
+                    return SyncResult(
+                        local_id=ticket.id,
+                        action=SyncAction.UPDATED,
+                        api_id=api_id,
+                        success=True,
+                        message="Updated description",
+                        file_path=file_path,
+                    )
+                else:
+                    error = data.get("detail", str(data)) if data else f"HTTP {status}"
+                    return SyncResult(
+                        local_id=ticket.id,
+                        action=SyncAction.FAILED,
+                        success=False,
+                        error=error,
+                        file_path=file_path,
+                    )
+
+        # Ticket doesn't exist - create new
         payload = ticket.to_api_payload(
             project_id=self.config.project_id,
             spec_id=self.config.spec_id,
         )
-        payload["description"] = body  # Markdown body becomes description
+        payload["description"] = body
 
-        # Add user_id if configured
         if self.config.user_id:
             payload["user_id"] = self.config.user_id
+
+        if self.config.dry_run:
+            return SyncResult(
+                local_id=ticket.id,
+                action=SyncAction.CREATED,
+                api_id=f"dry-run-{ticket.id}",
+                success=True,
+                message="Would create (dry run)",
+                file_path=file_path,
+            )
 
         status, data = await self._request("POST", "/api/v1/tickets", json=payload)
 
@@ -270,44 +550,48 @@ class MarkdownSyncService:
             )
             return SyncResult(
                 local_id=ticket.id,
+                action=SyncAction.CREATED,
                 api_id=api_id,
                 success=True,
+                message="Created",
                 file_path=file_path,
             )
         else:
             error = data.get("detail", str(data)) if data else f"HTTP {status}"
             return SyncResult(
                 local_id=ticket.id,
+                action=SyncAction.FAILED,
                 success=False,
                 error=error,
                 file_path=file_path,
             )
 
-    async def _sync_tasks(self, tasks_dir: Path, summary: SyncSummary) -> None:
-        """Sync all task markdown files."""
+    async def _sync_tasks(
+        self,
+        tasks_dir: Path,
+        summary: SyncSummary,
+        existing_tasks: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """Sync all task markdown files with create/update/skip logic."""
         for task_file in sorted(tasks_dir.glob("TSK-*.md")):
-            result = await self._sync_task_file(task_file, summary.ticket_id_map)
-            summary.task_results.append(result)
-
-            if result.success and result.api_id:
-                summary.tasks_synced += 1
-                summary.task_id_map[result.local_id] = result.api_id
-            else:
-                summary.tasks_failed += 1
-                if result.error:
-                    summary.errors.append(f"Task {result.local_id}: {result.error}")
+            result = await self._sync_task_file(
+                task_file, summary.ticket_id_map, existing_tasks
+            )
+            summary.add_task_result(result)
 
     async def _sync_task_file(
         self,
         file_path: Path,
         ticket_id_map: Dict[str, str],
+        existing_tasks: Dict[str, Dict[str, Any]],
     ) -> SyncResult:
-        """Sync a single task markdown file."""
+        """Sync a single task markdown file with create/update/skip logic."""
         try:
             task, body = parse_task_markdown(file_path)
         except MarkdownParseError as e:
             return SyncResult(
                 local_id=file_path.stem,
+                action=SyncAction.FAILED,
                 success=False,
                 error=str(e),
                 file_path=file_path,
@@ -318,14 +602,87 @@ class MarkdownSyncService:
         if not ticket_api_id:
             return SyncResult(
                 local_id=task.id,
+                action=SyncAction.FAILED,
                 success=False,
                 error=f"Parent ticket {task.parent_ticket} not found in sync",
                 file_path=file_path,
             )
 
-        # Convert to API payload
+        # Check if task already exists by title
+        existing = existing_tasks.get(task.title)
+
+        if existing:
+            # Task exists - check if we need to update description
+            existing_desc = (existing.get("description") or "").strip()
+            new_desc = body.strip()
+
+            if existing_desc == new_desc:
+                # Same description - skip
+                return SyncResult(
+                    local_id=task.id,
+                    action=SyncAction.SKIPPED,
+                    api_id=existing.get("id"),
+                    success=True,
+                    message="Already exists with same description",
+                    file_path=file_path,
+                )
+            else:
+                # Different description - update
+                if self.config.dry_run:
+                    return SyncResult(
+                        local_id=task.id,
+                        action=SyncAction.UPDATED,
+                        api_id=existing.get("id"),
+                        success=True,
+                        message="Would update description (dry run)",
+                        file_path=file_path,
+                    )
+
+                status, data = await self._update_task(
+                    existing["id"], {"description": body}
+                )
+                if status in (200, 201) and data:
+                    api_id = data.get("id", existing.get("id"))
+                    await self._emit(
+                        EventTypes.TASK_UPDATED,
+                        data={
+                            "local_id": task.id,
+                            "api_id": api_id,
+                            "ticket_api_id": ticket_api_id,
+                            "title": task.title,
+                        },
+                    )
+                    return SyncResult(
+                        local_id=task.id,
+                        action=SyncAction.UPDATED,
+                        api_id=api_id,
+                        success=True,
+                        message="Updated description",
+                        file_path=file_path,
+                    )
+                else:
+                    error = data.get("detail", str(data)) if data else f"HTTP {status}"
+                    return SyncResult(
+                        local_id=task.id,
+                        action=SyncAction.FAILED,
+                        success=False,
+                        error=error,
+                        file_path=file_path,
+                    )
+
+        # Task doesn't exist - create new
         payload = task.to_api_payload(ticket_api_id=ticket_api_id)
-        payload["description"] = body  # Markdown body becomes description
+        payload["description"] = body
+
+        if self.config.dry_run:
+            return SyncResult(
+                local_id=task.id,
+                action=SyncAction.CREATED,
+                api_id=f"dry-run-{task.id}",
+                success=True,
+                message="Would create (dry run)",
+                file_path=file_path,
+            )
 
         status, data = await self._request("POST", "/api/v1/tasks", json=payload)
 
@@ -342,14 +699,17 @@ class MarkdownSyncService:
             )
             return SyncResult(
                 local_id=task.id,
+                action=SyncAction.CREATED,
                 api_id=api_id,
                 success=True,
+                message="Created",
                 file_path=file_path,
             )
         else:
             error = data.get("detail", str(data)) if data else f"HTTP {status}"
             return SyncResult(
                 local_id=task.id,
+                action=SyncAction.FAILED,
                 success=False,
                 error=error,
                 file_path=file_path,
@@ -361,8 +721,10 @@ class MarkdownSyncService:
     ) -> SyncSummary:
         """Sync directly from TASKS phase output (without markdown files).
 
-        This is an alternative to sync_directory when you have the
-        phase output in memory and don't need to read from files.
+        Behavior:
+        - CREATE: If ticket/task doesn't exist (by title match)
+        - UPDATE: If exists but description differs
+        - SKIP: If exists with same description
 
         Args:
             tasks_output: Output from TASKS phase with tickets and tasks
@@ -384,31 +746,25 @@ class MarkdownSyncService:
             },
         )
 
-        # Create tickets
+        # Fetch existing items for comparison (create/update/skip logic)
+        existing_tickets = await self._list_tickets()
+        existing_tasks = await self._list_tasks()
+
+        # Build lookup by title for comparison
+        ticket_by_title = {t.get("title", ""): t for t in existing_tickets}
+        task_by_title = {t.get("title", ""): t for t in existing_tasks}
+
+        # Sync tickets
         for ticket_data in tickets:
-            result = await self._sync_ticket_dict(ticket_data)
-            summary.ticket_results.append(result)
+            result = await self._sync_ticket_dict(ticket_data, ticket_by_title)
+            summary.add_ticket_result(result)
 
-            if result.success and result.api_id:
-                summary.tickets_synced += 1
-                summary.ticket_id_map[result.local_id] = result.api_id
-            else:
-                summary.tickets_failed += 1
-                if result.error:
-                    summary.errors.append(f"Ticket {result.local_id}: {result.error}")
-
-        # Create tasks
+        # Sync tasks
         for task_data in tasks:
-            result = await self._sync_task_dict(task_data, summary.ticket_id_map)
-            summary.task_results.append(result)
-
-            if result.success and result.api_id:
-                summary.tasks_synced += 1
-                summary.task_id_map[result.local_id] = result.api_id
-            else:
-                summary.tasks_failed += 1
-                if result.error:
-                    summary.errors.append(f"Task {result.local_id}: {result.error}")
+            result = await self._sync_task_dict(
+                task_data, summary.ticket_id_map, task_by_title
+            )
+            summary.add_task_result(result)
 
         await self._emit(
             EventTypes.SYNC_COMPLETED,
@@ -417,13 +773,71 @@ class MarkdownSyncService:
 
         return summary
 
-    async def _sync_ticket_dict(self, ticket_data: Dict[str, Any]) -> SyncResult:
-        """Sync a ticket from dict data."""
+    async def _sync_ticket_dict(
+        self,
+        ticket_data: Dict[str, Any],
+        existing_tickets: Dict[str, Dict[str, Any]],
+    ) -> SyncResult:
+        """Sync a ticket from dict data with create/update/skip logic."""
         local_id = ticket_data.get("id", "unknown")
         title = ticket_data.get("title", local_id)
         description = ticket_data.get("description", "")
         priority = ticket_data.get("priority", "MEDIUM")
 
+        # Check if ticket already exists by title
+        existing = existing_tickets.get(title)
+
+        if existing:
+            # Ticket exists - check if we need to update description
+            existing_desc = (existing.get("description") or "").strip()
+            new_desc = description.strip()
+
+            if existing_desc == new_desc:
+                # Same description - skip
+                return SyncResult(
+                    local_id=local_id,
+                    action=SyncAction.SKIPPED,
+                    api_id=existing.get("id"),
+                    success=True,
+                    message="Already exists with same description",
+                )
+            else:
+                # Different description - update
+                if self.config.dry_run:
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.UPDATED,
+                        api_id=existing.get("id"),
+                        success=True,
+                        message="Would update description (dry run)",
+                    )
+
+                status, data = await self._update_ticket(
+                    existing["id"], {"description": description}
+                )
+                if status in (200, 201) and data:
+                    api_id = data.get("id", existing.get("id"))
+                    await self._emit(
+                        EventTypes.TICKET_UPDATED,
+                        data={"local_id": local_id, "api_id": api_id, "title": title},
+                    )
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.UPDATED,
+                        api_id=api_id,
+                        success=True,
+                        message="Updated description",
+                    )
+                else:
+                    error = data.get("detail", str(data)) if data else f"HTTP {status}"
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.FAILED,
+                        success=False,
+                        error=error,
+                    )
+
+        # Ticket doesn't exist - create new
         payload = {
             "title": title,
             "description": description,
@@ -439,6 +853,15 @@ class MarkdownSyncService:
         if self.config.user_id:
             payload["user_id"] = self.config.user_id
 
+        if self.config.dry_run:
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.CREATED,
+                api_id=f"dry-run-{local_id}",
+                success=True,
+                message="Would create (dry run)",
+            )
+
         status, data = await self._request("POST", "/api/v1/tickets", json=payload)
 
         if status in (200, 201) and data:
@@ -447,17 +870,29 @@ class MarkdownSyncService:
                 EventTypes.TICKET_CREATED,
                 data={"local_id": local_id, "api_id": api_id, "title": title},
             )
-            return SyncResult(local_id=local_id, api_id=api_id, success=True)
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.CREATED,
+                api_id=api_id,
+                success=True,
+                message="Created",
+            )
         else:
             error = data.get("detail", str(data)) if data else f"HTTP {status}"
-            return SyncResult(local_id=local_id, success=False, error=error)
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.FAILED,
+                success=False,
+                error=error,
+            )
 
     async def _sync_task_dict(
         self,
         task_data: Dict[str, Any],
         ticket_id_map: Dict[str, str],
+        existing_tasks: Dict[str, Dict[str, Any]],
     ) -> SyncResult:
-        """Sync a task from dict data."""
+        """Sync a task from dict data with create/update/skip logic."""
         local_id = task_data.get("id", "unknown")
         title = task_data.get("title", local_id)
         description = task_data.get("description", task_data.get("objective", ""))
@@ -469,10 +904,70 @@ class MarkdownSyncService:
         if not ticket_api_id:
             return SyncResult(
                 local_id=local_id,
+                action=SyncAction.FAILED,
                 success=False,
                 error=f"Parent ticket {parent_ticket} not found",
             )
 
+        # Check if task already exists by title
+        existing = existing_tasks.get(title)
+
+        if existing:
+            # Task exists - check if we need to update description
+            existing_desc = (existing.get("description") or "").strip()
+            new_desc = description.strip()
+
+            if existing_desc == new_desc:
+                # Same description - skip
+                return SyncResult(
+                    local_id=local_id,
+                    action=SyncAction.SKIPPED,
+                    api_id=existing.get("id"),
+                    success=True,
+                    message="Already exists with same description",
+                )
+            else:
+                # Different description - update
+                if self.config.dry_run:
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.UPDATED,
+                        api_id=existing.get("id"),
+                        success=True,
+                        message="Would update description (dry run)",
+                    )
+
+                status, data = await self._update_task(
+                    existing["id"], {"description": description}
+                )
+                if status in (200, 201) and data:
+                    api_id = data.get("id", existing.get("id"))
+                    await self._emit(
+                        EventTypes.TASK_UPDATED,
+                        data={
+                            "local_id": local_id,
+                            "api_id": api_id,
+                            "ticket_api_id": ticket_api_id,
+                            "title": title,
+                        },
+                    )
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.UPDATED,
+                        api_id=api_id,
+                        success=True,
+                        message="Updated description",
+                    )
+                else:
+                    error = data.get("detail", str(data)) if data else f"HTTP {status}"
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.FAILED,
+                        success=False,
+                        error=error,
+                    )
+
+        # Task doesn't exist - create new
         payload = {
             "ticket_id": ticket_api_id,
             "title": title,
@@ -480,6 +975,15 @@ class MarkdownSyncService:
             "task_type": task_type,
             "priority": priority,
         }
+
+        if self.config.dry_run:
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.CREATED,
+                api_id=f"dry-run-{local_id}",
+                success=True,
+                message="Would create (dry run)",
+            )
 
         status, data = await self._request("POST", "/api/v1/tasks", json=payload)
 
@@ -494,7 +998,301 @@ class MarkdownSyncService:
                     "title": title,
                 },
             )
-            return SyncResult(local_id=local_id, api_id=api_id, success=True)
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.CREATED,
+                api_id=api_id,
+                success=True,
+                message="Created",
+            )
         else:
             error = data.get("detail", str(data)) if data else f"HTTP {status}"
-            return SyncResult(local_id=local_id, success=False, error=error)
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.FAILED,
+                success=False,
+                error=error,
+            )
+
+    # =========================================================================
+    # Requirements and Design Sync Methods
+    # =========================================================================
+
+    async def sync_requirements_to_spec(
+        self,
+        requirements: List[Dict[str, Any]],
+        summary: Optional[SyncSummary] = None,
+    ) -> SyncSummary:
+        """Sync requirements to the spec document.
+
+        Args:
+            requirements: List of requirement dicts with title, condition, action
+            summary: Optional existing summary to add to
+
+        Returns:
+            SyncSummary with results
+        """
+        if summary is None:
+            summary = SyncSummary()
+
+        await self._emit(
+            EventTypes.REQUIREMENTS_SYNC_STARTED,
+            data={"requirement_count": len(requirements)},
+        )
+
+        # Fetch existing requirements for comparison
+        existing_reqs = await self._list_spec_requirements()
+        req_by_title = {r.get("title", ""): r for r in existing_reqs}
+
+        for req_data in requirements:
+            result = await self._sync_requirement(req_data, req_by_title)
+            summary.add_requirement_result(result)
+
+        await self._emit(
+            EventTypes.REQUIREMENTS_SYNC_COMPLETED,
+            data={
+                "requirements_created": summary.requirements_created,
+                "requirements_updated": summary.requirements_updated,
+                "requirements_skipped": summary.requirements_skipped,
+                "requirements_failed": summary.requirements_failed,
+            },
+        )
+
+        return summary
+
+    async def _sync_requirement(
+        self,
+        req_data: Dict[str, Any],
+        existing_reqs: Dict[str, Dict[str, Any]],
+    ) -> SyncResult:
+        """Sync a single requirement with create/update/skip logic."""
+        local_id = req_data.get("id", "unknown")
+        title = req_data.get("title", local_id)
+        condition = req_data.get("condition", "")
+        action = req_data.get("action", "")
+        linked_design = req_data.get("linked_design")
+
+        # Check if requirement already exists by title
+        existing = existing_reqs.get(title)
+
+        if existing:
+            # Requirement exists - check if we need to update
+            existing_condition = existing.get("condition", "").strip()
+            existing_action = existing.get("action", "").strip()
+
+            if existing_condition == condition.strip() and existing_action == action.strip():
+                # Same content - skip
+                return SyncResult(
+                    local_id=local_id,
+                    action=SyncAction.SKIPPED,
+                    api_id=existing.get("id"),
+                    success=True,
+                    message="Already exists with same content",
+                )
+            else:
+                # Different content - update
+                if self.config.dry_run:
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.UPDATED,
+                        api_id=existing.get("id"),
+                        success=True,
+                        message="Would update (dry run)",
+                    )
+
+                payload = {"condition": condition, "action": action}
+                if linked_design:
+                    payload["linked_design"] = linked_design
+
+                status, data = await self._update_requirement(existing["id"], payload)
+                if status in (200, 201) and data:
+                    api_id = data.get("id", existing.get("id"))
+                    await self._emit(
+                        EventTypes.REQUIREMENT_UPDATED,
+                        data={"local_id": local_id, "api_id": api_id, "title": title},
+                    )
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.UPDATED,
+                        api_id=api_id,
+                        success=True,
+                        message="Updated",
+                    )
+                else:
+                    error = data.get("detail", str(data)) if data else f"HTTP {status}"
+                    return SyncResult(
+                        local_id=local_id,
+                        action=SyncAction.FAILED,
+                        success=False,
+                        error=error,
+                    )
+
+        # Requirement doesn't exist - create new
+        payload = {
+            "title": title,
+            "condition": condition,
+            "action": action,
+        }
+        if linked_design:
+            payload["linked_design"] = linked_design
+
+        if self.config.dry_run:
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.CREATED,
+                api_id=f"dry-run-{local_id}",
+                success=True,
+                message="Would create (dry run)",
+            )
+
+        status, data = await self._create_requirement(payload)
+
+        if status in (200, 201) and data:
+            api_id = data.get("id")
+            await self._emit(
+                EventTypes.REQUIREMENT_CREATED,
+                data={"local_id": local_id, "api_id": api_id, "title": title},
+            )
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.CREATED,
+                api_id=api_id,
+                success=True,
+                message="Created",
+            )
+        else:
+            error = data.get("detail", str(data)) if data else f"HTTP {status}"
+            return SyncResult(
+                local_id=local_id,
+                action=SyncAction.FAILED,
+                success=False,
+                error=error,
+            )
+
+    async def sync_design_to_spec(
+        self,
+        design: Dict[str, Any],
+        summary: Optional[SyncSummary] = None,
+    ) -> SyncSummary:
+        """Sync design to the spec document.
+
+        Args:
+            design: Design dict with architecture, data_model, api_spec
+            summary: Optional existing summary to add to
+
+        Returns:
+            SyncSummary with results
+        """
+        if summary is None:
+            summary = SyncSummary()
+
+        await self._emit(
+            EventTypes.DESIGN_SYNC_STARTED,
+            data={"has_architecture": bool(design.get("architecture"))},
+        )
+
+        # Fetch existing design for comparison
+        existing_design = await self._get_spec_design()
+
+        # Compare designs (simple check - could be more sophisticated)
+        if existing_design and self._designs_equal(existing_design, design):
+            summary.design_skipped = True
+            await self._emit(
+                EventTypes.DESIGN_SYNC_COMPLETED,
+                data={"design_skipped": True, "reason": "No changes"},
+            )
+            return summary
+
+        # Update design
+        if self.config.dry_run:
+            summary.design_updated = True
+            await self._emit(
+                EventTypes.DESIGN_SYNC_COMPLETED,
+                data={"design_updated": True, "dry_run": True},
+            )
+            return summary
+
+        status, data = await self._update_design(design)
+
+        if status in (200, 201):
+            summary.design_updated = True
+            await self._emit(
+                EventTypes.DESIGN_UPDATED,
+                data={"spec_id": self.config.spec_id},
+            )
+            await self._emit(
+                EventTypes.DESIGN_SYNC_COMPLETED,
+                data={"design_updated": True},
+            )
+        else:
+            summary.design_failed = True
+            error = data.get("detail", str(data)) if data else f"HTTP {status}"
+            summary.errors.append(f"Design sync failed: {error}")
+            await self._emit(
+                EventTypes.DESIGN_SYNC_COMPLETED,
+                data={"design_failed": True, "error": error},
+            )
+
+        return summary
+
+    def _designs_equal(
+        self, existing: Dict[str, Any], new: Dict[str, Any]
+    ) -> bool:
+        """Compare two designs for equality."""
+        import json
+
+        # Compare architecture
+        if existing.get("architecture") != new.get("architecture"):
+            return False
+
+        # Compare data_model
+        if existing.get("data_model") != new.get("data_model"):
+            return False
+
+        # Compare api_spec (normalize to compare)
+        existing_api = existing.get("api_spec", [])
+        new_api = new.get("api_spec", [])
+        if len(existing_api) != len(new_api):
+            return False
+
+        # Simple comparison - could be more sophisticated
+        return json.dumps(existing_api, sort_keys=True) == json.dumps(new_api, sort_keys=True)
+
+    async def sync_phase_outputs_to_spec(
+        self,
+        requirements_output: Optional[Dict[str, Any]] = None,
+        design_output: Optional[Dict[str, Any]] = None,
+    ) -> SyncSummary:
+        """Sync requirements and design phase outputs to the spec document.
+
+        This is the main method to sync the outputs of REQUIREMENTS and DESIGN
+        phases to the spec document API. It handles both requirements and design
+        in a single call for convenience.
+
+        Args:
+            requirements_output: Output from REQUIREMENTS phase
+            design_output: Output from DESIGN phase
+
+        Returns:
+            SyncSummary with combined results
+        """
+        summary = SyncSummary()
+
+        # Sync requirements if provided
+        if requirements_output:
+            requirements = requirements_output.get("requirements", [])
+            if requirements:
+                await self.sync_requirements_to_spec(requirements, summary)
+
+        # Sync design if provided
+        if design_output:
+            design = {
+                "architecture": design_output.get("architecture"),
+                "data_model": design_output.get("data_model"),
+                "api_spec": design_output.get("api_spec", []),
+            }
+            # Only sync if there's actual design content
+            if any(design.values()):
+                await self.sync_design_to_spec(design, summary)
+
+        return summary

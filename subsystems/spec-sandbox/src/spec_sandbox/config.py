@@ -72,7 +72,7 @@ class SpecSandboxSettings(BaseSettings):
     )
 
     # === Execution Limits ===
-    max_turns: int = Field(default=50, description="Max turns per phase")
+    max_turns: int = Field(default=65, description="Max turns per phase")
     max_budget_usd: float = Field(default=10.0, description="Max budget in USD")
     use_mock: bool = Field(
         default=False,

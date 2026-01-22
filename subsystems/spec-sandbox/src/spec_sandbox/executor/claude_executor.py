@@ -47,7 +47,7 @@ class ExecutorConfig:
         default_factory=lambda: ["Read", "Write", "Edit", "Glob", "Grep", "Bash", "Task", "Explore", "Agent", "Skill"]
     )
     cwd: Optional[Path] = None
-    timeout_seconds: int = 600  # 10 minutes per phase
+    timeout_seconds: int = 900  # 15 minutes per phase (increased for TASKS phase)
     use_mock: bool = False  # Force mock execution for testing
 
 
