@@ -608,7 +608,14 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
       <div className="hidden w-56 flex-shrink-0 border-r bg-muted/30 lg:block">
         <div className="flex h-full flex-col">
           <div className="border-b p-4">
-            <Select value={specId}>
+            <Select
+              value={specId}
+              onValueChange={(newSpecId) => {
+                if (newSpecId !== specId) {
+                  router.push(`/projects/${id}/specs/${newSpecId}`)
+                }
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select spec" />
               </SelectTrigger>
