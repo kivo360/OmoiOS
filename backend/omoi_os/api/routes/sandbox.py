@@ -1890,6 +1890,96 @@ async def sandbox_health():
     }
 
 
+@router.get("/monitoring/status", response_model=dict)
+async def get_sandbox_monitoring_status():
+    """Get status of all active sandboxes including phase completion.
+
+    Returns monitoring information for all sandboxes with recent heartbeats.
+    For spec sandboxes (sandbox_id starting with 'spec-'), includes detailed
+    phase completion status.
+
+    This endpoint is useful for:
+    - Monitoring sandbox health
+    - Detecting stuck sandboxes
+    - Viewing phase completion progress for spec sandboxes
+
+    Returns:
+        Dictionary with:
+        - sandboxes: List of sandbox status objects
+        - active_count: Number of active sandboxes
+        - spec_sandbox_count: Number of spec sandboxes
+        - stuck_count: Number of sandboxes detected as stuck
+    """
+    from omoi_os.services.idle_sandbox_monitor import IdleSandboxMonitor
+    from omoi_os.services.daytona_spawner import get_daytona_spawner_service
+
+    db = get_db_service()
+    daytona_spawner = get_daytona_spawner_service()
+    monitor = IdleSandboxMonitor(db=db, daytona_spawner=daytona_spawner)
+
+    statuses = monitor.get_all_sandbox_status()
+
+    # Compute summary statistics
+    spec_sandbox_count = sum(
+        1 for s in statuses if s["sandbox_id"].startswith("spec-")
+    )
+    stuck_count = sum(
+        1 for s in statuses
+        if s.get("activity", {}).get("is_idle")
+        or (s.get("phase_status", {}) or {}).get("is_stuck_between_phases")
+    )
+
+    return {
+        "sandboxes": statuses,
+        "active_count": len(statuses),
+        "spec_sandbox_count": spec_sandbox_count,
+        "stuck_count": stuck_count,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/{sandbox_id}/phase-status", response_model=dict)
+async def get_sandbox_phase_status(sandbox_id: str):
+    """Get phase completion status for a specific sandbox.
+
+    For spec sandboxes (sandbox_id starting with 'spec-'), returns detailed
+    information about which phases have completed, which have started,
+    and whether the sandbox is stuck between phases.
+
+    For non-spec sandboxes, returns basic status indicating it's not a spec sandbox.
+
+    Args:
+        sandbox_id: The sandbox identifier (from URL path)
+
+    Returns:
+        Phase status dictionary with:
+        - is_spec_sandbox: Whether this is a spec sandbox
+        - phases_completed: List of completed phase names
+        - phases_started: List of started phase names
+        - last_phase_completed: Name of last completed phase
+        - next_expected_phase: Name of next expected phase
+        - is_stuck_between_phases: Whether sandbox appears stuck
+        - has_execution_completed: Whether execution completed successfully
+        - has_execution_failed: Whether execution failed
+    """
+    from omoi_os.services.idle_sandbox_monitor import IdleSandboxMonitor
+    from omoi_os.services.daytona_spawner import get_daytona_spawner_service
+
+    db = get_db_service()
+    daytona_spawner = get_daytona_spawner_service()
+    monitor = IdleSandboxMonitor(db=db, daytona_spawner=daytona_spawner)
+
+    phase_status = monitor.get_phase_completion_status(sandbox_id)
+    activity = monitor.check_sandbox_activity(sandbox_id)
+
+    return {
+        "sandbox_id": sandbox_id,
+        "phase_status": phase_status,
+        "activity": activity,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 @router.get("/{sandbox_id}/events", response_model=SandboxEventsListResponse)
 async def get_sandbox_events(
     sandbox_id: str,
