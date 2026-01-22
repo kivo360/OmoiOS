@@ -708,280 +708,164 @@ Define each component's:
 - Dependencies
 - Interface methods
 
+## Description Format (CRITICAL - Rich Markdown for UI Display)
+
+All description fields MUST contain rich markdown that can be displayed directly in a UI. This includes:
+- `architecture_overview` - Full markdown with sections, code blocks, diagrams
+- `components[].description` - Rich markdown for each component
+- `data_models[].description` - Rich markdown for each data model
+- `api_endpoints[].description` - Rich markdown for each endpoint
+
+**⚠️ OUTPUT SIZE LIMITS - CRITICAL:**
+- Keep `architecture_overview` to 300-500 words max
+- Keep each component/model/endpoint description to 100-200 words max
+- Use bullet points instead of paragraphs where possible
+- Code examples should be 3-8 lines max, showing patterns not full implementations
+- Total JSON output should be under 50KB to avoid API limits
+
+### Component Description Format
+```markdown
+## Purpose
+What this component does and why it exists (2-3 sentences).
+
+## Responsibility
+Single responsibility principle - what this component owns.
+
+## Dependencies
+- **ServiceA**: Used for X
+- **ServiceB**: Used for Y
+
+## Key Methods
+
+### `method_name(args) -> ReturnType`
+Description of what this method does.
+
+**Example:**
+```python
+result = await service.method_name(arg1, arg2)
+```
+
+## Integration Points
+How this component integrates with other parts of the system.
+
+## Error Handling
+How errors are handled and propagated.
+```
+
+### Data Model Description Format
+```markdown
+## Purpose
+What data this model stores and why.
+
+## Usage Context
+Where and how this model is used in the system.
+
+## Field Details
+
+### `field_name` (Type)
+Description of what this field represents, constraints, and valid values.
+
+## Relationships
+- **belongs_to**: Parent model relationships
+- **has_many**: Child model relationships
+
+## Indexes & Performance
+Why specific indexes exist and what queries they optimize.
+
+## Example Record
+```json
+{{
+  "id": "uuid",
+  "field": "value"
+}}
+```
+```
+
+### API Endpoint Description Format
+```markdown
+## Purpose
+What this endpoint does (1-2 sentences).
+
+## Use Cases
+- Use case 1
+- Use case 2
+
+## Request Example
+```bash
+curl -X POST /api/v1/endpoint \\
+  -H "Authorization: Bearer token" \\
+  -d '{{"field": "value"}}'
+```
+
+## Response Example
+```json
+{{
+  "id": "uuid",
+  "status": "success"
+}}
+```
+
+## Error Scenarios
+| Status | Condition | Response |
+|--------|-----------|----------|
+| 400 | Invalid input | Error details |
+| 404 | Not found | Error message |
+```
+
 ## Required Output Format
 
-When complete, you MUST write a JSON file with this structure:
+When complete, you MUST write a JSON file with this structure. **Keep descriptions concise (100-200 words max per item) to stay under API limits.**
 
 ```json
 {{
     "feature_name": "webhook-notifications",
-    "architecture_overview": "The webhook system integrates with the existing EventBusService to capture events and deliver them to external HTTP endpoints. It consists of three main components: WebhookSubscriptionService (manages subscriptions), WebhookDeliveryService (handles HTTP delivery with retries), and WebhookNotificationService (bridges EventBus to delivery).",
-    "architecture_diagram": "EventBus -> WebhookNotificationService -> WebhookDeliveryService -> External URL\\n                                    |                          |\\n                              SubscriptionService          DeliveryLog",
+    "architecture_overview": "## Overview\\nWebhook system for real-time event notifications to external HTTP endpoints.\\n\\n## Components\\n- **WebhookSubscriptionService**: Manages registrations\\n- **WebhookDeliveryService**: HTTP delivery with retries\\n\\n## Data Flow\\n1. Event published to EventBus\\n2. Subscriptions matched\\n3. HTTP POST with HMAC signature\\n4. Retry on failure",
+    "architecture_diagram": "```mermaid\\nflowchart LR\\n    EB[EventBus] --> WS[SubscriptionService]\\n    WS --> WD[DeliveryService]\\n    WD --> EXT[External URL]\\n```",
     "components": [
         {{
             "name": "WebhookSubscriptionService",
             "type": "service",
-            "file_path": "omoi_os/services/webhook_subscription.py",
-            "responsibility": "Manages webhook subscription CRUD operations and validation",
+            "file_path": "services/webhook_subscription.py",
+            "description": "## Purpose\\nManages webhook subscription CRUD.\\n\\n## Key Methods\\n- `create_subscription(url, events)`: Register endpoint\\n- `get_subscriptions_for_event(event_type)`: Find matching subscriptions",
+            "responsibility": "Webhook subscription CRUD and validation",
             "interfaces": [
-                {{
-                    "method": "create_subscription",
-                    "inputs": {{"url": "str", "events": "list[str]", "secret": "str"}},
-                    "outputs": {{"subscription": "WebhookSubscription"}},
-                    "description": "Creates a new webhook subscription"
-                }},
-                {{
-                    "method": "get_subscriptions_for_event",
-                    "inputs": {{"event_type": "str"}},
-                    "outputs": {{"subscriptions": "list[WebhookSubscription]"}},
-                    "description": "Returns all active subscriptions for an event type"
-                }},
-                {{
-                    "method": "delete_subscription",
-                    "inputs": {{"subscription_id": "UUID"}},
-                    "outputs": {{"success": "bool"}},
-                    "description": "Soft-deletes a subscription"
-                }}
+                {{"method": "create_subscription", "inputs": {{"url": "str", "events": "list[str]"}}, "outputs": {{"subscription": "WebhookSubscription"}}}}
             ],
-            "dependencies": ["WebhookSubscriptionRepository", "DatabaseService"]
-        }},
-        {{
-            "name": "WebhookDeliveryService",
-            "type": "service",
-            "file_path": "omoi_os/services/webhook_delivery.py",
-            "responsibility": "Handles HTTP delivery of webhook payloads with retry logic",
-            "interfaces": [
-                {{
-                    "method": "deliver",
-                    "inputs": {{"subscription": "WebhookSubscription", "event_type": "str", "payload": "dict"}},
-                    "outputs": {{"delivery": "WebhookDelivery"}},
-                    "description": "Delivers webhook with retry logic and signature"
-                }},
-                {{
-                    "method": "_generate_signature",
-                    "inputs": {{"payload": "bytes", "secret": "str"}},
-                    "outputs": {{"signature": "str"}},
-                    "description": "Generates HMAC-SHA256 signature for payload"
-                }}
-            ],
-            "dependencies": ["httpx", "WebhookDeliveryRepository"]
-        }},
-        {{
-            "name": "WebhookNotificationService",
-            "type": "service",
-            "file_path": "omoi_os/services/webhook_notification.py",
-            "responsibility": "Bridges EventBusService to webhook delivery",
-            "interfaces": [
-                {{
-                    "method": "handle_event",
-                    "inputs": {{"event": "Event"}},
-                    "outputs": {{"deliveries": "list[WebhookDelivery]"}},
-                    "description": "Handles an event and triggers webhook deliveries"
-                }}
-            ],
-            "dependencies": ["EventBusService", "WebhookSubscriptionService", "WebhookDeliveryService"]
+            "dependencies": ["DatabaseService"]
         }}
     ],
     "data_models": [
         {{
             "name": "WebhookSubscription",
             "table_name": "webhook_subscriptions",
-            "description": "Stores webhook subscription configurations",
+            "description": "## Purpose\\nStores webhook configurations: URL, event filters, secret.\\n\\n## Key Fields\\n- `url`: Target endpoint\\n- `events`: Array of event types\\n- `secret`: HMAC signing key",
             "fields": {{
-                "id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
-                "project_id": "UUID NOT NULL REFERENCES projects(id)",
+                "id": "UUID PRIMARY KEY",
                 "url": "VARCHAR(2048) NOT NULL",
-                "secret": "VARCHAR(256) NOT NULL",
                 "events": "TEXT[] NOT NULL",
-                "is_active": "BOOLEAN DEFAULT true",
-                "created_at": "TIMESTAMP WITH TIME ZONE DEFAULT NOW()",
-                "updated_at": "TIMESTAMP WITH TIME ZONE DEFAULT NOW()",
-                "deleted_at": "TIMESTAMP WITH TIME ZONE"
+                "secret": "VARCHAR(256) NOT NULL",
+                "is_active": "BOOLEAN DEFAULT true"
             }},
-            "indexes": [
-                "CREATE INDEX idx_webhook_sub_project ON webhook_subscriptions(project_id)",
-                "CREATE INDEX idx_webhook_sub_events ON webhook_subscriptions USING GIN(events)",
-                "CREATE INDEX idx_webhook_sub_active ON webhook_subscriptions(is_active) WHERE is_active = true"
-            ],
-            "relationships": [
-                "belongs_to Project (project_id)",
-                "has_many WebhookDelivery"
-            ]
-        }},
-        {{
-            "name": "WebhookDelivery",
-            "table_name": "webhook_deliveries",
-            "description": "Tracks individual webhook delivery attempts",
-            "fields": {{
-                "id": "UUID PRIMARY KEY DEFAULT gen_random_uuid()",
-                "subscription_id": "UUID NOT NULL REFERENCES webhook_subscriptions(id)",
-                "event_type": "VARCHAR(100) NOT NULL",
-                "payload": "JSONB NOT NULL",
-                "status": "VARCHAR(20) NOT NULL DEFAULT 'pending'",
-                "attempts": "INTEGER DEFAULT 0",
-                "last_attempt_at": "TIMESTAMP WITH TIME ZONE",
-                "response_status": "INTEGER",
-                "response_body": "TEXT",
-                "error_message": "TEXT",
-                "created_at": "TIMESTAMP WITH TIME ZONE DEFAULT NOW()"
-            }},
-            "indexes": [
-                "CREATE INDEX idx_webhook_del_sub ON webhook_deliveries(subscription_id)",
-                "CREATE INDEX idx_webhook_del_status ON webhook_deliveries(status)",
-                "CREATE INDEX idx_webhook_del_created ON webhook_deliveries(created_at)"
-            ],
-            "relationships": [
-                "belongs_to WebhookSubscription (subscription_id)"
-            ]
+            "indexes": ["CREATE INDEX idx_events ON webhook_subscriptions USING GIN(events)"],
+            "relationships": ["has_many WebhookDelivery"]
         }}
     ],
     "api_endpoints": [
         {{
             "method": "POST",
             "path": "/api/v1/webhooks",
-            "description": "Create a new webhook subscription",
+            "description": "Create webhook subscription",
             "auth_required": true,
-            "request_schema": {{
-                "url": "string (required, valid URL)",
-                "events": "array of strings (required, event types to subscribe to)",
-                "secret": "string (optional, auto-generated if not provided)"
-            }},
-            "response_schema": {{
-                "id": "uuid",
-                "url": "string",
-                "events": "array",
-                "is_active": "boolean",
-                "created_at": "timestamp"
-            }},
-            "error_responses": {{
-                "400": "Validation error (invalid URL, empty events)",
-                "401": "Unauthorized",
-                "409": "Subscription already exists for this URL"
-            }}
-        }},
-        {{
-            "method": "GET",
-            "path": "/api/v1/webhooks",
-            "description": "List all webhook subscriptions for the project",
-            "auth_required": true,
-            "query_params": {{
-                "is_active": "boolean (optional, filter by active status)",
-                "limit": "integer (optional, default 50)",
-                "offset": "integer (optional, default 0)"
-            }},
-            "response_schema": {{
-                "items": "array of WebhookSubscription",
-                "total": "integer",
-                "limit": "integer",
-                "offset": "integer"
-            }},
-            "error_responses": {{
-                "401": "Unauthorized"
-            }}
-        }},
-        {{
-            "method": "GET",
-            "path": "/api/v1/webhooks/{{id}}",
-            "description": "Get a specific webhook subscription",
-            "auth_required": true,
-            "path_params": ["id"],
-            "response_schema": {{
-                "id": "uuid",
-                "url": "string",
-                "events": "array",
-                "is_active": "boolean",
-                "created_at": "timestamp",
-                "updated_at": "timestamp"
-            }},
-            "error_responses": {{
-                "401": "Unauthorized",
-                "404": "Subscription not found"
-            }}
-        }},
-        {{
-            "method": "DELETE",
-            "path": "/api/v1/webhooks/{{id}}",
-            "description": "Delete a webhook subscription",
-            "auth_required": true,
-            "path_params": ["id"],
-            "response_schema": {{
-                "success": "boolean"
-            }},
-            "error_responses": {{
-                "401": "Unauthorized",
-                "404": "Subscription not found"
-            }}
-        }},
-        {{
-            "method": "GET",
-            "path": "/api/v1/webhooks/{{id}}/deliveries",
-            "description": "Get delivery history for a subscription",
-            "auth_required": true,
-            "path_params": ["id"],
-            "query_params": {{
-                "status": "string (optional, filter by status)",
-                "limit": "integer (optional, default 50)"
-            }},
-            "response_schema": {{
-                "items": "array of WebhookDelivery",
-                "total": "integer"
-            }},
-            "error_responses": {{
-                "401": "Unauthorized",
-                "404": "Subscription not found"
-            }}
+            "request_schema": {{"url": "string", "events": "array"}},
+            "response_schema": {{"id": "uuid", "url": "string"}},
+            "error_responses": {{"400": "Invalid input", "401": "Unauthorized"}}
         }}
     ],
-    "integration_points": [
-        {{
-            "system": "EventBusService",
-            "type": "internal",
-            "description": "Subscribe to events for webhook triggering"
-        }},
-        {{
-            "system": "External Webhook URLs",
-            "type": "external",
-            "description": "HTTP POST to customer-provided endpoints"
-        }}
-    ],
-    "error_handling": {{
-        "strategy": "Retry with exponential backoff",
-        "max_retries": 3,
-        "backoff_base": 2,
-        "backoff_delays": ["2s", "4s", "8s"],
-        "dead_letter": "Mark as failed after max retries, log for manual review"
-    }},
-    "testing_strategy": {{
-        "unit_tests": [
-            "WebhookSubscriptionService - CRUD operations",
-            "WebhookDeliveryService - signature generation",
-            "WebhookDeliveryService - retry logic"
-        ],
-        "integration_tests": [
-            "End-to-end webhook delivery",
-            "EventBus integration",
-            "API endpoint tests"
-        ],
-        "load_tests": [
-            "1000 events/minute throughput test"
-        ]
-    }},
-    "security_considerations": [
-        "HMAC-SHA256 signing for payload verification",
-        "Secret stored encrypted at rest",
-        "Rate limiting on webhook creation",
-        "URL validation (no internal IPs, valid scheme)"
-    ],
-    "migration_plan": {{
-        "steps": [
-            "Create webhook_subscriptions table",
-            "Create webhook_deliveries table",
-            "Add indexes",
-            "Deploy services",
-            "Enable EventBus integration"
-        ],
-        "rollback": "Drop tables, disable EventBus handler"
-    }}
+    "integration_points": [{{"system": "EventBusService", "type": "internal", "description": "Event source"}}],
+    "error_handling": {{"strategy": "Retry with exponential backoff", "max_retries": 3}},
+    "testing_strategy": {{"unit_tests": ["Subscription CRUD", "Signature generation"], "integration_tests": ["End-to-end delivery"]}},
+    "security_considerations": ["HMAC-SHA256 signing", "Secret encrypted at rest"],
+    "migration_plan": {{"steps": ["Create tables", "Add indexes", "Deploy services"]}}
 }}
 ```
 
@@ -1035,6 +919,34 @@ Tickets are parent work items that appear on the project board:
 - **L**: 1-2 weeks
 - **XL**: 2+ weeks (consider splitting)
 
+### Ticket Description Format (Markdown)
+
+Ticket descriptions MUST be rich markdown that can be displayed directly in a UI. Keep descriptions to ~150-250 words - concise but complete. Include:
+
+```markdown
+## Overview
+Brief summary of what this ticket accomplishes (2-3 sentences).
+
+## Background & Context
+Why this work is needed. Reference the codebase patterns discovered in EXPLORE phase.
+Mention specific existing files/patterns this builds upon.
+
+## Scope
+### In Scope
+- Feature A
+- Integration with X
+
+### Out of Scope
+- Future enhancement Y
+
+## Technical Approach
+High-level approach and key decisions. Reference design components.
+
+## Success Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+```
+
 ## Task Guidelines
 
 Tasks are atomic units of work that an AI agent can complete in a single session:
@@ -1060,9 +972,103 @@ Tasks are atomic units of work that an AI agent can complete in a single session
 - **M**: 2-4 hours
 - **L**: 4-8 hours (consider splitting if > 4h)
 
+### Task Description Format (CRITICAL - Rich Markdown)
+
+Task descriptions MUST be comprehensive markdown documents that provide ALL context needed for an AI agent or developer to complete the work independently. This is displayed in the UI and must be self-contained.
+
+**IMPORTANT - Output Size Guidelines:**
+- Keep task descriptions to ~200-400 words each (not thousands)
+- Focus on WHAT and WHY, not exhaustive HOW
+- Code examples should be 5-15 lines max, showing patterns not full implementations
+- Prioritize clarity over completeness - AI agents can explore the codebase
+- Total JSON output should be under 100KB
+
+**Required sections in task description:**
+
+```markdown
+## Objective
+Clear statement of what this task accomplishes (1-2 sentences).
+
+## Context & Background
+- Why this task exists and how it fits into the larger feature
+- Reference to parent ticket and related requirements
+- Link to relevant design decisions
+
+## Current State
+Describe what exists today:
+- Existing files that will be modified (with brief description of their purpose)
+- Existing patterns in the codebase to follow
+- Any relevant code snippets or interfaces
+
+## Implementation Details
+
+### Approach
+Step-by-step implementation approach:
+1. First, do X because Y
+2. Then implement Z following pattern from `existing/file.py`
+3. Finally, wire up A to B
+
+### Code Examples
+Show concrete code patterns, function signatures, or pseudocode:
+```python
+# Example: Expected function signature
+async def create_subscription(
+    self,
+    url: str,
+    events: list[str],
+    secret: str | None = None
+) -> WebhookSubscription:
+    \"\"\"Create a new webhook subscription.
+
+    Args:
+        url: The webhook endpoint URL
+        events: List of event types to subscribe to
+        secret: Optional secret for HMAC signing (auto-generated if not provided)
+
+    Returns:
+        The created WebhookSubscription
+    \"\"\"
+    pass
+```
+
+### Key Considerations
+- Important edge cases to handle
+- Error scenarios and how to handle them
+- Performance considerations
+- Security considerations (if applicable)
+
+## Files to Modify
+| File | Change Description |
+|------|-------------------|
+| `path/to/file.py` | Add new class/function for X |
+| `path/to/other.py` | Import and register the new component |
+
+## Files to Create
+| File | Purpose |
+|------|---------|
+| `path/to/new_file.py` | Implementation of X component |
+
+## Testing Requirements
+- Unit tests: What should be tested
+- Integration tests: End-to-end scenarios to verify
+- Edge cases to cover in tests
+
+## Acceptance Criteria
+- [ ] Criterion 1 with specific measurable outcome
+- [ ] Criterion 2 with specific measurable outcome
+- [ ] All existing tests still pass
+- [ ] New tests achieve 80%+ coverage
+
+## Definition of Done
+- Code implemented and working
+- Tests written and passing
+- No linting errors
+- Ready for review
+```
+
 ## Required Output Format
 
-When complete, you MUST write a JSON file with this structure:
+When complete, you MUST write a JSON file with this structure. Note: descriptions shown here are abbreviated - your actual descriptions should follow the markdown format specified above but be concise (~200-400 words per task):
 
 ```json
 {{
@@ -1071,39 +1077,19 @@ When complete, you MUST write a JSON file with this structure:
         {{
             "id": "TKT-001",
             "title": "Webhook Infrastructure Setup",
-            "description": "Set up the core webhook infrastructure including database models, delivery service with retry logic, and API endpoints for webhook management.",
+            "description": "## Overview\\nSet up core webhook infrastructure: database models, delivery service with retry logic, and API endpoints.\\n\\n## Background & Context\\nBuilds on EventBusService. Follows existing service/model/route patterns.\\n\\n## Scope\\n### In Scope\\n- WebhookSubscription and WebhookDelivery models\\n- WebhookDeliveryService with HMAC signing\\n- REST API endpoints\\n\\n### Out of Scope\\n- Frontend UI\\n\\n## Technical Approach\\nCreate SQLAlchemy models, implement services, add FastAPI routes.\\n\\n## Success Criteria\\n- [ ] Models created with indexes\\n- [ ] Delivery service handles retries\\n- [ ] API endpoints functional",
             "priority": "HIGH",
             "estimate": "M",
-            "requirements": ["REQ-WEBHOOK-FUNC-001", "REQ-WEBHOOK-FUNC-002", "REQ-WEBHOOK-SEC-001"],
-            "tasks": ["TSK-001", "TSK-002", "TSK-003", "TSK-004", "TSK-005", "TSK-006"],
+            "requirements": ["REQ-WEBHOOK-FUNC-001", "REQ-WEBHOOK-FUNC-002"],
+            "tasks": ["TSK-001", "TSK-002", "TSK-003"],
             "acceptance_criteria": [
-                "WebhookSubscription and WebhookDelivery models created",
-                "Database migrations applied successfully",
-                "WebhookDeliveryService delivers with retry logic",
-                "All API endpoints functional",
-                "Unit tests pass with 80%+ coverage"
+                "Models created with proper indexes",
+                "Delivery service handles retries correctly",
+                "API endpoints functional"
             ],
             "dependencies": {{
                 "blocked_by": [],
                 "blocks": ["TKT-002"]
-            }}
-        }},
-        {{
-            "id": "TKT-002",
-            "title": "EventBus Integration",
-            "description": "Integrate webhook delivery with the existing EventBusService to automatically trigger webhooks when events occur.",
-            "priority": "HIGH",
-            "estimate": "S",
-            "requirements": ["REQ-WEBHOOK-FUNC-002"],
-            "tasks": ["TSK-007", "TSK-008"],
-            "acceptance_criteria": [
-                "WebhookNotificationService bridges EventBus to delivery",
-                "Events trigger webhook deliveries automatically",
-                "Integration tests pass"
-            ],
-            "dependencies": {{
-                "blocked_by": ["TKT-001"],
-                "blocks": []
             }}
         }}
     ],
@@ -1111,240 +1097,36 @@ When complete, you MUST write a JSON file with this structure:
         {{
             "id": "TSK-001",
             "title": "Create WebhookSubscription and WebhookDelivery Models",
-            "description": "Create SQLAlchemy models for webhook subscriptions and delivery tracking with all fields from the design.",
+            "description": "## Objective\\nCreate SQLAlchemy models for webhook subscriptions and delivery tracking.\\n\\n## Context & Background\\nPart of TKT-001, addresses REQ-WEBHOOK-FUNC-001. Follow existing patterns in `omoi_os/models/`.\\n\\n## Current State\\nCodebase uses SQLAlchemy 2.0 with UUIDs, timestamps, soft deletes.\\n\\n## Implementation Details\\n### Approach\\n1. Create `omoi_os/models/webhook.py`\\n2. Follow existing model patterns\\n3. Add GIN index for events array\\n4. Create Pydantic schemas\\n\\n### Code Pattern\\n```python\\nclass WebhookSubscription(Base):\\n    __tablename__ = 'webhook_subscriptions'\\n    id = Column(UUID, primary_key=True)\\n    url = Column(String(2048), nullable=False)\\n    events = Column(ARRAY(Text), nullable=False)\\n```\\n\\n## Files\\n- Create: `omoi_os/models/webhook.py`, `omoi_os/schemas/webhook.py`\\n- Modify: `omoi_os/models/__init__.py`\\n\\n## Acceptance Criteria\\n- [ ] Models with all design fields\\n- [ ] Pydantic schemas created",
             "parent_ticket": "TKT-001",
             "type": "implementation",
             "priority": "HIGH",
             "estimate": "M",
             "estimated_hours": 3,
-            "files_to_create": [
-                "omoi_os/models/webhook.py"
-            ],
-            "files_to_modify": [
-                "omoi_os/models/__init__.py"
-            ],
-            "implementation_notes": "Follow existing model patterns. Use UUID for IDs, include created_at/updated_at timestamps. Store secret encrypted.",
-            "acceptance_criteria": [
-                "WebhookSubscription model with all fields from design",
-                "WebhookDelivery model with all fields from design",
-                "Models registered in __init__.py",
-                "Pydantic schemas created for API"
-            ],
-            "dependencies": {{
-                "depends_on": [],
-                "blocks": ["TSK-002", "TSK-003"]
-            }},
+            "files_to_create": ["omoi_os/models/webhook.py", "omoi_os/schemas/webhook.py"],
+            "files_to_modify": ["omoi_os/models/__init__.py"],
+            "acceptance_criteria": ["Models with all design fields", "Pydantic schemas created"],
+            "dependencies": {{"depends_on": [], "blocks": ["TSK-002"]}},
             "requirements_addressed": ["REQ-WEBHOOK-FUNC-001"]
         }},
         {{
             "id": "TSK-002",
-            "title": "Create Database Migration for Webhook Tables",
-            "description": "Create Alembic migration to add webhook_subscriptions and webhook_deliveries tables with indexes.",
+            "title": "Create Database Migration",
+            "description": "## Objective\\nCreate Alembic migration for webhook tables.\\n\\n## Context\\nDepends on TSK-001 models.\\n\\n## Implementation\\nRun `alembic revision --autogenerate`, add GIN index, test upgrade/downgrade.\\n\\n## Acceptance Criteria\\n- [ ] Migration creates tables\\n- [ ] Indexes created\\n- [ ] Reversible",
             "parent_ticket": "TKT-001",
             "type": "implementation",
             "priority": "HIGH",
             "estimate": "S",
             "estimated_hours": 1,
-            "files_to_create": [
-                "omoi_os/migrations/versions/xxx_add_webhook_tables.py"
-            ],
+            "files_to_create": ["omoi_os/migrations/versions/xxx_add_webhook_tables.py"],
             "files_to_modify": [],
-            "implementation_notes": "Use alembic revision --autogenerate. Verify indexes are created. Test upgrade and downgrade.",
-            "acceptance_criteria": [
-                "Migration creates both tables",
-                "All indexes from design are created",
-                "Migration is reversible (downgrade works)",
-                "Migration passes on test database"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-001"],
-                "blocks": ["TSK-003", "TSK-004"]
-            }},
+            "acceptance_criteria": ["Migration creates tables", "Reversible"],
+            "dependencies": {{"depends_on": ["TSK-001"], "blocks": ["TSK-003"]}},
             "requirements_addressed": ["REQ-WEBHOOK-FUNC-001"]
-        }},
-        {{
-            "id": "TSK-003",
-            "title": "Implement WebhookDeliveryService",
-            "description": "Create the delivery service with HTTP client, HMAC signature generation, and retry logic with exponential backoff.",
-            "parent_ticket": "TKT-001",
-            "type": "implementation",
-            "priority": "HIGH",
-            "estimate": "M",
-            "estimated_hours": 4,
-            "files_to_create": [
-                "omoi_os/services/webhook_delivery.py"
-            ],
-            "files_to_modify": [
-                "omoi_os/services/__init__.py"
-            ],
-            "implementation_notes": "Use httpx for async HTTP. Implement HMAC-SHA256 signing. Retry with delays: 2s, 4s, 8s. Log all attempts to WebhookDelivery table.",
-            "acceptance_criteria": [
-                "deliver() method sends HTTP POST with payload",
-                "X-Signature header includes HMAC-SHA256 signature",
-                "Failed deliveries retry up to 3 times",
-                "Exponential backoff between retries",
-                "All attempts logged to database"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-001", "TSK-002"],
-                "blocks": ["TSK-004", "TSK-007"]
-            }},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-002", "REQ-WEBHOOK-SEC-001"]
-        }},
-        {{
-            "id": "TSK-004",
-            "title": "Implement WebhookSubscriptionService",
-            "description": "Create the subscription service with CRUD operations and subscription lookup by event type.",
-            "parent_ticket": "TKT-001",
-            "type": "implementation",
-            "priority": "HIGH",
-            "estimate": "M",
-            "estimated_hours": 2,
-            "files_to_create": [
-                "omoi_os/services/webhook_subscription.py"
-            ],
-            "files_to_modify": [
-                "omoi_os/services/__init__.py"
-            ],
-            "implementation_notes": "Follow existing service patterns. Auto-generate secret if not provided. Validate URL format.",
-            "acceptance_criteria": [
-                "create_subscription() creates and returns subscription",
-                "get_subscriptions_for_event() returns matching subscriptions",
-                "delete_subscription() soft-deletes",
-                "URL validation rejects invalid URLs"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-001", "TSK-002"],
-                "blocks": ["TSK-005", "TSK-007"]
-            }},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-001"]
-        }},
-        {{
-            "id": "TSK-005",
-            "title": "Create Webhook API Endpoints",
-            "description": "Add FastAPI routes for webhook subscription management (CRUD) and delivery history.",
-            "parent_ticket": "TKT-001",
-            "type": "implementation",
-            "priority": "HIGH",
-            "estimate": "M",
-            "estimated_hours": 3,
-            "files_to_create": [
-                "omoi_os/api/routes/webhooks.py"
-            ],
-            "files_to_modify": [
-                "omoi_os/api/main.py"
-            ],
-            "implementation_notes": "Follow existing route patterns. Use dependency injection for services. Add OpenAPI documentation.",
-            "acceptance_criteria": [
-                "POST /api/v1/webhooks creates subscription",
-                "GET /api/v1/webhooks lists subscriptions",
-                "GET /api/v1/webhooks/{{id}} gets single subscription",
-                "DELETE /api/v1/webhooks/{{id}} deletes subscription",
-                "GET /api/v1/webhooks/{{id}}/deliveries lists delivery history",
-                "All endpoints require authentication"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-003", "TSK-004"],
-                "blocks": ["TSK-006"]
-            }},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-001"]
-        }},
-        {{
-            "id": "TSK-006",
-            "title": "Write Unit Tests for Webhook Services",
-            "description": "Create comprehensive unit tests for WebhookDeliveryService and WebhookSubscriptionService.",
-            "parent_ticket": "TKT-001",
-            "type": "test",
-            "priority": "HIGH",
-            "estimate": "M",
-            "estimated_hours": 3,
-            "files_to_create": [
-                "tests/unit/services/test_webhook_delivery.py",
-                "tests/unit/services/test_webhook_subscription.py"
-            ],
-            "files_to_modify": [],
-            "implementation_notes": "Mock HTTP client for delivery tests. Test retry logic, signature generation, CRUD operations.",
-            "acceptance_criteria": [
-                "Tests cover happy path for all service methods",
-                "Tests cover error cases (network failure, invalid input)",
-                "Tests verify retry logic with mocked delays",
-                "Tests verify HMAC signature generation",
-                "80%+ code coverage"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-003", "TSK-004", "TSK-005"],
-                "blocks": []
-            }},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-001", "REQ-WEBHOOK-FUNC-002", "REQ-WEBHOOK-SEC-001"]
-        }},
-        {{
-            "id": "TSK-007",
-            "title": "Implement WebhookNotificationService",
-            "description": "Create the notification service that bridges EventBusService to webhook delivery.",
-            "parent_ticket": "TKT-002",
-            "type": "implementation",
-            "priority": "HIGH",
-            "estimate": "M",
-            "estimated_hours": 2,
-            "files_to_create": [
-                "omoi_os/services/webhook_notification.py"
-            ],
-            "files_to_modify": [
-                "omoi_os/services/__init__.py"
-            ],
-            "implementation_notes": "Subscribe to EventBus events. For each event, look up matching subscriptions and trigger delivery.",
-            "acceptance_criteria": [
-                "handle_event() processes events from EventBus",
-                "Looks up subscriptions by event type",
-                "Triggers delivery for each matching subscription",
-                "Handles delivery failures gracefully"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-003", "TSK-004"],
-                "blocks": ["TSK-008"]
-            }},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-002"]
-        }},
-        {{
-            "id": "TSK-008",
-            "title": "Write Integration Tests for EventBus Integration",
-            "description": "Create integration tests verifying end-to-end flow from EventBus event to webhook delivery.",
-            "parent_ticket": "TKT-002",
-            "type": "test",
-            "priority": "MEDIUM",
-            "estimate": "M",
-            "estimated_hours": 2,
-            "files_to_create": [
-                "tests/integration/test_webhook_integration.py"
-            ],
-            "files_to_modify": [],
-            "implementation_notes": "Use test database. Mock external HTTP endpoints. Verify complete flow.",
-            "acceptance_criteria": [
-                "Test creates subscription, triggers event, verifies delivery",
-                "Test verifies retry behavior on failure",
-                "Test verifies signature in delivered payload",
-                "All tests use isolated test database"
-            ],
-            "dependencies": {{
-                "depends_on": ["TSK-007"],
-                "blocks": []
-            }},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-002"]
         }}
     ],
-    "total_estimated_hours": 20,
-    "critical_path": ["TSK-001", "TSK-002", "TSK-003", "TSK-005", "TSK-007"],
-    "parallel_tracks": [
-        {{
-            "name": "Core Infrastructure",
-            "tasks": ["TSK-001", "TSK-002", "TSK-003", "TSK-004", "TSK-005"]
-        }},
-        {{
-            "name": "Integration",
-            "tasks": ["TSK-007", "TSK-008"],
-            "starts_after": "TSK-004"
-        }}
-    ]
+    "total_estimated_hours": 8,
+    "critical_path": ["TSK-001", "TSK-002", "TSK-003"]
 }}
 ```
 

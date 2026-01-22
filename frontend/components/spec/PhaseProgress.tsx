@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils"
 import {
   Search,
   FileText,
+  ClipboardList,
   Palette,
   ListTodo,
   RefreshCw,
@@ -26,9 +27,10 @@ interface PhaseProgressProps {
   size?: "sm" | "md" | "lg"
 }
 
-// Spec phases in order
+// Spec phases in order (6 phases)
 const phases = [
   { id: "explore", label: "Explore", icon: Search, description: "Exploring codebase and gathering context" },
+  { id: "prd", label: "PRD", icon: ClipboardList, description: "Creating Product Requirements Document" },
   { id: "requirements", label: "Requirements", icon: FileText, description: "Defining EARS-format requirements" },
   { id: "design", label: "Design", icon: Palette, description: "Creating architecture and data models" },
   { id: "tasks", label: "Tasks", icon: ListTodo, description: "Breaking down into implementation tasks" },
