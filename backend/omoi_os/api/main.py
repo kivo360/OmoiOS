@@ -76,6 +76,7 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
 from omoi_os.services.phase_gate import PhaseGateService
+from omoi_os.services.phase_manager import PhaseManager
 from omoi_os.services.resource_lock import ResourceLockService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
@@ -94,6 +95,7 @@ collaboration_service: CollaborationService | None = None
 lock_service: ResourceLockService | None = None
 monitor_service = None  # Defined below in lifespan
 phase_gate_service: PhaseGateService | None = None
+phase_manager: PhaseManager | None = None
 cost_tracking_service: CostTrackingService | None = None
 budget_enforcer_service: BudgetEnforcerService | None = None
 result_submission_service = None  # Defined below in lifespan
@@ -666,6 +668,7 @@ async def lifespan(app: FastAPI):
         lock_service, \
         monitor_service, \
         phase_gate_service, \
+        phase_manager, \
         cost_tracking_service, \
         budget_enforcer_service, \
         result_submission_service, \
@@ -704,6 +707,19 @@ async def lifespan(app: FastAPI):
     collaboration_service = CollaborationService(db, event_bus)
     lock_service = ResourceLockService(db)
     phase_gate_service = PhaseGateService(db)
+
+    # Unified Phase Manager - consolidates phase progression, gating, and transitions
+    from omoi_os.services.phase_manager import get_phase_manager
+
+    phase_manager = get_phase_manager(
+        db=db,
+        task_queue=queue,
+        phase_gate=phase_gate_service,
+        event_bus=event_bus,
+    )
+    # Subscribe to events for automatic phase handling
+    phase_manager.subscribe_to_events()
+    logger.info("PhaseManager initialized and subscribed to events")
 
     # Import MonitorService here to avoid issues if Phase 4 not complete
     try:

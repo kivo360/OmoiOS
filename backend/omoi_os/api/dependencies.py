@@ -31,6 +31,7 @@ if TYPE_CHECKING:
     from omoi_os.services.llm_service import LLMService
     from omoi_os.services.monitor import MonitorService
     from omoi_os.services.phase_gate import PhaseGateService
+    from omoi_os.services.phase_manager import PhaseManager
     from omoi_os.services.resource_lock import ResourceLockService
     from omoi_os.services.task_queue import TaskQueueService
 
@@ -42,6 +43,7 @@ _task_queue_instance: "TaskQueueService | None" = None
 _agent_status_manager_instance: "AgentStatusManager | None" = None
 _approval_service_instance: "ApprovalService | None" = None
 _phase_gate_service_instance: "PhaseGateService | None" = None
+_phase_manager_instance: "PhaseManager | None" = None
 _collaboration_service_instance: "CollaborationService | None" = None
 _resource_lock_service_instance: "ResourceLockService | None" = None
 _cost_tracking_service_instance: "CostTrackingService | None" = None
@@ -314,6 +316,37 @@ def get_phase_gate_service() -> "PhaseGateService":
 
     _phase_gate_service_instance = PhaseGateService(get_db_service())
     return _phase_gate_service_instance
+
+
+def get_phase_manager_service() -> "PhaseManager":
+    """Get phase manager service instance with lazy initialization fallback.
+
+    The PhaseManager provides a unified interface for:
+    - Phase definitions and metadata
+    - Transition rules and validation
+    - Automatic progression callbacks
+    - Phase gate orchestration
+    - Status synchronization
+    """
+    global _phase_manager_instance
+    import omoi_os.api.main as main_module
+
+    if main_module.phase_manager is not None:
+        return main_module.phase_manager
+
+    if _phase_manager_instance is not None:
+        return _phase_manager_instance
+
+    # Last resort: Use the singleton getter from phase_manager module
+    from omoi_os.services.phase_manager import get_phase_manager
+
+    _phase_manager_instance = get_phase_manager(
+        db=get_db_service(),
+        task_queue=get_task_queue(),
+        phase_gate=get_phase_gate_service(),
+        event_bus=get_event_bus(),
+    )
+    return _phase_manager_instance
 
 
 def get_event_bus_service() -> "EventBusService":
