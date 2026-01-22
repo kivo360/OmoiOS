@@ -101,6 +101,14 @@ class IdleSandboxMonitor:
         SpecEventTypes.HEARTBEAT,
     }
 
+    # Expected phase order for spec sandboxes
+    EXPECTED_PHASES: list[str] = ["explore", "prd", "requirements", "design", "tasks", "sync"]
+
+    # Stuck between phases threshold (5 minutes)
+    # If a phase completes but the next phase doesn't start within this time,
+    # the sandbox might be stuck
+    STUCK_BETWEEN_PHASES_THRESHOLD = timedelta(minutes=5)
+
     def __init__(
         self,
         db: DatabaseService,
@@ -142,6 +150,153 @@ class IdleSandboxMonitor:
                 .all()
             )
             return [r[0] for r in results]
+
+    def get_phase_completion_status(self, sandbox_id: str) -> dict:
+        """Get phase completion status for a spec sandbox.
+
+        Detects which phases have completed and if the sandbox is stuck
+        between phases (phase completed but next phase hasn't started).
+
+        Args:
+            sandbox_id: ID of the sandbox to check
+
+        Returns:
+            Dictionary with phase completion details:
+            - sandbox_id: The sandbox ID
+            - is_spec_sandbox: Whether this is a spec sandbox (starts with 'spec-')
+            - phases_completed: List of completed phase names
+            - phases_started: List of started phase names
+            - last_phase_completed: Name of last completed phase (or None)
+            - last_phase_completed_at: Timestamp of last phase completion
+            - next_expected_phase: Name of next expected phase (or None if done)
+            - is_stuck_between_phases: Whether sandbox appears stuck between phases
+            - stuck_duration_seconds: How long it's been stuck (if stuck)
+            - has_execution_completed: Whether spec.execution_completed was emitted
+            - has_execution_failed: Whether spec.execution_failed was emitted
+        """
+        is_spec_sandbox = sandbox_id.startswith("spec-")
+
+        if not is_spec_sandbox:
+            return {
+                "sandbox_id": sandbox_id,
+                "is_spec_sandbox": False,
+                "phases_completed": [],
+                "phases_started": [],
+                "last_phase_completed": None,
+                "last_phase_completed_at": None,
+                "next_expected_phase": None,
+                "is_stuck_between_phases": False,
+                "stuck_duration_seconds": 0,
+                "has_execution_completed": False,
+                "has_execution_failed": False,
+            }
+
+        with self.db.get_session() as session:
+            # Get all phase_started events
+            phase_started_events = (
+                session.query(SandboxEvent)
+                .filter(
+                    SandboxEvent.sandbox_id == sandbox_id,
+                    SandboxEvent.event_type == SpecEventTypes.PHASE_STARTED,
+                )
+                .order_by(SandboxEvent.created_at.asc())
+                .all()
+            )
+
+            # Get all phase_completed events
+            phase_completed_events = (
+                session.query(SandboxEvent)
+                .filter(
+                    SandboxEvent.sandbox_id == sandbox_id,
+                    SandboxEvent.event_type == SpecEventTypes.PHASE_COMPLETED,
+                )
+                .order_by(SandboxEvent.created_at.asc())
+                .all()
+            )
+
+            # Extract phase names
+            phases_started = []
+            for e in phase_started_events:
+                phase = e.event_data.get("phase") if e.event_data else None
+                if phase:
+                    phases_started.append(phase)
+
+            phases_completed = []
+            last_phase_completed = None
+            last_phase_completed_at = None
+            for e in phase_completed_events:
+                phase = e.event_data.get("phase") if e.event_data else None
+                if phase:
+                    phases_completed.append(phase)
+                    last_phase_completed = phase
+                    last_phase_completed_at = e.created_at
+
+            # Check for execution completion/failure
+            execution_completed = (
+                session.query(SandboxEvent)
+                .filter(
+                    SandboxEvent.sandbox_id == sandbox_id,
+                    SandboxEvent.event_type == SpecEventTypes.EXECUTION_COMPLETED,
+                )
+                .first()
+            )
+
+            execution_failed = (
+                session.query(SandboxEvent)
+                .filter(
+                    SandboxEvent.sandbox_id == sandbox_id,
+                    SandboxEvent.event_type == SpecEventTypes.EXECUTION_FAILED,
+                )
+                .first()
+            )
+
+            # Determine next expected phase
+            next_expected_phase = None
+            if last_phase_completed and last_phase_completed in self.EXPECTED_PHASES:
+                idx = self.EXPECTED_PHASES.index(last_phase_completed)
+                if idx + 1 < len(self.EXPECTED_PHASES):
+                    next_expected_phase = self.EXPECTED_PHASES[idx + 1]
+
+            # Check if stuck between phases
+            is_stuck_between_phases = False
+            stuck_duration_seconds = 0
+            now = utc_now()
+
+            if (
+                last_phase_completed_at
+                and next_expected_phase
+                and next_expected_phase not in phases_started
+                and not execution_completed
+                and not execution_failed
+            ):
+                # A phase completed, next phase hasn't started, and execution isn't done
+                time_since_completion = now - last_phase_completed_at
+                if time_since_completion > self.STUCK_BETWEEN_PHASES_THRESHOLD:
+                    is_stuck_between_phases = True
+                    stuck_duration_seconds = time_since_completion.total_seconds()
+                    logger.warning(
+                        "sandbox_stuck_between_phases",
+                        sandbox_id=sandbox_id,
+                        last_phase=last_phase_completed,
+                        next_expected=next_expected_phase,
+                        stuck_seconds=stuck_duration_seconds,
+                    )
+
+            return {
+                "sandbox_id": sandbox_id,
+                "is_spec_sandbox": True,
+                "phases_completed": phases_completed,
+                "phases_started": phases_started,
+                "last_phase_completed": last_phase_completed,
+                "last_phase_completed_at": (
+                    last_phase_completed_at.isoformat() if last_phase_completed_at else None
+                ),
+                "next_expected_phase": next_expected_phase,
+                "is_stuck_between_phases": is_stuck_between_phases,
+                "stuck_duration_seconds": stuck_duration_seconds,
+                "has_execution_completed": execution_completed is not None,
+                "has_execution_failed": execution_failed is not None,
+            }
 
     def check_sandbox_activity(self, sandbox_id: str) -> dict:
         """Check if a sandbox has recent work activity.
@@ -461,7 +616,12 @@ class IdleSandboxMonitor:
         }
 
     async def check_and_terminate_idle_sandboxes(self) -> list[dict]:
-        """Check all active sandboxes and terminate any that are idle.
+        """Check all active sandboxes and terminate any that are idle or stuck.
+
+        This method checks for:
+        1. Idle sandboxes (no work events for extended period)
+        2. Stuck running sandboxes (reports running but no actual work)
+        3. Stuck between phases (phase completed but next phase hasn't started)
 
         Returns:
             List of termination results for any sandboxes that were terminated
@@ -477,6 +637,46 @@ class IdleSandboxMonitor:
         for sandbox_id in active_sandbox_ids:
             try:
                 activity = self.check_sandbox_activity(sandbox_id)
+
+                # For spec sandboxes, also check phase completion status
+                phase_status = None
+                if sandbox_id.startswith("spec-"):
+                    phase_status = self.get_phase_completion_status(sandbox_id)
+
+                    # Log phase status for visibility
+                    log.debug(
+                        "spec_sandbox_phase_status",
+                        sandbox_id=sandbox_id,
+                        phases_completed=phase_status.get("phases_completed", []),
+                        phases_started=phase_status.get("phases_started", []),
+                        last_phase_completed=phase_status.get("last_phase_completed"),
+                        next_expected_phase=phase_status.get("next_expected_phase"),
+                        is_stuck_between_phases=phase_status.get("is_stuck_between_phases"),
+                        has_execution_completed=phase_status.get("has_execution_completed"),
+                        has_execution_failed=phase_status.get("has_execution_failed"),
+                    )
+
+                # Check for stuck-between-phases condition (spec sandboxes only)
+                if phase_status and phase_status.get("is_stuck_between_phases"):
+                    reason = "stuck_between_phases"
+                    log.warning(
+                        "stuck_between_phases_sandbox_detected",
+                        sandbox_id=sandbox_id,
+                        last_phase=phase_status.get("last_phase_completed"),
+                        next_expected=phase_status.get("next_expected_phase"),
+                        stuck_duration_seconds=phase_status.get("stuck_duration_seconds"),
+                        phases_completed=phase_status.get("phases_completed"),
+                    )
+
+                    result = await self.terminate_idle_sandbox(
+                        sandbox_id=sandbox_id,
+                        reason=reason,
+                        idle_duration_seconds=phase_status.get("stuck_duration_seconds", 0),
+                    )
+                    # Add phase status to result for API visibility
+                    result["phase_status"] = phase_status
+                    terminated.append(result)
+                    continue  # Don't check other conditions
 
                 if activity["is_idle"]:
                     # Determine appropriate reason based on why it's idle
@@ -504,6 +704,9 @@ class IdleSandboxMonitor:
                         reason=reason,
                         idle_duration_seconds=activity["idle_duration_seconds"],
                     )
+                    # Add phase status if available
+                    if phase_status:
+                        result["phase_status"] = phase_status
                     terminated.append(result)
                 elif activity["is_alive"]:
                     # Log why we're NOT terminating this sandbox
@@ -530,3 +733,50 @@ class IdleSandboxMonitor:
             log.info("idle_sandboxes_terminated", count=len(terminated))
 
         return terminated
+
+    def get_all_sandbox_status(self) -> list[dict]:
+        """Get status for all active sandboxes including phase completion.
+
+        Returns a list of status dictionaries for all sandboxes that have
+        recent heartbeats, including their activity status and phase completion
+        status (for spec sandboxes).
+
+        Returns:
+            List of status dictionaries with keys:
+            - sandbox_id: The sandbox ID
+            - activity: Activity check results (is_idle, is_alive, etc.)
+            - phase_status: Phase completion status (for spec sandboxes only)
+        """
+        active_sandbox_ids = self.get_active_sandbox_ids()
+        results = []
+
+        for sandbox_id in active_sandbox_ids:
+            try:
+                activity = self.check_sandbox_activity(sandbox_id)
+
+                status = {
+                    "sandbox_id": sandbox_id,
+                    "activity": activity,
+                    "phase_status": None,
+                }
+
+                # Add phase status for spec sandboxes
+                if sandbox_id.startswith("spec-"):
+                    status["phase_status"] = self.get_phase_completion_status(sandbox_id)
+
+                results.append(status)
+
+            except Exception as e:
+                logger.error(
+                    "sandbox_status_check_failed",
+                    sandbox_id=sandbox_id,
+                    error=str(e),
+                )
+                results.append({
+                    "sandbox_id": sandbox_id,
+                    "activity": None,
+                    "phase_status": None,
+                    "error": str(e),
+                })
+
+        return results
