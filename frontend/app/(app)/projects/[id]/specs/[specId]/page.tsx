@@ -1939,7 +1939,12 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Linked Tickets</span>
-                  <span className="font-medium">{specData.linkedTickets}</span>
+                  <button
+                    onClick={handleLinkTickets}
+                    className="font-medium text-primary hover:underline cursor-pointer"
+                  >
+                    {specData.linkedTickets}
+                  </button>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Updated</span>
