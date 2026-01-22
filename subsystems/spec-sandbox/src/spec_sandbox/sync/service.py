@@ -14,10 +14,11 @@ Sync Behavior:
 - FAILED: If sync operation fails
 """
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
 
@@ -30,6 +31,117 @@ from spec_sandbox.parsers.markdown import (
 from spec_sandbox.reporters.base import Reporter
 from spec_sandbox.schemas.events import Event, EventTypes
 from spec_sandbox.schemas.frontmatter import TaskFrontmatter, TicketFrontmatter
+
+
+# =============================================================================
+# Helper Functions for Data Transformation
+# =============================================================================
+
+
+def parse_ears_text(text: str) -> Tuple[str, str]:
+    """Parse EARS-format text into condition and action.
+
+    EARS format: "WHEN [condition], THE SYSTEM SHALL [action]"
+    Also handles variations like "WHEN ... THE SYSTEM SHALL ..." without comma.
+
+    Args:
+        text: EARS-formatted requirement text
+
+    Returns:
+        Tuple of (condition, action). Returns original text as action if parsing fails.
+    """
+    if not text:
+        return "", ""
+
+    # Try pattern: WHEN ... , THE SYSTEM SHALL ...
+    pattern1 = r"^WHEN\s+(.+?),?\s+THE SYSTEM SHALL\s+(.+?)\.?$"
+    match = re.match(pattern1, text.strip(), re.IGNORECASE | re.DOTALL)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+
+    # Try pattern: WHEN ... THE SYSTEM SHALL ... (no comma)
+    pattern2 = r"^WHEN\s+(.+?)\s+THE SYSTEM SHALL\s+(.+?)\.?$"
+    match = re.match(pattern2, text.strip(), re.IGNORECASE | re.DOTALL)
+    if match:
+        return match.group(1).strip(), match.group(2).strip()
+
+    # Fallback: return empty condition, text as action
+    return "", text.strip()
+
+
+def convert_data_models_to_markdown(data_models: List[Dict[str, Any]]) -> str:
+    """Convert data models list to markdown string for backend storage.
+
+    Args:
+        data_models: List of data model dicts with name, table_name, fields, etc.
+
+    Returns:
+        Markdown string representing the data models.
+    """
+    if not data_models:
+        return ""
+
+    lines = []
+    for model in data_models:
+        name = model.get("name", "Unknown")
+        table_name = model.get("table_name", "")
+        description = model.get("description", "")
+
+        lines.append(f"### {name}")
+        if table_name:
+            lines.append(f"**Table:** `{table_name}`")
+        if description:
+            lines.append(f"\n{description}\n")
+
+        fields = model.get("fields", [])
+        if fields:
+            lines.append("\n| Field | Type | Description |")
+            lines.append("|-------|------|-------------|")
+            for field_data in fields:
+                fname = field_data.get("name", "")
+                ftype = field_data.get("type", "")
+                fdesc = field_data.get("description", "")
+                lines.append(f"| {fname} | {ftype} | {fdesc} |")
+
+        relationships = model.get("relationships", [])
+        if relationships:
+            lines.append("\n**Relationships:**")
+            for rel in relationships:
+                if isinstance(rel, dict):
+                    lines.append(f"- {rel.get('description', str(rel))}")
+                else:
+                    lines.append(f"- {rel}")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def convert_api_endpoints_to_spec(api_endpoints: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Convert api_endpoints to api_spec format expected by backend.
+
+    Args:
+        api_endpoints: List from design phase output
+
+    Returns:
+        List in api_spec format: [{method, path, description, ...}]
+    """
+    api_spec = []
+    for ep in api_endpoints:
+        spec_entry = {
+            "method": ep.get("method", "GET"),
+            "endpoint": ep.get("path", ep.get("endpoint", "")),
+            "description": ep.get("description", ""),
+        }
+        # Include optional fields if present
+        if ep.get("auth_required") is not None:
+            spec_entry["auth_required"] = ep.get("auth_required")
+        if ep.get("request_schema"):
+            spec_entry["request_body"] = ep.get("request_schema")
+        if ep.get("response_schema"):
+            spec_entry["response"] = ep.get("response_schema")
+        api_spec.append(spec_entry)
+    return api_spec
 
 
 class SyncAction(Enum):
@@ -671,8 +783,12 @@ class MarkdownSyncService:
                     )
 
         # Task doesn't exist - create new
-        payload = task.to_api_payload(ticket_api_id=ticket_api_id)
-        payload["description"] = body
+        # Pass description and ensure phase_id=PHASE_IMPLEMENTATION for continuous mode
+        payload = task.to_api_payload(
+            ticket_api_id=ticket_api_id,
+            description=body,
+            phase_id="PHASE_IMPLEMENTATION",
+        )
 
         if self.config.dry_run:
             return SyncResult(
@@ -1065,12 +1181,36 @@ class MarkdownSyncService:
         req_data: Dict[str, Any],
         existing_reqs: Dict[str, Dict[str, Any]],
     ) -> SyncResult:
-        """Sync a single requirement with create/update/skip logic."""
+        """Sync a single requirement with create/update/skip logic.
+
+        Handles both formats:
+        - Direct condition/action fields
+        - EARS 'text' field that needs parsing
+        """
         local_id = req_data.get("id", "unknown")
         title = req_data.get("title", local_id)
+
+        # Get condition/action - either directly or parse from 'text' field
         condition = req_data.get("condition", "")
         action = req_data.get("action", "")
+
+        # If condition/action are empty, try to parse from 'text' field (EARS format)
+        if not condition and not action:
+            text = req_data.get("text", "")
+            if text:
+                condition, action = parse_ears_text(text)
+
         linked_design = req_data.get("linked_design")
+
+        # Get acceptance criteria (list of strings or dicts)
+        acceptance_criteria = req_data.get("acceptance_criteria", [])
+        # Normalize to list of strings
+        criteria_list = []
+        for crit in acceptance_criteria:
+            if isinstance(crit, dict):
+                criteria_list.append(crit.get("text", str(crit)))
+            else:
+                criteria_list.append(str(crit))
 
         # Check if requirement already exists by title
         existing = existing_reqs.get(title)
@@ -1103,6 +1243,8 @@ class MarkdownSyncService:
                 payload = {"condition": condition, "action": action}
                 if linked_design:
                     payload["linked_design"] = linked_design
+                if criteria_list:
+                    payload["acceptance_criteria"] = criteria_list
 
                 status, data = await self._update_requirement(existing["id"], payload)
                 if status in (200, 201) and data:
@@ -1135,6 +1277,8 @@ class MarkdownSyncService:
         }
         if linked_design:
             payload["linked_design"] = linked_design
+        if criteria_list:
+            payload["acceptance_criteria"] = criteria_list
 
         if self.config.dry_run:
             return SyncResult(
@@ -1286,10 +1430,30 @@ class MarkdownSyncService:
 
         # Sync design if provided
         if design_output:
+            # Map from generated output field names to backend expected field names:
+            # - architecture_diagram (or architecture_overview) -> architecture
+            # - data_models (list of dicts) -> data_model (markdown string)
+            # - api_endpoints -> api_spec
+            architecture = design_output.get("architecture_diagram") or design_output.get("architecture_overview") or design_output.get("architecture", "")
+
+            # Convert data_models list to markdown string
+            data_models = design_output.get("data_models", [])
+            if isinstance(data_models, list) and data_models:
+                data_model = convert_data_models_to_markdown(data_models)
+            else:
+                data_model = design_output.get("data_model", "")
+
+            # Convert api_endpoints to api_spec format
+            api_endpoints = design_output.get("api_endpoints", [])
+            if api_endpoints:
+                api_spec = convert_api_endpoints_to_spec(api_endpoints)
+            else:
+                api_spec = design_output.get("api_spec", [])
+
             design = {
-                "architecture": design_output.get("architecture"),
-                "data_model": design_output.get("data_model"),
-                "api_spec": design_output.get("api_spec", []),
+                "architecture": architecture,
+                "data_model": data_model,
+                "api_spec": api_spec,
             }
             # Only sync if there's actual design content
             if any(design.values()):

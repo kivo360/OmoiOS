@@ -812,64 +812,76 @@ curl -X POST /api/v1/endpoint \\
 | 404 | Not found | Error message |
 ```
 
-## Required Output Format
+## Required Output Format - INCREMENTAL WRITING
 
-When complete, you MUST write a JSON file with this structure. **Keep descriptions concise (100-200 words max per item) to stay under API limits.**
+**⚠️ CRITICAL: Build the output file incrementally to avoid API token limits!**
+
+### Step 1: Write base structure first
+Use the Write tool to create the JSON file with the basic structure:
 
 ```json
 {{
-    "feature_name": "webhook-notifications",
-    "architecture_overview": "## Overview\\nWebhook system for real-time event notifications to external HTTP endpoints.\\n\\n## Components\\n- **WebhookSubscriptionService**: Manages registrations\\n- **WebhookDeliveryService**: HTTP delivery with retries\\n\\n## Data Flow\\n1. Event published to EventBus\\n2. Subscriptions matched\\n3. HTTP POST with HMAC signature\\n4. Retry on failure",
-    "architecture_diagram": "```mermaid\\nflowchart LR\\n    EB[EventBus] --> WS[SubscriptionService]\\n    WS --> WD[DeliveryService]\\n    WD --> EXT[External URL]\\n```",
-    "components": [
-        {{
-            "name": "WebhookSubscriptionService",
-            "type": "service",
-            "file_path": "services/webhook_subscription.py",
-            "description": "## Purpose\\nManages webhook subscription CRUD.\\n\\n## Key Methods\\n- `create_subscription(url, events)`: Register endpoint\\n- `get_subscriptions_for_event(event_type)`: Find matching subscriptions",
-            "responsibility": "Webhook subscription CRUD and validation",
-            "interfaces": [
-                {{"method": "create_subscription", "inputs": {{"url": "str", "events": "list[str]"}}, "outputs": {{"subscription": "WebhookSubscription"}}}}
-            ],
-            "dependencies": ["DatabaseService"]
-        }}
-    ],
-    "data_models": [
-        {{
-            "name": "WebhookSubscription",
-            "table_name": "webhook_subscriptions",
-            "description": "## Purpose\\nStores webhook configurations: URL, event filters, secret.\\n\\n## Key Fields\\n- `url`: Target endpoint\\n- `events`: Array of event types\\n- `secret`: HMAC signing key",
-            "fields": {{
-                "id": "UUID PRIMARY KEY",
-                "url": "VARCHAR(2048) NOT NULL",
-                "events": "TEXT[] NOT NULL",
-                "secret": "VARCHAR(256) NOT NULL",
-                "is_active": "BOOLEAN DEFAULT true"
-            }},
-            "indexes": ["CREATE INDEX idx_events ON webhook_subscriptions USING GIN(events)"],
-            "relationships": ["has_many WebhookDelivery"]
-        }}
-    ],
-    "api_endpoints": [
-        {{
-            "method": "POST",
-            "path": "/api/v1/webhooks",
-            "description": "Create webhook subscription",
-            "auth_required": true,
-            "request_schema": {{"url": "string", "events": "array"}},
-            "response_schema": {{"id": "uuid", "url": "string"}},
-            "error_responses": {{"400": "Invalid input", "401": "Unauthorized"}}
-        }}
-    ],
-    "integration_points": [{{"system": "EventBusService", "type": "internal", "description": "Event source"}}],
-    "error_handling": {{"strategy": "Retry with exponential backoff", "max_retries": 3}},
-    "testing_strategy": {{"unit_tests": ["Subscription CRUD", "Signature generation"], "integration_tests": ["End-to-end delivery"]}},
-    "security_considerations": ["HMAC-SHA256 signing", "Secret encrypted at rest"],
-    "migration_plan": {{"steps": ["Create tables", "Add indexes", "Deploy services"]}}
+    "feature_name": "your-feature-name",
+    "architecture_overview": "Brief overview here (2-3 sentences)",
+    "architecture_diagram": "```mermaid\\nflowchart LR\\n    A --> B --> C\\n```",
+    "components": [],
+    "data_models": [],
+    "api_endpoints": [],
+    "integration_points": [],
+    "error_handling": {{}},
+    "testing_strategy": {{}},
+    "security_considerations": [],
+    "migration_plan": {{}}
 }}
 ```
 
-Use the Write tool to create this JSON file at the path specified in your instructions.
+### Step 2: Add components one at a time using Edit
+Use the Edit tool to add each component to the "components" array. Example component:
+```json
+{{
+    "name": "ServiceName",
+    "type": "service",
+    "file_path": "path/to/file.py",
+    "description": "Brief purpose (2-3 sentences)",
+    "responsibility": "Single responsibility",
+    "interfaces": [{{"method": "name", "inputs": {{}}, "outputs": {{}}}}],
+    "dependencies": ["Dep1", "Dep2"]
+}}
+```
+
+### Step 3: Add data_models one at a time using Edit
+```json
+{{
+    "name": "ModelName",
+    "table_name": "table_name",
+    "description": "Brief purpose (2-3 sentences)",
+    "fields": {{"id": "UUID PRIMARY KEY", "field": "TYPE"}},
+    "indexes": ["CREATE INDEX ..."],
+    "relationships": ["belongs_to X", "has_many Y"]
+}}
+```
+
+### Step 4: Add api_endpoints one at a time using Edit
+```json
+{{
+    "method": "POST",
+    "path": "/api/v1/resource",
+    "description": "Brief description",
+    "auth_required": true,
+    "request_schema": {{}},
+    "response_schema": {{}},
+    "error_responses": {{}}
+}}
+```
+
+### Step 5: Fill in remaining fields using Edit
+- integration_points
+- error_handling
+- testing_strategy
+- security_considerations
+- migration_plan
+
+**This incremental approach prevents hitting the 32000 token output limit.**
 """
 
 # =============================================================================
@@ -1066,73 +1078,65 @@ async def create_subscription(
 - Ready for review
 ```
 
-## Required Output Format
+## Required Output Format - INCREMENTAL WRITING
 
-When complete, you MUST write a JSON file with this structure. Note: descriptions shown here are abbreviated - your actual descriptions should follow the markdown format specified above but be concise (~200-400 words per task):
+**⚠️ CRITICAL: Build the output file incrementally to avoid API token limits!**
+
+### Step 1: Write base structure first
+Use the Write tool to create the JSON file with the skeleton:
 
 ```json
 {{
-    "feature_name": "webhook-notifications",
-    "tickets": [
-        {{
-            "id": "TKT-001",
-            "title": "Webhook Infrastructure Setup",
-            "description": "## Overview\\nSet up core webhook infrastructure: database models, delivery service with retry logic, and API endpoints.\\n\\n## Background & Context\\nBuilds on EventBusService. Follows existing service/model/route patterns.\\n\\n## Scope\\n### In Scope\\n- WebhookSubscription and WebhookDelivery models\\n- WebhookDeliveryService with HMAC signing\\n- REST API endpoints\\n\\n### Out of Scope\\n- Frontend UI\\n\\n## Technical Approach\\nCreate SQLAlchemy models, implement services, add FastAPI routes.\\n\\n## Success Criteria\\n- [ ] Models created with indexes\\n- [ ] Delivery service handles retries\\n- [ ] API endpoints functional",
-            "priority": "HIGH",
-            "estimate": "M",
-            "requirements": ["REQ-WEBHOOK-FUNC-001", "REQ-WEBHOOK-FUNC-002"],
-            "tasks": ["TSK-001", "TSK-002", "TSK-003"],
-            "acceptance_criteria": [
-                "Models created with proper indexes",
-                "Delivery service handles retries correctly",
-                "API endpoints functional"
-            ],
-            "dependencies": {{
-                "blocked_by": [],
-                "blocks": ["TKT-002"]
-            }}
-        }}
-    ],
-    "tasks": [
-        {{
-            "id": "TSK-001",
-            "title": "Create WebhookSubscription and WebhookDelivery Models",
-            "description": "## Objective\\nCreate SQLAlchemy models for webhook subscriptions and delivery tracking.\\n\\n## Context & Background\\nPart of TKT-001, addresses REQ-WEBHOOK-FUNC-001. Follow existing patterns in `omoi_os/models/`.\\n\\n## Current State\\nCodebase uses SQLAlchemy 2.0 with UUIDs, timestamps, soft deletes.\\n\\n## Implementation Details\\n### Approach\\n1. Create `omoi_os/models/webhook.py`\\n2. Follow existing model patterns\\n3. Add GIN index for events array\\n4. Create Pydantic schemas\\n\\n### Code Pattern\\n```python\\nclass WebhookSubscription(Base):\\n    __tablename__ = 'webhook_subscriptions'\\n    id = Column(UUID, primary_key=True)\\n    url = Column(String(2048), nullable=False)\\n    events = Column(ARRAY(Text), nullable=False)\\n```\\n\\n## Files\\n- Create: `omoi_os/models/webhook.py`, `omoi_os/schemas/webhook.py`\\n- Modify: `omoi_os/models/__init__.py`\\n\\n## Acceptance Criteria\\n- [ ] Models with all design fields\\n- [ ] Pydantic schemas created",
-            "parent_ticket": "TKT-001",
-            "type": "implementation",
-            "priority": "HIGH",
-            "estimate": "M",
-            "estimated_hours": 3,
-            "files_to_create": ["omoi_os/models/webhook.py", "omoi_os/schemas/webhook.py"],
-            "files_to_modify": ["omoi_os/models/__init__.py"],
-            "acceptance_criteria": ["Models with all design fields", "Pydantic schemas created"],
-            "dependencies": {{"depends_on": [], "blocks": ["TSK-002"]}},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-001"]
-        }},
-        {{
-            "id": "TSK-002",
-            "title": "Create Database Migration",
-            "description": "## Objective\\nCreate Alembic migration for webhook tables.\\n\\n## Context\\nDepends on TSK-001 models.\\n\\n## Implementation\\nRun `alembic revision --autogenerate`, add GIN index, test upgrade/downgrade.\\n\\n## Acceptance Criteria\\n- [ ] Migration creates tables\\n- [ ] Indexes created\\n- [ ] Reversible",
-            "parent_ticket": "TKT-001",
-            "type": "implementation",
-            "priority": "HIGH",
-            "estimate": "S",
-            "estimated_hours": 1,
-            "files_to_create": ["omoi_os/migrations/versions/xxx_add_webhook_tables.py"],
-            "files_to_modify": [],
-            "acceptance_criteria": ["Migration creates tables", "Reversible"],
-            "dependencies": {{"depends_on": ["TSK-001"], "blocks": ["TSK-003"]}},
-            "requirements_addressed": ["REQ-WEBHOOK-FUNC-001"]
-        }}
-    ],
-    "total_estimated_hours": 8,
-    "critical_path": ["TSK-001", "TSK-002", "TSK-003"]
+    "feature_name": "your-feature-name",
+    "tickets": [],
+    "tasks": [],
+    "total_estimated_hours": 0,
+    "critical_path": []
 }}
 ```
 
-### Quality Checklist
+### Step 2: Add tickets one at a time using Edit
+Use the Edit tool to add each ticket to the "tickets" array:
+```json
+{{
+    "id": "TKT-001",
+    "title": "Ticket Title",
+    "description": "## Overview\\nBrief summary.\\n\\n## Scope\\n- In: X\\n- Out: Y\\n\\n## Success Criteria\\n- [ ] Criterion 1",
+    "priority": "HIGH",
+    "estimate": "M",
+    "requirements": ["REQ-001"],
+    "tasks": ["TSK-001", "TSK-002"],
+    "acceptance_criteria": ["Criterion 1"],
+    "dependencies": {{"blocked_by": [], "blocks": []}}
+}}
+```
 
-Before finalizing, verify:
+### Step 3: Add tasks one at a time using Edit
+Use the Edit tool to add each task to the "tasks" array:
+```json
+{{
+    "id": "TSK-001",
+    "title": "Task Title",
+    "description": "## Objective\\nWhat this does.\\n\\n## Context\\nPart of TKT-001.\\n\\n## Implementation\\n1. Step 1\\n2. Step 2\\n\\n## Files\\n- Create: file.py\\n- Modify: other.py\\n\\n## Acceptance Criteria\\n- [ ] Done",
+    "parent_ticket": "TKT-001",
+    "type": "implementation",
+    "priority": "HIGH",
+    "estimate": "M",
+    "estimated_hours": 3,
+    "files_to_create": ["path/file.py"],
+    "files_to_modify": ["path/other.py"],
+    "acceptance_criteria": ["Done"],
+    "dependencies": {{"depends_on": [], "blocks": ["TSK-002"]}},
+    "requirements_addressed": ["REQ-001"]
+}}
+```
+
+### Step 4: Update totals using Edit
+Update total_estimated_hours and critical_path once all tickets/tasks are added.
+
+**This incremental approach prevents hitting the 32000 token output limit.**
+
+### Quality Checklist
 - [ ] Every ticket has TKT-NNN format ID
 - [ ] Every task has TSK-NNN format ID
 - [ ] Every task has a parent_ticket reference
@@ -1140,9 +1144,6 @@ Before finalizing, verify:
 - [ ] No circular dependencies
 - [ ] All requirements are addressed by at least one task
 - [ ] Critical path is defined
-- [ ] Files to create/modify are specified for each task
-
-Use the Write tool to create this JSON file at the path specified in your instructions.
 """
 
 # =============================================================================

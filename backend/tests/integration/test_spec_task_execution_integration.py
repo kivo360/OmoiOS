@@ -126,14 +126,24 @@ class TestPriorityAndPhaseMapping:
         assert priority_map["low"] == "LOW"
 
     def test_phase_map_values(self):
-        """Test phase mapping covers spec phases."""
+        """Test phase mapping covers spec phases.
+
+        NOTE: Requirements and Design phases now map to PHASE_IMPLEMENTATION
+        to ensure tasks run in continuous mode and execute to completion.
+        """
         phase_map = SpecTaskExecutionService.PHASE_MAP
 
-        assert phase_map["Requirements"] == "PHASE_INITIAL"
-        assert phase_map["Design"] == "PHASE_INITIAL"
+        # Requirements/Design now map to IMPLEMENTATION for continuous mode
+        assert phase_map["Requirements"] == "PHASE_IMPLEMENTATION"
+        assert phase_map["Design"] == "PHASE_IMPLEMENTATION"
         assert phase_map["Implementation"] == "PHASE_IMPLEMENTATION"
         assert phase_map["Testing"] == "PHASE_INTEGRATION"
         assert phase_map["Done"] == "PHASE_REFACTORING"
+
+        # Verify original mapping is preserved for reference
+        original_map = SpecTaskExecutionService.ORIGINAL_PHASE_MAP
+        assert original_map["Requirements"] == "PHASE_INITIAL"
+        assert original_map["Design"] == "PHASE_INITIAL"
 
 
 # =============================================================================
@@ -415,13 +425,18 @@ class TestTaskTypeDetermination:
 
         assert task_type == "write_tests"
 
-    def test_design_phase_gives_analyze_requirements(self):
-        """Test design phase results in analyze_requirements type."""
+    def test_design_phase_gives_implement_feature(self):
+        """Test design phase results in implement_feature type.
+
+        NOTE: Design and Requirements phases now use implement_feature
+        to ensure they run in implementation mode with continuous execution.
+        Previously they used analyze_requirements which caused exploration mode.
+        """
         phase_lower = "design"
         task_type = "implement_feature"  # Default
         if "test" in phase_lower:
             task_type = "write_tests"
-        elif "design" in phase_lower:
-            task_type = "analyze_requirements"
+        # NOTE: Design phase NO LONGER maps to analyze_requirements
+        # This ensures implementation mode and continuous execution
 
-        assert task_type == "analyze_requirements"
+        assert task_type == "implement_feature"
