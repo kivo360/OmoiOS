@@ -2415,6 +2415,9 @@ async def _link_tickets_to_spec_async(
                 linked_ids.append(ticket_id)
             else:
                 ticket.spec_id = spec_id
+                # Ensure ticket has a valid phase_id for board display
+                if not ticket.phase_id:
+                    ticket.phase_id = "PHASE_BACKLOG"
                 linked_count += 1
                 linked_ids.append(ticket_id)
 

@@ -374,7 +374,7 @@ class SpecSyncService:
                     new_ticket = Ticket(
                         title=title,
                         description=description,
-                        phase_id="backlog",
+                        phase_id="PHASE_BACKLOG",
                         status="backlog",
                         priority=priority if priority in priority_map.values() else "MEDIUM",
                         project_id=spec.project_id,
@@ -451,7 +451,7 @@ class SpecSyncService:
                         new_ticket = Ticket(
                             title=title,
                             description=description,
-                            phase_id="backlog",
+                            phase_id="PHASE_BACKLOG",
                             status="backlog",
                             priority=ticket_priority,
                             project_id=spec.project_id,
@@ -471,7 +471,7 @@ class SpecSyncService:
                         # Create Task (work unit) linked to the Ticket
                         new_task = Task(
                             ticket_id=parent_ticket_id,
-                            phase_id="backlog",
+                            phase_id="PHASE_BACKLOG",
                             task_type=task_type,
                             title=title,
                             description=description,
