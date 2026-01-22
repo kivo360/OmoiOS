@@ -13,7 +13,7 @@ This document tracks the design and implementation of the complete flow from tas
 
 **Two Sandbox Systems**:
 1. **spec-sandbox** (`subsystems/spec-sandbox/`): Generates specs with phases EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC
-2. **Claude Sandbox Worker** (`backend/omoi_os/workers/continuous_sandbox_worker.py`): Executes implementation tasks
+2. **Claude Sandbox Worker** (`backend/omoi_os/workers/claude_sandbox_worker.py`): Executes implementation tasks
 
 Both systems need to communicate task completion back to the backend and update UI state.
 
@@ -28,19 +28,17 @@ Both systems need to communicate task completion back to the backend and update 
 - [x] TASK_COMPLETED events correctly trigger phase transitions
 - [x] Tickets transition from BACKLOG → IMPLEMENTATION → DONE automatically
 - [x] Explored Claude sandbox worker completion signal pattern
+- [x] **Created TaskContextBuilder service** (`backend/omoi_os/services/task_context_builder.py`)
+- [x] **Removed MCP server dependency from Claude sandbox worker** - context now injected at creation time
+- [x] **Added automatic criteria update hooks** via `EventReporter.report_criterion_met()`
+- [x] **Implemented `spec.criterion_met` event handler** in sandbox routes
+- [x] **Events emitted for real-time UI updates** (`CRITERION_COMPLETED` event)
+- [x] **Completely removed MCP tools from Claude sandbox worker** - context injected at creation time
 
-### In Progress
+### To Do (Future UI Work)
 
-- [ ] Design document for task completion and phase flow (this document)
-- [ ] Define completion signal patterns for acceptance criteria updates
-- [ ] Document API endpoints sandbox needs to call at runtime
-
-### To Do
-
-- [ ] Implement acceptance criteria update endpoint
-- [ ] Add acceptance criteria status to spec dashboard UI
-- [ ] Create sandbox context pulling mechanism
-- [ ] Test end-to-end flow with real sandbox execution
+- [ ] Add acceptance criteria status display to spec dashboard UI
+- [ ] WebSocket updates for real-time criteria checkbox updates
 
 ---
 
@@ -72,7 +70,7 @@ Both systems need to communicate task completion back to the backend and update 
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Claude Agent in sandbox:                                                    │
-│  1. Pulls context from API (requirements, design, task details)              │
+│  1. Receives full context at creation (via TASK_DATA_BASE64 env var)         │
 │  2. Executes implementation work                                             │
 │  3. Signals completion via "TASK_COMPLETE" string (2x consecutive)           │
 │  4. Git validation runs (clean, pushed, PR created)                          │
@@ -101,7 +99,7 @@ Both systems need to communicate task completion back to the backend and update 
 
 ## Current Completion Signal Pattern (Claude Sandbox Worker)
 
-**File**: `backend/omoi_os/workers/continuous_sandbox_worker.py` (lines 625-720)
+**File**: `backend/omoi_os/workers/claude_sandbox_worker.py`
 
 ```python
 # Check for completion signal
@@ -121,7 +119,7 @@ else:
 - After threshold: runs git validation (`_run_validation()`)
 - Git validation checks: clean working directory, code pushed, PR created
 
-**Validation Logic** (lines 692-769):
+**Validation Logic**:
 ```python
 async def _run_validation(self):
     git_status = check_git_status(config.cwd)
@@ -165,34 +163,37 @@ async def _run_validation(self):
 
 ## Acceptance Criteria Update Flow
 
-### Current State
+### Current State (IMPLEMENTED)
 
 - Requirements with acceptance criteria are stored in the spec
 - Spec dashboard shows requirements with checkboxes
-- No mechanism for sandbox to update individual criteria as "met"
+- **Sandbox can mark criteria as met via `EventReporter.report_criterion_met()`**
+- **Backend handles `spec.criterion_met` events and emits `CRITERION_COMPLETED` for UI**
+- Context is injected at sandbox creation time (no MCP tools needed)
 
-### Proposed Flow
+### Current Flow (Implemented)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│  1. Sandbox pulls task context at start                                      │
-│     GET /api/v1/tasks/{task_id}/context                                      │
+│  1. Sandbox receives full context at creation time                           │
+│     via TASK_DATA_BASE64 environment variable                                │
 │                                                                              │
-│     Response includes:                                                       │
-│     - Task description                                                       │
+│     Context includes (built by TaskContextBuilder):                          │
+│     - Task description and implementation notes                              │
 │     - Linked requirements with acceptance criteria                           │
-│     - Design references                                                      │
+│     - Design references and architecture                                     │
 │     - Ticket context                                                         │
+│     - Markdown formatted for system prompt injection                         │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  2. Sandbox executes task, marking criteria as met                           │
 │                                                                              │
-│     As work progresses, sandbox calls:                                       │
-│     PATCH /api/v1/requirements/{req_id}/criteria/{criteria_id}               │
-│     Body: { "status": "met", "evidence": "..." }                             │
+│     As work progresses, sandbox calls EventReporter:                         │
+│     report_criterion_met(criterion_id, evidence)                             │
 │                                                                              │
+│     Backend handles spec.criterion_met event and emits CRITERION_COMPLETED   │
 │     UI updates in real-time (checkbox checked)                               │
 └─────────────────────────────────────────────────────────────────────────────┘
                                     │
@@ -333,31 +334,30 @@ def _handle_task_completed(self, event_data: dict) -> None:
 
 ## Integration Points
 
-### 1. Claude Sandbox Worker Changes
+### 1. Claude Sandbox Worker (IMPLEMENTED)
 
-**File**: `backend/omoi_os/workers/continuous_sandbox_worker.py`
+**File**: `backend/omoi_os/workers/claude_sandbox_worker.py`
 
-Add context pulling at task start:
+Context is injected at creation time via TASK_DATA_BASE64:
 ```python
-async def _start_task(self):
-    # Pull full context before starting
-    context = await self._fetch_task_context(self.task_id)
+# In WorkerConfig.__init__:
+# Decode TASK_DATA_BASE64 environment variable
+task_data_b64 = os.environ.get("TASK_DATA_BASE64", "")
+if task_data_b64:
+    task_data = json.loads(base64.b64decode(task_data_b64))
+    self.spec_context_markdown = task_data.get("_markdown_context", "")
 
-    # Inject context into Claude prompt
-    self.system_prompt = self._build_prompt_with_context(context)
+# Context is then injected into system prompt append_parts
+if self.spec_context_markdown:
+    append_parts.append(f"## TASK ASSIGNMENT\n{self.spec_context_markdown}")
 ```
 
-Add acceptance criteria updates during execution:
+Acceptance criteria updates use EventReporter:
 ```python
-async def _report_criteria_met(self, criteria_id: str, evidence: str):
-    await self.reporter.report(
-        "criteria.met",
-        {
-            "criteria_id": criteria_id,
-            "evidence": evidence,
-            "task_id": self.task_id,
-        }
-    )
+# In sandbox, agent can call:
+await reporter.report_criterion_met(criterion_id, evidence)
+
+# Which sends spec.criterion_met event to backend
 ```
 
 ### 2. Backend API Changes
@@ -461,7 +461,9 @@ async def update_acceptance_criteria(
 | `backend/scripts/test_e2e_phase_flow.py` | E2E test for phase transitions |
 | `backend/omoi_os/services/phase_manager.py` | Phase transition logic |
 | `backend/omoi_os/services/task_queue.py` | Task status and event publishing |
-| `backend/omoi_os/workers/continuous_sandbox_worker.py` | Claude sandbox execution |
+| `backend/omoi_os/services/task_context_builder.py` | Builds full task context for sandbox injection |
+| `backend/omoi_os/workers/claude_sandbox_worker.py` | Claude sandbox execution |
+| `backend/omoi_os/workers/orchestrator_worker.py` | Spawns sandboxes with context |
 | `backend/omoi_os/api/routes/sandbox.py` | Sandbox API endpoints |
 | `subsystems/spec-sandbox/src/spec_sandbox/worker/state_machine.py` | Spec generation |
 | `subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py` | Spec phase prompts |
@@ -470,9 +472,50 @@ async def update_acceptance_criteria(
 
 ## Session Continuation Context
 
-**Last Updated**: 2025-01-22
+**Last Updated**: 2025-01-22 (Session 3)
 
-### What Was Accomplished This Session
+### What Was Accomplished This Session (Session 3)
+
+1. **Completely Removed MCP Tools from Claude Sandbox Worker**
+   - Removed all MCP-related imports (`tool`, `create_sdk_mcp_server`, `MCP_AVAILABLE`)
+   - Removed `enable_spec_tools` configuration and environment variable
+   - Removed MCP server registration from `get_sdk_options()`
+   - Removed MCP tools documentation from system prompt
+   - Updated fallback message when no context is available (warns instead of suggesting MCP calls)
+   - File is now ~490 lines shorter
+
+### What Was Accomplished (Session 2)
+
+1. **Created TaskContextBuilder Service** (`backend/omoi_os/services/task_context_builder.py`)
+   - Builds comprehensive task context including spec requirements, design, and acceptance criteria
+   - Provides both async and sync methods for context building
+   - Generates markdown output for system prompt injection
+   - Links: Task → Ticket → Spec → Requirements → AcceptanceCriteria
+
+2. **Removed MCP Server Dependency from Claude Sandbox Worker**
+   - Context now injected at sandbox/worker creation time via `TASK_DATA_BASE64` environment variable
+   - System prompt includes full spec context markdown (requirements, design, acceptance criteria)
+   - No more MCP tool calls needed to fetch task context during execution
+
+3. **Added Automatic Criteria Update Hooks**
+   - Added `EventReporter.report_criterion_met()` method for sandbox to report criteria completion
+   - Modified `sandbox.py` to handle `spec.criterion_met` events
+   - Backend updates criterion in database and emits `CRITERION_COMPLETED` event for UI
+
+4. **Modified OrchestratorWorker**
+   - Now uses TaskContextBuilder to build full context for implementation and validation tasks
+   - Includes `_markdown_context` field for system prompt injection
+
+### Key Files Modified This Session
+
+| File | Changes |
+|------|---------|
+| `backend/omoi_os/services/task_context_builder.py` | **NEW** - Builds full task context with spec data |
+| `backend/omoi_os/workers/orchestrator_worker.py` | Uses TaskContextBuilder for context injection |
+| `backend/omoi_os/workers/claude_sandbox_worker.py` | Parses nested task_data, injects spec context to system prompt |
+| `backend/omoi_os/api/routes/sandbox.py` | Handles `spec.criterion_met` events, emits `CRITERION_COMPLETED` |
+
+### Previous Session (Session 1)
 
 1. **Verified PhaseManager Integration Works**
    - Created `backend/scripts/test_e2e_phase_flow.py` - a mock mode E2E test
@@ -495,17 +538,23 @@ async def update_acceptance_criteria(
 # 1. This design document (you're reading it)
 docs/design/workflows/sandbox_task_completion_flow.md
 
-# 2. The E2E test script (shows working phase transition flow)
+# 2. NEW - TaskContextBuilder service
+backend/omoi_os/services/task_context_builder.py
+
+# 3. The E2E test script (shows working phase transition flow)
 backend/scripts/test_e2e_phase_flow.py
 
-# 3. PhaseManager event handlers (core logic)
+# 4. PhaseManager event handlers (core logic)
 backend/omoi_os/services/phase_manager.py  # lines 1096-1127 for _handle_task_completed
 
-# 4. Claude sandbox worker completion detection
-backend/omoi_os/workers/continuous_sandbox_worker.py  # lines 625-720
+# 5. Claude sandbox worker (context injection + criteria reporting)
+backend/omoi_os/workers/claude_sandbox_worker.py
 
-# 5. Task completion endpoint (sandbox calls this)
-backend/omoi_os/api/routes/sandbox.py  # search for "task-complete"
+# 6. Sandbox routes (criterion_met event handler)
+backend/omoi_os/api/routes/sandbox.py  # search for "spec.criterion_met"
+
+# 7. Orchestrator worker (uses TaskContextBuilder)
+backend/omoi_os/workers/orchestrator_worker.py
 ```
 
 ### Commands to Run E2E Test
@@ -518,18 +567,20 @@ uv run python scripts/test_e2e_phase_flow.py --mock
 
 ### What Needs to Be Done Next
 
-**Priority 1 - For Demo Today:**
-- [ ] Run the E2E test to verify it still passes
-- [ ] Manually test with a real spec execution if time permits
+**Priority 1 - For Demo:**
+- [x] Run the E2E test to verify it still passes ✅
+- [ ] Test with real spec execution to validate full flow
 
-**Priority 2 - Acceptance Criteria Updates:**
-- [ ] Implement `GET /api/v1/tasks/{task_id}/context` endpoint
-- [ ] Implement `PATCH /api/v1/requirements/{req_id}/criteria/{criteria_id}` endpoint
-- [ ] Wire sandbox to call these endpoints during execution
+**Priority 2 - Completed This Session:**
+- [x] Create TaskContextBuilder service ✅
+- [x] Remove MCP dependency from Claude sandbox worker ✅
+- [x] Inject context at sandbox creation time ✅
+- [x] Add automatic criteria update hooks ✅
+- [x] Emit events for real-time UI updates ✅
 
-**Priority 3 - UI Updates:**
+**Priority 3 - UI Updates (Future):**
 - [ ] Add real-time criteria status updates to spec dashboard
-- [ ] Show checkboxes updating as sandbox marks criteria met
+- [ ] Show checkboxes updating as sandbox marks criteria met via WebSocket
 
 ### Key Decisions Made
 
