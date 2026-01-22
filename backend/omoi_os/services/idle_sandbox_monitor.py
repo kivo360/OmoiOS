@@ -32,6 +32,8 @@ class IdleSandboxMonitor:
     """Detects and terminates idle sandboxes that show no work progress.
 
     Work Events (indicate actual progress):
+
+    Agent Events (Claude Agent SDK):
     - agent.file_edited
     - agent.tool_completed
     - agent.subagent_completed
@@ -41,15 +43,25 @@ class IdleSandboxMonitor:
     - agent.tool_use
     - agent.tool_result
 
+    Spec Events (spec-sandbox phases):
+    - spec.execution_started, spec.execution_completed
+    - spec.phase_started, spec.phase_completed, spec.phase_retry
+    - spec.progress, spec.artifact_created
+    - spec.requirements_generated, spec.design_generated, spec.tasks_generated
+    - spec.sync_started, spec.sync_completed, spec.tasks_queued
+    - spec.ticket_created, spec.task_created, etc.
+
     Non-Work Events (don't indicate progress):
-    - agent.heartbeat
+    - agent.heartbeat, spec.heartbeat
     - agent.started
     - agent.thinking
-    - agent.error
+    - agent.error, spec.phase_failed, spec.execution_failed
     """
 
     # Events that indicate actual work is being done
+    # Includes both agent.* events (Claude Agent SDK) and spec.* events (spec-sandbox)
     WORK_EVENT_TYPES: Set[str] = {
+        # Agent events (Claude Agent SDK)
         "agent.file_edited",
         "agent.tool_completed",
         "agent.subagent_completed",
@@ -58,6 +70,36 @@ class IdleSandboxMonitor:
         "agent.assistant_message",
         "agent.tool_use",
         "agent.tool_result",
+        # Spec events (spec-sandbox phases) - CRITICAL: These indicate spec generation progress
+        # Without these, idle monitor may terminate sandboxes that are actively generating specs
+        "spec.execution_started",
+        "spec.execution_completed",
+        "spec.phase_started",
+        "spec.phase_completed",
+        "spec.phase_retry",
+        "spec.progress",
+        "spec.artifact_created",
+        "spec.requirements_generated",
+        "spec.design_generated",
+        "spec.tasks_generated",
+        "spec.sync_started",
+        "spec.sync_completed",
+        "spec.tasks_queued",
+        # Ticket/task CRUD events from spec-sandbox
+        "spec.tickets_creation_started",
+        "spec.tickets_creation_completed",
+        "spec.ticket_created",
+        "spec.ticket_updated",
+        "spec.task_created",
+        "spec.task_updated",
+        # Requirements/design sync events
+        "spec.requirements_sync_started",
+        "spec.requirements_sync_completed",
+        "spec.requirement_created",
+        "spec.requirement_updated",
+        "spec.design_sync_started",
+        "spec.design_sync_completed",
+        "spec.design_updated",
     }
 
     # Default idle threshold (3 minutes - if only heartbeats for this long, sandbox is idle)

@@ -1,4 +1,28 @@
 """
+DEPRECATED - Use spec-sandbox subsystem instead.
+
+This module is NO LONGER USED. The spec-driven development workflow is now
+handled by the spec-sandbox subsystem located at:
+
+    subsystems/spec-sandbox/
+
+The spec-sandbox provides:
+- Better separation of concerns (standalone package)
+- HTTPReporter for real-time event streaming to backend
+- Improved phase prompts with EARS-format requirements
+- Claude Agent SDK integration with configurable generators
+- Proper context passing (SPEC_TITLE, SPEC_DESCRIPTION env vars)
+
+Migration:
+- DaytonaSpawner.spawn_for_phase() sets USE_SPEC_SANDBOX=true
+- The sandbox uploads spec_sandbox package from subsystems/spec-sandbox/
+- Phase prompts are defined in: subsystems/spec-sandbox/src/spec_sandbox/prompts/phases.py
+
+DO NOT USE THIS FILE FOR NEW DEVELOPMENT.
+
+================================================================================
+ORIGINAL DOCSTRING (for historical reference):
+
 Spec-driven development state machine.
 
 Orchestrates the multi-phase spec generation workflow:
@@ -25,6 +49,7 @@ Usage:
         working_directory="/workspace",
     )
     success = await machine.run()
+================================================================================
 """
 
 import asyncio

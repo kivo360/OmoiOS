@@ -885,8 +885,8 @@ class DaytonaSpawnerService:
             "USE_SPEC_SANDBOX": "true",
             # Explicitly disable continuous mode - spec state machine handles iteration
             "CONTINUOUS_MODE": "false",
-            # Increase max turns per phase (default is 50, we increase to 100 for complex specs)
-            "MAX_TURNS": "100",
+            # Increase max turns per phase to prevent getting stuck on complex specs
+            "MAX_TURNS": "150",
             # Increase budget to allow for all 5 phases (default is $10)
             "MAX_BUDGET_USD": "50.0",
             # CWD tells spec-sandbox where the cloned codebase is located
@@ -904,13 +904,27 @@ class DaytonaSpawnerService:
 
             cred_service = CredentialsService(self.db)
 
-            # Get spec to find user_id
+            # Get spec to find user_id, title, and description
             user_id = None
             with self.db.get_session() as session:
                 spec = session.get(Spec, spec_id)
-                if spec and spec.user_id:
-                    user_id = spec.user_id
-                    env_vars["USER_ID"] = str(user_id)
+                if spec:
+                    if spec.user_id:
+                        user_id = spec.user_id
+                        env_vars["USER_ID"] = str(user_id)
+
+                    # CRITICAL: Pass spec title and description as env vars
+                    # Without these, spec-sandbox defaults to "Untitled Spec" and empty description,
+                    # causing the phase prompts to not know what feature to design
+                    if spec.title:
+                        env_vars["SPEC_TITLE"] = spec.title
+                    if spec.description:
+                        env_vars["SPEC_DESCRIPTION"] = spec.description
+                    logger.info(
+                        f"[SPAWNER] Spec context: title='{spec.title}', description='{spec.description[:50]}...'"
+                        if spec.description and len(spec.description) > 50
+                        else f"[SPAWNER] Spec context: title='{spec.title}', description='{spec.description}'"
+                    )
 
                 # Get project for GitHub repo info
                 project = session.get(Project, project_id)
