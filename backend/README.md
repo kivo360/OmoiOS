@@ -44,6 +44,24 @@ LLM_API_KEY=your-api-key
 OMOIOS_ENV=development
 ```
 
+## Database Connection (Scripts & Tests)
+
+Always use `get_app_settings()` for database connections - never hardcode connection strings:
+
+```python
+from omoi_os.config import get_app_settings
+from omoi_os.services.database import DatabaseService
+
+settings = get_app_settings()
+db = DatabaseService(connection_string=settings.database.url)
+
+with db.get_session() as session:
+    # Your database operations here
+    pass
+```
+
+This automatically loads from `.env` / `.env.local` files with proper precedence.
+
 ## Documentation
 
 See `../docs/` for complete documentation:
