@@ -75,6 +75,26 @@ uv run alembic downgrade -1
 uv run alembic history
 ```
 
+### Database Connection in Scripts
+
+**ALWAYS use `get_app_settings()` for database connections** - never hardcode connection strings:
+
+```python
+from omoi_os.config import get_app_settings
+from omoi_os.services.database import DatabaseService
+
+settings = get_app_settings()
+db = DatabaseService(connection_string=settings.database.url)
+
+with db.get_session() as session:
+    # Your database operations here
+    from omoi_os.models.task import Task
+    tasks = session.query(Task).filter(Task.status == "running").all()
+```
+
+This automatically loads credentials from `.env` / `.env.local` files (`.env.local` takes precedence).
+The Railway production database URL is configured in `.env.local`.
+
 ### Docker Development
 ```bash
 # Start all services
