@@ -114,6 +114,12 @@ class IdleSandboxMonitor:
     # Doubled from 10 minutes to allow spec-sandbox more time for complex operations
     STUCK_RUNNING_THRESHOLD = timedelta(minutes=20)
 
+    # Heartbeat event types (both agent and spec-sandbox heartbeats)
+    HEARTBEAT_EVENT_TYPES: Set[str] = {
+        "agent.heartbeat",
+        "spec.heartbeat",
+    }
+
     def __init__(
         self,
         db: DatabaseService,
@@ -144,10 +150,11 @@ class IdleSandboxMonitor:
 
         with self.db.get_session() as session:
             # Query distinct sandbox IDs with recent heartbeats
+            # Supports both agent.heartbeat and spec.heartbeat events
             results = (
                 session.query(SandboxEvent.sandbox_id)
                 .filter(
-                    SandboxEvent.event_type == "agent.heartbeat",
+                    SandboxEvent.event_type.in_(self.HEARTBEAT_EVENT_TYPES),
                     SandboxEvent.created_at >= cutoff,
                 )
                 .distinct()
@@ -184,12 +191,12 @@ class IdleSandboxMonitor:
                 .first()
             )
 
-            # Get last heartbeat
+            # Get last heartbeat (supports both agent and spec-sandbox heartbeats)
             last_heartbeat = (
                 session.query(SandboxEvent)
                 .filter(
                     SandboxEvent.sandbox_id == sandbox_id,
-                    SandboxEvent.event_type == "agent.heartbeat",
+                    SandboxEvent.event_type.in_(self.HEARTBEAT_EVENT_TYPES),
                 )
                 .order_by(SandboxEvent.created_at.desc())
                 .first()
