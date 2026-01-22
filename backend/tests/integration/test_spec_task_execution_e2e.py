@@ -133,17 +133,28 @@ class TestSpecTaskConversionLogic:
         assert priority_map.get("CRITICAL".lower()) == "CRITICAL"
 
     def test_phase_mapping(self):
-        """Test all phase levels are mapped correctly."""
+        """Test all phase levels are mapped correctly.
+
+        NOTE: Requirements and Design phases now map to PHASE_IMPLEMENTATION
+        to ensure tasks run in continuous mode and execute to completion.
+        The original mapping (PHASE_INITIAL) is preserved in ORIGINAL_PHASE_MAP.
+        """
         from omoi_os.services.spec_task_execution import SpecTaskExecutionService
 
         phase_map = SpecTaskExecutionService.PHASE_MAP
 
-        # Test all mappings
-        assert phase_map["Requirements"] == "PHASE_INITIAL"
-        assert phase_map["Design"] == "PHASE_INITIAL"
+        # Test all mappings - Requirements/Design now map to IMPLEMENTATION
+        # to enable continuous mode execution
+        assert phase_map["Requirements"] == "PHASE_IMPLEMENTATION"
+        assert phase_map["Design"] == "PHASE_IMPLEMENTATION"
         assert phase_map["Implementation"] == "PHASE_IMPLEMENTATION"
         assert phase_map["Testing"] == "PHASE_INTEGRATION"
         assert phase_map["Done"] == "PHASE_REFACTORING"
+
+        # Verify original mapping is preserved for reference
+        original_map = SpecTaskExecutionService.ORIGINAL_PHASE_MAP
+        assert original_map["Requirements"] == "PHASE_INITIAL"
+        assert original_map["Design"] == "PHASE_INITIAL"
 
     def test_task_type_inference_from_phase(self):
         """Test task type is correctly inferred from phase."""

@@ -32,6 +32,7 @@ from omoi_os.services.message_queue import (
     get_message_queue,
 )
 from omoi_os.services.phase_gate import PhaseGateService
+from omoi_os.services.phase_manager import PhaseManager, get_phase_manager
 from omoi_os.services.resource_lock import ResourceLockService
 from omoi_os.services.restart_orchestrator import RestartOrchestrator
 from omoi_os.services.task_queue import TaskQueueService
@@ -62,6 +63,8 @@ __all__ = [
     "InMemoryMessageQueue",
     "LLMService",
     "PhaseGateService",
+    "PhaseManager",
+    "get_phase_manager",
     "RedisMessageQueue",
     "ResourceLockService",
     "RestartOrchestrator",

@@ -76,6 +76,7 @@ class ClaudeMarkdownGenerator:
     async def generate_all(
         self,
         explore_output: Optional[Dict[str, Any]] = None,
+        prd_output: Optional[Dict[str, Any]] = None,
         requirements_output: Optional[Dict[str, Any]] = None,
         design_output: Optional[Dict[str, Any]] = None,
         tasks_output: Optional[Dict[str, Any]] = None,
@@ -90,6 +91,7 @@ class ClaudeMarkdownGenerator:
         # Build context from all phases
         context = {
             "explore": explore_output or {},
+            "prd": prd_output or {},
             "requirements": requirements_output or {},
             "design": design_output or {},
             "tasks": tasks_output or {},

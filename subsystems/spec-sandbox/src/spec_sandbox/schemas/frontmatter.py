@@ -101,12 +101,25 @@ class TicketFrontmatter(BaseModel):
     dependencies: Dependencies = Field(default_factory=Dependencies)
     labels: List[str] = Field(default_factory=list)
 
-    def to_api_payload(self, project_id: str, spec_id: Optional[str] = None) -> Dict[str, Any]:
+    def to_api_payload(
+        self,
+        project_id: str,
+        spec_id: Optional[str] = None,
+        phase_id: str = "PHASE_IMPLEMENTATION",
+        status: str = "building",
+    ) -> Dict[str, Any]:
         """Convert frontmatter to API payload for ticket creation.
 
         Args:
             project_id: The project ID to create the ticket in
             spec_id: Optional spec ID for context
+            phase_id: Phase ID for the ticket (default: PHASE_IMPLEMENTATION)
+                     Using PHASE_IMPLEMENTATION ensures:
+                     1. Tasks run in continuous mode (auto-enabled)
+                     2. Tasks run to completion with PR creation
+                     3. Tickets appear in "doing" category for immediate work
+            status: Ticket status (default: "building")
+                   Using "building" puts tickets in the active work queue
 
         Returns:
             Dict ready for POST /api/v1/tickets
@@ -115,6 +128,8 @@ class TicketFrontmatter(BaseModel):
             "title": self.title,
             "priority": self.priority.value,
             "project_id": project_id,
+            "phase_id": phase_id,  # Set to IMPLEMENTATION for continuous mode
+            "status": status,       # Set to building for immediate execution
             "context": {
                 "local_id": self.id,
                 "requirements": self.requirements,
@@ -166,20 +181,46 @@ class TaskFrontmatter(BaseModel):
     )
     dependencies: Dependencies = Field(default_factory=Dependencies)
 
-    def to_api_payload(self, ticket_api_id: str) -> Dict[str, Any]:
+    def to_api_payload(
+        self,
+        ticket_api_id: str,
+        description: str = "",
+        phase_id: str = "PHASE_IMPLEMENTATION",
+    ) -> Dict[str, Any]:
         """Convert frontmatter to API payload for task creation.
 
         Args:
             ticket_api_id: The API ID of the parent ticket
+            description: Task description (body content from markdown)
+            phase_id: Phase ID for the task (default: PHASE_IMPLEMENTATION)
+                     Using PHASE_IMPLEMENTATION ensures:
+                     1. Tasks run in continuous mode (auto-enabled)
+                     2. Tasks run to completion with PR creation
+                     3. Tasks get execution_mode="implementation"
 
         Returns:
             Dict ready for POST /api/v1/tasks
         """
+        # Map TaskType to task_type that ensures implementation mode
+        # Using "implement_feature" ensures the task is analyzed as implementation mode
+        # and gets continuous mode enabled
+        task_type_map = {
+            TaskType.IMPLEMENTATION: "implement_feature",
+            TaskType.TEST: "write_tests",
+            TaskType.RESEARCH: "implement_feature",  # Changed from analyze_requirements
+            TaskType.DOCUMENTATION: "implement_feature",  # Changed from analyze_requirements
+            TaskType.INFRASTRUCTURE: "implement_feature",
+            TaskType.REFACTOR: "implement_feature",
+        }
+        task_type = task_type_map.get(self.type, "implement_feature")
+
         payload = {
             "ticket_id": ticket_api_id,
             "title": self.title,
-            "task_type": self.type.value,
+            "description": description,
+            "task_type": task_type,
             "priority": self.priority.value,
+            "phase_id": phase_id,
         }
 
         if self.dependencies.depends_on:
