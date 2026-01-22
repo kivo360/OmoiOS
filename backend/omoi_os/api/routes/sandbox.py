@@ -1177,7 +1177,7 @@ async def post_sandbox_event(
     # Handle task status transitions based on event type
     # This includes: agent.started -> running, agent.completed/continuous.completed -> completed, agent.failed/error -> failed
     # NOTE: continuous.completed contains the actual validation result (validation_passed field)
-    # Also handles spec phase events for incremental spec sync
+    # Also handles spec phase events for incremental spec sync and acceptance criteria updates
     if event.event_type in (
         "agent.started",
         "agent.completed",
@@ -1190,6 +1190,7 @@ async def post_sandbox_event(
         "spec.phase_failed",
         "spec.phase_retry",
         "spec.execution_completed",  # Final spec completion
+        "spec.criterion_met",  # Acceptance criteria completion from sandbox
     ):
         try:
             db = get_db_service()
@@ -1219,6 +1220,62 @@ async def post_sandbox_event(
                         logger.warning(
                             f"No task found for sandbox {sandbox_id} with status claiming/assigned/running"
                         )
+
+            # Handle criterion_met - can work with or without task_id
+            if event.event_type == "spec.criterion_met":
+                criterion_id = event.event_data.get("criterion_id")
+                requirement_id = event.event_data.get("requirement_id")
+                evidence = event.event_data.get("evidence", "")
+                spec_id = event.event_data.get("spec_id")
+
+                # If no spec_id in event, try to get it from task result
+                if not spec_id and task_id:
+                    async with db.get_async_session() as session:
+                        result = await session.execute(
+                            select(Task).where(Task.id == task_id)
+                        )
+                        task = result.scalar_one_or_none()
+                        if task and task.result:
+                            spec_id = task.result.get("spec_id")
+
+                if criterion_id:
+                    logger.info(
+                        f"Acceptance criterion met: {criterion_id} (requirement: {requirement_id}, spec: {spec_id})"
+                    )
+                    async with db.get_async_session() as session:
+                        from omoi_os.models.spec import SpecAcceptanceCriterion
+
+                        result = await session.execute(
+                            select(SpecAcceptanceCriterion).where(
+                                SpecAcceptanceCriterion.id == criterion_id
+                            )
+                        )
+                        criterion = result.scalar_one_or_none()
+                        if criterion:
+                            criterion.completed = True
+                            await session.commit()
+                            logger.info(f"Criterion {criterion_id} marked as completed")
+
+                            # Emit real-time event for UI update
+                            from omoi_os.services.event_bus import SystemEvent
+
+                            event_bus.publish(
+                                SystemEvent(
+                                    event_type="CRITERION_COMPLETED",
+                                    entity_type="criterion",
+                                    entity_id=criterion_id,
+                                    payload={
+                                        "criterion_id": criterion_id,
+                                        "requirement_id": requirement_id,
+                                        "spec_id": spec_id,
+                                        "evidence": evidence,
+                                        "sandbox_id": sandbox_id,
+                                        "task_id": task_id,
+                                    },
+                                )
+                            )
+                        else:
+                            logger.warning(f"Criterion {criterion_id} not found for update")
 
             if task_id:
                 task_queue = TaskQueueService(db, event_bus=get_event_bus())
@@ -1563,6 +1620,8 @@ async def post_sandbox_event(
                                 spec.updated_at = utc_now()
                                 await session.commit()
                                 logger.info(f"Spec {spec_id} marked as completed (100%)")
+                    # Note: spec.criterion_met is handled above at the top level
+                    # (before task_id check) to work with both task-based and spec-based events
                 else:
                     logger.warning(
                         f"Could not determine task_id for status update. event_type={event.event_type}, sandbox_id={sandbox_id}, event_data keys={list(event.event_data.keys())}"
