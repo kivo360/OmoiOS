@@ -102,15 +102,17 @@ class IdleSandboxMonitor:
         "spec.design_updated",
     }
 
-    # Default idle threshold (3 minutes - if only heartbeats for this long, sandbox is idle)
-    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=3)
+    # Default idle threshold (10 minutes - if only heartbeats for this long, sandbox is idle)
+    # Increased from 3 minutes to allow spec-sandbox more time for processing
+    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=10)
 
-    # Heartbeat timeout (90 seconds - sandbox is dead if no heartbeat for this long)
-    HEARTBEAT_TIMEOUT = timedelta(seconds=90)
+    # Heartbeat timeout (2 minutes - sandbox is dead if no heartbeat for this long)
+    HEARTBEAT_TIMEOUT = timedelta(minutes=2)
 
-    # Stuck running threshold (10 minutes - if agent reports "running" but no work events,
+    # Stuck running threshold (20 minutes - if agent reports "running" but no work events,
     # consider it stuck even though it claims to be working)
-    STUCK_RUNNING_THRESHOLD = timedelta(minutes=10)
+    # Doubled from 10 minutes to allow spec-sandbox more time for complex operations
+    STUCK_RUNNING_THRESHOLD = timedelta(minutes=20)
 
     def __init__(
         self,
