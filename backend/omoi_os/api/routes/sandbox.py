@@ -540,7 +540,7 @@ async def _sync_tasks_to_table(
                 new_ticket = Ticket(
                     title=title,
                     description=description,
-                    phase_id="backlog",
+                    phase_id="PHASE_BACKLOG",
                     status="backlog",
                     priority=priority if priority in priority_map.values() else "MEDIUM",
                     project_id=spec.project_id,
@@ -630,7 +630,7 @@ async def _sync_tasks_to_table(
                             new_ticket = Ticket(
                                 title=title,
                                 description=description,
-                                phase_id="backlog",
+                                phase_id="PHASE_BACKLOG",
                                 status="backlog",
                                 priority=ticket_priority,
                                 project_id=spec.project_id,
@@ -651,7 +651,7 @@ async def _sync_tasks_to_table(
                         task_priority_upper = priority_map.get(priority.lower() if priority else "medium", "MEDIUM")
                         new_task = Task(
                             ticket_id=parent_ticket_id,
-                            phase_id="backlog",
+                            phase_id="PHASE_BACKLOG",
                             task_type=task_type,
                             title=title,
                             description=description,
