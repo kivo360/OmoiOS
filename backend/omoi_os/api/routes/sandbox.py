@@ -711,9 +711,56 @@ async def _sync_design_to_spec(
                 return False
 
             # Extract design components
+            # Handle both formats:
+            # 1. spec-sandbox format: architecture_overview, architecture_diagram, data_models
+            # 2. Legacy format: architecture (dict), data_model (dict)
+
+            # Build architecture markdown from overview and diagram
+            architecture_parts = []
+            arch_overview = design_output.get("architecture_overview", "")
+            arch_diagram = design_output.get("architecture_diagram", "")
+            legacy_arch = design_output.get("architecture", {})
+
+            if arch_overview:
+                architecture_parts.append(arch_overview)
+            if arch_diagram:
+                architecture_parts.append(arch_diagram)
+            if not architecture_parts and isinstance(legacy_arch, str) and legacy_arch:
+                architecture_parts.append(legacy_arch)
+
+            architecture = "\n\n".join(architecture_parts) if architecture_parts else legacy_arch
+
+            # Build data model markdown from data_models list or legacy format
+            data_models = design_output.get("data_models", [])
+            legacy_dm = design_output.get("data_model", {})
+
+            if data_models and isinstance(data_models, list):
+                # Convert structured data models to markdown
+                dm_parts = []
+                for model in data_models:
+                    if isinstance(model, dict):
+                        name = model.get("name", "Model")
+                        desc = model.get("description", "")
+                        fields = model.get("fields", [])
+                        dm_parts.append(f"### {name}")
+                        if desc:
+                            dm_parts.append(desc)
+                        if fields:
+                            dm_parts.append("\n**Fields:**")
+                            for field in fields:
+                                if isinstance(field, dict):
+                                    fname = field.get("name", "field")
+                                    ftype = field.get("type", "string")
+                                    fdesc = field.get("description", "")
+                                    dm_parts.append(f"- `{fname}` ({ftype}){': ' + fdesc if fdesc else ''}")
+                        dm_parts.append("")
+                data_model = "\n".join(dm_parts) if dm_parts else legacy_dm
+            else:
+                data_model = legacy_dm if isinstance(legacy_dm, str) else legacy_dm
+
             spec.design = {
-                "architecture": design_output.get("architecture", {}),
-                "data_model": design_output.get("data_model", {}),
+                "architecture": architecture,
+                "data_model": data_model,
                 "api_spec": design_output.get("api_endpoints", []),
                 "components": design_output.get("components", []),
                 "error_handling": design_output.get("error_handling", {}),

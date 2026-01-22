@@ -1146,28 +1146,38 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
                       </CardHeader>
                       <CardContent>
                         {design.api_spec && design.api_spec.length > 0 ? (
-                          <div className="space-y-2">
+                          <div className="space-y-4">
                             {design.api_spec.map((endpoint: any, idx: number) => (
                               <div
                                 key={idx}
-                                className="flex items-center gap-4 rounded-md border p-3"
+                                className="rounded-lg border bg-card"
                               >
-                                <Badge
-                                  variant={
-                                    endpoint.method === "GET"
-                                      ? "secondary"
-                                      : endpoint.method === "POST"
-                                      ? "default"
-                                      : "outline"
-                                  }
-                                  className="w-16 justify-center font-mono"
-                                >
-                                  {endpoint.method}
-                                </Badge>
-                                <code className="flex-1 font-mono text-sm">{endpoint.endpoint}</code>
-                                <span className="text-sm text-muted-foreground">
-                                  {endpoint.description}
-                                </span>
+                                {/* Endpoint header with method and path */}
+                                <div className="flex items-center gap-3 border-b px-4 py-3">
+                                  <Badge
+                                    variant={
+                                      endpoint.method === "GET"
+                                        ? "secondary"
+                                        : endpoint.method === "POST"
+                                        ? "default"
+                                        : endpoint.method === "PUT"
+                                        ? "outline"
+                                        : endpoint.method === "DELETE"
+                                        ? "destructive"
+                                        : "outline"
+                                    }
+                                    className="w-20 justify-center font-mono text-xs"
+                                  >
+                                    {endpoint.method}
+                                  </Badge>
+                                  <code className="font-mono text-sm font-medium">{endpoint.endpoint}</code>
+                                </div>
+                                {/* Description with markdown rendering */}
+                                {endpoint.description && (
+                                  <div className="px-4 py-3">
+                                    <Markdown content={endpoint.description} className="text-sm" />
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
