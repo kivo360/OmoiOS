@@ -283,19 +283,28 @@ async def _update_spec_phase_data(
             # Update status based on success
             if success:
                 # Determine current phase based on what data we have
-                # Phases: explore (20%), requirements (40%), design (60%), tasks (80%), sync (100%)
-                phase_order = ["explore", "requirements", "design", "tasks", "sync"]
+                # Phases: explore, prd, requirements, design, tasks, sync (6 phases)
+                # Each phase is ~16.67% but we round to nice numbers
+                phase_order = ["explore", "prd", "requirements", "design", "tasks", "sync"]
+                phase_progress_map = {
+                    "explore": 16.0,
+                    "prd": 32.0,
+                    "requirements": 48.0,
+                    "design": 64.0,
+                    "tasks": 80.0,
+                    "sync": 100.0,
+                }
                 current_phase = "explore"
-                completed_phases = 0
+                max_progress = 0.0
                 for phase in phase_order:
                     if phase in existing_phase_data:
                         current_phase = phase
-                        completed_phases += 1
+                        max_progress = phase_progress_map.get(phase, 0.0)
 
                 spec.current_phase = current_phase
 
-                # Calculate progress: each phase is 20% of total
-                spec.progress = completed_phases * 20.0
+                # Set progress based on completed phases
+                spec.progress = max_progress
 
                 # Update status based on completion
                 if "sync" in existing_phase_data:
@@ -1495,13 +1504,14 @@ async def post_sandbox_event(
                                 f"Phase started: spec {spec_id} now in phase {phase_name}"
                             )
                             # Calculate progress based on phase order
-                            # Phases: explore (0%), requirements (20%), design (40%), tasks (60%), sync (80%)
-                            # Progress shows "starting this phase", completion adds the final 20%
+                            # Phases: explore, prd, requirements, design, tasks, sync (6 phases)
+                            # Progress shows "starting this phase" - we show the previous phase's completion
                             phase_progress = {
                                 "explore": 0.0,
-                                "requirements": 20.0,
-                                "design": 40.0,
-                                "tasks": 60.0,
+                                "prd": 16.0,
+                                "requirements": 32.0,
+                                "design": 48.0,
+                                "tasks": 64.0,
                                 "sync": 80.0,
                             }
                             new_progress = phase_progress.get(phase_name, 0.0)
