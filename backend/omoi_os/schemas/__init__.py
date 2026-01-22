@@ -1,5 +1,15 @@
-"""Pydantic schemas for structured LLM outputs."""
+"""Pydantic schemas for structured LLM outputs and canonical event definitions."""
 
+from omoi_os.schemas.events import (
+    AgentEventTypes,
+    IterationEventTypes,
+    NON_WORK_EVENTS,
+    PHASE_PROGRESSION_EVENTS,
+    SpecEventTypes,
+    get_event_category,
+    is_phase_progression,
+    is_work_event,
+)
 from omoi_os.schemas.github import (
     AvailabilityCheckRequest,
     AvailabilityCheckResponse,
@@ -61,6 +71,15 @@ from omoi_os.schemas.spec_generation import (
 )
 
 __all__ = [
+    # Event Types (canonical definitions)
+    "AgentEventTypes",
+    "SpecEventTypes",
+    "IterationEventTypes",
+    "NON_WORK_EVENTS",
+    "PHASE_PROGRESSION_EVENTS",
+    "is_work_event",
+    "is_phase_progression",
+    "get_event_category",
     # GitHub
     "AvailabilityCheckRequest",
     "AvailabilityCheckResponse",

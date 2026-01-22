@@ -23,6 +23,8 @@ constant updates as new event types are added), we use an INVERTED approach:
 
 This means new event types are automatically treated as work, preventing premature
 sandbox termination when new features are added.
+
+The canonical event type definitions are in omoi_os.schemas.events.
 """
 
 from __future__ import annotations
@@ -33,6 +35,11 @@ from typing import TYPE_CHECKING, Optional, Set
 from omoi_os.logging import get_logger
 from omoi_os.models.sandbox_event import SandboxEvent
 from omoi_os.models.task import Task
+from omoi_os.schemas.events import (
+    NON_WORK_EVENTS,
+    AgentEventTypes,
+    SpecEventTypes,
+)
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
 
@@ -68,45 +75,30 @@ class IdleSandboxMonitor:
     # ==========================================================================
     # NON-WORK EVENTS (Blocklist)
     # ==========================================================================
-    # Events that do NOT indicate actual work progress.
-    # ANY event NOT in this set is considered work.
+    # Uses the canonical NON_WORK_EVENTS from omoi_os.schemas.events.
+    # Any event NOT in this set is considered work.
     # This inverted approach is safer - new event types are automatically treated as work.
-    NON_WORK_EVENT_TYPES: Set[str] = {
-        # Heartbeats - just keepalive signals, not actual work
-        "agent.heartbeat",
-        "spec.heartbeat",
-        # Started events - initialization phase, not actual work yet
-        "agent.started",
-        # Error events - failures don't indicate forward progress
-        "agent.error",
-        "agent.stream_error",
-        "spec.phase_failed",
-        "spec.execution_failed",
-        "iteration.failed",
-        # Waiting events - ready state, but not actively working
-        "agent.waiting",
-        # Shutdown events - cleanup, not productive work
-        "agent.shutdown",
-        # Interrupted events - work was stopped, not progress
-        "agent.interrupted",
-    }
+    #
+    # Convert frozenset to set for SQLAlchemy compatibility
+    NON_WORK_EVENT_TYPES: Set[str] = set(NON_WORK_EVENTS)
 
-    # Default idle threshold (10 minutes - if only heartbeats for this long, sandbox is idle)
-    # Increased from 3 minutes to allow spec-sandbox more time for processing
-    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=10)
+    # Default idle threshold (20 minutes - if only heartbeats for this long, sandbox is idle)
+    # Doubled from 10 minutes to allow spec-sandbox more time for complex processing
+    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=20)
 
     # Heartbeat timeout (2 minutes - sandbox is dead if no heartbeat for this long)
     HEARTBEAT_TIMEOUT = timedelta(minutes=2)
 
-    # Stuck running threshold (20 minutes - if agent reports "running" but no work events,
+    # Stuck running threshold (40 minutes - if agent reports "running" but no work events,
     # consider it stuck even though it claims to be working)
-    # Doubled from 10 minutes to allow spec-sandbox more time for complex operations
-    STUCK_RUNNING_THRESHOLD = timedelta(minutes=20)
+    # Doubled from 20 minutes to allow spec-sandbox more time for complex operations
+    STUCK_RUNNING_THRESHOLD = timedelta(minutes=40)
 
     # Heartbeat event types (both agent and spec-sandbox heartbeats)
+    # Uses canonical event types from omoi_os.schemas.events
     HEARTBEAT_EVENT_TYPES: Set[str] = {
-        "agent.heartbeat",
-        "spec.heartbeat",
+        AgentEventTypes.HEARTBEAT,
+        SpecEventTypes.HEARTBEAT,
     }
 
     def __init__(
