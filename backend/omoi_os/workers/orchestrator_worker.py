@@ -499,30 +499,58 @@ async def orchestrator_loop():
                                 # Inject full task context as base64-encoded JSON
                                 # This eliminates the need for worker to fetch from API
                                 # Base64 encoding avoids shell escaping issues with JSON
+                                # Now includes spec requirements, design, and acceptance criteria
                                 import base64
+                                from omoi_os.services.task_context_builder import TaskContextBuilder
 
-                                task_data = {
-                                    "task_id": str(task.id),
-                                    "task_type": task.task_type,
-                                    "task_description": task.description or "",
-                                    "task_priority": task.priority,
-                                    "phase_id": task.phase_id,
-                                    "ticket_id": str(ticket.id),
-                                    "ticket_title": ticket.title or "",
-                                    "ticket_description": ticket.description or "",
-                                    "ticket_priority": ticket.priority,
-                                    "ticket_context": ticket.context or {},
-                                }
+                                # Build comprehensive task context including spec data
+                                try:
+                                    context_builder = TaskContextBuilder(db=db)
+                                    full_context = await context_builder.build_context(str(task.id))
+                                    task_data = full_context.to_dict()
 
-                                # Include revision feedback if task previously failed validation
-                                # This allows the implementer to see what went wrong and fix it
-                                if task.result:
-                                    if task.result.get("revision_feedback"):
-                                        task_data["revision_feedback"] = task.result["revision_feedback"]
-                                    if task.result.get("revision_recommendations"):
-                                        task_data["revision_recommendations"] = task.result["revision_recommendations"]
-                                    if task.result.get("validation_iteration"):
-                                        task_data["validation_iteration"] = task.result["validation_iteration"]
+                                    # Also include the markdown version for system prompt injection
+                                    task_data["_markdown_context"] = full_context.to_markdown()
+
+                                    log.info(
+                                        "built_full_task_context",
+                                        task_id=str(task.id),
+                                        has_spec=bool(full_context.spec_id),
+                                        num_requirements=len(full_context.requirements),
+                                        has_design=bool(full_context.design),
+                                    )
+                                except Exception as ctx_err:
+                                    # Fallback to basic context on error
+                                    log.warning(
+                                        "full_context_build_failed",
+                                        task_id=str(task.id),
+                                        error=str(ctx_err),
+                                    )
+                                    task_data = {
+                                        "task": {
+                                            "id": str(task.id),
+                                            "type": task.task_type,
+                                            "description": task.description or "",
+                                            "priority": task.priority,
+                                            "phase_id": task.phase_id,
+                                        },
+                                        "ticket": {
+                                            "id": str(ticket.id),
+                                            "title": ticket.title or "",
+                                            "description": ticket.description or "",
+                                            "priority": ticket.priority,
+                                            "context": ticket.context or {},
+                                        },
+                                    }
+                                    # Include revision feedback if available
+                                    if task.result:
+                                        if task.result.get("revision_feedback"):
+                                            task_data["revision"] = {
+                                                "feedback": task.result["revision_feedback"],
+                                                "recommendations": task.result.get("revision_recommendations", []),
+                                                "iteration": task.result.get("validation_iteration"),
+                                            }
+
                                 # Base64 encode to avoid shell escaping issues
                                 task_json = json.dumps(task_data)
                                 extra_env["TASK_DATA_BASE64"] = base64.b64encode(
@@ -885,19 +913,48 @@ async def orchestrator_loop():
                                 extra_env["TICKET_TITLE"] = ticket.title or ""
                                 extra_env["TICKET_DESCRIPTION"] = ticket.description or ""
 
-                                # Include task data with validation context
-                                task_data = {
-                                    "task_id": str(validation_task.id),
-                                    "task_type": validation_task.task_type,
-                                    "task_description": validation_task.description or "",
-                                    "task_priority": validation_task.priority,
-                                    "phase_id": validation_task.phase_id,
-                                    "ticket_id": str(ticket.id),
-                                    "ticket_title": ticket.title or "",
-                                    "ticket_description": ticket.description or "",
-                                    "validation_mode": True,  # Signals this is a validation run
-                                    "implementation_result": validation_task.result or {},  # Previous implementation result
-                                }
+                                # Build full task context with validation mode flag
+                                from omoi_os.services.task_context_builder import TaskContextBuilder
+
+                                try:
+                                    context_builder = TaskContextBuilder(db=db)
+                                    full_context = context_builder.build_context_sync(str(validation_task.id))
+                                    task_data = full_context.to_dict()
+
+                                    # Add validation-specific flags
+                                    task_data["validation_mode"] = True
+                                    task_data["implementation_result"] = validation_task.result or {}
+                                    task_data["_markdown_context"] = full_context.to_markdown()
+
+                                    val_log.info(
+                                        "built_validation_context",
+                                        task_id=str(validation_task.id),
+                                        has_spec=bool(full_context.spec_id),
+                                        num_requirements=len(full_context.requirements),
+                                    )
+                                except Exception as ctx_err:
+                                    val_log.warning(
+                                        "validation_context_build_failed",
+                                        error=str(ctx_err),
+                                    )
+                                    task_data = {
+                                        "task": {
+                                            "id": str(validation_task.id),
+                                            "type": validation_task.task_type,
+                                            "description": validation_task.description or "",
+                                            "priority": validation_task.priority,
+                                            "phase_id": validation_task.phase_id,
+                                        },
+                                        "ticket": {
+                                            "id": str(ticket.id),
+                                            "title": ticket.title or "",
+                                            "description": ticket.description or "",
+                                            "priority": ticket.priority,
+                                            "context": ticket.context or {},
+                                        },
+                                        "validation_mode": True,
+                                        "implementation_result": validation_task.result or {},
+                                    }
 
                                 task_json = json.dumps(task_data)
                                 extra_env["TASK_DATA_BASE64"] = base64.b64encode(
