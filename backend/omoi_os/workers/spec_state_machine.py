@@ -1073,11 +1073,67 @@ Try again now.
         return _MockSpec(spec_id=self.spec_id)
 
     async def load_phase_data(self, phase: str) -> dict:
-        """Load data from a specific phase."""
+        """Load data from a specific phase.
+
+        Falls back to loading from database tables if phase_data is empty
+        but the data exists in the database (e.g., requirements synced but
+        phase_data not updated).
+        """
         spec = await self.load_spec()
-        if not spec or not spec.phase_data:
+        if not spec:
             return {}
-        return spec.phase_data.get(phase, {})
+
+        # First try phase_data
+        if spec.phase_data:
+            phase_data = spec.phase_data.get(phase, {})
+            if phase_data:
+                return phase_data
+
+        # Fall back to database for requirements phase
+        if phase == "requirements":
+            return await self._load_requirements_from_db(spec)
+
+        return {}
+
+    async def _load_requirements_from_db(self, spec: Any) -> dict:
+        """Load requirements from SpecRequirement table as fallback.
+
+        This is used when phase_data['requirements'] is empty but
+        requirements exist in the database (e.g., synced separately).
+        """
+        from omoi_os.models.spec import SpecRequirement
+        from sqlalchemy import select
+
+        try:
+            async with self.db.get_async_session() as session:
+                result = await session.execute(
+                    select(SpecRequirement).filter(SpecRequirement.spec_id == self.spec_id)
+                )
+                requirements = result.scalars().all()
+
+                if not requirements:
+                    logger.warning(f"No requirements found in DB for spec {self.spec_id}")
+                    return {}
+
+                logger.info(
+                    f"Loaded {len(requirements)} requirements from DB for spec {self.spec_id}"
+                )
+
+                return {
+                    "requirements": [
+                        {
+                            "id": req.id,
+                            "title": req.title,
+                            "condition": req.condition,
+                            "action": req.action,
+                            "status": req.status,
+                        }
+                        for req in requirements
+                    ]
+                }
+        except Exception as e:
+            logger.error(f"Failed to load requirements from DB: {e}")
+            return {}
 
     async def save_phase_result(
         self, spec: Any, phase: SpecPhase, result: PhaseResult
