@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { PromptInput, ModelSelector, RepoSelector, Project, Repository } from "@/components/command"
+import { PromptInput, ModelSelector, RepoSelector, Project, Repository, SpecDrivenSettingsPanel } from "@/components/command"
 import { useProjects } from "@/hooks/useProjects"
 import { useConnectedRepositories } from "@/hooks/useGitHub"
 import { useRegisterAgent } from "@/hooks/useAgents"
@@ -14,6 +14,7 @@ export default function CommandCenterPage() {
   const [selectedRepo, setSelectedRepo] = useState<string | null>(null)
   const [selectedBranch, setSelectedBranch] = useState("main")
   const [selectedModel, setSelectedModel] = useState("opus-4.5")
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   // Fetch real data
   const { data: projectsData } = useProjects({ status: "active" })
@@ -139,6 +140,13 @@ export default function CommandCenterPage() {
           </div>
         )}
       </div>
+
+      {/* Spec-Driven Settings Panel */}
+      <SpecDrivenSettingsPanel
+        projectId={selectedProject?.id ?? null}
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+      />
     </div>
   )
 }
