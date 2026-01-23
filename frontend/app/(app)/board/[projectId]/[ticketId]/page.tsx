@@ -1,6 +1,6 @@
 "use client"
 
-import { use, useState, useMemo } from "react"
+import { use, useState, useMemo, useTransition, memo, lazy, Suspense } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -57,6 +57,90 @@ import { useTicket, useTicketContext, useTransitionTicket } from "@/hooks/useTic
 import { useTicketCommits } from "@/hooks/useCommits"
 import { useTasks } from "@/hooks/useTasks"
 
+// Memoized Markdown wrapper to prevent re-renders
+const MemoizedMarkdown = memo(function MemoizedMarkdown({ content }: { content: string }) {
+  return <Markdown content={content} />
+})
+
+// Memoized task card to prevent re-renders when other tasks change
+const TaskCard = memo(function TaskCard({
+  task,
+  statusConfig,
+  projectId
+}: {
+  task: any
+  statusConfig: any
+  projectId: string
+}) {
+  const taskStatus = task.status?.toLowerCase() || "pending"
+  const config = statusConfig[taskStatus as keyof typeof statusConfig] || statusConfig.pending
+  const TaskIcon = config.icon
+  const hasSandbox = !!task.sandbox_id
+
+  const cardContent = (
+    <CardContent className="p-4">
+      <div className="flex items-center gap-4">
+        <div
+          className={`flex h-6 w-6 items-center justify-center rounded-full ${
+            taskStatus === "completed"
+              ? "bg-primary text-primary-foreground"
+              : taskStatus === "running" || taskStatus === "in_progress"
+              ? "bg-blue-100 text-blue-600"
+              : "border-2"
+          }`}
+        >
+          <TaskIcon
+            className={`h-3 w-3 ${
+              taskStatus === "running" || taskStatus === "in_progress" ? "animate-spin" : ""
+            }`}
+          />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div
+            className={
+              taskStatus === "completed"
+                ? "text-muted-foreground line-through"
+                : ""
+            }
+          >
+            <MemoizedMarkdown content={task.description || task.task_type} />
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
+            <span className="font-mono">{task.id.slice(0, 8)}</span>
+            {task.assigned_agent_id && (
+              <>
+                <span>•</span>
+                <span className="flex items-center gap-1">
+                  <Bot className="h-3 w-3" />
+                  {task.assigned_agent_id.slice(0, 8)}
+                </span>
+              </>
+            )}
+            <span>•</span>
+            <span>{task.task_type}</span>
+          </div>
+        </div>
+        <Badge variant={config.color as any}>{config.label}</Badge>
+        {hasSandbox && (
+          <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        )}
+      </div>
+    </CardContent>
+  )
+
+  return hasSandbox ? (
+    <Link href={`/sandbox/${task.sandbox_id}`}>
+      <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+        {cardContent}
+      </Card>
+    </Link>
+  ) : (
+    <Card className="opacity-75">
+      {cardContent}
+    </Card>
+  )
+})
+
 interface TicketDetailPageProps {
   params: Promise<{ projectId: string; ticketId: string }>
 }
@@ -97,6 +181,14 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
   const { projectId, ticketId } = use(params)
   const [activeTab, setActiveTab] = useState("details")
   const [newComment, setNewComment] = useState("")
+  const [isPending, startTransition] = useTransition()
+
+  // Handle tab change with transition for better INP
+  const handleTabChange = (value: string) => {
+    startTransition(() => {
+      setActiveTab(value)
+    })
+  }
 
   // Fetch ticket data
   const { data: ticket, isLoading: ticketLoading, error: ticketError } = useTicket(ticketId)
@@ -253,7 +345,7 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col overflow-hidden">
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="flex flex-1 flex-col overflow-hidden">
           <div className="flex-shrink-0 border-b bg-background px-6">
             <TabsList className="h-12 w-full justify-start rounded-none border-0 bg-transparent p-0">
               <TabsTrigger
@@ -302,7 +394,13 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
           </div>
 
           {/* Tab Content */}
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 relative">
+            {/* Transition loading overlay */}
+            {isPending && (
+              <div className="absolute inset-0 bg-background/50 backdrop-blur-[1px] z-10 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            )}
             {/* Details Tab */}
             <TabsContent value="details" className="m-0 p-6">
               <div className="max-w-3xl space-y-6">
@@ -312,7 +410,7 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                   <Card>
                     <CardContent className="p-4">
                       {ticket.description ? (
-                        <Markdown content={ticket.description} />
+                        <MemoizedMarkdown content={ticket.description} />
                       ) : (
                         <p className="text-muted-foreground">No description provided.</p>
                       )}
@@ -434,75 +532,14 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                   </Card>
                 ) : (
                   <div className="space-y-2">
-                    {ticketTasks.map((task) => {
-                      const taskStatus = task.status?.toLowerCase() || "pending"
-                      const config = statusConfig[taskStatus as keyof typeof statusConfig] || statusConfig.pending
-                      const TaskIcon = config.icon
-                      const hasSandbox = !!task.sandbox_id
-
-                      const cardContent = (
-                        <CardContent className="p-4">
-                          <div className="flex items-center gap-4">
-                            <div
-                              className={`flex h-6 w-6 items-center justify-center rounded-full ${
-                                taskStatus === "completed"
-                                  ? "bg-primary text-primary-foreground"
-                                  : taskStatus === "running" || taskStatus === "in_progress"
-                                  ? "bg-blue-100 text-blue-600"
-                                  : "border-2"
-                              }`}
-                            >
-                              <TaskIcon
-                                className={`h-3 w-3 ${
-                                  taskStatus === "running" || taskStatus === "in_progress" ? "animate-spin" : ""
-                                }`}
-                              />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div
-                                className={
-                                  taskStatus === "completed"
-                                    ? "text-muted-foreground line-through"
-                                    : ""
-                                }
-                              >
-                                <Markdown content={task.description || task.task_type} />
-                              </div>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
-                                <span className="font-mono">{task.id.slice(0, 8)}</span>
-                                {task.assigned_agent_id && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="flex items-center gap-1">
-                                      <Bot className="h-3 w-3" />
-                                      {task.assigned_agent_id.slice(0, 8)}
-                                    </span>
-                                  </>
-                                )}
-                                <span>•</span>
-                                <span>{task.task_type}</span>
-                              </div>
-                            </div>
-                            <Badge variant={config.color as any}>{config.label}</Badge>
-                            {hasSandbox && (
-                              <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </div>
-                        </CardContent>
-                      )
-
-                      return hasSandbox ? (
-                        <Link key={task.id} href={`/sandbox/${task.sandbox_id}`}>
-                          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
-                            {cardContent}
-                          </Card>
-                        </Link>
-                      ) : (
-                        <Card key={task.id} className="opacity-75">
-                          {cardContent}
-                        </Card>
-                      )
-                    })}
+                    {ticketTasks.map((task) => (
+                      <TaskCard
+                        key={task.id}
+                        task={task}
+                        statusConfig={statusConfig}
+                        projectId={projectId}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
