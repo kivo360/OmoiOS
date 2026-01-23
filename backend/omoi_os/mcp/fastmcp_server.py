@@ -12,6 +12,7 @@ from pydantic import Field
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.memory import MemoryService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
@@ -22,6 +23,7 @@ _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
 _collaboration_service: Optional[Any] = None
+_memory_service: Optional[MemoryService] = None
 
 
 def initialize_mcp_services(
@@ -30,6 +32,7 @@ def initialize_mcp_services(
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
     collaboration_service: Optional[Any] = None,
+    memory_service: Optional[MemoryService] = None,
 ) -> None:
     """Initialize global services for MCP server.
 
@@ -39,13 +42,15 @@ def initialize_mcp_services(
         task_queue: Task queue service
         discovery_service: Discovery service
         collaboration_service: Optional collaboration service for agent messaging
+        memory_service: Optional memory service for task memory retrieval
     """
-    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service, _memory_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
     _collaboration_service = collaboration_service
+    _memory_service = memory_service
 
 
 # Create FastMCP server
@@ -1540,6 +1545,92 @@ def get_discoveries_by_type(
                 }
                 for d in discoveries
             ],
+        }
+
+
+# ============================================================================
+# Memory Tools (NEW - for agent memory retrieval)
+# ============================================================================
+
+
+@mcp.tool()
+def find_memory(
+    ctx: Context,
+    task_description: str = Field(..., min_length=5, description="Description of the task to find similar memories for"),
+    top_k: int = Field(default=5, ge=1, le=100, description="Maximum number of results to return"),
+    similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0, description="Minimum similarity score"),
+    memory_types: Optional[List[str]] = Field(default=None, description="Optional list of memory types to filter by"),
+    success_only: bool = Field(default=False, description="Only return successful task memories"),
+    search_mode: str = Field(default="hybrid", description="Search mode: semantic, keyword, or hybrid"),
+) -> Dict[str, Any]:
+    """Search for similar past task memories using semantic, keyword, or hybrid search.
+
+    Use this tool to retrieve relevant past solutions and learnings before starting
+    a new task. Returns memories ranked by similarity with execution summaries and
+    success indicators.
+
+    Args:
+        task_description: Description of the task to find similar memories for (min 5 chars)
+        top_k: Maximum number of results to return (1-100, default: 5)
+        similarity_threshold: Minimum similarity score (0.0-1.0, default: 0.7)
+        memory_types: Optional list of memory types to filter by (e.g., ["error_fix", "decision"])
+        success_only: Only return successful task memories (default: False)
+        search_mode: Search mode: "semantic", "keyword", or "hybrid" (default: "hybrid")
+
+    Returns:
+        Dictionary with success status, count, and list of matching memories
+    """
+    if not _db or not _memory_service:
+        raise RuntimeError("Database or memory service not initialized")
+
+    with _db.get_session() as session:
+        results = _memory_service.search_similar(
+            session=session,
+            task_description=task_description,
+            top_k=top_k,
+            similarity_threshold=similarity_threshold,
+            success_only=success_only,
+            memory_types=memory_types,
+            search_mode=search_mode,
+        )
+
+        # Format results for MCP response
+        memories = [
+            {
+                "memory_id": result.memory_id,
+                "task_id": result.task_id,
+                "summary": result.summary,
+                "success": result.success,
+                "similarity_score": round(result.similarity_score, 4),
+                "reused_count": result.reused_count,
+                "semantic_score": round(result.semantic_score, 4) if result.semantic_score else None,
+                "keyword_score": round(result.keyword_score, 4) if result.keyword_score else None,
+            }
+            for result in results
+        ]
+
+        ctx.info(f"Found {len(memories)} memory(ies) matching '{task_description[:50]}...'")
+
+        # Publish event for observability
+        if _event_bus:
+            _event_bus.publish(
+                SystemEvent(
+                    event_type="MEMORY_SEARCH",
+                    entity_type="memory",
+                    entity_id="search",
+                    payload={
+                        "query_length": len(task_description),
+                        "top_k": top_k,
+                        "result_count": len(memories),
+                        "search_mode": search_mode,
+                    },
+                )
+            )
+
+        return {
+            "success": True,
+            "count": len(memories),
+            "memories": memories,
         }
 
 
