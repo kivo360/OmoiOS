@@ -1397,3 +1397,21 @@ export interface PaginatedResponse<T> {
   page: number
   page_size: number
 }
+
+// ============================================================================
+// Spec-Driven Settings Types
+// ============================================================================
+
+export interface SpecDrivenOptions {
+  spec_driven_mode_enabled: boolean
+  auto_advance_phases: boolean
+  require_approval_gates: boolean
+  auto_spawn_tasks: boolean
+}
+
+export interface SpecDrivenSettingsUpdate {
+  spec_driven_mode_enabled?: boolean
+  auto_advance_phases?: boolean
+  require_approval_gates?: boolean
+  auto_spawn_tasks?: boolean
+}
