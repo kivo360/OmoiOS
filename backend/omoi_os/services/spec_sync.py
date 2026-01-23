@@ -406,6 +406,10 @@ class SpecSyncService:
                     stats.errors.append(f"Ticket creation failed: {e}")
 
         # Phase 2: Create Tasks (discrete work units linked to tickets)
+        # Track local task IDs to database IDs for dependency resolution
+        task_id_map: Dict[str, str] = {}  # local_id (TSK-001) -> db_uuid
+        tasks_with_deps: List[tuple[Task, dict]] = []  # (Task, original_dependencies)
+
         if tasks:
             logger.info(f"Syncing {len(tasks)} tasks for spec {spec.id}")
 
@@ -418,6 +422,7 @@ class SpecSyncService:
 
             for task_data in dedup_result.to_create:
                 try:
+                    local_task_id = task_data.get("id", "")  # e.g., "TSK-001"
                     title = task_data.get("title", "")
                     description = task_data.get("description", "")
                     parent_ticket_local_id = task_data.get("parent_ticket", "")
@@ -471,6 +476,7 @@ class SpecSyncService:
 
                     if parent_ticket_id:
                         # Create Task (work unit) linked to the Ticket
+                        # Initially create with empty dependencies - we'll resolve them after all tasks are created
                         new_task = Task(
                             ticket_id=parent_ticket_id,
                             phase_id="PHASE_BACKLOG",
@@ -479,9 +485,20 @@ class SpecSyncService:
                             description=description,
                             priority=priority_map.get(priority, "MEDIUM"),
                             status="pending",
-                            dependencies=dependencies if isinstance(dependencies, dict) else {"depends_on": []},
+                            dependencies=None,  # Will be resolved after all tasks are created
                         )
                         session.add(new_task)
+                        await session.flush()  # Get the task ID
+
+                        # Track local ID to database UUID mapping
+                        if local_task_id:
+                            task_id_map[local_task_id] = str(new_task.id)
+
+                        # Track tasks that have dependencies for later resolution
+                        if dependencies and isinstance(dependencies, dict):
+                            depends_on = dependencies.get("depends_on", [])
+                            if depends_on:
+                                tasks_with_deps.append((new_task, dependencies))
 
                         logger.debug(
                             f"Created task under ticket: {title}",
@@ -489,6 +506,8 @@ class SpecSyncService:
                                 "spec_id": spec.id,
                                 "spec_task_id": new_spec_task.id,
                                 "ticket_id": parent_ticket_id,
+                                "task_id": str(new_task.id),
+                                "local_task_id": local_task_id,
                             },
                         )
 
@@ -497,6 +516,48 @@ class SpecSyncService:
                     stats.errors.append(f"Task creation failed: {e}")
 
             stats.tasks_skipped = len(dedup_result.to_skip)
+
+            # Phase 3: Resolve task dependencies (map symbolic IDs to actual UUIDs)
+            if tasks_with_deps and task_id_map:
+                logger.info(
+                    f"Resolving dependencies for {len(tasks_with_deps)} tasks "
+                    f"using {len(task_id_map)} task ID mappings"
+                )
+                for task, original_deps in tasks_with_deps:
+                    depends_on = original_deps.get("depends_on", [])
+                    blocks = original_deps.get("blocks", [])
+
+                    # Resolve symbolic references to actual UUIDs
+                    resolved_depends_on = []
+                    for dep_id in depends_on:
+                        if dep_id in task_id_map:
+                            resolved_depends_on.append(task_id_map[dep_id])
+                        else:
+                            # Dependency not found in this sync - might be a pre-existing task
+                            # or an invalid reference. Log warning but don't include.
+                            logger.warning(
+                                f"Could not resolve dependency {dep_id} for task {task.id}"
+                            )
+
+                    resolved_blocks = []
+                    for block_id in blocks:
+                        if block_id in task_id_map:
+                            resolved_blocks.append(task_id_map[block_id])
+
+                    # Update task with resolved dependencies
+                    if resolved_depends_on or resolved_blocks:
+                        task.dependencies = {
+                            "depends_on": resolved_depends_on,
+                            "blocks": resolved_blocks,
+                        }
+                    else:
+                        # No valid dependencies after resolution - set to None
+                        task.dependencies = None
+
+                    logger.debug(
+                        f"Resolved dependencies for task {task.id}: "
+                        f"{depends_on} -> {resolved_depends_on}"
+                    )
 
     async def _update_spec_dedup_fields(
         self,

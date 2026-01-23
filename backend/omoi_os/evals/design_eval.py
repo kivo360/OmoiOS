@@ -4,9 +4,18 @@ Evaluator for the DESIGN phase output.
 Validates that technical design is complete and implementable.
 """
 
+import logging
 from typing import Any
 
+from omoi_os.utils.mermaid import (
+    extract_mermaid_blocks,
+    sanitize_mermaid_diagram,
+    sanitize_markdown_mermaid_blocks,
+)
+
 from .base import BaseEvaluator, EvalResult
+
+logger = logging.getLogger(__name__)
 
 
 class DesignEvaluator(BaseEvaluator):
@@ -120,6 +129,10 @@ class DesignEvaluator(BaseEvaluator):
 
         result = self._make_result(checks)
 
+        # Validate and sanitize any Mermaid diagrams
+        # This modifies the design dict in-place if sanitization is needed
+        self._validate_and_sanitize_mermaid(design, result)
+
         # Add warnings for optional but recommended fields
         if not has_error_handling:
             result.warnings.append(
@@ -182,3 +195,95 @@ class DesignEvaluator(BaseEvaluator):
             return True
         method = endpoint.get("method", "")
         return method.upper() in self.VALID_METHODS
+
+    def _validate_and_sanitize_mermaid(
+        self,
+        design: dict,
+        result: EvalResult
+    ) -> dict:
+        """Validate and sanitize any Mermaid diagrams in the design.
+
+        This method:
+        1. Extracts Mermaid code from architecture_diagram or architecture fields
+        2. Sanitizes the diagrams to fix common syntax issues
+        3. Updates the design dict with sanitized versions
+        4. Adds warnings for any diagrams that needed sanitization
+
+        Args:
+            design: The design dict to validate
+            result: EvalResult to add warnings to
+
+        Returns:
+            Updated design dict with sanitized Mermaid diagrams
+        """
+        mermaid_fields_to_check = [
+            "architecture_diagram",
+            "architecture",
+            "architecture_overview",
+        ]
+
+        sanitization_performed = False
+
+        for field in mermaid_fields_to_check:
+            content = design.get(field)
+            if not content or not isinstance(content, str):
+                continue
+
+            # Check if content contains mermaid code blocks
+            if "```mermaid" in content.lower():
+                # Sanitize mermaid blocks within markdown
+                sanitized = sanitize_markdown_mermaid_blocks(content)
+                if sanitized != content:
+                    design[field] = sanitized
+                    sanitization_performed = True
+                    logger.info(
+                        f"Sanitized Mermaid diagram in design.{field}"
+                    )
+            elif self._looks_like_mermaid(content):
+                # Direct mermaid code (not in markdown block)
+                sanitized = sanitize_mermaid_diagram(content)
+                if sanitized != content:
+                    design[field] = sanitized
+                    sanitization_performed = True
+                    logger.info(
+                        f"Sanitized raw Mermaid diagram in design.{field}"
+                    )
+
+        if sanitization_performed:
+            result.warnings.append(
+                "Mermaid diagram(s) contained syntax issues and were auto-corrected. "
+                "Common issues: unquoted special characters ({}, (), /) in node labels. "
+                "Future diagrams should follow Mermaid syntax rules."
+            )
+
+        return design
+
+    def _looks_like_mermaid(self, content: str) -> bool:
+        """Check if content looks like raw Mermaid diagram code.
+
+        Args:
+            content: String to check
+
+        Returns:
+            True if content appears to be Mermaid diagram syntax
+        """
+        mermaid_keywords = [
+            "flowchart",
+            "graph ",
+            "graph\n",
+            "sequenceDiagram",
+            "classDiagram",
+            "stateDiagram",
+            "erDiagram",
+            "gantt",
+            "pie",
+            "gitGraph",
+            "mindmap",
+            "timeline",
+            "subgraph",
+        ]
+        content_lower = content.lower().strip()
+        return any(
+            content_lower.startswith(kw.lower())
+            for kw in mermaid_keywords
+        )

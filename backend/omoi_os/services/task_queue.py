@@ -260,6 +260,10 @@ class TaskQueueService:
                 ):
                     continue  # Skip tasks that don't match capabilities
 
+                # Skip tasks from archived specs
+                if self._is_task_from_archived_spec(session, task):
+                    continue
+
                 # Compute and update score (REQ-TQM-PRI-002)
                 task.score = self.scorer.compute_score(task)
                 available_tasks.append(task)
@@ -343,6 +347,10 @@ class TaskQueueService:
                     task, agent_capabilities
                 ):
                     continue  # Skip tasks that don't match capabilities
+
+                # Skip tasks from archived specs
+                if self._is_task_from_archived_spec(session, task):
+                    continue
 
                 # Compute and update score (REQ-TQM-PRI-002)
                 task.score = self.scorer.compute_score(task)
@@ -546,6 +554,38 @@ class TaskQueueService:
 
         # All dependencies must be completed
         return all(dep_task.status == "completed" for dep_task in dependency_tasks)
+
+    def _is_task_from_archived_spec(self, session, task: Task) -> bool:
+        """
+        Check if a task belongs to an archived spec.
+
+        Tasks linked to tickets that are linked to archived specs should be
+        excluded from processing to prevent spawning work for archived specs.
+
+        Args:
+            session: Database session
+            task: Task to check
+
+        Returns:
+            True if the task is from an archived spec, False otherwise
+        """
+        from omoi_os.models.ticket import Ticket
+        from omoi_os.models.spec import Spec
+
+        # Get the ticket for this task
+        ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+        if not ticket or not ticket.spec_id:
+            return False  # No spec linked, not archived
+
+        # Check if the spec is archived
+        spec = session.query(Spec).filter(Spec.id == ticket.spec_id).first()
+        if spec and spec.archived:
+            logger.debug(
+                f"Task {task.id} is from archived spec {spec.id}, excluding from queue"
+            )
+            return True
+
+        return False
 
     def _check_capability_match(
         self, task: Task, agent_capabilities: List[str]
@@ -1893,6 +1933,17 @@ class TaskQueueService:
                     task.score = self.scorer.compute_score(task)
                     available_tasks.append(task)
                     continue
+
+                # Skip tasks from archived specs
+                if ticket.spec_id:
+                    from omoi_os.models.spec import Spec
+                    spec = session.query(Spec).filter(Spec.id == ticket.spec_id).first()
+                    if spec and spec.archived:
+                        logger.debug(
+                            f"Ticket {ticket.id} is linked to archived spec {ticket.spec_id}, "
+                            f"skipping task {task.id}"
+                        )
+                        continue
 
                 project_id = ticket.project_id
 
