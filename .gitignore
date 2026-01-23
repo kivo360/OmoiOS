@@ -78,3 +78,9 @@ examples/workspaces/
 # MCP
 .mcp/
 
+# Node.js
+node_modules/
+
+# System files
+ITERATION_NOTES.md
+
