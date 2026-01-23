@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any
+import logging
+from typing import Any, Optional
 
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.phase_gate_result import PhaseGateResult
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
+from omoi_os.services.spec_driven_settings import (
+    GateEnforcementStrictness,
+    SpecDrivenSettings,
+    SpecDrivenSettingsService,
+)
+
+logger = logging.getLogger(__name__)
 
 
 PHASE_GATE_REQUIREMENTS: dict[str, dict[str, Any]] = {
@@ -26,7 +34,7 @@ PHASE_GATE_REQUIREMENTS: dict[str, dict[str, Any]] = {
         "required_artifacts": ["code_changes", "test_coverage"],
         "required_tasks_completed": True,
         "validation_criteria": {
-            "test_coverage": {"min_percentage": 80},
+            "test_coverage": {"min_percentage": 80},  # Default, overridden by settings
             "code_changes": {"must_have_tests": True},
         },
     },
@@ -48,10 +56,46 @@ PHASE_GATE_REQUIREMENTS: dict[str, dict[str, Any]] = {
 
 
 class PhaseGateService:
-    """Validates phase gates before transitions."""
+    """Validates phase gates before transitions.
 
-    def __init__(self, db: DatabaseService):
+    Supports configurable gate enforcement strictness and coverage thresholds
+    via SpecDrivenSettingsService. When no settings service is provided,
+    defaults to strict enforcement with 80% coverage threshold.
+
+    Strictness behaviors:
+    - bypass: Log validation result, always return success
+    - lenient: Return warnings but allow transitions
+    - strict: Block transition on validation failure (default)
+    """
+
+    def __init__(
+        self,
+        db: DatabaseService,
+        settings_service: Optional[SpecDrivenSettingsService] = None,
+    ):
+        """Initialize the phase gate service.
+
+        Args:
+            db: DatabaseService instance for database operations
+            settings_service: Optional SpecDrivenSettingsService for reading project settings.
+                             If not provided, defaults to strict enforcement with 80% coverage.
+        """
         self.db = db
+        self.settings_service = settings_service
+
+    def _get_settings_for_ticket(self, ticket_id: str) -> SpecDrivenSettings:
+        """Get settings for a ticket, using defaults if no service is configured.
+
+        Args:
+            ticket_id: The ticket ID to get settings for
+
+        Returns:
+            SpecDrivenSettings with values from the ticket's project or defaults
+        """
+        if self.settings_service:
+            return self.settings_service.get_settings_for_ticket(ticket_id)
+        # Return default settings if no service is configured
+        return SpecDrivenSettings()
 
     def check_gate_requirements(self, ticket_id: str, phase_id: str) -> dict[str, Any]:
         """
@@ -112,14 +156,29 @@ class PhaseGateService:
         """
         Run full gate validation and persist result.
 
+        Applies gate enforcement strictness from settings:
+        - bypass: Log validation result, always return passed
+        - lenient: Return warnings in validation_result but gate_status=passed
+        - strict: Block transition on validation failure (default)
+
         Returns:
             PhaseGateResult representing validation outcome.
         """
+        # Get settings for this ticket
+        settings = self._get_settings_for_ticket(ticket_id)
+        strictness = settings.gate_enforcement_strictness
+
+        logger.debug(
+            f"Validating gate for ticket {ticket_id}, phase {phase_id}, "
+            f"strictness={strictness.value}, min_coverage={settings.min_test_coverage}"
+        )
+
         # Ensure latest artifacts are captured before validation
         self.collect_artifacts(ticket_id, phase_id)
 
         requirements = self.check_gate_requirements(ticket_id, phase_id)
         blocking_reasons: list[str] = []
+        warnings: list[str] = []
         validation_passed = requirements["requirements_met"]
 
         if not requirements["requirements_met"]:
@@ -132,22 +191,57 @@ class PhaseGateService:
                 blocking_reasons.append("Phase tasks not yet completed")
         else:
             validation_passed, criteria_reasons = self._evaluate_validation_criteria(
-                ticket_id, phase_id
+                ticket_id, phase_id, settings
             )
             if criteria_reasons:
                 blocking_reasons.extend(criteria_reasons)
 
-        gate_status = "passed" if validation_passed and not blocking_reasons else "failed"
+        # Determine gate status based on strictness
+        validation_failed = not validation_passed or bool(blocking_reasons)
+
+        if strictness == GateEnforcementStrictness.BYPASS:
+            # Bypass mode: log but always return success
+            if validation_failed:
+                logger.info(
+                    f"Gate validation BYPASSED for ticket {ticket_id}, phase {phase_id}. "
+                    f"Would have failed with: {blocking_reasons}"
+                )
+            gate_status = "passed"
+            warnings = blocking_reasons  # Store as warnings instead
+            blocking_reasons = []  # Clear blocking reasons
+
+        elif strictness == GateEnforcementStrictness.LENIENT:
+            # Lenient mode: warn but allow transition
+            if validation_failed:
+                logger.warning(
+                    f"Gate validation LENIENT for ticket {ticket_id}, phase {phase_id}. "
+                    f"Allowing transition with warnings: {blocking_reasons}"
+                )
+            gate_status = "passed"
+            warnings = blocking_reasons  # Store as warnings
+            blocking_reasons = []  # Clear blocking reasons
+
+        else:
+            # Strict mode (default): block on failure
+            gate_status = "passed" if not validation_failed else "failed"
 
         with self.db.get_session() as session:
+            validation_result_data: dict[str, Any] = {
+                "requirements": requirements,
+                "blocking_reasons": blocking_reasons,
+                "strictness": strictness.value,
+                "min_test_coverage": settings.min_test_coverage,
+            }
+
+            # Include warnings if any (for bypass/lenient modes)
+            if warnings:
+                validation_result_data["warnings"] = warnings
+
             result = PhaseGateResult(
                 ticket_id=ticket_id,
                 phase_id=phase_id,
                 gate_status=gate_status,
-                validation_result={
-                    "requirements": requirements,
-                    "blocking_reasons": blocking_reasons,
-                },
+                validation_result=validation_result_data,
                 blocking_reasons=blocking_reasons or None,
                 validated_by="phase-gate-service",
             )
@@ -235,9 +329,22 @@ class PhaseGateService:
         return can_transition, (blocking if not can_transition else [])
 
     def _evaluate_validation_criteria(
-        self, ticket_id: str, phase_id: str
+        self,
+        ticket_id: str,
+        phase_id: str,
+        settings: Optional[SpecDrivenSettings] = None,
     ) -> tuple[bool, list[str]]:
-        """Validate artifacts against configured criteria."""
+        """Validate artifacts against configured criteria.
+
+        Args:
+            ticket_id: The ticket ID being validated
+            phase_id: The phase ID being validated
+            settings: Optional settings to use for configurable thresholds.
+                     If not provided, uses default hardcoded values.
+
+        Returns:
+            Tuple of (validation_passed, list of blocking reasons)
+        """
         config = PHASE_GATE_REQUIREMENTS.get(phase_id, {})
         criteria = config.get("validation_criteria", {})
         if not criteria:
@@ -292,6 +399,13 @@ class PhaseGateService:
 
             min_percentage = rules.get("min_percentage")
             if min_percentage is not None:
+                # Use configurable threshold from settings if available
+                if settings and artifact_type == "test_coverage":
+                    min_percentage = settings.min_test_coverage
+                    logger.debug(
+                        f"Using configured min_test_coverage={min_percentage} "
+                        f"for artifact {artifact_type}"
+                    )
                 percentage = content.get("percentage", 0)
                 if percentage < min_percentage:
                     blocking_reasons.append(
