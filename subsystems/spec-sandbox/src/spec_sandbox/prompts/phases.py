@@ -788,16 +788,16 @@ Define each component's:
 When generating Mermaid diagrams in the `architecture_diagram` field, you MUST follow these rules to ensure valid syntax that renders correctly:
 
 ### 1. Quote Node Labels with Special Characters
-If a node label contains ANY of these characters: `{`, `}`, `(`, `)`, `/`, `|`, `<`, `>`, wrap the ENTIRE label in double quotes:
+If a node label contains ANY of these characters: `{{`, `}}`, `(`, `)`, `/`, `|`, `<`, `>`, wrap the ENTIRE label in double quotes:
 
 ```
 ❌ WRONG - Will fail to render:
-API[/projects/{id}/settings]
+API[/projects/{{id}}/settings]
 ENDPOINT[GET /api/v1/users]
 FLOW[Step A | Step B]
 
 ✅ CORRECT - Always quote special characters:
-API["/projects/{id}/settings"]
+API["/projects/{{id}}/settings"]
 ENDPOINT["GET /api/v1/users"]
 FLOW["Step A | Step B"]
 ```
@@ -813,11 +813,11 @@ Use `#quot;` for double quotes inside labels:
 - `#amp;` for &
 - `#lt;` for <
 - `#gt;` for >
-- `#lbrace;` for {{
-- `#rbrace;` for }}
+- `#lbrace;` for curly braces
+- `#rbrace;` for curly braces
 
 ### 4. Common Mistakes to Avoid
-- **Curly braces create rhombus shapes**: `{{text}}` creates a diamond/decision node, NOT literal braces
+- **Curly braces create rhombus shapes**: double curly braces create a diamond/decision node, NOT literal braces
 - **Parentheses create stadium shapes**: `(text)` creates a rounded node, NOT literal parentheses
 - **Unquoted paths break parsing**: `/api/v1/resource` must be quoted in labels
 
@@ -828,8 +828,8 @@ Use `#quot;` for double quotes inside labels:
 ([text])   → Stadium with padding
 [[text]]   → Subroutine
 [(text)]   → Cylindrical (database)
-{{text}}    → Rhombus (decision)
-{{{{text}}}}  → Hexagon
+double curly → Rhombus (decision)
+quadruple curly → Hexagon
 >text]     → Flag
 ```
 
