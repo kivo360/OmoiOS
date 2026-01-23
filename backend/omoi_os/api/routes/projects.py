@@ -1,19 +1,71 @@
 """Projects API routes for multi-project management."""
 
 from datetime import datetime
+from enum import Enum
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
-from omoi_os.api.dependencies import get_db_service, get_event_bus_service
+from omoi_os.api.dependencies import (
+    get_current_user,
+    get_db_service,
+    get_event_bus_service,
+)
 from omoi_os.models.project import Project
 from omoi_os.models.ticket import Ticket
+from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.utils.datetime import utc_now
 
 router = APIRouter()
+
+
+# =============================================================================
+# Spec-Driven Settings Models
+# =============================================================================
+
+
+class StrictnessLevel(str, Enum):
+    """Strictness level for spec-driven development."""
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    STRICT = "strict"
+
+
+class SpecDrivenSettingsResponse(BaseModel):
+    """Response model for spec-driven settings."""
+
+    enabled: bool = False
+    coverage_threshold: int = Field(default=80, ge=0, le=100)
+    strictness: StrictnessLevel = StrictnessLevel.MEDIUM
+    auto_generate_tasks: bool = True
+    require_design_approval: bool = True
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SpecDrivenSettingsUpdate(BaseModel):
+    """Request model for updating spec-driven settings."""
+
+    enabled: Optional[bool] = None
+    coverage_threshold: Optional[int] = Field(default=None, ge=0, le=100)
+    strictness: Optional[StrictnessLevel] = None
+    auto_generate_tasks: Optional[bool] = None
+    require_design_approval: Optional[bool] = None
+
+
+# Default spec-driven settings
+DEFAULT_SPEC_DRIVEN_SETTINGS = {
+    "enabled": False,
+    "coverage_threshold": 80,
+    "strictness": "medium",
+    "auto_generate_tasks": True,
+    "require_design_approval": True,
+}
 
 
 class ProjectCreate(BaseModel):
@@ -352,3 +404,126 @@ async def get_project_stats(
             active_agents=active_agents,
             total_commits=total_commits,
         )
+
+
+# =============================================================================
+# Spec-Driven Settings Routes
+# =============================================================================
+
+
+@router.get(
+    "/{project_id}/settings/spec-driven",
+    response_model=SpecDrivenSettingsResponse,
+)
+async def get_spec_driven_settings(
+    project_id: str,
+    db: DatabaseService = Depends(get_db_service),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get spec-driven settings for a project.
+
+    Returns default settings if no settings have been configured.
+
+    Args:
+        project_id: Project ID
+        db: Database service
+        current_user: Authenticated user
+
+    Returns:
+        Spec-driven settings
+
+    Raises:
+        404: Project not found
+    """
+    with db.get_session() as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Get spec_driven settings from project settings, or use defaults
+        settings = project.settings or {}
+        spec_driven = settings.get("spec_driven", DEFAULT_SPEC_DRIVEN_SETTINGS.copy())
+
+        # Ensure all default fields are present
+        for key, value in DEFAULT_SPEC_DRIVEN_SETTINGS.items():
+            if key not in spec_driven:
+                spec_driven[key] = value
+
+        return SpecDrivenSettingsResponse(**spec_driven)
+
+
+@router.patch(
+    "/{project_id}/settings/spec-driven",
+    response_model=SpecDrivenSettingsResponse,
+)
+async def update_spec_driven_settings(
+    project_id: str,
+    settings_update: SpecDrivenSettingsUpdate,
+    db: DatabaseService = Depends(get_db_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Update spec-driven settings for a project.
+
+    Creates settings if they don't exist.
+
+    Args:
+        project_id: Project ID
+        settings_update: Settings to update
+        db: Database service
+        event_bus: Event bus service
+        current_user: Authenticated user
+
+    Returns:
+        Updated spec-driven settings
+
+    Raises:
+        404: Project not found
+        400/422: Validation error
+    """
+    with db.get_session() as session:
+        project = session.get(Project, project_id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        # Initialize settings if none exist
+        if project.settings is None:
+            project.settings = {}
+
+        # Get current spec_driven settings or defaults
+        current_settings = project.settings.get(
+            "spec_driven", DEFAULT_SPEC_DRIVEN_SETTINGS.copy()
+        )
+
+        # Update with provided values (only non-None values)
+        update_data = settings_update.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            if value is not None:
+                # Convert enum to string for storage
+                if isinstance(value, StrictnessLevel):
+                    current_settings[key] = value.value
+                else:
+                    current_settings[key] = value
+
+        # Update project settings
+        project.settings = {**project.settings, "spec_driven": current_settings}
+        project.updated_at = utc_now()
+
+        session.commit()
+        session.refresh(project)
+
+        # Emit event
+        from omoi_os.services.event_bus import SystemEvent
+
+        event_bus.publish(
+            SystemEvent(
+                event_type="PROJECT_SETTINGS_UPDATED",
+                entity_type="project",
+                entity_id=project.id,
+                payload={"settings_type": "spec_driven", "changes": update_data},
+            )
+        )
+
+        return SpecDrivenSettingsResponse(**current_settings)
