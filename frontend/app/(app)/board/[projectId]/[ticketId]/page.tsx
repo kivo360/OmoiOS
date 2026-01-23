@@ -374,7 +374,7 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                 className="relative h-12 rounded-none border-b-2 border-transparent px-4 pb-3 pt-2 font-medium text-muted-foreground data-[state=active]:border-primary data-[state=active]:text-foreground"
               >
                 <GitCommit className="mr-2 h-4 w-4" />
-                Commits ({commits.length})
+                Commits (0)
               </TabsTrigger>
               <TabsTrigger
                 value="blocking"
@@ -462,7 +462,7 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                         </div>
                         <div>
                           <dt className="text-muted-foreground">Commits</dt>
-                          <dd>{commits.length}</dd>
+                          <dd className="text-muted-foreground text-xs">Coming soon</dd>
                         </div>
                       </dl>
                     </CardContent>
@@ -548,6 +548,19 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
             {/* Commits Tab */}
             <TabsContent value="commits" className="m-0 p-6">
               <div className="max-w-3xl space-y-4">
+                <Card>
+                  <CardContent className="p-6 text-center text-muted-foreground">
+                    <GitCommit className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>Commit tracking coming soon</p>
+                    <p className="text-sm mt-2">Commits linked to this ticket will appear here once tracking is enabled.</p>
+                  </CardContent>
+                </Card>
+              </div>
+            </TabsContent>
+
+            {/* PRESERVED FOR FUTURE: Full commits implementation
+            <TabsContent value="commits" className="m-0 p-6">
+              <div className="max-w-3xl space-y-4">
                 <div className="flex items-center justify-between text-sm">
                   <p className="text-muted-foreground">
                     {commits.length} commits •{" "}
@@ -616,6 +629,7 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                 )}
               </div>
             </TabsContent>
+            END PRESERVED FOR FUTURE */}
 
             {/* Blocking Tab */}
             <TabsContent value="blocking" className="m-0 p-6">
@@ -744,7 +758,7 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Commits</span>
-                  <span>{commits.length}</span>
+                  <span className="text-muted-foreground text-xs">Coming soon</span>
                 </div>
               </div>
             </div>
@@ -754,17 +768,8 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
             {/* Code Changes */}
             <div>
               <h3 className="text-sm font-medium mb-3">Code Changes</h3>
-              <div className="text-center">
-                <p className="text-2xl font-bold font-mono">
-                  <span className="text-green-600">
-                    +{commits.reduce((sum, c) => sum + (c.insertions || 0), 0)}
-                  </span>
-                </p>
-                <p className="text-2xl font-bold font-mono">
-                  <span className="text-red-600">
-                    -{commits.reduce((sum, c) => sum + (c.deletions || 0), 0)}
-                  </span>
-                </p>
+              <div className="text-center text-muted-foreground">
+                <p className="text-sm">Coming soon</p>
               </div>
             </div>
 
