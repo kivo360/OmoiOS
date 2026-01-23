@@ -12,6 +12,7 @@ from pydantic import Field
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.memory import MemoryService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
@@ -22,6 +23,7 @@ _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
 _collaboration_service: Optional[Any] = None
+_memory_service: Optional[MemoryService] = None
 
 
 def initialize_mcp_services(
@@ -30,6 +32,7 @@ def initialize_mcp_services(
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
     collaboration_service: Optional[Any] = None,
+    memory_service: Optional[MemoryService] = None,
 ) -> None:
     """Initialize global services for MCP server.
 
@@ -39,13 +42,15 @@ def initialize_mcp_services(
         task_queue: Task queue service
         discovery_service: Discovery service
         collaboration_service: Optional collaboration service for agent messaging
+        memory_service: Optional memory service for finding past memories
     """
-    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service, _memory_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
     _collaboration_service = collaboration_service
+    _memory_service = memory_service
 
 
 # Create FastMCP server
@@ -1033,6 +1038,164 @@ def get_workflow_graph(
             "ticket_id": ticket_id,
             **graph,
         }
+
+
+# ============================================================================
+# Memory Tools (NEW - for finding past solutions)
+# ============================================================================
+
+
+@mcp.tool()
+def find_memory(
+    ctx: Context,
+    query: str = Field(..., min_length=3, description="Search query for finding relevant memories"),
+    top_k: int = Field(default=5, ge=1, le=50, description="Number of results to return"),
+    similarity_threshold: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Minimum similarity score (0.0 to 1.0)"
+    ),
+    search_mode: str = Field(
+        default="hybrid",
+        description="Search mode: 'semantic', 'keyword', or 'hybrid' (default: hybrid)",
+    ),
+    memory_types: Optional[List[str]] = Field(
+        default=None,
+        description="Filter by memory types (e.g., ['error_fix', 'discovery']). Valid types: error_fix, discovery, decision, learning, warning, codebase_knowledge",
+    ),
+    success_only: bool = Field(
+        default=False, description="Only return memories from successful task executions"
+    ),
+    semantic_weight: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description="Weight for semantic search in hybrid mode (default: 0.6). Only applies when search_mode='hybrid'",
+    ),
+    keyword_weight: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        description="Weight for keyword search in hybrid mode (default: 0.4). Only applies when search_mode='hybrid'",
+    ),
+) -> Dict[str, Any]:
+    """Find relevant past memories using semantic, keyword, or hybrid search.
+
+    This tool searches the memory system for past task executions that are
+    relevant to the given query. Use it to find solutions to similar problems,
+    learn from past errors, or retrieve relevant decisions and discoveries.
+
+    Search Modes:
+    - semantic: Uses embedding similarity to find conceptually similar memories
+    - keyword: Uses full-text search for keyword matching
+    - hybrid: Combines both using Reciprocal Rank Fusion (RRF) - recommended for best results
+
+    Args:
+        query: Search query for finding relevant memories (minimum 3 characters)
+        top_k: Number of results to return (default: 5, max: 50)
+        similarity_threshold: Minimum similarity score between 0.0 and 1.0 (default: 0.7)
+        search_mode: Search mode - 'semantic', 'keyword', or 'hybrid' (default: hybrid)
+        memory_types: Optional list of memory types to filter by
+        success_only: Only return memories from successful executions (default: false)
+        semantic_weight: Weight for semantic search in hybrid mode (default: 0.6)
+        keyword_weight: Weight for keyword search in hybrid mode (default: 0.4)
+
+    Returns:
+        Dictionary with search results including memory details and similarity scores
+    """
+    from omoi_os.models.memory_type import MemoryType
+
+    # Validate search_mode first (fast fail before service check)
+    valid_search_modes = ["semantic", "keyword", "hybrid"]
+    if search_mode not in valid_search_modes:
+        return {
+            "success": False,
+            "error": f"Invalid search_mode: '{search_mode}'. Must be one of: {', '.join(valid_search_modes)}",
+        }
+
+    # Validate memory_types if provided (fast fail before service check)
+    if memory_types:
+        valid_types = MemoryType.all_types()
+        invalid_types = [t for t in memory_types if not MemoryType.is_valid(t)]
+        if invalid_types:
+            return {
+                "success": False,
+                "error": f"Invalid memory_types: {invalid_types}. Valid types are: {', '.join(valid_types)}",
+            }
+
+    if not _db or not _memory_service:
+        raise RuntimeError("Database or Memory service not initialized")
+
+    with _db.get_session() as session:
+        try:
+            results = _memory_service.search_similar(
+                session=session,
+                task_description=query,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold,
+                success_only=success_only,
+                memory_types=memory_types,
+                search_mode=search_mode,
+                semantic_weight=semantic_weight,
+                keyword_weight=keyword_weight,
+            )
+
+            # Format results for response
+            memories = [
+                {
+                    "memory_id": result.memory_id,
+                    "task_id": result.task_id,
+                    "summary": result.summary,
+                    "success": result.success,
+                    "similarity_score": round(result.similarity_score, 4),
+                    "reused_count": result.reused_count,
+                    "semantic_score": round(result.semantic_score, 4) if result.semantic_score else None,
+                    "keyword_score": round(result.keyword_score, 4) if result.keyword_score else None,
+                }
+                for result in results
+            ]
+
+            # Publish event for observability
+            if _event_bus:
+                _event_bus.publish(
+                    SystemEvent(
+                        event_type="memory.search",
+                        entity_type="memory",
+                        entity_id="search",
+                        payload={
+                            "query_length": len(query),
+                            "search_mode": search_mode,
+                            "results_count": len(memories),
+                            "success_only": success_only,
+                            "memory_types_filter": memory_types,
+                        },
+                    )
+                )
+
+            ctx.info(f"Found {len(memories)} memories matching query (mode: {search_mode})")
+            return {
+                "success": True,
+                "query": query,
+                "search_mode": search_mode,
+                "filters": {
+                    "success_only": success_only,
+                    "memory_types": memory_types,
+                    "similarity_threshold": similarity_threshold,
+                },
+                "results_count": len(memories),
+                "memories": memories,
+            }
+
+        except ValueError as e:
+            # Handle validation errors from MemoryService
+            return {
+                "success": False,
+                "error": str(e),
+            }
+        except Exception as e:
+            ctx.warning(f"Memory search failed: {e}")
+            return {
+                "success": False,
+                "error": f"Memory search failed: {str(e)}",
+            }
 
 
 # ============================================================================
