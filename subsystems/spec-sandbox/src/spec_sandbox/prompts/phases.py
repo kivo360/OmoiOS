@@ -783,6 +783,65 @@ Define each component's:
 - Dependencies
 - Interface methods
 
+## ⚠️ MERMAID DIAGRAM SYNTAX RULES (CRITICAL - Must Follow)
+
+When generating Mermaid diagrams in the `architecture_diagram` field, you MUST follow these rules to ensure valid syntax that renders correctly:
+
+### 1. Quote Node Labels with Special Characters
+If a node label contains ANY of these characters: `{`, `}`, `(`, `)`, `/`, `|`, `<`, `>`, wrap the ENTIRE label in double quotes:
+
+```
+❌ WRONG - Will fail to render:
+API[/projects/{id}/settings]
+ENDPOINT[GET /api/v1/users]
+FLOW[Step A | Step B]
+
+✅ CORRECT - Always quote special characters:
+API["/projects/{id}/settings"]
+ENDPOINT["GET /api/v1/users"]
+FLOW["Step A | Step B"]
+```
+
+### 2. Escape Quotes Inside Labels
+Use `#quot;` for double quotes inside labels:
+```
+✅ NODE["Value: #quot;example#quot;"]
+```
+
+### 3. Use HTML Entities for Special Characters
+- `#quot;` for "
+- `#amp;` for &
+- `#lt;` for <
+- `#gt;` for >
+- `#lbrace;` for {{
+- `#rbrace;` for }}
+
+### 4. Common Mistakes to Avoid
+- **Curly braces create rhombus shapes**: `{{text}}` creates a diamond/decision node, NOT literal braces
+- **Parentheses create stadium shapes**: `(text)` creates a rounded node, NOT literal parentheses
+- **Unquoted paths break parsing**: `/api/v1/resource` must be quoted in labels
+
+### 5. Valid Node Shape Syntax Reference
+```
+[text]     → Rectangle (default)
+(text)     → Stadium/rounded
+([text])   → Stadium with padding
+[[text]]   → Subroutine
+[(text)]   → Cylindrical (database)
+{{text}}    → Rhombus (decision)
+{{{{text}}}}  → Hexagon
+>text]     → Flag
+```
+
+### 6. Subgraph Labels
+Subgraph titles with spaces or special characters should also be quoted:
+```
+✅ subgraph "API Layer"
+✅ subgraph "Service Layer (Core)"
+```
+
+**TEST YOUR DIAGRAM MENTALLY**: Before writing each node, ask: "Does this label contain special characters?" If yes, quote it.
+
 ## Description Format (CRITICAL - Rich Markdown for UI Display)
 
 All description fields MUST contain rich markdown that can be displayed directly in a UI. This includes:

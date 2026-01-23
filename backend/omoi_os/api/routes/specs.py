@@ -190,8 +190,14 @@ async def _update_spec_async(
         return result.scalar_one_or_none()
 
 
-async def _delete_spec_async(db: DatabaseService, spec_id: str) -> bool:
-    """Delete a spec (ASYNC - non-blocking)."""
+async def _archive_spec_async(db: DatabaseService, spec_id: str) -> bool:
+    """Archive a spec (soft delete) - ASYNC.
+
+    This marks the spec as archived rather than deleting it,
+    so linked tickets and tasks are excluded from active views.
+    """
+    from omoi_os.utils.datetime import utc_now
+
     async with db.get_async_session() as session:
         result = await session.execute(
             select(SpecModel).filter(SpecModel.id == spec_id)
@@ -200,7 +206,8 @@ async def _delete_spec_async(db: DatabaseService, spec_id: str) -> bool:
         if not spec:
             return False
 
-        await session.delete(spec)
+        spec.archived = True
+        spec.archived_at = utc_now()
         await session.commit()
         return True
 
@@ -1312,12 +1319,17 @@ async def delete_spec(
     db: DatabaseService = Depends(get_db_service),
     _: str = Depends(verify_spec_access),  # Verify access to spec
 ):
-    """Delete a spec."""
-    # Use async database operations (non-blocking)
-    deleted = await _delete_spec_async(db, spec_id)
-    if not deleted:
+    """Archive a spec (soft delete).
+
+    This marks the spec as archived rather than permanently deleting it.
+    Archived specs and their linked tickets/tasks are excluded from
+    active views (board, task queue, etc.) but remain in the database
+    for audit purposes.
+    """
+    archived = await _archive_spec_async(db, spec_id)
+    if not archived:
         raise HTTPException(status_code=404, detail="Spec not found")
-    return {"message": "Spec deleted successfully"}
+    return {"message": "Spec archived successfully"}
 
 
 # ============================================================================

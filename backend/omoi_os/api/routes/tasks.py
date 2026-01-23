@@ -4,7 +4,7 @@ from typing import List, Optional, Dict, Any
 
 from fastapi import APIRouter, HTTPException, Depends, Body
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, or_
 
 from omoi_os.api.dependencies import (
     get_db_service,
@@ -482,6 +482,7 @@ async def list_tasks(
         List of tasks for the user's accessible projects
     """
     from omoi_os.models.ticket import Ticket
+    from omoi_os.models.spec import Spec
 
     # Get user's accessible project IDs for multi-tenant filtering
     accessible_project_ids = await get_accessible_project_ids(current_user, db)
@@ -491,11 +492,21 @@ async def list_tasks(
         return []
 
     async with db.get_async_session() as session:
-        # Join Task → Ticket to filter by accessible projects
+        # Join Task → Ticket → Spec to filter by accessible projects and exclude archived specs
         query = (
             select(Task)
             .join(Ticket, Task.ticket_id == Ticket.id)
+            .outerjoin(Spec, Ticket.spec_id == Spec.id)
             .filter(Ticket.project_id.in_([str(pid) for pid in accessible_project_ids]))
+            .filter(
+                # Include tasks from tickets that either:
+                # 1. Have no spec_id (not linked to any spec), OR
+                # 2. Are linked to a spec that is NOT archived
+                or_(
+                    Ticket.spec_id.is_(None),
+                    Spec.archived == False,  # noqa: E712
+                )
+            )
         )
 
         # Apply optional filters
