@@ -216,13 +216,21 @@ async def orchestrator_loop():
                         if hasattr(task, "task_type") and task.task_type:
                             # Use exploration mode for spec-creation tasks
                             if task.task_type in (
-                                "explore_codebase", "create_spec", "create_requirements",
-                                "create_design", "create_tickets", "create_tasks",
-                                "analyze_dependencies", "define_feature"
+                                "explore_codebase",
+                                "create_spec",
+                                "create_requirements",
+                                "create_design",
+                                "create_tickets",
+                                "create_tasks",
+                                "analyze_dependencies",
+                                "define_feature",
                             ):
                                 execution_mode = "exploration"
                             elif task.task_type in (
-                                "validate", "validate_implementation", "review_code", "run_tests"
+                                "validate",
+                                "validate_implementation",
+                                "review_code",
+                                "run_tests",
                             ):
                                 execution_mode = "validation"
 
@@ -231,7 +239,9 @@ async def orchestrator_loop():
                         project_id = None
                         if hasattr(task, "execution_config") and task.execution_config:
                             exec_config = task.execution_config
-                            require_spec_skill = exec_config.get("require_spec_skill", False)
+                            require_spec_skill = exec_config.get(
+                                "require_spec_skill", False
+                            )
                             # Get project_id from ticket's project
                             if hasattr(task, "ticket") and task.ticket:
                                 project_id = task.ticket.project_id
@@ -305,7 +315,9 @@ async def orchestrator_loop():
                         )
                     )
 
-                    logger.info("Assigned task to agent", task_id=task_id, agent_id=agent_id)
+                    logger.info(
+                        "Assigned task to agent", task_id=task_id, agent_id=agent_id
+                    )
 
             # Poll every 10 seconds
             await asyncio.sleep(10)
@@ -367,8 +379,12 @@ async def heartbeat_monitoring_loop():
                             logger.info(
                                 "Agent restarted successfully",
                                 agent_id=agent_id,
-                                replacement_agent_id=restart_result['replacement_agent_id'],
-                                reassigned_tasks=len(restart_result['reassigned_tasks']),
+                                replacement_agent_id=restart_result[
+                                    "replacement_agent_id"
+                                ],
+                                reassigned_tasks=len(
+                                    restart_result["reassigned_tasks"]
+                                ),
                             )
                         else:
                             logger.warning(
@@ -377,13 +393,20 @@ async def heartbeat_monitoring_loop():
                             )
 
                     except Exception as e:
-                        logger.error("Error initiating restart", agent_id=agent_id, error=str(e), exc_info=True)
+                        logger.error(
+                            "Error initiating restart",
+                            agent_id=agent_id,
+                            error=str(e),
+                            exc_info=True,
+                        )
 
             # Check every 10 seconds (more frequent than diagnostic loop)
             await asyncio.sleep(10)
 
         except Exception as e:
-            logger.error("Error in heartbeat monitoring loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in heartbeat monitoring loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(10)
 
 
@@ -452,7 +475,9 @@ async def diagnostic_monitoring_loop():
             await asyncio.sleep(60)
 
         except Exception as e:
-            logger.error("Error in diagnostic monitoring loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in diagnostic monitoring loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(60)
 
 
@@ -529,7 +554,9 @@ async def blocking_detection_loop():
             await asyncio.sleep(300)  # 5 minutes
 
         except Exception as e:
-            logger.error("Error in blocking detection loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in blocking detection loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(300)
 
 
@@ -648,7 +675,9 @@ async def anomaly_monitoring_loop():
             await asyncio.sleep(60)
 
         except Exception as e:
-            logger.error("Error in anomaly monitoring loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in anomaly monitoring loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(60)
 
 
@@ -776,6 +805,7 @@ async def lifespan(app: FastAPI):
         event_bus=event_bus,
         task_queue=queue,
         discovery_service=discovery_service,
+        memory_service=memory_service,
         collaboration_service=collaboration_service,
     )
 
@@ -1020,12 +1050,16 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
     # Capture to Sentry with request context
     import sentry_sdk
+
     with sentry_sdk.push_scope() as scope:
-        scope.set_context("request", {
-            "method": request.method,
-            "path": request.url.path,
-            "query": str(request.query_params),
-        })
+        scope.set_context(
+            "request",
+            {
+                "method": request.method,
+                "path": request.url.path,
+                "query": str(request.query_params),
+            },
+        )
         sentry_sdk.capture_exception(exc)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1065,6 +1099,7 @@ async def logging_context_middleware(request: Request, call_next):
     finally:
         # Clear context at end of request
         clear_context()
+
 
 # Include routers
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["tickets"])
