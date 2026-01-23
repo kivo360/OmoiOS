@@ -458,17 +458,17 @@ export default function TicketDetailPage({ params }: TicketDetailPageProps) {
                                 }`}
                               />
                             </div>
-                            <div className="flex-1">
-                              <p
+                            <div className="flex-1 min-w-0">
+                              <div
                                 className={
                                   taskStatus === "completed"
                                     ? "text-muted-foreground line-through"
-                                    : "font-medium"
+                                    : ""
                                 }
                               >
-                                {task.description || task.task_type}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Markdown content={task.description || task.task_type} />
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground mt-2">
                                 <span className="font-mono">{task.id.slice(0, 8)}</span>
                                 {task.assigned_agent_id && (
                                   <>
