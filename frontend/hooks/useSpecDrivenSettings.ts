@@ -9,7 +9,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { apiClient } from "@/lib/api/client"
+import { api } from "@/lib/api/client"
 
 // Types for spec-driven settings
 export interface SpecDrivenSettings {
@@ -147,17 +147,17 @@ export const specDrivenSettingsKeys = {
 
 // API functions
 async function fetchSpecDrivenSettings(): Promise<SpecDrivenSettings> {
-  const response = await apiClient.get<SpecDrivenSettings>("/api/v1/settings/spec-driven")
+  const response = await api.get<SpecDrivenSettings>("/api/v1/settings/spec-driven")
   return response
 }
 
 async function updateSpecDrivenSettings(data: SpecDrivenSettingsUpdate): Promise<SpecDrivenSettings> {
-  const response = await apiClient.patch<SpecDrivenSettings>("/api/v1/settings/spec-driven", data)
+  const response = await api.patch<SpecDrivenSettings>("/api/v1/settings/spec-driven", data)
   return response
 }
 
 async function resetSpecDrivenSettings(): Promise<SpecDrivenSettings> {
-  const response = await apiClient.post<SpecDrivenSettings>("/api/v1/settings/spec-driven/reset", {})
+  const response = await api.post<SpecDrivenSettings>("/api/v1/settings/spec-driven/reset", {})
   return response
 }
 
