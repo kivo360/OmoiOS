@@ -569,7 +569,7 @@ class IdleSandboxMonitor:
         task_id = None
         is_graceful_completion = reason in (
             "execution_completed",
-            "agent_completed",
+            "execution_failed",
         )
 
         with self.db.get_session() as session:
@@ -751,22 +751,14 @@ class IdleSandboxMonitor:
                         result["phase_status"] = phase_status
                     terminated.append(result)
                 elif activity["is_alive"]:
-                    # Check if regular (non-spec) sandbox has completed its work
+                    # Note: We don't terminate on agent.completed for regular sandboxes
+                    # because continuous agents emit agent.completed multiple times
+                    # during execution. Let idle detection handle cleanup instead.
                     if activity["has_completed"]:
-                        # Agent sandbox completed - terminate gracefully
-                        log.info(
-                            "completed_agent_sandbox_detected",
+                        log.debug(
+                            "sandbox_has_completed_event",
                             sandbox_id=sandbox_id,
                         )
-
-                        result = await self.terminate_idle_sandbox(
-                            sandbox_id=sandbox_id,
-                            reason="agent_completed",
-                            idle_duration_seconds=0,  # Not idle, just completed
-                        )
-                        if phase_status:
-                            result["phase_status"] = phase_status
-                        terminated.append(result)
                     elif activity["heartbeat_status"] == "running":
                         log.debug(
                             "sandbox_skipped_agent_running",
