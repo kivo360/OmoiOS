@@ -23,6 +23,7 @@ from omoi_os.api.dependencies import (
 from omoi_os.models.user import User
 from omoi_os.services.ticket_dedup import TicketDeduplicationService
 from omoi_os.models.ticket import Ticket
+from omoi_os.models.spec import Spec
 from omoi_os.models.ticket_status import TicketStatus
 from omoi_os.models.approval_status import ApprovalStatus
 from omoi_os.services.database import DatabaseService
@@ -75,8 +76,21 @@ async def list_tickets(
         return TicketListResponse(tickets=[], total=0)
 
     async with db.get_async_session() as session:
-        # Build base query - filter to accessible projects
-        stmt = select(Ticket).filter(Ticket.project_id.in_([str(pid) for pid in accessible_project_ids]))
+        # Build base query - filter to accessible projects and exclude archived specs
+        stmt = (
+            select(Ticket)
+            .outerjoin(Spec, Ticket.spec_id == Spec.id)
+            .filter(Ticket.project_id.in_([str(pid) for pid in accessible_project_ids]))
+            .filter(
+                # Include tickets that either:
+                # 1. Have no spec_id (not linked to any spec), OR
+                # 2. Are linked to a spec that is NOT archived
+                or_(
+                    Ticket.spec_id.is_(None),
+                    Spec.archived == False,  # noqa: E712
+                )
+            )
+        )
 
         # Apply optional filters
         if project_id:

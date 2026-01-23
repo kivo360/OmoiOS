@@ -3,10 +3,11 @@
 from typing import List, Dict, Any, Optional, Union
 from uuid import UUID
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session
 
 from omoi_os.models.board_column import BoardColumn
+from omoi_os.models.spec import Spec
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 
@@ -58,7 +59,21 @@ class BoardService:
         tickets_by_phase: Dict[str, List[Ticket]] = {phase_id: [] for phase_id in all_phase_ids}
 
         if all_phase_ids:
-            query = select(Ticket).where(Ticket.phase_id.in_(all_phase_ids))
+            # Query tickets, excluding those linked to archived specs
+            query = (
+                select(Ticket)
+                .outerjoin(Spec, Ticket.spec_id == Spec.id)
+                .where(Ticket.phase_id.in_(all_phase_ids))
+                .where(
+                    # Include tickets that either:
+                    # 1. Have no spec_id (not linked to any spec), OR
+                    # 2. Are linked to a spec that is NOT archived
+                    or_(
+                        Ticket.spec_id.is_(None),
+                        Spec.archived == False,  # noqa: E712
+                    )
+                )
+            )
             if project_id is not None:
                 query = query.where(Ticket.project_id == project_id)
             if user_id is not None:

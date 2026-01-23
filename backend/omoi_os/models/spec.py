@@ -50,6 +50,18 @@ class Spec(Base):
         index=True,
         comment="draft, requirements, design, executing, completed",
     )
+    archived: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        index=True,
+        comment="Whether the spec is archived (soft delete)",
+    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="When the spec was archived",
+    )
     phase: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
