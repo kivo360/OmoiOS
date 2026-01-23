@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import desc
 from sqlalchemy.orm import attributes
 
+from omoi_os.logging import get_logger
 from omoi_os.models.agent import Agent
 from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
 from omoi_os.models.task import Task
+from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.utils.datetime import utc_now
+
+if TYPE_CHECKING:
+    from omoi_os.services.spec_driven_settings import SpecDrivenSettingsService
+
+logger = get_logger(__name__)
 
 
 class GuardianService:
@@ -31,15 +38,142 @@ class GuardianService:
         self,
         db: DatabaseService,
         event_bus: Optional[EventBusService] = None,
+        settings_service: Optional["SpecDrivenSettingsService"] = None,
     ):
         """Initialize guardian service.
-        
+
         Args:
             db: DatabaseService instance for database operations
             event_bus: Optional EventBusService for publishing intervention events
+            settings_service: Optional SpecDrivenSettingsService for project settings
         """
         self.db = db
         self.event_bus = event_bus
+        self.settings_service = settings_service
+
+    # -------------------------------------------------------------------------
+    # Settings and Auto-Steering Helpers
+    # -------------------------------------------------------------------------
+
+    def _get_project_id_for_task(self, task_id: str) -> Optional[str]:
+        """Get the project ID for a task through its ticket.
+
+        Args:
+            task_id: The task ID to look up
+
+        Returns:
+            Project ID if found, None otherwise
+        """
+        with self.db.get_session() as session:
+            task = session.get(Task, task_id)
+            if not task or not task.ticket_id:
+                return None
+
+            ticket = session.get(Ticket, task.ticket_id)
+            if not ticket:
+                return None
+
+            return ticket.project_id
+
+    def _check_auto_steering_enabled(
+        self,
+        project_id: Optional[str],
+        action_type: str,
+        target_entity: str,
+    ) -> tuple[bool, bool]:
+        """Check if auto-steering is enabled for a project.
+
+        Args:
+            project_id: The project ID to check settings for
+            action_type: Type of intervention being attempted
+            target_entity: Entity being intervened upon
+
+        Returns:
+            Tuple of (auto_steering_enabled, settings_checked)
+            - auto_steering_enabled: True if intervention should proceed
+            - settings_checked: True if settings were actually checked
+        """
+        # If no settings service configured, default to enabled
+        if not self.settings_service:
+            return True, False
+
+        # If no project_id, we can't check settings - default to enabled
+        if not project_id:
+            logger.debug(
+                "No project_id for intervention, defaulting to auto-steering enabled",
+                action_type=action_type,
+                target_entity=target_entity,
+            )
+            return True, False
+
+        # Check project settings
+        auto_steering = self.settings_service.get_guardian_auto_steering(project_id)
+
+        logger.info(
+            "Checked guardian_auto_steering setting",
+            project_id=project_id,
+            auto_steering_enabled=auto_steering,
+            action_type=action_type,
+            target_entity=target_entity,
+        )
+
+        return auto_steering, True
+
+    def _log_intervention_skipped(
+        self,
+        action_type: str,
+        target_entity: str,
+        reason: str,
+        initiated_by: str,
+        authority: AuthorityLevel,
+        project_id: Optional[str],
+    ) -> GuardianAction:
+        """Log an intervention that was skipped due to auto-steering being disabled.
+
+        Creates an audit record with executed=False to track that the intervention
+        was detected but not executed.
+
+        Args:
+            action_type: Type of intervention
+            target_entity: Entity that would have been intervened upon
+            reason: Original reason for intervention
+            initiated_by: Who initiated the intervention
+            authority: Authority level of initiator
+            project_id: Project ID if known
+
+        Returns:
+            GuardianAction audit record
+        """
+        with self.db.get_session() as session:
+            action = GuardianAction(
+                action_type=action_type,
+                target_entity=target_entity,
+                authority_level=authority,
+                reason=reason,
+                initiated_by=initiated_by,
+                approved_by=None,
+                executed_at=None,  # Not executed
+                audit_log={
+                    "auto_steering_enabled": False,
+                    "executed": False,
+                    "skipped_reason": "guardian_auto_steering disabled for project",
+                    "project_id": project_id,
+                },
+            )
+            session.add(action)
+            session.commit()
+            session.refresh(action)
+            session.expunge(action)
+
+            logger.info(
+                "Intervention logged but not executed (auto-steering disabled)",
+                action_id=action.id,
+                action_type=action_type,
+                target_entity=target_entity,
+                project_id=project_id,
+            )
+
+            return action
 
     # -------------------------------------------------------------------------
     # Core Intervention Methods
@@ -51,18 +185,20 @@ class GuardianService:
         reason: str,
         initiated_by: str,
         authority: AuthorityLevel = AuthorityLevel.GUARDIAN,
+        manual: bool = False,
     ) -> Optional[GuardianAction]:
         """Cancel a running task in emergency situations.
-        
+
         Args:
             task_id: ID of task to cancel
             reason: Explanation for emergency cancellation
             initiated_by: Agent/user ID initiating the action
             authority: Authority level (must be GUARDIAN or higher)
-            
+            manual: If True, bypass auto-steering check (manual intervention)
+
         Returns:
             GuardianAction audit record if successful, None if task not found
-            
+
         Raises:
             PermissionError: If authority level insufficient
         """
@@ -71,6 +207,24 @@ class GuardianService:
                 f"Emergency cancellation requires GUARDIAN authority (level {AuthorityLevel.GUARDIAN}), "
                 f"but got {authority.name} (level {authority})"
             )
+
+        # Get project_id for settings check
+        project_id = self._get_project_id_for_task(task_id)
+
+        # Check auto-steering setting (unless this is a manual intervention)
+        if not manual:
+            auto_steering, settings_checked = self._check_auto_steering_enabled(
+                project_id, "cancel_task", task_id
+            )
+            if settings_checked and not auto_steering:
+                return self._log_intervention_skipped(
+                    action_type="cancel_task",
+                    target_entity=task_id,
+                    reason=reason,
+                    initiated_by=initiated_by,
+                    authority=authority,
+                    project_id=project_id,
+                )
 
         with self.db.get_session() as session:
             task = session.get(Task, task_id)
@@ -88,7 +242,7 @@ class GuardianService:
             old_status = task.status
             task.status = "failed"
             task.error_message = f"EMERGENCY CANCELLATION: {reason}"
-            
+
             # Create audit record
             action = GuardianAction(
                 action_type="cancel_task",
@@ -103,6 +257,10 @@ class GuardianService:
                     "after": {"status": "failed", "error_message": task.error_message},
                     "old_status": old_status,
                     "intervention_type": "emergency",
+                    "auto_steering_enabled": True,
+                    "executed": True,
+                    "manual": manual,
+                    "project_id": project_id,
                 },
             )
             session.add(action)
@@ -132,12 +290,14 @@ class GuardianService:
         reason: str,
         initiated_by: str,
         authority: AuthorityLevel = AuthorityLevel.GUARDIAN,
+        manual: bool = False,
+        project_id: Optional[str] = None,
     ) -> Optional[GuardianAction]:
         """Reallocate capacity from one agent to another.
-        
+
         Typically used to steal resources from low-priority work
         to handle critical failures.
-        
+
         Args:
             from_agent_id: Source agent to take capacity from
             to_agent_id: Target agent to give capacity to
@@ -145,10 +305,12 @@ class GuardianService:
             reason: Explanation for reallocation
             initiated_by: Agent/user ID initiating the action
             authority: Authority level (must be GUARDIAN or higher)
-            
+            manual: If True, bypass auto-steering check (manual intervention)
+            project_id: Optional project ID for settings lookup
+
         Returns:
             GuardianAction audit record if successful, None if agents not found
-            
+
         Raises:
             PermissionError: If authority level insufficient
             ValueError: If capacity invalid or insufficient
@@ -161,6 +323,23 @@ class GuardianService:
 
         if capacity <= 0:
             raise ValueError(f"Capacity must be positive, got {capacity}")
+
+        target_entity = f"{from_agent_id}→{to_agent_id}"
+
+        # Check auto-steering setting (unless this is a manual intervention)
+        if not manual:
+            auto_steering, settings_checked = self._check_auto_steering_enabled(
+                project_id, "reallocate_capacity", target_entity
+            )
+            if settings_checked and not auto_steering:
+                return self._log_intervention_skipped(
+                    action_type="reallocate_capacity",
+                    target_entity=target_entity,
+                    reason=reason,
+                    initiated_by=initiated_by,
+                    authority=authority,
+                    project_id=project_id,
+                )
 
         with self.db.get_session() as session:
             from_agent = session.get(Agent, from_agent_id)
@@ -196,7 +375,7 @@ class GuardianService:
             # Create audit record
             action = GuardianAction(
                 action_type="reallocate_capacity",
-                target_entity=f"{from_agent_id}→{to_agent_id}",
+                target_entity=target_entity,
                 authority_level=authority,
                 reason=reason,
                 initiated_by=initiated_by,
@@ -214,6 +393,10 @@ class GuardianService:
                         },
                     },
                     "capacity_transferred": capacity,
+                    "auto_steering_enabled": True,
+                    "executed": True,
+                    "manual": manual,
+                    "project_id": project_id,
                 },
             )
             session.add(action)
@@ -242,21 +425,23 @@ class GuardianService:
         reason: str,
         initiated_by: str,
         authority: AuthorityLevel = AuthorityLevel.GUARDIAN,
+        manual: bool = False,
     ) -> Optional[GuardianAction]:
         """Override task priority in the queue.
-        
+
         Used to boost critical tasks ahead of normal queue order.
-        
+
         Args:
             task_id: ID of task to boost
             new_priority: New priority level (CRITICAL, HIGH, MEDIUM, LOW)
             reason: Explanation for priority override
             initiated_by: Agent/user ID initiating the action
             authority: Authority level (must be GUARDIAN or higher)
-            
+            manual: If True, bypass auto-steering check (manual intervention)
+
         Returns:
             GuardianAction audit record if successful, None if task not found
-            
+
         Raises:
             PermissionError: If authority level insufficient
             ValueError: If priority value invalid
@@ -272,6 +457,24 @@ class GuardianService:
             raise ValueError(
                 f"Invalid priority '{new_priority}'. Must be one of {valid_priorities}"
             )
+
+        # Get project_id for settings check
+        project_id = self._get_project_id_for_task(task_id)
+
+        # Check auto-steering setting (unless this is a manual intervention)
+        if not manual:
+            auto_steering, settings_checked = self._check_auto_steering_enabled(
+                project_id, "override_priority", task_id
+            )
+            if settings_checked and not auto_steering:
+                return self._log_intervention_skipped(
+                    action_type="override_priority",
+                    target_entity=task_id,
+                    reason=reason,
+                    initiated_by=initiated_by,
+                    authority=authority,
+                    project_id=project_id,
+                )
 
         with self.db.get_session() as session:
             task = session.get(Task, task_id)
@@ -301,6 +504,10 @@ class GuardianService:
                     "after": {"priority": new_priority},
                     "old_priority": old_priority,
                     "new_priority": new_priority,
+                    "auto_steering_enabled": True,
+                    "executed": True,
+                    "manual": manual,
+                    "project_id": project_id,
                 },
             )
             session.add(action)

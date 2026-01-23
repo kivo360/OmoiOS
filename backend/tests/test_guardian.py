@@ -4,16 +4,37 @@ import pytest
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.guardian_action import AuthorityLevel, GuardianAction
+from omoi_os.models.project import Project
 from omoi_os.models.task import Task
+from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.guardian import GuardianService
+from omoi_os.services.spec_driven_settings import SpecDrivenSettingsService
 
 
 @pytest.fixture
 def guardian_service(db_service: DatabaseService, event_bus_service: EventBusService):
     """Create a guardian service for testing."""
     return GuardianService(db=db_service, event_bus=event_bus_service)
+
+
+@pytest.fixture
+def settings_service(db_service: DatabaseService):
+    """Create a settings service for testing."""
+    return SpecDrivenSettingsService(db=db_service)
+
+
+@pytest.fixture
+def guardian_service_with_settings(
+    db_service: DatabaseService,
+    event_bus_service: EventBusService,
+    settings_service: SpecDrivenSettingsService,
+):
+    """Create a guardian service with settings service for testing."""
+    return GuardianService(
+        db=db_service, event_bus=event_bus_service, settings_service=settings_service
+    )
 
 
 @pytest.fixture
@@ -462,4 +483,265 @@ def test_get_action_by_id(
     assert retrieved.id == action.id
     assert retrieved.action_type == "cancel_task"
     assert retrieved.target_entity == running_task.id
+
+
+# -------------------------------------------------------------------------
+# Auto-Steering Settings Tests
+# -------------------------------------------------------------------------
+
+
+@pytest.fixture
+def project_with_auto_steering_disabled(db_service: DatabaseService) -> Project:
+    """Create a project with auto-steering disabled."""
+    with db_service.get_session() as session:
+        project = Project(
+            name="Test Project - Auto Steering Disabled",
+            description="Project with guardian_auto_steering disabled",
+            settings={
+                "spec_driven": {
+                    "guardian_auto_steering": False,
+                }
+            },
+        )
+        session.add(project)
+        session.commit()
+        session.refresh(project)
+        session.expunge(project)
+        return project
+
+
+@pytest.fixture
+def project_with_auto_steering_enabled(db_service: DatabaseService) -> Project:
+    """Create a project with auto-steering explicitly enabled."""
+    with db_service.get_session() as session:
+        project = Project(
+            name="Test Project - Auto Steering Enabled",
+            description="Project with guardian_auto_steering enabled",
+            settings={
+                "spec_driven": {
+                    "guardian_auto_steering": True,
+                }
+            },
+        )
+        session.add(project)
+        session.commit()
+        session.refresh(project)
+        session.expunge(project)
+        return project
+
+
+@pytest.fixture
+def task_in_disabled_project(
+    db_service: DatabaseService, project_with_auto_steering_disabled: Project
+) -> Task:
+    """Create a task in a project with auto-steering disabled."""
+    with db_service.get_session() as session:
+        ticket = Ticket(
+            title="Test Ticket in Disabled Project",
+            description="Test description",
+            phase_id="PHASE_REQUIREMENTS",
+            status="pending",
+            priority="MEDIUM",
+            project_id=project_with_auto_steering_disabled.id,
+        )
+        session.add(ticket)
+        session.commit()
+        session.refresh(ticket)
+
+        task = Task(
+            ticket_id=ticket.id,
+            phase_id="PHASE_REQUIREMENTS",
+            task_type="analyze_requirements",
+            description="Test task in disabled project",
+            priority="MEDIUM",
+            status="running",
+            assigned_agent_id="test-agent-1",
+        )
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        session.expunge(task)
+        return task
+
+
+@pytest.fixture
+def task_in_enabled_project(
+    db_service: DatabaseService, project_with_auto_steering_enabled: Project
+) -> Task:
+    """Create a task in a project with auto-steering enabled."""
+    with db_service.get_session() as session:
+        ticket = Ticket(
+            title="Test Ticket in Enabled Project",
+            description="Test description",
+            phase_id="PHASE_REQUIREMENTS",
+            status="pending",
+            priority="MEDIUM",
+            project_id=project_with_auto_steering_enabled.id,
+        )
+        session.add(ticket)
+        session.commit()
+        session.refresh(ticket)
+
+        task = Task(
+            ticket_id=ticket.id,
+            phase_id="PHASE_REQUIREMENTS",
+            task_type="analyze_requirements",
+            description="Test task in enabled project",
+            priority="MEDIUM",
+            status="running",
+            assigned_agent_id="test-agent-1",
+        )
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+        session.expunge(task)
+        return task
+
+
+def test_emergency_cancel_respects_auto_steering_disabled(
+    guardian_service_with_settings: GuardianService,
+    db_service: DatabaseService,
+    task_in_disabled_project: Task,
+    guardian_agent: Agent,
+):
+    """Test that intervention is logged but not executed when auto-steering is disabled."""
+    action = guardian_service_with_settings.emergency_cancel_task(
+        task_id=task_in_disabled_project.id,
+        reason="Test intervention with auto-steering disabled",
+        initiated_by=guardian_agent.id,
+        authority=AuthorityLevel.GUARDIAN,
+    )
+
+    assert action is not None
+    assert action.action_type == "cancel_task"
+    assert action.executed_at is None  # Not executed
+    assert action.audit_log["executed"] is False
+    assert action.audit_log["auto_steering_enabled"] is False
+
+    # Verify task was NOT cancelled
+    with db_service.get_session() as session:
+        task = session.get(Task, task_in_disabled_project.id)
+        assert task.status == "running"  # Still running
+
+
+def test_emergency_cancel_executes_when_auto_steering_enabled(
+    guardian_service_with_settings: GuardianService,
+    db_service: DatabaseService,
+    task_in_enabled_project: Task,
+    guardian_agent: Agent,
+):
+    """Test that intervention is executed when auto-steering is enabled."""
+    action = guardian_service_with_settings.emergency_cancel_task(
+        task_id=task_in_enabled_project.id,
+        reason="Test intervention with auto-steering enabled",
+        initiated_by=guardian_agent.id,
+        authority=AuthorityLevel.GUARDIAN,
+    )
+
+    assert action is not None
+    assert action.action_type == "cancel_task"
+    assert action.executed_at is not None  # Executed
+    assert action.audit_log["executed"] is True
+    assert action.audit_log["auto_steering_enabled"] is True
+
+    # Verify task was cancelled
+    with db_service.get_session() as session:
+        task = session.get(Task, task_in_enabled_project.id)
+        assert task.status == "failed"
+        assert "EMERGENCY CANCELLATION" in task.error_message
+
+
+def test_manual_intervention_bypasses_auto_steering(
+    guardian_service_with_settings: GuardianService,
+    db_service: DatabaseService,
+    task_in_disabled_project: Task,
+    guardian_agent: Agent,
+):
+    """Test that manual intervention executes even when auto-steering is disabled."""
+    action = guardian_service_with_settings.emergency_cancel_task(
+        task_id=task_in_disabled_project.id,
+        reason="Manual intervention test",
+        initiated_by=guardian_agent.id,
+        authority=AuthorityLevel.GUARDIAN,
+        manual=True,  # Manual intervention
+    )
+
+    assert action is not None
+    assert action.executed_at is not None  # Executed despite auto-steering disabled
+    assert action.audit_log["executed"] is True
+    assert action.audit_log["manual"] is True
+
+    # Verify task was cancelled
+    with db_service.get_session() as session:
+        task = session.get(Task, task_in_disabled_project.id)
+        assert task.status == "failed"
+
+
+def test_override_priority_respects_auto_steering_disabled(
+    guardian_service_with_settings: GuardianService,
+    db_service: DatabaseService,
+    task_in_disabled_project: Task,
+    guardian_agent: Agent,
+):
+    """Test that priority override is logged but not executed when auto-steering is disabled."""
+    action = guardian_service_with_settings.override_task_priority(
+        task_id=task_in_disabled_project.id,
+        new_priority="CRITICAL",
+        reason="Test priority override with auto-steering disabled",
+        initiated_by=guardian_agent.id,
+        authority=AuthorityLevel.GUARDIAN,
+    )
+
+    assert action is not None
+    assert action.action_type == "override_priority"
+    assert action.executed_at is None  # Not executed
+    assert action.audit_log["executed"] is False
+
+    # Verify priority was NOT changed
+    with db_service.get_session() as session:
+        task = session.get(Task, task_in_disabled_project.id)
+        assert task.priority == "MEDIUM"  # Still original priority
+
+
+def test_no_settings_service_defaults_to_enabled(
+    guardian_service: GuardianService,  # No settings service
+    db_service: DatabaseService,
+    running_task: Task,
+    guardian_agent: Agent,
+):
+    """Test that without settings service, intervention executes (default behavior)."""
+    action = guardian_service.emergency_cancel_task(
+        task_id=running_task.id,
+        reason="Test without settings service",
+        initiated_by=guardian_agent.id,
+        authority=AuthorityLevel.GUARDIAN,
+    )
+
+    assert action is not None
+    assert action.executed_at is not None  # Executed
+
+    # Verify task was cancelled
+    with db_service.get_session() as session:
+        task = session.get(Task, running_task.id)
+        assert task.status == "failed"
+
+
+def test_audit_log_records_auto_steering_state(
+    guardian_service_with_settings: GuardianService,
+    task_in_enabled_project: Task,
+    guardian_agent: Agent,
+):
+    """Test that audit log records the auto-steering state."""
+    action = guardian_service_with_settings.emergency_cancel_task(
+        task_id=task_in_enabled_project.id,
+        reason="Test audit log",
+        initiated_by=guardian_agent.id,
+        authority=AuthorityLevel.GUARDIAN,
+    )
+
+    assert action.audit_log is not None
+    assert "auto_steering_enabled" in action.audit_log
+    assert "executed" in action.audit_log
+    assert "project_id" in action.audit_log
+    assert action.audit_log["project_id"] is not None
 
