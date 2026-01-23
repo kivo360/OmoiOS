@@ -3427,6 +3427,27 @@ if __name__ == "__main__":
         """List all tracked sandboxes."""
         return list(self._sandboxes.values())
 
+    def clear_all_tracked_sandboxes(self) -> int:
+        """Clear all in-memory sandbox tracking.
+
+        Use this after manually killing sandboxes in Daytona to reset the
+        spawner's internal state. This marks all tracked sandboxes as
+        terminated and clears the tracking dicts.
+
+        Returns:
+            Number of sandboxes cleared
+        """
+        count = len(self._sandboxes)
+        for info in self._sandboxes.values():
+            info.status = "terminated"
+            info.completed_at = utc_now()
+
+        self._sandboxes.clear()
+        self._task_to_sandbox.clear()
+
+        logger.info(f"Cleared {count} tracked sandboxes from memory")
+        return count
+
     async def cleanup_stale_sandboxes(self, max_age_hours: int = 24) -> int:
         """Cleanup sandboxes older than max_age_hours.
 
