@@ -1,0 +1,20 @@
+"""Pydantic schemas for event types."""
+
+from enum import Enum
+
+
+class ResourceEventType(str, Enum):
+    """Event types for resource monitoring."""
+
+    # Resource usage events
+    RESOURCE_USAGE_UPDATED = "RESOURCE_USAGE_UPDATED"
+    RESOURCE_METRICS_COLLECTED = "RESOURCE_METRICS_COLLECTED"
+
+    # Threshold events
+    RESOURCE_WARNING_THRESHOLD = "RESOURCE_WARNING_THRESHOLD"
+    RESOURCE_CRITICAL_THRESHOLD = "RESOURCE_CRITICAL_THRESHOLD"
+    RESOURCE_THRESHOLD_CLEARED = "RESOURCE_THRESHOLD_CLEARED"
+
+    # Limit events
+    RESOURCE_LIMIT_UPDATED = "RESOURCE_LIMIT_UPDATED"
+    RESOURCE_LIMIT_EXCEEDED = "RESOURCE_LIMIT_EXCEEDED"
