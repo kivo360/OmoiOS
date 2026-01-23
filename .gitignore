@@ -78,3 +78,9 @@ examples/workspaces/
 # MCP
 .mcp/
 
+# Node.js
+node_modules/
+
+# Task iteration notes
+ITERATION_NOTES.md
+
