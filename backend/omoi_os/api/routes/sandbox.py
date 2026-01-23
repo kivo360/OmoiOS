@@ -544,6 +544,7 @@ async def _sync_tasks_to_table(
                     status="backlog",
                     priority=priority if priority in priority_map.values() else "MEDIUM",
                     project_id=spec.project_id,
+                    user_id=spec.user_id,  # Inherit user from spec
                     dependencies={
                         "blocked_by": dependencies,
                         "requirements": requirements_refs,
@@ -634,6 +635,7 @@ async def _sync_tasks_to_table(
                                 status="backlog",
                                 priority=ticket_priority,
                                 project_id=spec.project_id,
+                                user_id=spec.user_id,  # Inherit user from spec
                                 context={
                                     "spec_id": spec_id,
                                     "spec_task_id": new_spec_task.id,
