@@ -21,6 +21,10 @@ from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.phase_gate import PhaseGateService
+from omoi_os.services.spec_driven_settings import (
+    SpecDrivenSettingsService,
+    get_spec_driven_settings_service,
+)
 from omoi_os.services.task_queue import TaskQueueService
 
 if TYPE_CHECKING:
@@ -98,6 +102,7 @@ class PhaseProgressionService:
         task_queue: TaskQueueService,
         phase_gate: PhaseGateService,
         event_bus: Optional[EventBusService] = None,
+        settings_service: Optional[SpecDrivenSettingsService] = None,
     ):
         """
         Initialize phase progression service.
@@ -107,11 +112,13 @@ class PhaseProgressionService:
             task_queue: Task queue service for task operations
             phase_gate: Phase gate service for validation
             event_bus: Optional event bus for subscribing to events
+            settings_service: Optional settings service for reading project settings
         """
         self.db = db
         self.task_queue = task_queue
         self.phase_gate = phase_gate
         self.event_bus = event_bus
+        self.settings_service = settings_service or get_spec_driven_settings_service(db)
         self._workflow_orchestrator: Optional["TicketWorkflowOrchestrator"] = None
 
     def set_workflow_orchestrator(
@@ -325,6 +332,25 @@ class PhaseProgressionService:
                     ticket_id=ticket_id,
                     phase_id=phase_id,
                 )
+
+                # Check auto_phase_progression setting before advancing
+                project_id = self._get_ticket_project_id(ticket_id)
+                settings = self.settings_service.get_settings(project_id)
+
+                if not settings.auto_phase_progression:
+                    logger.info(
+                        "Auto-progression disabled for project, skipping advancement",
+                        project_id=project_id,
+                        ticket_id=ticket_id,
+                        phase_id=phase_id,
+                    )
+                    return
+
+                logger.debug(
+                    "Auto-progression enabled, proceeding with advancement",
+                    project_id=project_id,
+                    ticket_id=ticket_id,
+                )
                 self._try_advance_ticket(ticket_id)
             else:
                 logger.debug(
@@ -354,6 +380,25 @@ class PhaseProgressionService:
                 return True
 
             return all(task.status == "completed" for task in tasks)
+
+    def _get_ticket_project_id(self, ticket_id: str) -> Optional[str]:
+        """Get the project ID for a ticket.
+
+        Args:
+            ticket_id: The ticket ID to look up
+
+        Returns:
+            The project ID or None if ticket not found
+        """
+        with self.db.get_session() as session:
+            ticket = session.get(Ticket, ticket_id)
+            if not ticket:
+                logger.warning(
+                    "Ticket not found when looking up project_id",
+                    ticket_id=ticket_id,
+                )
+                return None
+            return ticket.project_id
 
     def _try_advance_ticket(self, ticket_id: str) -> bool:
         """
@@ -870,6 +915,7 @@ def get_phase_progression_service(
     task_queue: Optional[TaskQueueService] = None,
     phase_gate: Optional[PhaseGateService] = None,
     event_bus: Optional[EventBusService] = None,
+    settings_service: Optional[SpecDrivenSettingsService] = None,
 ) -> PhaseProgressionService:
     """Get or create the singleton phase progression service."""
     global _phase_progression_service
@@ -884,6 +930,7 @@ def get_phase_progression_service(
             task_queue=task_queue,  # type: ignore
             phase_gate=phase_gate,  # type: ignore
             event_bus=event_bus,
+            settings_service=settings_service,
         )
 
     return _phase_progression_service
