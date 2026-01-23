@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRight, Activity, Shield, AlertTriangle, Loader2 } from "lucide-react"
+import { ArrowRight, Activity, Shield, AlertTriangle, Loader2, Cpu } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -220,6 +220,12 @@ export default function HealthOverviewPage() {
       <Separator />
 
       <div className="flex flex-wrap gap-3">
+        <Button asChild variant="outline">
+          <Link href="/health/resources">
+            <Cpu className="mr-2 h-4 w-4" />
+            Resource Monitor <ArrowRight className="ml-2 h-4 w-4" />
+          </Link>
+        </Button>
         <Button asChild variant="outline">
           <Link href="/health/trajectories">
             Trajectory Analysis <ArrowRight className="ml-2 h-4 w-4" />

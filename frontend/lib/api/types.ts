@@ -806,6 +806,73 @@ export interface CreatePullRequestRequest {
 }
 
 // ============================================================================
+// Resource Monitoring Types
+// ============================================================================
+
+export interface ResourceMetrics {
+  worker_id: string
+  cpu_percent: number
+  memory_percent: number
+  memory_used_mb: number
+  memory_total_mb: number
+  disk_percent: number
+  disk_used_gb: number
+  disk_total_gb: number
+  timestamp: string
+}
+
+export interface ResourceLimits {
+  cpu_limit_percent: number
+  memory_limit_percent: number
+  disk_limit_percent: number
+}
+
+export interface WorkerResourceStatus {
+  worker_id: string
+  status: "healthy" | "warning" | "critical"
+  metrics: ResourceMetrics
+  limits: ResourceLimits
+  alerts: string[]
+}
+
+export interface ResourceAllocation {
+  worker_id: string
+  limits: ResourceLimits
+  applied_at: string
+}
+
+export interface ResourceHistoryPoint {
+  timestamp: string
+  cpu_percent: number
+  memory_percent: number
+  disk_percent: number
+}
+
+export interface ResourceHistory {
+  worker_id: string
+  points: ResourceHistoryPoint[]
+  period_minutes: number
+}
+
+export interface ResourceSummary {
+  total_workers: number
+  healthy_count: number
+  warning_count: number
+  critical_count: number
+  avg_cpu_percent: number
+  avg_memory_percent: number
+  avg_disk_percent: number
+  workers: WorkerResourceStatus[]
+}
+
+export interface ResourceAlert {
+  worker_id: string
+  message: string
+  severity: string
+  timestamp: string
+}
+
+// ============================================================================
 // Generic Response Types
 // ============================================================================
 

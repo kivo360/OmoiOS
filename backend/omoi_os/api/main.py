@@ -38,6 +38,7 @@ from omoi_os.api.routes import (
     projects,
     quality,
     reasoning,
+    resources,
     results,
     sandbox,
     specs,
@@ -988,6 +989,9 @@ app.include_router(reasoning.router, prefix="/api/v1", tags=["reasoning"])
 
 # Code exploration routes
 app.include_router(explore.router, prefix="/api/v1", tags=["explore"])
+
+# Resource monitoring routes
+app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
 
 # Mount FastMCP server at /mcp
 app.mount("/mcp", mcp_app)
