@@ -1,5 +1,9 @@
 # External dependencies
 external/
+node_modules/
+
+# Iteration notes (auto-generated)
+ITERATION_NOTES.md
 
 # Python
 **/__pycache__/
