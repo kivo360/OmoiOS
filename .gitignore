@@ -78,3 +78,6 @@ examples/workspaces/
 # MCP
 .mcp/
 
+
+# Node.js
+node_modules/
