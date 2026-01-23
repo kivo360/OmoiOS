@@ -13,6 +13,8 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.task_queue import TaskQueueService
+from omoi_os.services.memory import MemoryService
+from omoi_os.services.embedding import EmbeddingService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
 
@@ -22,6 +24,8 @@ _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
 _collaboration_service: Optional[Any] = None
+_memory_service: Optional[MemoryService] = None
+_embedding_service: Optional[EmbeddingService] = None
 
 
 def initialize_mcp_services(
@@ -30,6 +34,8 @@ def initialize_mcp_services(
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
     collaboration_service: Optional[Any] = None,
+    memory_service: Optional[MemoryService] = None,
+    embedding_service: Optional[EmbeddingService] = None,
 ) -> None:
     """Initialize global services for MCP server.
 
@@ -39,13 +45,18 @@ def initialize_mcp_services(
         task_queue: Task queue service
         discovery_service: Discovery service
         collaboration_service: Optional collaboration service for agent messaging
+        memory_service: Optional memory service for task memory operations
+        embedding_service: Optional embedding service for memory operations
     """
     global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global _memory_service, _embedding_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
     _collaboration_service = collaboration_service
+    _memory_service = memory_service
+    _embedding_service = embedding_service
 
 
 # Create FastMCP server
@@ -1538,6 +1549,206 @@ def get_discoveries_by_type(
                 for d in discoveries
             ],
         }
+
+
+# ============================================================================
+# Memory MCP Tools (NEW - for task memory management)
+# ============================================================================
+
+
+@mcp.tool()
+def save_memory(
+    ctx: Context,
+    task_id: str = Field(..., description="ID of the task to save memory for"),
+    execution_summary: str = Field(
+        ..., min_length=10, description="Summary of what happened during execution"
+    ),
+    success: bool = Field(..., description="Whether the execution was successful"),
+    memory_type: Optional[str] = Field(
+        default=None,
+        description="Optional memory type (error_fix, discovery, decision, learning, warning, codebase_knowledge)",
+    ),
+    error_patterns: Optional[Dict[str, Any]] = Field(
+        default=None, description="Optional error patterns for failed executions"
+    ),
+) -> Dict[str, Any]:
+    """Save task execution memory for future reference and pattern learning.
+
+    Stores the execution result with embeddings for semantic search.
+    Memory type is auto-classified if not provided.
+
+    Args:
+        task_id: ID of the task to save memory for
+        execution_summary: Summary of what happened (minimum 10 characters)
+        success: Whether the execution was successful
+        memory_type: Optional memory type override
+        error_patterns: Optional error patterns for failed executions
+
+    Returns:
+        Dictionary with created memory information
+    """
+    if not _db or not _memory_service:
+        raise RuntimeError("Database or memory service not initialized")
+
+    from omoi_os.models.memory_type import MemoryType
+
+    # Validate memory_type if provided
+    if memory_type and not MemoryType.is_valid(memory_type):
+        return {
+            "success": False,
+            "error": f"Invalid memory_type: {memory_type}. Must be one of: {', '.join(MemoryType.all_types())}",
+        }
+
+    with _db.get_session() as session:
+        try:
+            memory = _memory_service.store_execution(
+                session=session,
+                task_id=task_id,
+                execution_summary=execution_summary,
+                success=success,
+                error_patterns=error_patterns,
+                memory_type=memory_type,
+            )
+            session.commit()
+
+            ctx.info(f"Saved memory {memory.id} for task {task_id}")
+
+            # Publish event
+            if _event_bus:
+                _event_bus.publish(
+                    SystemEvent(
+                        event_type="MEMORY_SAVED",
+                        entity_type="task_memory",
+                        entity_id=str(memory.id),
+                        payload={
+                            "task_id": task_id,
+                            "success": success,
+                            "memory_type": memory.memory_type,
+                        },
+                    )
+                )
+
+            return {
+                "success": True,
+                "memory_id": str(memory.id),
+                "task_id": task_id,
+                "memory_type": memory.memory_type,
+                "has_embedding": memory.context_embedding is not None,
+                "reused_count": memory.reused_count,
+            }
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
+
+
+@mcp.tool()
+def find_memory(
+    ctx: Context,
+    task_description: str = Field(
+        ..., min_length=3, description="Description of the task to find similar memories for"
+    ),
+    search_mode: str = Field(
+        default="hybrid",
+        description="Search mode: semantic, keyword, or hybrid (default: hybrid)",
+    ),
+    top_k: int = Field(default=5, ge=1, le=50, description="Maximum number of results"),
+    similarity_threshold: float = Field(
+        default=0.7, ge=0.0, le=1.0, description="Minimum similarity score"
+    ),
+    success_only: bool = Field(
+        default=False, description="Only return memories from successful executions"
+    ),
+    memory_types: Optional[List[str]] = Field(
+        default=None, description="Optional list of memory types to filter by"
+    ),
+) -> Dict[str, Any]:
+    """Find similar task memories using semantic, keyword, or hybrid search.
+
+    Searches stored task memories to find relevant past experiences.
+    Automatically increments reuse count for returned memories.
+
+    Args:
+        task_description: Description of the task (minimum 3 characters)
+        search_mode: Search mode (semantic, keyword, or hybrid)
+        top_k: Maximum number of results (1-50)
+        similarity_threshold: Minimum similarity score (0.0-1.0)
+        success_only: Only return successful execution memories
+        memory_types: Optional filter by memory types
+
+    Returns:
+        Dictionary with search results including memories and count
+    """
+    if not _db or not _memory_service:
+        raise RuntimeError("Database or memory service not initialized")
+
+    from omoi_os.models.memory_type import MemoryType
+
+    # Validate search_mode
+    valid_modes = ["semantic", "keyword", "hybrid"]
+    if search_mode not in valid_modes:
+        return {
+            "success": False,
+            "error": f"Invalid search_mode: {search_mode}. Must be one of: {', '.join(valid_modes)}",
+        }
+
+    # Validate memory_types if provided
+    if memory_types:
+        for mem_type in memory_types:
+            if not MemoryType.is_valid(mem_type):
+                return {
+                    "success": False,
+                    "error": f"Invalid memory_type in filter: {mem_type}. Must be one of: {', '.join(MemoryType.all_types())}",
+                }
+
+    with _db.get_session() as session:
+        try:
+            results = _memory_service.search_similar(
+                session=session,
+                task_description=task_description,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold,
+                success_only=success_only,
+                memory_types=memory_types,
+                search_mode=search_mode,
+            )
+            session.commit()
+
+            ctx.info(f"Found {len(results)} similar memories for query")
+
+            # Publish event
+            if _event_bus:
+                _event_bus.publish(
+                    SystemEvent(
+                        event_type="MEMORY_SEARCHED",
+                        entity_type="task_memory",
+                        entity_id="search",
+                        payload={
+                            "query_length": len(task_description),
+                            "search_mode": search_mode,
+                            "result_count": len(results),
+                        },
+                    )
+                )
+
+            return {
+                "success": True,
+                "count": len(results),
+                "search_mode": search_mode,
+                "memories": [
+                    {
+                        "task_id": r.task_id,
+                        "memory_id": r.memory_id,
+                        "summary": r.summary,
+                        "success": r.success,
+                        "similarity_score": r.similarity_score,
+                        "reused_count": r.reused_count,
+                        "semantic_score": r.semantic_score,
+                        "keyword_score": r.keyword_score,
+                    }
+                    for r in results
+                ],
+            }
+        except ValueError as e:
+            return {"success": False, "error": str(e)}
 
 
 # Create HTTP app for FastAPI mounting using Streamable HTTP transport
