@@ -11,7 +11,9 @@ from pydantic import Field
 
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
+from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.memory import MemoryService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
@@ -22,6 +24,8 @@ _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
 _collaboration_service: Optional[Any] = None
+_memory_service: Optional[MemoryService] = None
+_embedding_service: Optional[EmbeddingService] = None
 
 
 def initialize_mcp_services(
@@ -30,6 +34,8 @@ def initialize_mcp_services(
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
     collaboration_service: Optional[Any] = None,
+    memory_service: Optional[MemoryService] = None,
+    embedding_service: Optional[EmbeddingService] = None,
 ) -> None:
     """Initialize global services for MCP server.
 
@@ -39,13 +45,18 @@ def initialize_mcp_services(
         task_queue: Task queue service
         discovery_service: Discovery service
         collaboration_service: Optional collaboration service for agent messaging
+        memory_service: Optional memory service for task memory storage
+        embedding_service: Optional embedding service for generating embeddings
     """
     global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global _memory_service, _embedding_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
     _collaboration_service = collaboration_service
+    _memory_service = memory_service
+    _embedding_service = embedding_service
 
 
 # Create FastMCP server
@@ -1538,6 +1549,141 @@ def get_discoveries_by_type(
                 for d in discoveries
             ],
         }
+
+
+# ============================================================================
+# Memory Tools (NEW - for persisting task execution memories)
+# ============================================================================
+
+
+@mcp.tool()
+def save_memory(
+    ctx: Context,
+    task_id: str = Field(..., description="ID of the task to save memory for"),
+    execution_summary: str = Field(
+        ..., min_length=10, description="Summary of what happened during execution"
+    ),
+    success: bool = Field(..., description="Whether the task execution was successful"),
+    memory_type: Optional[str] = Field(
+        None,
+        description="Memory type (discovery, error_fix, decision, learning, warning, codebase_knowledge). Auto-classified if not provided.",
+    ),
+    goal: Optional[str] = Field(None, description="ACE workflow goal (optional)"),
+    result: Optional[str] = Field(None, description="ACE workflow result (optional)"),
+    feedback: Optional[str] = Field(
+        None, description="ACE workflow feedback (optional)"
+    ),
+    tool_usage: Optional[List[str]] = Field(
+        None, description="List of tools used during execution (optional)"
+    ),
+    error_patterns: Optional[Dict[str, Any]] = Field(
+        None, description="Error patterns if task failed (optional)"
+    ),
+) -> Dict[str, Any]:
+    """Save a task execution memory with embeddings for future retrieval.
+
+    This tool persists task execution memories including summaries, success status,
+    and optional ACE workflow metadata. Memories are embedded for semantic search
+    and can be retrieved later using find_memory.
+
+    Args:
+        task_id: ID of the task to save memory for (required)
+        execution_summary: Summary of what happened during execution (required, min 10 chars)
+        success: Whether the task execution was successful (required)
+        memory_type: Memory type classification (auto-classified if not provided)
+        goal: ACE workflow goal (optional)
+        result: ACE workflow result (optional)
+        feedback: ACE workflow feedback (optional)
+        tool_usage: List of tools used during execution (optional)
+        error_patterns: Error patterns if task failed (optional)
+
+    Returns:
+        Dictionary with success status and memory details or error information
+    """
+    try:
+        # Get or create memory service
+        memory_service = _memory_service
+        if memory_service is None:
+            # Create memory service on demand if not injected
+            if _embedding_service is None:
+                embedding_svc = EmbeddingService()
+            else:
+                embedding_svc = _embedding_service
+            memory_service = MemoryService(
+                embedding_service=embedding_svc,
+                event_bus=_event_bus,
+            )
+
+        if not _db:
+            return {"success": False, "error": "Database service not initialized"}
+
+        # Build enhanced summary with ACE workflow fields if provided
+        enhanced_summary = execution_summary
+        if goal or result or feedback or tool_usage:
+            ace_parts = []
+            if goal:
+                ace_parts.append(f"Goal: {goal}")
+            if result:
+                ace_parts.append(f"Result: {result}")
+            if feedback:
+                ace_parts.append(f"Feedback: {feedback}")
+            if tool_usage:
+                ace_parts.append(f"Tools used: {', '.join(tool_usage)}")
+            if ace_parts:
+                enhanced_summary = f"{execution_summary}\n\nACE Context:\n" + "\n".join(
+                    ace_parts
+                )
+
+        with _db.get_session() as session:
+            memory = memory_service.store_execution(
+                session=session,
+                task_id=task_id,
+                execution_summary=enhanced_summary,
+                success=success,
+                error_patterns=error_patterns,
+                auto_extract_patterns=success,  # Only extract patterns on success
+                memory_type=memory_type,
+            )
+            session.commit()
+
+            # Build response
+            response = {
+                "success": True,
+                "memory_id": str(memory.id),
+                "task_id": task_id,
+                "memory_type": memory.memory_type,
+                "has_embedding": memory.context_embedding is not None,
+            }
+
+        # Event publishing (non-blocking) - ensure event failure doesn't break the operation
+        try:
+            if _event_bus:
+                _event_bus.publish(
+                    "memory.saved_via_mcp",
+                    {
+                        "memory_id": str(memory.id),
+                        "task_id": task_id,
+                        "memory_type": memory.memory_type,
+                        "success": success,
+                    },
+                )
+        except Exception as event_error:
+            # Log event publishing failure but don't fail the operation
+            ctx.warning(f"Event publishing failed (non-critical): {event_error}")
+
+        ctx.info(
+            f"Saved memory {memory.id} for task {task_id} (type: {memory.memory_type})"
+        )
+        return response
+
+    except ValueError as e:
+        # Validation errors (e.g., invalid task_id, invalid memory_type)
+        ctx.warning(f"save_memory validation failed: {e}")
+        return {"success": False, "error": str(e)}
+    except Exception as e:
+        # Unexpected errors - log and return structured error
+        ctx.warning(f"save_memory failed: {e}")
+        return {"success": False, "error": "Failed to save memory"}
 
 
 # Create HTTP app for FastAPI mounting using Streamable HTTP transport
