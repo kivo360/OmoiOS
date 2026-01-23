@@ -2875,3 +2875,44 @@ async def submit_validation_result(
         validation_passed=validation.passed,
         new_task_status=new_status,
     )
+
+
+# ============================================================================
+# ADMIN: Sandbox Management
+# ============================================================================
+
+
+class ClearSandboxesResponse(BaseModel):
+    """Response for clearing sandbox tracking."""
+
+    cleared_count: int
+    message: str
+
+
+@router.post("/admin/clear-tracked-sandboxes", response_model=ClearSandboxesResponse)
+async def clear_tracked_sandboxes():
+    """Clear all in-memory sandbox tracking.
+
+    Use this after manually killing sandboxes in Daytona to reset the
+    spawner's internal state. This does NOT terminate any running sandboxes -
+    it only clears the in-memory tracking.
+
+    This is useful when:
+    - You've manually killed sandboxes in Daytona dashboard
+    - The backend was restarted but old sandbox refs linger
+    - You need to reset the spawner state for debugging
+
+    Returns:
+        ClearSandboxesResponse with count of cleared sandboxes
+    """
+    from omoi_os.services.daytona_spawner import get_daytona_spawner
+
+    db = get_db_service()
+    spawner = get_daytona_spawner(db=db)
+
+    cleared = spawner.clear_all_tracked_sandboxes()
+
+    return ClearSandboxesResponse(
+        cleared_count=cleared,
+        message=f"Cleared {cleared} tracked sandboxes from memory",
+    )
