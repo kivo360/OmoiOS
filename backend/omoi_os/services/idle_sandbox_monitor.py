@@ -82,17 +82,17 @@ class IdleSandboxMonitor:
     # Convert frozenset to set for SQLAlchemy compatibility
     NON_WORK_EVENT_TYPES: Set[str] = set(NON_WORK_EVENTS)
 
-    # Default idle threshold (20 minutes - if only heartbeats for this long, sandbox is idle)
-    # Doubled from 10 minutes to allow spec-sandbox more time for complex processing
-    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=20)
+    # Default idle threshold (10 minutes - if only heartbeats for this long, sandbox is idle)
+    # This is for sandboxes that are alive but not doing any work
+    DEFAULT_IDLE_THRESHOLD = timedelta(minutes=10)
 
     # Heartbeat timeout (2 minutes - sandbox is dead if no heartbeat for this long)
     HEARTBEAT_TIMEOUT = timedelta(minutes=2)
 
-    # Stuck running threshold (40 minutes - if agent reports "running" but no work events,
+    # Stuck running threshold (15 minutes - if agent reports "running" but no work events,
     # consider it stuck even though it claims to be working)
-    # Doubled from 20 minutes to allow spec-sandbox more time for complex operations
-    STUCK_RUNNING_THRESHOLD = timedelta(minutes=40)
+    # This catches sandboxes that are hung/stuck in a loop
+    STUCK_RUNNING_THRESHOLD = timedelta(minutes=15)
 
     # Heartbeat event types (both agent and spec-sandbox heartbeats)
     # Uses canonical event types from omoi_os.schemas.events
@@ -563,15 +563,31 @@ class IdleSandboxMonitor:
             log.error("sandbox_stop_failed", error=str(e))
             # Continue to update task status even if stop fails
 
-        # 2. Update associated task status (only if not already completed)
+        # 2. Update associated task status
+        # For completion-based termination: don't change task status (it should already be completed)
+        # For failure-based termination: mark as failed if still in active state
         task_id = None
+        is_graceful_completion = reason in (
+            "execution_completed",
+            "agent_completed",
+        )
+
         with self.db.get_session() as session:
             task = session.query(Task).filter(Task.sandbox_id == sandbox_id).first()
             if task:
                 task_id = str(task.id)
-                # Only mark as failed if task is still in an active state
-                # Don't overwrite completed/cancelled tasks
-                if task.status in ("pending", "claiming", "assigned", "running"):
+
+                if is_graceful_completion:
+                    # Graceful completion - sandbox is being cleaned up after work is done
+                    # Don't change task status; it should already be set appropriately
+                    log.info(
+                        "task_status_preserved_graceful_completion",
+                        task_id=task_id,
+                        existing_status=task.status,
+                        reason=reason,
+                    )
+                elif task.status in ("pending", "claiming", "assigned", "running"):
+                    # Failure-based termination (idle, stuck) - mark task as failed
                     task.status = "failed"
                     task.error_message = (
                         f"Sandbox terminated: {reason}. "
@@ -616,12 +632,13 @@ class IdleSandboxMonitor:
         }
 
     async def check_and_terminate_idle_sandboxes(self) -> list[dict]:
-        """Check all active sandboxes and terminate any that are idle or stuck.
+        """Check all active sandboxes and terminate any that are idle, stuck, or completed.
 
         This method checks for:
-        1. Idle sandboxes (no work events for extended period)
-        2. Stuck running sandboxes (reports running but no actual work)
-        3. Stuck between phases (phase completed but next phase hasn't started)
+        1. Completed sandboxes (spec.execution_completed or agent.completed) - graceful cleanup
+        2. Idle sandboxes (no work events for extended period)
+        3. Stuck running sandboxes (reports running but no actual work)
+        4. Stuck between phases (phase completed but next phase hasn't started)
 
         Returns:
             List of termination results for any sandboxes that were terminated
@@ -655,6 +672,31 @@ class IdleSandboxMonitor:
                         has_execution_completed=phase_status.get("has_execution_completed"),
                         has_execution_failed=phase_status.get("has_execution_failed"),
                     )
+
+                    # Check for completed spec sandboxes - terminate gracefully
+                    if phase_status.get("has_execution_completed") or phase_status.get(
+                        "has_execution_failed"
+                    ):
+                        reason = (
+                            "execution_completed"
+                            if phase_status.get("has_execution_completed")
+                            else "execution_failed"
+                        )
+                        log.info(
+                            "completed_spec_sandbox_detected",
+                            sandbox_id=sandbox_id,
+                            reason=reason,
+                            phases_completed=phase_status.get("phases_completed", []),
+                        )
+
+                        result = await self.terminate_idle_sandbox(
+                            sandbox_id=sandbox_id,
+                            reason=reason,
+                            idle_duration_seconds=0,  # Not idle, just completed
+                        )
+                        result["phase_status"] = phase_status
+                        terminated.append(result)
+                        continue  # Don't check other conditions
 
                 # Check for stuck-between-phases condition (spec sandboxes only)
                 if phase_status and phase_status.get("is_stuck_between_phases"):
@@ -709,12 +751,22 @@ class IdleSandboxMonitor:
                         result["phase_status"] = phase_status
                     terminated.append(result)
                 elif activity["is_alive"]:
-                    # Log why we're NOT terminating this sandbox
+                    # Check if regular (non-spec) sandbox has completed its work
                     if activity["has_completed"]:
-                        log.debug(
-                            "sandbox_skipped_already_completed",
+                        # Agent sandbox completed - terminate gracefully
+                        log.info(
+                            "completed_agent_sandbox_detected",
                             sandbox_id=sandbox_id,
                         )
+
+                        result = await self.terminate_idle_sandbox(
+                            sandbox_id=sandbox_id,
+                            reason="agent_completed",
+                            idle_duration_seconds=0,  # Not idle, just completed
+                        )
+                        if phase_status:
+                            result["phase_status"] = phase_status
+                        terminated.append(result)
                     elif activity["heartbeat_status"] == "running":
                         log.debug(
                             "sandbox_skipped_agent_running",
