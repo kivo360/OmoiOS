@@ -1,5 +1,6 @@
 # External dependencies
 external/
+node_modules/
 
 # Python
 **/__pycache__/
