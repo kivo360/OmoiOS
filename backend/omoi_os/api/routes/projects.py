@@ -580,3 +580,108 @@ async def get_project_stats(
         raise HTTPException(status_code=404, detail="Project not found")
 
     return ProjectStatsResponse(**stats)
+
+
+# ============================================================================
+# Spec-Driven Settings Endpoints
+# ============================================================================
+
+
+@router.get("/{project_id}/settings/spec-driven")
+async def get_spec_driven_settings(
+    project_id: str,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Get spec-driven development settings for a project.
+
+    Returns the current spec-driven settings or defaults if none are configured.
+
+    Requires authentication and verifies the user has access to the project.
+
+    Args:
+        project_id: Project ID
+        current_user: Authenticated user
+        db: Database service
+
+    Returns:
+        SpecDrivenOptionsSchema with current settings
+    """
+    from omoi_os.services.spec_driven_settings import (
+        SpecDrivenSettingsService,
+        SpecDrivenOptionsSchema,
+    )
+
+    # Verify user has access to this project (multi-tenant check)
+    await verify_project_access(project_id, current_user, db)
+
+    async with db.get_async_session() as session:
+        service = SpecDrivenSettingsService(session)
+        settings = await service.get_settings(project_id)
+
+        # If project doesn't exist, get_settings returns defaults
+        # We need to verify the project actually exists
+        result = await session.execute(
+            select(Project).filter(Project.id == project_id)
+        )
+        project = result.scalar_one_or_none()
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+
+        return settings
+
+
+@router.patch("/{project_id}/settings/spec-driven")
+async def update_spec_driven_settings(
+    project_id: str,
+    settings_update: dict,
+    current_user: User = Depends(get_current_user),
+    db: DatabaseService = Depends(get_db_service),
+):
+    """
+    Update spec-driven development settings for a project.
+
+    Performs a partial update, only modifying the fields that are provided.
+
+    Requires authentication and verifies the user has access to the project.
+
+    Args:
+        project_id: Project ID
+        settings_update: Partial settings to update
+        current_user: Authenticated user
+        db: Database service
+
+    Returns:
+        SpecDrivenOptionsSchema with updated settings
+    """
+    from omoi_os.services.spec_driven_settings import (
+        SpecDrivenSettingsService,
+        update_settings_partial,
+    )
+    from omoi_os.schemas.spec_driven_settings import SpecDrivenSettingsUpdateSchema
+
+    # Validate the update payload
+    try:
+        validated_update = SpecDrivenSettingsUpdateSchema(**settings_update)
+    except Exception as e:
+        raise HTTPException(status_code=422, detail=str(e))
+
+    # Verify user has access to this project (multi-tenant check)
+    await verify_project_access(project_id, current_user, db)
+
+    async with db.get_async_session() as session:
+        service = SpecDrivenSettingsService(session)
+
+        try:
+            updated = await update_settings_partial(
+                service,
+                project_id,
+                validated_update.model_dump(exclude_unset=True),
+                str(current_user.id),
+            )
+            return updated
+        except ValueError as e:
+            if "not found" in str(e).lower():
+                raise HTTPException(status_code=404, detail="Project not found")
+            raise HTTPException(status_code=400, detail=str(e))
