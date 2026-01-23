@@ -40,6 +40,10 @@ from omoi_os.services.task_scorer import TaskScorer
 from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
 from omoi_os.services.validation_agent import ValidationAgent
 from omoi_os.services.llm_service import LLMService, get_llm_service
+from omoi_os.services.spec_driven_settings import (
+    SpecDrivenOptionsSchema,
+    SpecDrivenSettingsService,
+)
 
 __all__ = [
     "ACEEngine",
@@ -78,4 +82,6 @@ __all__ = [
     "GitHubAPIError",
     "RepositoryService",
     "RepositoryServiceError",
+    "SpecDrivenOptionsSchema",
+    "SpecDrivenSettingsService",
 ]
