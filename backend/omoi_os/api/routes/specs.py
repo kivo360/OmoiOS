@@ -52,6 +52,7 @@ async def _list_project_specs_async(
     db: DatabaseService,
     project_id: str,
     status: Optional[str] = None,
+    include_archived: bool = False,
 ) -> List[SpecModel]:
     """List specs for a project (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
@@ -67,6 +68,9 @@ async def _list_project_specs_async(
         )
         if status:
             query = query.filter(SpecModel.status == status)
+        # Filter out archived specs by default
+        if not include_archived:
+            query = query.filter(SpecModel.archived == False)
         query = query.order_by(SpecModel.created_at.desc())
         result = await session.execute(query)
         specs = result.scalars().all()
@@ -1166,13 +1170,14 @@ def _spec_to_response(spec: SpecModel) -> SpecResponse:
 async def list_project_specs(
     project_id: str,
     status: Optional[str] = Query(None, description="Filter by status"),
+    include_archived: bool = Query(False, description="Include archived specs"),
     current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     _: str = Depends(verify_project_access),  # Verify access to project
 ):
     """List all specs for a project."""
     # Use async database operations (non-blocking)
-    specs = await _list_project_specs_async(db, project_id, status)
+    specs = await _list_project_specs_async(db, project_id, status, include_archived)
     return SpecListResponse(
         specs=[_spec_to_response(s) for s in specs],
         total=len(specs),
