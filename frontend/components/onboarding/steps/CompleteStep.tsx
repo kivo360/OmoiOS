@@ -117,7 +117,7 @@ export function CompleteStep() {
             </>
           ) : data.firstSpecId ? (
             <>
-              Watch Agent Progress
+              View Spec Progress
               <ArrowRight className="ml-2 h-5 w-5" />
             </>
           ) : (
