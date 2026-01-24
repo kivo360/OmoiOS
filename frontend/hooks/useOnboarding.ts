@@ -7,6 +7,7 @@ import { persist } from "zustand/middleware"
 import { useAuth } from "@/hooks/useAuth"
 import { createSafeStorage } from "@/lib/storage/safeStorage"
 import { api } from "@/lib/api/client"
+import { launchSpec } from "@/lib/api/specs"
 import { track, trackEvent as analyticsTrackEvent, ANALYTICS_EVENTS } from "@/lib/analytics"
 import {
   fetchOnboardingStatus,
@@ -289,10 +290,13 @@ export function useOnboarding() {
 
     const checkSpecStatus = async () => {
       try {
-        const response = await api.get<{ status: string }>(`/api/v1/sandboxes/${data.firstSpecId}`)
+        // Poll the spec endpoint since firstSpecId now refers to a spec (not a sandbox)
+        const response = await api.get<{ status: string; current_phase: string }>(`/api/v1/specs/${data.firstSpecId}`)
         const status = response.status?.toLowerCase()
+        const phase = response.current_phase?.toLowerCase()
 
-        if (status === "completed" || status === "success") {
+        // Spec is complete when it reaches 'complete' phase or 'sync' phase (PR created)
+        if (status === "completed" || status === "success" || phase === "complete" || phase === "sync") {
           setData({ firstSpecStatus: "completed" })
           addCompletedChecklistItem("watch-agent")
           setIsOnboardingComplete(true)
@@ -445,14 +449,22 @@ export function useOnboarding() {
         setData({ projectId })
       }
 
-      const sandboxResponse = await api.post<{ id: string; sandbox_id: string }>("/api/v1/sandboxes", {
+      // Ensure we have a project ID before launching the spec
+      if (!projectId) {
+        throw new Error("Project ID is required to create a spec")
+      }
+
+      // Use spec-driven workflow instead of direct sandbox creation
+      // This creates a proper spec that goes through requirements → design → tasks → sync
+      const specResponse = await launchSpec({
+        title: specText.slice(0, 100),
+        description: specText,
         project_id: projectId,
-        prompt: specText,
-        name: specText.slice(0, 50),
+        auto_execute: true, // Start sandbox execution immediately after planning
       })
 
       setData({
-        firstSpecId: sandboxResponse.sandbox_id || sandboxResponse.id,
+        firstSpecId: specResponse.spec_id,
         firstSpecText: specText,
         firstSpecStatus: "running",
       })
@@ -487,9 +499,9 @@ export function useOnboarding() {
         hasFirstSpec: !!data.firstSpecId,
       })
 
-      if (data.firstSpecId) {
-        const projectId = data.projectId || "all"
-        router.push(`/board/${projectId}`)
+      // Redirect to spec detail page to show the spec-driven workflow in action
+      if (data.firstSpecId && data.projectId) {
+        router.push(`/projects/${data.projectId}/specs/${data.firstSpecId}`)
       } else {
         router.push("/command")
       }
