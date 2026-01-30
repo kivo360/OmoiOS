@@ -441,6 +441,10 @@ class SpecTaskExecutionService:
         if spec_task.dependencies:
             dependencies = {"depends_on": spec_task.dependencies}
 
+        # Extract file ownership patterns from spec phase_data
+        # Tasks in TASKS phase output include files_to_create and files_to_modify
+        owned_files = self._extract_owned_files(spec, spec_task.id)
+
         # Create the Task
         task = Task(
             id=str(uuid4()),
@@ -452,6 +456,7 @@ class SpecTaskExecutionService:
             priority=priority,
             status="pending",
             dependencies=dependencies,
+            owned_files=owned_files,  # File ownership for parallel conflict detection
             result={
                 "spec_task_id": spec_task.id,  # Link back to SpecTask
                 "spec_id": spec.id,
@@ -486,6 +491,98 @@ class SpecTaskExecutionService:
             )
 
         return task
+
+    def _extract_owned_files(
+        self,
+        spec: Spec,
+        spec_task_id: str,
+    ) -> Optional[List[str]]:
+        """Extract file ownership patterns from spec phase_data for a task.
+
+        The TASKS phase output includes files_to_create and files_to_modify arrays
+        for each task. These are stored in spec.phase_data["tasks"]["tasks"].
+
+        We convert these file paths to glob patterns for ownership validation:
+        - Specific files: "src/services/user.py" -> "src/services/user.py"
+        - Directories: "src/services/user/" -> "src/services/user/**"
+
+        Args:
+            spec: The spec containing phase_data with task file info
+            spec_task_id: The SpecTask ID (e.g., "TSK-001")
+
+        Returns:
+            List of glob patterns for owned files, or None if not available
+        """
+        if not spec.phase_data:
+            return None
+
+        # Get tasks from TASKS phase output
+        tasks_data = spec.phase_data.get("tasks", {})
+        tasks_list = tasks_data.get("tasks", [])
+
+        if not tasks_list:
+            return None
+
+        # Find the task by ID
+        task_info = None
+        for t in tasks_list:
+            if isinstance(t, dict) and t.get("id") == spec_task_id:
+                task_info = t
+                break
+
+        if not task_info:
+            logger.debug(
+                "task_not_found_in_phase_data",
+                spec_id=spec.id,
+                spec_task_id=spec_task_id,
+            )
+            return None
+
+        # Collect all owned files
+        owned_files = []
+
+        # Add files to create
+        files_to_create = task_info.get("files_to_create", [])
+        if isinstance(files_to_create, list):
+            owned_files.extend(files_to_create)
+
+        # Add files to modify
+        files_to_modify = task_info.get("files_to_modify", [])
+        if isinstance(files_to_modify, list):
+            owned_files.extend(files_to_modify)
+
+        if not owned_files:
+            return None
+
+        # Convert to unique list and normalize patterns
+        unique_files = list(set(owned_files))
+        patterns = []
+
+        for file_path in unique_files:
+            if not file_path or not isinstance(file_path, str):
+                continue
+
+            # Clean the path
+            file_path = file_path.strip()
+            if not file_path:
+                continue
+
+            # If it's a directory (ends with /), convert to glob pattern
+            if file_path.endswith("/"):
+                patterns.append(f"{file_path}**")
+            else:
+                patterns.append(file_path)
+
+        if patterns:
+            logger.info(
+                "extracted_owned_files",
+                spec_task_id=spec_task_id,
+                owned_files_count=len(patterns),
+                patterns=patterns[:5],  # Log first 5 for brevity
+            )
+            return patterns
+
+        return None
 
     def _parse_parallel_opportunities(
         self,
