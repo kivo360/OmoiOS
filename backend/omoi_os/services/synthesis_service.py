@@ -142,13 +142,18 @@ class SynthesisService:
         # Check if any sources are already complete
         self._check_already_completed_sources(pending)
 
-    def _handle_join_created(self, event_data: dict) -> None:
+    def _handle_join_created(self, event_data) -> None:
         """Handle coordination.join.created event to track pending joins.
 
         Args:
-            event_data: Event payload from CoordinationService
+            event_data: SystemEvent from EventBusService or dict from direct call
         """
-        payload = event_data.get("payload", {})
+        # Handle both SystemEvent objects and plain dicts
+        if hasattr(event_data, "payload"):
+            payload = event_data.payload
+        else:
+            payload = event_data.get("payload", {})
+
         join_id = payload.get("join_id")
         source_task_ids = payload.get("source_task_ids", [])
         continuation_task_id = payload.get("continuation_task_id")
@@ -170,13 +175,17 @@ class SynthesisService:
             merge_strategy=merge_strategy,
         )
 
-    def _handle_task_completed(self, event_data: dict) -> None:
+    def _handle_task_completed(self, event_data) -> None:
         """Handle TASK_COMPLETED event to check if any joins are ready.
 
         Args:
-            event_data: Event payload with completed task info
+            event_data: SystemEvent from EventBusService or dict from direct call
         """
-        completed_task_id = event_data.get("entity_id")
+        # Handle both SystemEvent objects and plain dicts
+        if hasattr(event_data, "entity_id"):
+            completed_task_id = event_data.entity_id
+        else:
+            completed_task_id = event_data.get("entity_id")
         if not completed_task_id:
             return
 
