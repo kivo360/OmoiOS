@@ -306,6 +306,68 @@ class CoordinationService:
 
             return continuation
 
+    def register_join(
+        self,
+        join_id: str,
+        source_task_ids: List[str],
+        continuation_task_id: str,
+        merge_strategy: str = "all",
+    ) -> None:
+        """
+        Register a join operation for an existing continuation task.
+
+        Unlike join_tasks(), this method does NOT create a new task.
+        It only publishes the coordination.join.created event so that
+        SynthesisService can track the join and merge results when ready.
+
+        Use this when the continuation task was already created elsewhere
+        (e.g., by SpecTaskExecutionService during spec task conversion).
+
+        Args:
+            join_id: Unique identifier for the join operation
+            source_task_ids: List of task IDs that must complete before continuation
+            continuation_task_id: ID of the existing task that will receive merged results
+            merge_strategy: Strategy for merging results ("all", "first", "majority")
+        """
+        with self.db.get_session() as session:
+            # Verify all source tasks exist
+            source_tasks = (
+                session.query(Task).filter(Task.id.in_(source_task_ids)).all()
+            )
+            if len(source_tasks) != len(source_task_ids):
+                raise ValueError("Some source tasks not found")
+
+            # Verify continuation task exists
+            continuation = session.query(Task).filter(Task.id == continuation_task_id).first()
+            if not continuation:
+                raise ValueError(f"Continuation task not found: {continuation_task_id}")
+
+            # Update continuation task dependencies to include all source tasks
+            # This ensures it won't be picked up until all sources complete
+            existing_deps = continuation.dependencies or {}
+            depends_on = existing_deps.get("depends_on", [])
+            for source_id in source_task_ids:
+                if source_id not in depends_on:
+                    depends_on.append(source_id)
+            continuation.dependencies = {"depends_on": depends_on}
+            session.commit()
+
+        # Publish join event for SynthesisService
+        if self.event_bus:
+            self.event_bus.publish(
+                SystemEvent(
+                    event_type="coordination.join.created",
+                    entity_type="join",
+                    entity_id=join_id,
+                    payload={
+                        "join_id": join_id,
+                        "source_task_ids": source_task_ids,
+                        "continuation_task_id": continuation_task_id,
+                        "merge_strategy": merge_strategy,
+                    },
+                )
+            )
+
     # ---------------------------------------------------------------------
     # Merge Operations
     # ---------------------------------------------------------------------

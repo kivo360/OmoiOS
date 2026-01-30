@@ -2017,14 +2017,25 @@ async def execute_spec_tasks(
             detail=f"Task execution blocked: {billing_reason}",
         )
 
-    # Initialize service with event bus for completion tracking
+    # Initialize service with event bus for completion tracking and coordination for parallel task synthesis
     event_bus = None
+    coordination = None
     try:
         event_bus = get_event_bus()
     except Exception:
         pass  # Event bus optional
 
-    service = SpecTaskExecutionService(db=db, event_bus=event_bus)
+    # Initialize CoordinationService for parallel task synthesis
+    try:
+        from omoi_os.services.coordination import CoordinationService
+        from omoi_os.services.task_queue import TaskQueueService
+
+        task_queue = TaskQueueService(db, event_bus=event_bus)
+        coordination = CoordinationService(db=db, queue=task_queue, event_bus=event_bus)
+    except Exception:
+        pass  # Coordination optional - parallel synthesis won't work without it
+
+    service = SpecTaskExecutionService(db=db, event_bus=event_bus, coordination=coordination)
 
     # Subscribe to completions if event bus available
     if event_bus:
