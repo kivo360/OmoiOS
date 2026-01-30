@@ -484,3 +484,335 @@ class TestSynthesisServiceSingleton:
         # Need to provide args again
         with pytest.raises(ValueError):
             get_synthesis_service()
+
+
+# =============================================================================
+# COORDINATION INTEGRATION TESTS
+# =============================================================================
+
+
+class TestSynthesisCoordinationIntegration:
+    """Tests that verify SynthesisService integrates with CoordinationService.
+
+    These tests verify the event-driven flow works correctly when
+    CoordinationService.join_tasks() publishes events. Since tests may not
+    have Redis available, we use direct method calls to simulate events.
+    """
+
+    @pytest.fixture
+    def ticket(self, db_service: DatabaseService) -> Ticket:
+        """Create a test ticket."""
+        with db_service.get_session() as session:
+            ticket = Ticket(
+                title="Test Coordination Ticket",
+                description="Testing coordination-to-synthesis integration",
+                phase_id="PHASE_IMPLEMENTATION",
+                status="in_progress",
+                priority="MEDIUM",
+            )
+            session.add(ticket)
+            session.commit()
+            session.refresh(ticket)
+            session.expunge(ticket)
+            return ticket
+
+    @pytest.fixture
+    def source_tasks(self, db_service: DatabaseService, ticket: Ticket) -> list[Task]:
+        """Create source tasks for coordination."""
+        tasks = []
+        with db_service.get_session() as session:
+            for i in range(2):
+                task = Task(
+                    ticket_id=ticket.id,
+                    phase_id="PHASE_IMPLEMENTATION",
+                    task_type=f"parallel_task_{i}",
+                    description=f"Parallel task {i}",
+                    priority="MEDIUM",
+                    status="completed",
+                    result={"output": f"result_{i}", "data": {"key": f"value{i}"}},
+                )
+                session.add(task)
+                session.commit()
+                session.refresh(task)
+                session.expunge(task)
+                tasks.append(task)
+        return tasks
+
+    @pytest.fixture
+    def continuation_task(self, db_service: DatabaseService, ticket: Ticket) -> Task:
+        """Create continuation task."""
+        with db_service.get_session() as session:
+            task = Task(
+                ticket_id=ticket.id,
+                phase_id="PHASE_IMPLEMENTATION",
+                task_type="continuation_task",
+                description="Continuation after parallel tasks",
+                priority="MEDIUM",
+                status="pending",
+            )
+            session.add(task)
+            session.commit()
+            session.refresh(task)
+            session.expunge(task)
+            return task
+
+    @pytest.fixture
+    def synthesis_service(
+        self, db_service: DatabaseService, event_bus_service: EventBusService
+    ) -> SynthesisService:
+        """Create SynthesisService with real database."""
+        reset_synthesis_service()
+        service = SynthesisService(db=db_service, event_bus=event_bus_service)
+        service.subscribe_to_events()
+        return service
+
+    def test_handle_join_created_event_format(self, synthesis_service, source_tasks, continuation_task, db_service):
+        """Test that SynthesisService correctly handles join.created events.
+
+        When source tasks are already completed (as in this test), synthesis triggers
+        immediately during join registration. This verifies the complete flow works.
+        """
+        from omoi_os.services.event_bus import SystemEvent
+
+        source_ids = [str(task.id) for task in source_tasks]
+
+        # Simulate the event that CoordinationService.join_tasks() would publish
+        event = SystemEvent(
+            event_type="coordination.join.created",
+            entity_type="join",
+            entity_id="test-join-1",
+            payload={
+                "join_id": "test-join-1",
+                "source_task_ids": source_ids,
+                "continuation_task_id": str(continuation_task.id),
+                "merge_strategy": "combine",
+            },
+        )
+
+        # Directly call the handler (simulating what EventBus would do)
+        synthesis_service._handle_join_created(event)
+
+        # Since source tasks are already completed, synthesis should have triggered
+        # immediately, so the pending join is already cleaned up
+        pending = synthesis_service.get_pending_join("test-join-1")
+        assert pending is None  # Join completed and cleaned up
+
+        # Verify synthesis_context was injected into continuation task
+        with db_service.get_session() as session:
+            updated_task = session.query(Task).filter(
+                Task.id == continuation_task.id
+            ).first()
+            assert updated_task.synthesis_context is not None
+            assert "_source_results" in updated_task.synthesis_context
+            assert updated_task.synthesis_context["_merge_strategy"] == "combine"
+
+    def test_handle_task_completed_event_format(
+        self, synthesis_service, source_tasks, continuation_task, db_service
+    ):
+        """Test that SynthesisService correctly handles TASK_COMPLETED events."""
+        from omoi_os.services.event_bus import SystemEvent
+
+        source_ids = [str(task.id) for task in source_tasks]
+
+        # First register a join
+        synthesis_service.register_join(
+            join_id="event-format-test",
+            source_task_ids=source_ids,
+            continuation_task_id=str(continuation_task.id),
+            merge_strategy="combine",
+        )
+
+        # Simulate TASK_COMPLETED events (the format EventBus would send)
+        for task in source_tasks:
+            event = SystemEvent(
+                event_type="TASK_COMPLETED",
+                entity_type="task",
+                entity_id=str(task.id),
+                payload={"result": task.result},
+            )
+            synthesis_service._handle_task_completed(event)
+
+        # Verify synthesis completed and context was injected
+        assert synthesis_service.get_pending_join("event-format-test") is None
+
+        with db_service.get_session() as session:
+            updated_task = session.query(Task).filter(
+                Task.id == continuation_task.id
+            ).first()
+            assert updated_task.synthesis_context is not None
+            assert "_source_results" in updated_task.synthesis_context
+            assert updated_task.synthesis_context["_merge_strategy"] == "combine"
+            assert updated_task.synthesis_context["_source_count"] == 2
+
+    def test_full_event_driven_synthesis_flow(
+        self,
+        synthesis_service,
+        source_tasks,
+        continuation_task,
+        db_service,
+    ):
+        """Test complete flow: join.created event → immediate synthesis when tasks already complete.
+
+        This test demonstrates the real-world scenario where source tasks may complete
+        before the join is registered, and synthesis triggers immediately on registration.
+        """
+        from omoi_os.services.event_bus import SystemEvent
+
+        source_ids = [str(task.id) for task in source_tasks]
+
+        # Step 1: Simulate coordination.join.created event
+        # Since source tasks are already completed, synthesis will trigger immediately
+        join_event = SystemEvent(
+            event_type="coordination.join.created",
+            entity_type="join",
+            entity_id="full-flow-test",
+            payload={
+                "join_id": "full-flow-test",
+                "source_task_ids": source_ids,
+                "continuation_task_id": str(continuation_task.id),
+                "merge_strategy": "union",
+            },
+        )
+        synthesis_service._handle_join_created(join_event)
+
+        # Step 2: Join should be cleaned up (synthesis already completed)
+        assert synthesis_service.get_pending_join("full-flow-test") is None
+
+        # Step 3: Verify synthesis_context was injected into continuation task
+        with db_service.get_session() as session:
+            updated_task = session.query(Task).filter(
+                Task.id == continuation_task.id
+            ).first()
+            assert updated_task.synthesis_context is not None
+            assert "_source_results" in updated_task.synthesis_context
+            assert updated_task.synthesis_context["_merge_strategy"] == "union"
+            assert "_join_id" in updated_task.synthesis_context
+            assert updated_task.synthesis_context["_join_id"] == "full-flow-test"
+
+    def test_synthesis_flow_with_pending_tasks(
+        self,
+        db_service,
+        event_bus_service,
+    ):
+        """Test synthesis when tasks complete AFTER join is registered.
+
+        This tests the normal flow where:
+        1. Join is registered with pending source tasks
+        2. Tasks complete one by one
+        3. Synthesis triggers when all complete
+        """
+        from omoi_os.services.event_bus import SystemEvent
+
+        reset_synthesis_service()
+
+        # Create a ticket
+        with db_service.get_session() as session:
+            ticket = Ticket(
+                title="Pending Tasks Test",
+                description="Testing synthesis with pending tasks",
+                phase_id="PHASE_IMPLEMENTATION",
+                status="in_progress",
+                priority="MEDIUM",
+            )
+            session.add(ticket)
+            session.commit()
+            ticket_id = ticket.id
+
+        # Create source tasks in PENDING state (not completed)
+        source_task_ids = []
+        with db_service.get_session() as session:
+            for i in range(2):
+                task = Task(
+                    ticket_id=ticket_id,
+                    phase_id="PHASE_IMPLEMENTATION",
+                    task_type=f"pending_task_{i}",
+                    description=f"Pending task {i}",
+                    priority="MEDIUM",
+                    status="pending",  # Not completed yet!
+                )
+                session.add(task)
+                session.commit()
+                source_task_ids.append(str(task.id))
+
+        # Create continuation task
+        with db_service.get_session() as session:
+            continuation_task = Task(
+                ticket_id=ticket_id,
+                phase_id="PHASE_IMPLEMENTATION",
+                task_type="continuation_pending",
+                description="Continuation for pending test",
+                priority="MEDIUM",
+                status="pending",
+            )
+            session.add(continuation_task)
+            session.commit()
+            continuation_task_id = str(continuation_task.id)
+
+        # Create synthesis service
+        synthesis_service = SynthesisService(db=db_service, event_bus=event_bus_service)
+
+        # Step 1: Register join - tasks are pending, so join stays pending
+        join_event = SystemEvent(
+            event_type="coordination.join.created",
+            entity_type="join",
+            entity_id="pending-test-join",
+            payload={
+                "join_id": "pending-test-join",
+                "source_task_ids": source_task_ids,
+                "continuation_task_id": continuation_task_id,
+                "merge_strategy": "combine",
+            },
+        )
+        synthesis_service._handle_join_created(join_event)
+
+        # Join should still be pending (tasks not complete)
+        pending = synthesis_service.get_pending_join("pending-test-join")
+        assert pending is not None
+        assert len(pending.completed_source_ids) == 0
+
+        # Step 2: Complete first task
+        with db_service.get_session() as session:
+            task = session.query(Task).filter(Task.id == source_task_ids[0]).first()
+            task.status = "completed"
+            task.result = {"output": "first_result"}
+            session.commit()
+
+        complete_event1 = SystemEvent(
+            event_type="TASK_COMPLETED",
+            entity_type="task",
+            entity_id=source_task_ids[0],
+            payload={"status": "completed"},
+        )
+        synthesis_service._handle_task_completed(complete_event1)
+
+        # Join still pending (one task remaining)
+        pending = synthesis_service.get_pending_join("pending-test-join")
+        assert pending is not None
+        assert len(pending.completed_source_ids) == 1
+
+        # Step 3: Complete second task
+        with db_service.get_session() as session:
+            task = session.query(Task).filter(Task.id == source_task_ids[1]).first()
+            task.status = "completed"
+            task.result = {"output": "second_result"}
+            session.commit()
+
+        complete_event2 = SystemEvent(
+            event_type="TASK_COMPLETED",
+            entity_type="task",
+            entity_id=source_task_ids[1],
+            payload={"status": "completed"},
+        )
+        synthesis_service._handle_task_completed(complete_event2)
+
+        # Step 4: Join should be completed and cleaned up
+        assert synthesis_service.get_pending_join("pending-test-join") is None
+
+        # Step 5: Verify synthesis_context was injected
+        with db_service.get_session() as session:
+            updated_task = session.query(Task).filter(
+                Task.id == continuation_task_id
+            ).first()
+            assert updated_task.synthesis_context is not None
+            assert "_source_results" in updated_task.synthesis_context
+            assert updated_task.synthesis_context["_source_count"] == 2
