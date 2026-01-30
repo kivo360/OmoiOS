@@ -22,14 +22,16 @@ The validation is lenient by design:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from fnmatch import fnmatch
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Dict, Any
 from functools import lru_cache
 
 from omoi_os.logging import get_logger
 from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
+from omoi_os.utils.datetime import utc_now
 
 logger = get_logger(__name__)
 
@@ -42,6 +44,7 @@ class ValidationResult:
     conflicts: List[str]  # List of conflicting patterns/files
     warnings: List[str]
     conflicting_task_ids: List[str]  # IDs of tasks with conflicts
+    conflict_details: List[Dict[str, Any]] = field(default_factory=list)  # Detailed conflict info
 
     @property
     def has_warnings(self) -> bool:
@@ -50,6 +53,17 @@ class ValidationResult:
     @property
     def has_conflicts(self) -> bool:
         return bool(self.conflicts)
+
+    def to_merge_metrics(self) -> Dict[str, Any]:
+        """Convert to metrics format for MergeAttempt audit trail."""
+        return {
+            "total_conflicts": len(self.conflicts) + len(self.warnings),
+            "conflict_count": len(self.conflicts),
+            "warning_count": len(self.warnings),
+            "conflicting_task_ids": self.conflicting_task_ids,
+            "conflict_patterns": self.conflict_details,
+            "timestamp": utc_now().isoformat(),
+        }
 
 
 @dataclass
@@ -119,6 +133,7 @@ class OwnershipValidationService:
         conflicts: List[str] = []
         warnings: List[str] = []
         conflicting_task_ids: List[str] = []
+        conflict_details: List[Dict[str, Any]] = []  # For MergeAttempt metrics
 
         # If task has no ownership patterns, no restrictions apply
         if not task.owned_files:
@@ -127,6 +142,7 @@ class OwnershipValidationService:
                 conflicts=[],
                 warnings=[],
                 conflicting_task_ids=[],
+                conflict_details=[],
             )
 
         if not check_parallel_siblings:
@@ -135,6 +151,7 @@ class OwnershipValidationService:
                 conflicts=[],
                 warnings=[],
                 conflicting_task_ids=[],
+                conflict_details=[],
             )
 
         # Get parallel sibling task data (as dicts to avoid detached instance issues)
@@ -160,6 +177,15 @@ class OwnershipValidationService:
                     )
                     conflicts.append(conflict_msg)
 
+                    # Capture detailed metrics for MergeAttempt audit trail
+                    conflict_details.append({
+                        "task_id": str(task.id),
+                        "sibling_task_id": sibling_id,
+                        "task_pattern": overlap["task_pattern"],
+                        "sibling_pattern": overlap["sibling_pattern"],
+                        "detected_at": utc_now().isoformat(),
+                    })
+
                 conflicting_task_ids.append(sibling_id)
 
         # Determine validity based on strict mode
@@ -169,18 +195,27 @@ class OwnershipValidationService:
             warnings.extend(conflicts)
             conflicts = []  # Move to warnings in lenient mode
 
-        if conflicts:
+        # Log with detailed metrics for observability
+        if conflicts or warnings:
             logger.warning(
-                "ownership_validation_conflicts_found",
-                task_id=str(task.id),
-                conflict_count=len(conflicts),
-                conflicting_tasks=conflicting_task_ids,
+                "ownership_validation_conflicts_detected",
+                extra={
+                    "task_id": str(task.id),
+                    "ticket_id": str(task.ticket_id) if task.ticket_id else None,
+                    "conflict_count": len(conflicts),
+                    "warning_count": len(warnings),
+                    "conflicting_tasks": conflicting_task_ids,
+                    "conflict_patterns": [d["task_pattern"] for d in conflict_details],
+                    "strict_mode": self.strict_mode,
+                    "would_block_merge": bool(conflicts),
+                },
             )
-        elif warnings:
-            logger.info(
-                "ownership_validation_warnings",
+
+            # Record conflict metrics for MergeAttempt monitoring
+            self._record_conflict_metrics(
                 task_id=str(task.id),
-                warning_count=len(warnings),
+                ticket_id=str(task.ticket_id) if task.ticket_id else None,
+                conflict_details=conflict_details,
             )
 
         return ValidationResult(
@@ -188,6 +223,54 @@ class OwnershipValidationService:
             conflicts=conflicts,
             warnings=warnings,
             conflicting_task_ids=conflicting_task_ids,
+            conflict_details=conflict_details,
+        )
+
+    def _record_conflict_metrics(
+        self,
+        task_id: str,
+        ticket_id: Optional[str],
+        conflict_details: List[Dict[str, Any]],
+    ) -> None:
+        """Record conflict metrics for monitoring and MergeAttempt creation.
+
+        This logs detailed metrics that can be used to:
+        1. Monitor real conflict patterns over time
+        2. Create MergeAttempt records for audit trail
+        3. Analyze which file patterns cause the most conflicts
+
+        Args:
+            task_id: ID of the task being validated
+            ticket_id: ID of the ticket containing the task
+            conflict_details: List of detailed conflict information
+        """
+        if not conflict_details:
+            return
+
+        # Group conflicts by sibling task for analysis
+        conflicts_by_sibling: Dict[str, List[Dict[str, Any]]] = {}
+        for detail in conflict_details:
+            sibling_id = detail["sibling_task_id"]
+            if sibling_id not in conflicts_by_sibling:
+                conflicts_by_sibling[sibling_id] = []
+            conflicts_by_sibling[sibling_id].append(detail)
+
+        # Log aggregated conflict metrics
+        logger.info(
+            "ownership_conflict_metrics",
+            extra={
+                "task_id": task_id,
+                "ticket_id": ticket_id,
+                "total_conflicts": len(conflict_details),
+                "conflicting_sibling_count": len(conflicts_by_sibling),
+                "conflicts_by_sibling": {
+                    sid: len(conflicts) for sid, conflicts in conflicts_by_sibling.items()
+                },
+                "unique_patterns_involved": len(
+                    set(d["task_pattern"] for d in conflict_details)
+                ),
+                "timestamp": utc_now().isoformat(),
+            },
         )
 
     def validate_file_modification(
