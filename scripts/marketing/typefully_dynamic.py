@@ -108,16 +108,24 @@ class TypefullyClient:
         posts: list[str],
         publish_at: str | None = None,
         draft_title: str | None = None,
+        community_id: str | None = None,
+        share_with_followers: bool = True,
     ) -> tuple[dict, dict]:
-        """Create a new draft"""
+        """Create a new draft, optionally posting to an X community"""
         x_posts = [{"text": text, "media_ids": []} for text in posts]
+
+        # Build X settings
+        x_settings = {}
+        if community_id:
+            x_settings["community_id"] = community_id
+            x_settings["share_with_followers"] = share_with_followers
 
         payload = {
             "platforms": {
                 "x": {
                     "enabled": True,
                     "posts": x_posts,
-                    "settings": {}
+                    "settings": x_settings
                 }
             }
         }
