@@ -17,7 +17,8 @@ Architecture Notes:
 
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Optional, List
+import re
+from typing import Optional, List, Dict, TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -31,6 +32,9 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.task_queue import TaskQueueService
 
+if TYPE_CHECKING:
+    from omoi_os.services.coordination import CoordinationService
+
 logger = get_logger(__name__)
 
 
@@ -41,6 +45,7 @@ class ExecutionStats:
     tasks_created: int = 0
     tasks_skipped: int = 0
     ticket_id: Optional[str] = None
+    parallel_groups_created: int = 0
     errors: List[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
@@ -49,6 +54,7 @@ class ExecutionStats:
             "tasks_created": self.tasks_created,
             "tasks_skipped": self.tasks_skipped,
             "ticket_id": self.ticket_id,
+            "parallel_groups_created": self.parallel_groups_created,
             "errors": self.errors,
         }
 
@@ -60,6 +66,19 @@ class ExecutionResult:
     success: bool
     message: str
     stats: ExecutionStats = field(default_factory=ExecutionStats)
+
+
+@dataclass
+class ParallelGroup:
+    """A group of tasks that can run in parallel with a continuation.
+
+    Parsed from spec.phase_data["sync"]["dependency_analysis"]["parallel_opportunities"].
+    """
+
+    source_task_ids: List[str]  # Tasks that can run in parallel
+    continuation_task_id: Optional[str]  # Task that depends on all sources
+    description: str  # Original description from sync phase
+    merge_strategy: str = "combine"  # How to merge results
 
 
 class SpecTaskExecutionService:
@@ -108,6 +127,7 @@ class SpecTaskExecutionService:
         db: DatabaseService,
         task_queue: Optional[TaskQueueService] = None,
         event_bus: Optional[EventBusService] = None,
+        coordination: Optional["CoordinationService"] = None,
     ):
         """Initialize the service.
 
@@ -115,10 +135,14 @@ class SpecTaskExecutionService:
             db: Database service for persistence
             task_queue: Optional task queue service (creates one if not provided)
             event_bus: Optional event bus for completion notifications
+            coordination: Optional coordination service for parallel task joins.
+                         When provided, parallel opportunities from spec.phase_data
+                         will trigger join_tasks() calls for synthesis.
         """
         self.db = db
         self.task_queue = task_queue
         self.event_bus = event_bus
+        self.coordination = coordination
         self._completion_subscribed = False
 
     def subscribe_to_completions(self) -> None:
@@ -256,6 +280,9 @@ class SpecTaskExecutionService:
                     stats=stats,
                 )
 
+            # Build mapping from spec_task_id to created task_id for parallel coordination
+            task_mapping: Dict[str, str] = {}
+
             # Convert and enqueue each task
             for spec_task in tasks_to_execute:
                 try:
@@ -267,6 +294,8 @@ class SpecTaskExecutionService:
                         spec_task.status = "in_progress"
                         spec_task.assigned_agent = f"task:{task.id}"
                         stats.tasks_created += 1
+                        # Track mapping for parallel coordination
+                        task_mapping[spec_task.id] = task.id
                 except Exception as e:
                     error_msg = f"Failed to convert task {spec_task.id}: {e}"
                     stats.errors.append(error_msg)
@@ -277,6 +306,13 @@ class SpecTaskExecutionService:
                     )
 
             await session.commit()
+
+            # Register parallel task coordination (join points) for synthesis
+            # This wires CoordinationService.join_tasks() to SynthesisService
+            if self.coordination and task_mapping:
+                await self._register_parallel_coordination(
+                    spec, task_mapping, stats
+                )
 
             # Publish execution started event
             if self.event_bus and stats.tasks_created > 0:
@@ -289,13 +325,14 @@ class SpecTaskExecutionService:
                             "spec_id": spec_id,
                             "ticket_id": ticket_id,
                             "tasks_created": stats.tasks_created,
+                            "parallel_groups_created": stats.parallel_groups_created,
                         },
                     )
                 )
 
             return ExecutionResult(
                 success=True,
-                message=f"Created {stats.tasks_created} tasks for execution",
+                message=f"Created {stats.tasks_created} tasks for execution ({stats.parallel_groups_created} parallel groups)",
                 stats=stats,
             )
 
@@ -450,6 +487,226 @@ class SpecTaskExecutionService:
 
         return task
 
+    def _parse_parallel_opportunities(
+        self,
+        spec: Spec,
+        task_mapping: Dict[str, str],
+    ) -> List[ParallelGroup]:
+        """Parse parallel opportunities from spec.phase_data and resolve to task IDs.
+
+        Parallel opportunities are generated during the SYNC phase and stored in:
+        spec.phase_data["sync"]["dependency_analysis"]["parallel_opportunities"]
+
+        Format examples:
+        - "TSK-003 and TSK-004 can run in parallel after TSK-002"
+        - "TSK-006, TSK-007, and TSK-008 are independent and can run concurrently"
+
+        Args:
+            spec: The spec containing phase_data with parallel opportunities
+            task_mapping: Mapping from spec_task_id to created task_id
+
+        Returns:
+            List of ParallelGroup instances with resolved task IDs
+        """
+        groups = []
+
+        # Get parallel opportunities from phase_data
+        sync_data = spec.phase_data.get("sync", {}) if spec.phase_data else {}
+        dependency_analysis = sync_data.get("dependency_analysis", {})
+        opportunities = dependency_analysis.get("parallel_opportunities", [])
+
+        if not opportunities:
+            logger.debug(
+                "no_parallel_opportunities_found",
+                spec_id=spec.id,
+            )
+            return groups
+
+        # Also get the task dependency graph for finding continuation tasks
+        task_dep_graph = dependency_analysis.get("task_dependency_graph", {})
+
+        for opp in opportunities:
+            try:
+                # Extract task IDs from the opportunity description
+                # Pattern: "TSK-XXX" where XXX is alphanumeric
+                task_pattern = r"(TSK-[A-Za-z0-9-]+)"
+                found_ids = re.findall(task_pattern, opp)
+
+                if len(found_ids) < 2:
+                    logger.debug(
+                        "parallel_opportunity_too_few_tasks",
+                        opportunity=opp,
+                        found_ids=found_ids,
+                    )
+                    continue
+
+                # Resolve spec task IDs to created task IDs
+                resolved_ids = []
+                for spec_task_id in found_ids:
+                    if spec_task_id in task_mapping:
+                        resolved_ids.append(task_mapping[spec_task_id])
+                    else:
+                        logger.warning(
+                            "parallel_opportunity_task_not_found",
+                            spec_task_id=spec_task_id,
+                            opportunity=opp,
+                        )
+
+                if len(resolved_ids) < 2:
+                    logger.debug(
+                        "parallel_opportunity_not_enough_resolved",
+                        opportunity=opp,
+                        resolved_count=len(resolved_ids),
+                    )
+                    continue
+
+                # Find continuation task (task that depends on ALL the parallel tasks)
+                # Look in task_dep_graph for a task that has all resolved IDs as dependencies
+                continuation_task_id = self._find_continuation_task(
+                    resolved_ids, found_ids, task_dep_graph, task_mapping
+                )
+
+                groups.append(
+                    ParallelGroup(
+                        source_task_ids=resolved_ids,
+                        continuation_task_id=continuation_task_id,
+                        description=opp,
+                        merge_strategy="combine",
+                    )
+                )
+
+                logger.info(
+                    "parallel_group_created",
+                    spec_id=spec.id,
+                    source_count=len(resolved_ids),
+                    has_continuation=continuation_task_id is not None,
+                    description=opp[:100],
+                )
+
+            except Exception as e:
+                logger.warning(
+                    "parallel_opportunity_parse_error",
+                    opportunity=opp,
+                    error=str(e),
+                )
+                continue
+
+        return groups
+
+    def _find_continuation_task(
+        self,
+        resolved_source_ids: List[str],
+        spec_source_ids: List[str],
+        task_dep_graph: Dict[str, List[str]],
+        task_mapping: Dict[str, str],
+    ) -> Optional[str]:
+        """Find the continuation task that depends on all source tasks.
+
+        Looks in the task dependency graph for a task whose dependencies include
+        all the source tasks. This task becomes the continuation that receives
+        the merged synthesis context.
+
+        Args:
+            resolved_source_ids: Task IDs (after mapping)
+            spec_source_ids: Original spec task IDs (e.g., TSK-003)
+            task_dep_graph: Dependency graph from sync phase
+            task_mapping: Mapping from spec_task_id to created task_id
+
+        Returns:
+            Task ID of continuation task, or None if not found
+        """
+        spec_source_set = set(spec_source_ids)
+
+        # Look for a task that depends on ALL source tasks
+        for spec_task_id, dependencies in task_dep_graph.items():
+            if not dependencies:
+                continue
+
+            dep_set = set(dependencies)
+            # Check if this task depends on ALL source tasks
+            if spec_source_set.issubset(dep_set):
+                # This task depends on all parallel sources - it's the continuation
+                if spec_task_id in task_mapping:
+                    return task_mapping[spec_task_id]
+
+        return None
+
+    async def _register_parallel_coordination(
+        self,
+        spec: Spec,
+        task_mapping: Dict[str, str],
+        stats: ExecutionStats,
+    ) -> None:
+        """Register parallel task groups with CoordinationService for synthesis.
+
+        Parses parallel opportunities from spec.phase_data and calls join_tasks()
+        for each group. This publishes coordination.join.created events that
+        SynthesisService listens for.
+
+        Args:
+            spec: The spec with phase_data containing parallel opportunities
+            task_mapping: Mapping from spec_task_id to created task_id
+            stats: Stats object to update with parallel_groups_created
+        """
+        if not self.coordination:
+            return
+
+        # Parse parallel opportunities from spec phase_data
+        parallel_groups = self._parse_parallel_opportunities(spec, task_mapping)
+
+        if not parallel_groups:
+            logger.debug(
+                "no_parallel_groups_to_register",
+                spec_id=spec.id,
+            )
+            return
+
+        for group in parallel_groups:
+            try:
+                # Skip groups without a continuation task
+                # Without a continuation, there's nothing to inject synthesis context into
+                if not group.continuation_task_id:
+                    logger.info(
+                        "parallel_group_skipped_no_continuation",
+                        spec_id=spec.id,
+                        source_count=len(group.source_task_ids),
+                        description=group.description[:100],
+                    )
+                    continue
+
+                # Generate a unique join ID
+                join_id = f"join-{spec.id}-{uuid4().hex[:8]}"
+
+                # Register the join with CoordinationService
+                # This publishes coordination.join.created event that SynthesisService listens for
+                # The continuation task already exists (created by _convert_and_enqueue),
+                # so we use register_join() instead of join_tasks()
+                self.coordination.register_join(
+                    join_id=join_id,
+                    source_task_ids=group.source_task_ids,
+                    continuation_task_id=group.continuation_task_id,
+                    merge_strategy=group.merge_strategy,
+                )
+
+                stats.parallel_groups_created += 1
+
+                logger.info(
+                    "parallel_coordination_registered",
+                    spec_id=spec.id,
+                    join_id=join_id,
+                    source_count=len(group.source_task_ids),
+                    continuation_task_id=group.continuation_task_id,
+                    merge_strategy=group.merge_strategy,
+                )
+
+            except Exception as e:
+                logger.error(
+                    "parallel_coordination_registration_failed",
+                    spec_id=spec.id,
+                    error=str(e),
+                    source_count=len(group.source_task_ids),
+                )
+
     async def get_execution_status(self, spec_id: str) -> dict:
         """Get execution status for a spec.
 
@@ -501,11 +758,20 @@ def get_spec_task_execution_service(
     db: Optional[DatabaseService] = None,
     task_queue: Optional[TaskQueueService] = None,
     event_bus: Optional[EventBusService] = None,
+    coordination: Optional["CoordinationService"] = None,
 ) -> SpecTaskExecutionService:
     """Get the SpecTaskExecutionService singleton.
 
     Note: Due to lru_cache, only the first call's arguments are used.
     For testing, use SpecTaskExecutionService directly.
+
+    Args:
+        db: Database service for persistence
+        task_queue: Optional task queue service
+        event_bus: Optional event bus for completion notifications
+        coordination: Optional coordination service for parallel task synthesis.
+                     When provided, parallel opportunities from spec.phase_data
+                     will trigger join_tasks() calls for synthesis.
     """
     if db is None:
         from omoi_os.services.database import get_db_service
@@ -515,4 +781,5 @@ def get_spec_task_execution_service(
         db=db,
         task_queue=task_queue,
         event_bus=event_bus,
+        coordination=coordination,
     )
