@@ -56,6 +56,7 @@ from omoi_os.models.reasoning import ReasoningEvent
 from omoi_os.models.resource_lock import ResourceLock
 from omoi_os.models.sandbox_event import SandboxEvent
 from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
+from omoi_os.models.merge_attempt import MergeAttempt, MergeStatus
 from omoi_os.models.task import Task
 from omoi_os.models.task_discovery import DiscoveryType, TaskDiscovery
 from omoi_os.models.task_memory import TaskMemory
@@ -114,6 +115,8 @@ __all__ = [
     "LearnedPattern",
     "MCPInvocation",
     "MCPPolicy",
+    "MergeAttempt",
+    "MergeStatus",
     "MCPServer",
     "MCPToken",
     "MCPTool",
