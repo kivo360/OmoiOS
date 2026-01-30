@@ -39,7 +39,7 @@ After months of work, I built OmoiOS. Here's how it works:
 
 Under the hood, it's running Claude Code (Anthropic's coding agent) in isolated sandboxes. But the key difference: I don't check in. The system checks itself. OmoiOS watches the agents so I don't have to.
 
-It's early. There are bugs. But the core loop works, and I've already shipped features overnight that would have taken me days of back-and-forth with traditional AI tools.
+It's still evolving. There are bugs. But the core loop works, and I've shipped features overnight that would have taken me days of back-and-forth with traditional AI tools.
 
 If you've ever felt like a babysitter for your AI tools, I'd love your feedback. What's the most annoying part of working with AI assistants for you?
 
@@ -59,7 +59,7 @@ I've been chasing the "AI writes code for me" dream for a while now.
 
 **Attempt 3:** Try Cursor and similar tools. Result: better, but I found myself checking in constantly. "Did it break something? Is it going in the right direction? Is it stuck?" I became a babysitter.
 
-**Attempt 4:** Try continuous agents like Ralph. Just let it loop until done. Result: it loops, but toward what? No sense of the actual goal. Redoes work. Misses dependencies. Still needs me to check progress.
+**Attempt 4:** Try continuous agents. Just let it loop until done. Result: it loops, but toward what? No sense of the actual goal. Redoes work. Misses dependencies. Still needs me to check progress.
 
 After all these failures, I realized the problem wasn't the AI. **The problem was me.**
 
@@ -75,7 +75,7 @@ The insight: specs as source of truth. If the system knows your goal, it can mea
 
 Now I describe features before bed and wake up to PRs. Not because the AI got smarter — but because something is finally doing the oversight job I was doing manually.
 
-Still early. Still buggy. But the loop works.
+Still evolving. Still has bugs. But the loop works.
 
 Anyone else been through this cycle of trying to make AI coding tools actually useful? What's worked for you?
 
@@ -164,7 +164,7 @@ Rough time comparison:
 
 The AI isn't faster. But I am, because I'm not the bottleneck anymore.
 
-It's not magic. The specs need to be decent. The system is still buggy. But the core idea works: AI should babysit itself so you can do literally anything else.
+It's not magic. The specs need to be decent. The system still has bugs. But the core idea works: AI should babysit itself so you can do literally anything else.
 
 What's eating your time that you wish AI could handle autonomously?
 
@@ -209,11 +209,11 @@ AMA!
 
 ---
 
-I've been building OmoiOS for the past few months and wanted to share it with this community.
+I've been building OmoiOS and wanted to share it with this community.
 
 **The problem it solves:**
 
-Continuous agents (like Ralph) are great — just "loop until done." But they don't actually know what "done" means. They loop until they stop erroring, which isn't the same as achieving your goal.
+Continuous agents are great — just "loop until done." But they don't actually know what "done" means. They loop until they stop erroring, which isn't the same as achieving your goal.
 
 **How OmoiOS is different:**
 
@@ -231,7 +231,7 @@ Describe a feature → approve the plan → walk away → review the PR.
 
 **Current state:**
 
-Early. Buggy. But the core loop works. I've shipped features overnight that would have taken days of traditional AI back-and-forth.
+Still evolving. Has rough edges. But the core loop works. I've shipped features overnight that would have taken days of traditional AI back-and-forth.
 
 Looking for feedback from developers who've struggled with the same "AI babysitting" problem.
 
@@ -245,7 +245,7 @@ Link in bio if you want to try it.
 
 > I've tried most of them — Copilot, Cursor, Claude, ChatGPT for code. They're all good at generating code, but I kept spending hours babysitting them. Checking if they're on track, re-prompting when they drift, etc.
 >
-> Recently been using OmoiOS (something I built) which handles the oversight automatically. You write a spec, it executes with multiple agents, and checks progress against your goal. Still early but it's changed my workflow.
+> Been using OmoiOS (something I built) which handles the oversight automatically. You write a spec, it executes with multiple agents, and checks progress against your goal. Still evolving but it's changed my workflow.
 >
 > The others are great for autocomplete and quick questions though. Different tools for different jobs.
 
@@ -283,7 +283,7 @@ Link in bio if you want to try it.
 
 > awesome, it's called OmoiOS. basic idea: you write a spec, it breaks it into tasks, runs AI agents in parallel, and continuously checks progress against your goal. the "babysitting" is automated.
 >
-> still early/buggy but the core works. here's the link: [link]
+> still evolving but the core works. here's the link: [link]
 >
 > would love to know what you think, even if it's "this sucks because X" — that's useful too.
 
