@@ -28,7 +28,7 @@ The core idea: run Claude Code agents in sandboxes, but orchestrate them with a 
 
 **Why this matters:**
 
-Simple continuous agents (like Ralph) just loop: `while not done: do_thing()`. But "done" is poorly defined. The agent doesn't know if it achieved the goal — it just knows if it stopped erroring.
+Simple continuous agents just loop: `while not done: do_thing()`. But "done" is poorly defined. The agent doesn't know if it achieved the goal — it just knows if it stopped erroring.
 
 OmoiOS gives the loop a brain. It knows what "done" looks like because it has a spec to check against.
 
@@ -41,9 +41,7 @@ OmoiOS gives the loop a brain. It knows what "done" looks like because it has a 
 
 **Current state:**
 
-Early. Buggy. But the core loop works. I've shipped features overnight that would have taken days of back-and-forth with traditional prompting.
-
-Code isn't open source yet (cleaning it up), but happy to discuss the architecture.
+Early. Still iterating. But the core loop works. I've shipped features overnight that would have taken days of back-and-forth with traditional prompting.
 
 Looking for feedback, especially from people who've tried to make autonomous coding agents reliable.
 
@@ -61,7 +59,7 @@ I end up babysitting.
 
 The AI works, but I'm constantly checking in. Is it on track? Did it drift? Is it stuck? Should I re-prompt? I'm the oversight layer, and that oversight takes more time than I expected.
 
-Continuous agents (like Ralph) help — just "loop until done." But they don't actually know what "done" means. They loop until they stop erroring, which isn't the same thing.
+Continuous agents help — just "loop until done." But they don't actually know what "done" means. They loop until they stop erroring, which isn't the same thing.
 
 I've been working on a different approach:
 
@@ -152,7 +150,7 @@ Paste context, get code, paste into project. Works for small stuff. For anything
 
 Great for autocomplete. Still doing 95% of the thinking myself. Not autonomous.
 
-**Attempt 3: Continuous agents (Ralph-style)**
+**Attempt 3: Continuous agents**
 
 ```python
 while not done:
@@ -173,7 +171,7 @@ Specs as source of truth + DAG execution + continuous state checking.
 
 The insight: the AI isn't the bottleneck. The oversight is. If you automate the oversight, the AI becomes useful.
 
-I built this into a tool (OmoiOS). Early and buggy, but the core loop works. Happy to discuss the architecture if anyone's interested.
+I built this into a tool (OmoiOS). Still iterating, but the core loop works. Happy to discuss the architecture if anyone's interested.
 
 ---
 
@@ -185,7 +183,7 @@ I built this into a tool (OmoiOS). Early and buggy, but the core loop works. Hap
 >
 > I've been working on a system (OmoiOS) that runs Claude Code agents in sandboxes with a DAG for task dependencies. The key difference: it continuously checks state against a spec, so you're not the oversight layer.
 >
-> Still early, but the architecture might be interesting if you're hitting the same problems.
+> Still iterating, but the architecture might be interesting if you're hitting the same problems.
 
 ### When someone complains about AI reliability:
 
@@ -215,7 +213,7 @@ I built this into a tool (OmoiOS). Early and buggy, but the core loop works. Hap
 
 3. **Be technical.** Mention Claude Code, DAG, sandboxes. HN wants to understand how it works.
 
-4. **Acknowledge limitations.** "Early and buggy" is honest. "Revolutionary" gets downvoted.
+4. **Acknowledge limitations.** "Still iterating" is honest. "Revolutionary" gets downvoted.
 
 5. **Engage deeply.** Answer every technical question thoroughly. This is where credibility is built.
 
