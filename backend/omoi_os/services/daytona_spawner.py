@@ -24,6 +24,7 @@ from omoi_os.sandbox_skills import get_skills_for_upload
 from omoi_os.sandbox_modules import get_spec_state_machine_files, get_spec_sandbox_files
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.ownership_validation import OwnershipValidationService, OwnershipConflictError
 from omoi_os.utils.datetime import utc_now
 
 # TYPE_CHECKING import for TaskRequirements to avoid circular imports
@@ -222,6 +223,51 @@ class DaytonaSpawnerService:
                     f"Task {task_id} already has active sandbox {existing_id}"
                 )
                 return existing_id
+
+        # Validate file ownership to prevent parallel task conflicts
+        # This checks if the task's owned_files patterns conflict with
+        # parallel sibling tasks (tasks from the same ticket that are running)
+        if self.db:
+            try:
+                from omoi_os.models.task import Task
+
+                ownership_service = OwnershipValidationService(db=self.db, strict_mode=False)
+                with self.db.get_session() as session:
+                    task = session.query(Task).filter(Task.id == task_id).first()
+                    if task:
+                        validation_result = ownership_service.validate_task_ownership(task)
+                        if validation_result.has_warnings:
+                            logger.warning(
+                                "[SPAWNER] Ownership validation warnings",
+                                extra={
+                                    "task_id": task_id,
+                                    "warnings": validation_result.warnings,
+                                    "conflicting_tasks": validation_result.conflicting_task_ids,
+                                },
+                            )
+                        if not validation_result.valid:
+                            # In strict mode, this would raise OwnershipConflictError
+                            # In lenient mode (default), we log and continue
+                            logger.error(
+                                "[SPAWNER] Ownership validation failed - conflicts detected",
+                                extra={
+                                    "task_id": task_id,
+                                    "conflicts": validation_result.conflicts,
+                                    "conflicting_tasks": validation_result.conflicting_task_ids,
+                                },
+                            )
+                            raise OwnershipConflictError(
+                                conflicts=validation_result.conflicts,
+                                conflicting_task_ids=validation_result.conflicting_task_ids,
+                            )
+            except OwnershipConflictError:
+                raise  # Re-raise ownership conflicts
+            except Exception as e:
+                # Log but don't fail on validation errors
+                logger.warning(
+                    "[SPAWNER] Ownership validation skipped due to error",
+                    extra={"task_id": task_id, "error": str(e)},
+                )
 
         # Generate sandbox ID
         sandbox_id = f"omoios-{task_id[:8]}-{uuid4().hex[:6]}"

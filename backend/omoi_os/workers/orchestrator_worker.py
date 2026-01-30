@@ -1275,6 +1275,7 @@ async def init_services():
     from omoi_os.services.phase_gate import PhaseGateService
     from omoi_os.services.phase_progression_service import get_phase_progression_service
     from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
+    from omoi_os.services.synthesis_service import SynthesisService
 
     app_settings = get_app_settings()
 
@@ -1327,6 +1328,23 @@ async def init_services():
         "service_initialized",
         service="phase_progression",
         hooks=["Hook1:TaskCompletion->PhaseAdvance", "Hook2:PhaseTransition->TaskSpawn"],
+    )
+
+    # Synthesis Service (automatic result merging for parallel task coordination)
+    # This service:
+    # - Listens for coordination.join.created events
+    # - Tracks pending joins waiting for source tasks to complete
+    # - Triggers merge_task_results() when all sources complete
+    # - Injects merged context into continuation task's synthesis_context field
+    synthesis_service = SynthesisService(
+        db=db,
+        event_bus=event_bus,
+    )
+    synthesis_service.subscribe_to_events()
+    logger.info(
+        "service_initialized",
+        service="synthesis_service",
+        capabilities=["JoinTracking", "ResultMerging", "ContextInjection"],
     )
 
     logger.info("all_services_initialized")
