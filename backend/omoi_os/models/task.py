@@ -74,6 +74,18 @@ class Task(Base):
         JSONB, nullable=True
     )  # Task result/output
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Parallel coordination fields (synthesis + ownership)
+    synthesis_context: Mapped[Optional[dict]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Merged context from parallel predecessor tasks (injected by SynthesisService when joins complete)",
+    )
+    owned_files: Mapped[Optional[list[str]]] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Glob patterns for files this task can modify (e.g., ['src/services/user/**', 'tests/user/**'])",
+    )
     dependencies: Mapped[Optional[dict]] = mapped_column(
         JSONB, nullable=True
     )  # Task dependencies: {"depends_on": ["task_id_1", "task_id_2"]}

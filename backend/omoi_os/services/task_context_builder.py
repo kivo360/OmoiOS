@@ -153,6 +153,9 @@ class FullTaskContext:
     revision_recommendations: Optional[list[str]] = None
     validation_iteration: Optional[int] = None
 
+    # Synthesis context (merged results from parallel predecessor tasks)
+    synthesis_context: Optional[dict] = None
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization."""
         result = {
@@ -199,6 +202,10 @@ class FullTaskContext:
                 "recommendations": self.revision_recommendations or [],
                 "iteration": self.validation_iteration,
             }
+
+        # Add synthesis context if present (merged results from parallel predecessors)
+        if self.synthesis_context:
+            result["synthesis_context"] = self.synthesis_context
 
         return result
 
@@ -314,6 +321,32 @@ class FullTaskContext:
                     lines.append(f"- {rec}")
                 lines.append("")
 
+        # Synthesis context (merged results from parallel predecessors)
+        if self.synthesis_context:
+            lines.append("## Parallel Task Results (Synthesis Context)")
+            lines.append("")
+            source_count = self.synthesis_context.get("_source_count", 0)
+            merge_strategy = self.synthesis_context.get("_merge_strategy", "unknown")
+            lines.append(f"- **Source Tasks**: {source_count}")
+            lines.append(f"- **Merge Strategy**: {merge_strategy}")
+            lines.append("")
+
+            # List source results if available
+            source_results = self.synthesis_context.get("_source_results", [])
+            if source_results:
+                lines.append("### Source Task Results")
+                for i, source in enumerate(source_results, 1):
+                    task_id = source.get("_task_id", "unknown")[:8]
+                    task_type = source.get("_task_type", "unknown")
+                    lines.append(f"#### Task {i}: {task_id} ({task_type})")
+                    # Show non-meta keys from each source
+                    for key, value in source.items():
+                        if not key.startswith("_"):
+                            if isinstance(value, str) and len(value) > 200:
+                                value = value[:200] + "..."
+                            lines.append(f"- **{key}**: {value}")
+                    lines.append("")
+
         return "\n".join(lines)
 
 
@@ -379,6 +412,10 @@ class TaskContextBuilder:
 
                 if spec_id:
                     await self._add_spec_context(session, context, spec_id, spec_task_id)
+
+            # Include synthesis context if present (merged from parallel predecessors)
+            if task.synthesis_context:
+                context.synthesis_context = task.synthesis_context
 
             return context
 
@@ -519,6 +556,10 @@ class TaskContextBuilder:
 
                 if spec_id:
                     self._add_spec_context_sync(session, context, spec_id, spec_task_id)
+
+            # Include synthesis context if present (merged from parallel predecessors)
+            if task.synthesis_context:
+                context.synthesis_context = task.synthesis_context
 
             return context
 
