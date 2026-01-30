@@ -149,6 +149,133 @@ def spec_task_execution_service(
 # =============================================================================
 
 
+class TestOwnedFilesExtraction:
+    """Tests for extracting owned_files from spec.phase_data."""
+
+    def test_extract_owned_files_from_phase_data(
+        self, db_service: DatabaseService
+    ):
+        """Test extracting files_to_create and files_to_modify from phase_data."""
+        service = SpecTaskExecutionService(db=db_service)
+
+        spec = MagicMock()
+        spec.id = "test-spec"
+        spec.phase_data = {
+            "tasks": {
+                "tasks": [
+                    {
+                        "id": "TSK-001",
+                        "title": "Implement user service",
+                        "files_to_create": ["src/services/user.py", "src/models/user.py"],
+                        "files_to_modify": ["src/api/routes.py"],
+                    },
+                    {
+                        "id": "TSK-002",
+                        "title": "Add tests",
+                        "files_to_create": ["tests/test_user.py"],
+                        "files_to_modify": [],
+                    },
+                ]
+            }
+        }
+
+        # Test task with both create and modify
+        owned_files = service._extract_owned_files(spec, "TSK-001")
+        assert owned_files is not None
+        assert len(owned_files) == 3
+        assert "src/services/user.py" in owned_files
+        assert "src/models/user.py" in owned_files
+        assert "src/api/routes.py" in owned_files
+
+        # Test task with only create
+        owned_files_2 = service._extract_owned_files(spec, "TSK-002")
+        assert owned_files_2 is not None
+        assert len(owned_files_2) == 1
+        assert "tests/test_user.py" in owned_files_2
+
+    def test_extract_owned_files_missing_task(
+        self, db_service: DatabaseService
+    ):
+        """Test that missing task returns None."""
+        service = SpecTaskExecutionService(db=db_service)
+
+        spec = MagicMock()
+        spec.id = "test-spec"
+        spec.phase_data = {
+            "tasks": {
+                "tasks": [{"id": "TSK-001", "title": "Task 1"}]
+            }
+        }
+
+        result = service._extract_owned_files(spec, "TSK-999")
+        assert result is None
+
+    def test_extract_owned_files_empty_phase_data(
+        self, db_service: DatabaseService
+    ):
+        """Test that empty phase_data returns None."""
+        service = SpecTaskExecutionService(db=db_service)
+
+        spec = MagicMock()
+        spec.id = "test-spec"
+        spec.phase_data = {}
+
+        result = service._extract_owned_files(spec, "TSK-001")
+        assert result is None
+
+    def test_extract_owned_files_directory_glob_conversion(
+        self, db_service: DatabaseService
+    ):
+        """Test that directory paths are converted to glob patterns."""
+        service = SpecTaskExecutionService(db=db_service)
+
+        spec = MagicMock()
+        spec.id = "test-spec"
+        spec.phase_data = {
+            "tasks": {
+                "tasks": [
+                    {
+                        "id": "TSK-001",
+                        "title": "Task 1",
+                        "files_to_create": ["src/services/"],
+                        "files_to_modify": ["src/api/routes/"],
+                    }
+                ]
+            }
+        }
+
+        owned_files = service._extract_owned_files(spec, "TSK-001")
+        assert owned_files is not None
+        assert "src/services/**" in owned_files
+        assert "src/api/routes/**" in owned_files
+
+    def test_extract_owned_files_deduplication(
+        self, db_service: DatabaseService
+    ):
+        """Test that duplicate file paths are deduplicated."""
+        service = SpecTaskExecutionService(db=db_service)
+
+        spec = MagicMock()
+        spec.id = "test-spec"
+        spec.phase_data = {
+            "tasks": {
+                "tasks": [
+                    {
+                        "id": "TSK-001",
+                        "title": "Task 1",
+                        "files_to_create": ["src/user.py"],
+                        "files_to_modify": ["src/user.py"],  # Same file
+                    }
+                ]
+            }
+        }
+
+        owned_files = service._extract_owned_files(spec, "TSK-001")
+        assert owned_files is not None
+        assert len(owned_files) == 1
+        assert "src/user.py" in owned_files
+
+
 class TestParallelOpportunityParsing:
     """Tests for parsing parallel opportunities from spec.phase_data."""
 
