@@ -1,8 +1,9 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { Inter, JetBrains_Mono } from "next/font/google"
 import "./globals.css"
 import "xterm/css/xterm.css"
 import "katex/dist/katex.min.css"
+import { RootProvider } from "fumadocs-ui/provider/next"
 import { QueryProvider } from "@/providers/QueryProvider"
 import { WebSocketProvider } from "@/providers/WebSocketProvider"
 import { StoreProvider } from "@/providers/StoreProvider"
@@ -79,6 +80,45 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   manifest: "/site.webmanifest",
+  alternates: {
+    canonical: siteUrl,
+    types: {
+      "application/rss+xml": "/feed.xml",
+    },
+  },
+  category: "technology",
+}
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
+}
+
+function OrganizationJsonLd() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "OmoiOS",
+    url: siteUrl,
+    logo: `${siteUrl}/logo.png`,
+    description:
+      "Spec-driven, multi-agent orchestration system that scales development without scaling headcount.",
+    sameAs: [
+      "https://twitter.com/TheGeodexes",
+      "https://github.com/omoios",
+    ],
+  }
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  )
 }
 
 export default function RootLayout({
@@ -88,22 +128,27 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <OrganizationJsonLd />
+      </head>
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <PostHogProvider>
-            <QueryProvider>
-              <AuthProvider>
-                <WebSocketProvider>
-                  <StoreProvider>
-                    {children}
-                    <Toaster />
-                    <OnboardingDebugInit />
-                  </StoreProvider>
-                </WebSocketProvider>
-              </AuthProvider>
-            </QueryProvider>
-          </PostHogProvider>
-        </ThemeProvider>
+        <RootProvider>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+            <PostHogProvider>
+              <QueryProvider>
+                <AuthProvider>
+                  <WebSocketProvider>
+                    <StoreProvider>
+                      {children}
+                      <Toaster />
+                      <OnboardingDebugInit />
+                    </StoreProvider>
+                  </WebSocketProvider>
+                </AuthProvider>
+              </QueryProvider>
+            </PostHogProvider>
+          </ThemeProvider>
+        </RootProvider>
       </body>
     </html>
   )

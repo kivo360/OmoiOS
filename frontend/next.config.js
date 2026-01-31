@@ -1,4 +1,7 @@
 import { withSentryConfig } from "@sentry/nextjs"
+import { createMDX } from 'fumadocs-mdx/next';
+
+const withMDX = createMDX();
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -55,6 +58,9 @@ const sentryWebpackPluginOptions = {
   },
 }
 
-// Wrap the config with Sentry
-// This enables automatic error capturing and source map uploads
-export default withSentryConfig(nextConfig, sentryWebpackPluginOptions)
+// Wrap with MDX first, then Sentry
+// This enables Fumadocs MDX processing and Sentry error capturing
+export default withSentryConfig(
+  withMDX(nextConfig),
+  sentryWebpackPluginOptions
+)
