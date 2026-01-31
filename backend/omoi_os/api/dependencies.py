@@ -412,15 +412,6 @@ def get_monitoring_loop():
     return main_module.monitoring_loop
 
 
-def get_supabase_auth_service():
-    """Get Supabase auth service instance."""
-    from omoi_os.services.supabase_auth import SupabaseAuthService
-    from omoi_os.config import load_supabase_settings
-
-    settings = load_supabase_settings()
-    return SupabaseAuthService(settings)
-
-
 async def get_current_user(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: "DatabaseService" = Depends(get_db_service),

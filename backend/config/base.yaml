@@ -40,12 +40,6 @@ approval:
   approval_timeout_seconds: 1800
   on_reject: delete
 
-supabase:
-  url: null
-  anon_key: null
-  service_role_key: null
-  db_url: null
-
 auth:
   jwt_secret_key: dev-secret-key-change-in-production
   jwt_algorithm: HS256

@@ -48,7 +48,6 @@ def test_yaml_precedence_and_env_overrides(monkeypatch, tmp_path):
         (config.load_redis_settings, "redis"),
         (config.load_task_queue_settings, "task_queue"),
         (config.load_approval_settings, "approval"),
-        (config.load_supabase_settings, "supabase"),
         (config.load_auth_settings, "auth"),
     ],
 )
