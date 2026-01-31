@@ -43,7 +43,7 @@ class SubscriptionStatus(str, Enum):
 
 
 # Tier configuration - defines limits for each tier
-# Matches landing page pricing: Free $0, Pro $50, Team $150, Lifetime $299
+# Pricing: Starter $0, Pro $299, Team $999, Enterprise custom
 TIER_LIMITS = {
     SubscriptionTier.FREE: {
         "workflows_limit": 5,
@@ -53,33 +53,33 @@ TIER_LIMITS = {
         "byo_keys": False,
     },
     SubscriptionTier.PRO: {
-        "workflows_limit": 100,
-        "agents_limit": 5,
+        "workflows_limit": 50,
+        "agents_limit": 3,
         "storage_limit_gb": 50,
-        "price_monthly": 50,
+        "price_monthly": 299,
         "byo_keys": True,
     },
     SubscriptionTier.TEAM: {
-        "workflows_limit": 500,
+        "workflows_limit": -1,  # Unlimited
         "agents_limit": 10,
-        "storage_limit_gb": 200,
-        "price_monthly": 150,
+        "storage_limit_gb": 500,
+        "price_monthly": 999,
         "byo_keys": True,
     },
     SubscriptionTier.ENTERPRISE: {
         "workflows_limit": -1,  # Unlimited
         "agents_limit": -1,  # Unlimited
         "storage_limit_gb": -1,  # Unlimited
-        "price_monthly": 0,  # Custom pricing
+        "price_monthly": 0,  # Custom pricing (contact sales)
         "byo_keys": True,
     },
     SubscriptionTier.LIFETIME: {
         "workflows_limit": 50,
         "agents_limit": 5,
         "storage_limit_gb": 50,
-        "price_monthly": 0,  # One-time $299 payment
-        "price_one_time": 299,
-        "byo_keys": True,  # Early access to BYO keys
+        "price_monthly": 0,  # One-time $499 payment
+        "price_one_time": 499,
+        "byo_keys": True,
     },
 }
 
