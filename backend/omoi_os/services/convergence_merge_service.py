@@ -200,13 +200,16 @@ class ConvergenceMergeService:
         Returns:
             ConvergenceMergeResult with merge outcome
         """
-        # Create MergeAttempt record
-        merge_attempt = self._create_merge_attempt(
+        # Compute target branch before creating record
+        effective_target_branch = target_branch or f"ticket/{ticket_id}"
+
+        # Create MergeAttempt record (returns ID string)
+        merge_attempt_id = self._create_merge_attempt(
             continuation_task_id=continuation_task_id,
             source_task_ids=source_task_ids,
             ticket_id=ticket_id,
             spec_id=spec_id,
-            target_branch=target_branch or f"ticket/{ticket_id}",
+            target_branch=effective_target_branch,
         )
 
         # Initialize git operations
@@ -217,19 +220,19 @@ class ConvergenceMergeService:
 
         try:
             # Update status to in_progress
-            self._update_merge_attempt_status(merge_attempt.id, MergeStatus.IN_PROGRESS)
+            self._update_merge_attempt_status(merge_attempt_id, MergeStatus.IN_PROGRESS)
 
             # Score branches for optimal merge order
             scorer = ConflictScorer(git_ops)
             scored_order = await self._score_source_tasks(
                 scorer=scorer,
                 source_task_ids=source_task_ids,
-                target_branch=merge_attempt.target_branch,
+                target_branch=effective_target_branch,
             )
 
             # Update merge attempt with scoring results
             self._update_merge_attempt_scoring(
-                merge_attempt.id,
+                merge_attempt_id,
                 scored_order,
             )
 
@@ -237,24 +240,24 @@ class ConvergenceMergeService:
             if scored_order.total_conflicts > self.config.max_conflicts_auto_resolve:
                 if self.config.require_clean_merge:
                     return self._fail_merge(
-                        merge_attempt.id,
+                        merge_attempt_id,
                         f"Too many conflicts ({scored_order.total_conflicts}) for auto-resolve",
                         source_task_ids,
                     )
                 else:
                     # Flag for manual review
-                    self._update_merge_attempt_status(merge_attempt.id, MergeStatus.MANUAL)
+                    self._update_merge_attempt_status(merge_attempt_id, MergeStatus.MANUAL)
                     logger.warning(
                         "convergence_merge_needs_manual_review",
                         extra={
-                            "merge_attempt_id": merge_attempt.id,
+                            "merge_attempt_id": merge_attempt_id,
                             "total_conflicts": scored_order.total_conflicts,
                             "threshold": self.config.max_conflicts_auto_resolve,
                         },
                     )
                     return ConvergenceMergeResult(
                         success=False,
-                        merge_attempt_id=merge_attempt.id,
+                        merge_attempt_id=merge_attempt_id,
                         merged_tasks=[],
                         failed_tasks=source_task_ids,
                         total_conflicts_resolved=0,
@@ -264,10 +267,10 @@ class ConvergenceMergeService:
 
             # Merge in least-conflicts-first order
             result = await self._merge_in_order(
-                merge_attempt_id=merge_attempt.id,
+                merge_attempt_id=merge_attempt_id,
                 git_ops=git_ops,
                 scored_order=scored_order,
-                target_branch=merge_attempt.target_branch,
+                target_branch=effective_target_branch,
             )
 
             # Push if configured
@@ -280,13 +283,13 @@ class ConvergenceMergeService:
             logger.error(
                 "convergence_merge_error",
                 extra={
-                    "merge_attempt_id": merge_attempt.id,
+                    "merge_attempt_id": merge_attempt_id,
                     "error": str(e),
                 },
                 exc_info=True,
             )
             return self._fail_merge(
-                merge_attempt.id,
+                merge_attempt_id,
                 str(e),
                 source_task_ids,
             )
@@ -517,7 +520,7 @@ class ConvergenceMergeService:
         ticket_id: str,
         spec_id: Optional[str],
         target_branch: str,
-    ) -> MergeAttempt:
+    ) -> str:
         """Create a MergeAttempt record in the database.
 
         Args:
@@ -528,11 +531,12 @@ class ConvergenceMergeService:
             target_branch: Target branch for merge
 
         Returns:
-            Created MergeAttempt instance
+            ID of the created MergeAttempt
         """
+        merge_id = str(uuid4())
         with self.db.get_session() as session:
             merge_attempt = MergeAttempt(
-                id=str(uuid4()),
+                id=merge_id,
                 task_id=continuation_task_id,
                 ticket_id=ticket_id,
                 spec_id=spec_id,
@@ -546,13 +550,13 @@ class ConvergenceMergeService:
             logger.info(
                 "merge_attempt_created",
                 extra={
-                    "merge_attempt_id": merge_attempt.id,
+                    "merge_attempt_id": merge_id,
                     "continuation_task_id": continuation_task_id,
                     "source_count": len(source_task_ids),
                 },
             )
 
-            return merge_attempt
+        return merge_id
 
     def _update_merge_attempt_status(
         self,
