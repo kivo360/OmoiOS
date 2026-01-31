@@ -31,7 +31,6 @@ dependencies = [
     "jsonschema>=4.20.0,<5",
     "fastmcp>=2.14.0",
     "cryptography>=43.0.0,<44",
-    "supabase>=2.0.0,<3",
     "bcrypt>=4.0.0,<5",
     "python-jose[cryptography]>=3.3.0,<4",
     "python-multipart>=0.0.6,<1",

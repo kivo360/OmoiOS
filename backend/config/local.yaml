@@ -5,12 +5,6 @@ llm:
 
   fireworks_api_key: REDACTED_FIREWORKS_API_KEY
 
-supabase:
-  url: https://example.supabase.co
-  anon_key: local-anon-key
-  service_role_key: local-service-role-key
-  db_url: null
-
 database:
   # Remote Railway PostgreSQL database (default for local development)
   url: postgresql+psycopg://postgres:REDACTED_DB_PASSWORD@REDACTED_DB_HOST:5432/REDACTED_DB

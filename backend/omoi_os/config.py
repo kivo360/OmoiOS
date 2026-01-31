@@ -360,27 +360,6 @@ def load_approval_settings() -> ApprovalSettings:
     return get_app_settings().approval
 
 
-class SupabaseSettings(OmoiBaseSettings):
-    """
-    Supabase configuration settings.
-
-    Precedence: YAML defaults (config/base.yaml + config/<env>.yaml) < environment variables < init kwargs.
-    """
-
-    yaml_section = "supabase"
-    model_config = SettingsConfigDict(
-        env_prefix="SUPABASE_",
-        extra="ignore",
-    )
-
-    url: Optional[str] = None  # SUPABASE_URL
-    anon_key: Optional[str] = None  # SUPABASE_ANON_KEY (publishable key)
-    service_role_key: Optional[str] = None  # SUPABASE_SERVICE_ROLE_KEY (secret key)
-
-    # Database connection (optional, for direct PostgreSQL access)
-    db_url: Optional[str] = None  # SUPABASE_DB_URL
-
-
 class AuthSettings(OmoiBaseSettings):
     """
     Authentication and authorization settings.
@@ -784,10 +763,6 @@ class DemoSettings(OmoiBaseSettings):
     confirm_all: bool = True
 
 
-def load_supabase_settings() -> SupabaseSettings:
-    return get_app_settings().supabase
-
-
 def load_auth_settings() -> AuthSettings:
     return get_app_settings().auth
 
@@ -804,7 +779,6 @@ class AppSettings:
         self.redis = RedisSettings()
         self.task_queue = TaskQueueSettings()
         self.approval = ApprovalSettings()
-        self.supabase = SupabaseSettings()
         self.auth = AuthSettings()
         self.workspace = WorkspaceSettings()
         self.monitoring = MonitoringSettings()

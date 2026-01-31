@@ -53,7 +53,6 @@ def debug_settings_loading():
             load_llm_settings,
             load_task_queue_settings,
             load_approval_settings,
-            load_supabase_settings,
         )
 
         print("\n📊 Main Configuration Settings:")
@@ -64,10 +63,8 @@ def debug_settings_loading():
         print(f"DATABASE_URL: {db_settings.url}")
         if "localhost" in db_settings.url or "127.0.0.1" in db_settings.url:
             print("✅ Using local database (docker-compose)")
-        elif "supabase" in db_settings.url:
-            print("✅ Using Supabase database")
         else:
-            print("⚠️  Using unknown database")
+            print("✅ Using remote database")
 
         # Redis settings
         redis_settings = load_redis_settings()
@@ -85,14 +82,6 @@ def debug_settings_loading():
         # Approval settings
         approval_settings = load_approval_settings()
         print(f"APPROVAL_TICKET_HUMAN_REVIEW: {approval_settings.ticket_human_review}")
-
-        # Supabase settings
-        supabase_settings = load_supabase_settings()
-        print(
-            f"SUPABASE_URL: {supabase_settings.url[:50]}..."
-            if len(supabase_settings.url) > 50
-            else f"SUPABASE_URL: {supabase_settings.url}"
-        )
 
     except Exception as e:
         print(f"❌ Error loading main config: {e}")
@@ -138,7 +127,6 @@ def debug_environment_variables():
         "REDIS_URL",
         "LLM_MODEL",
         "LLM_API_KEY",
-        "SUPABASE_URL",
         "TQ_AGE_CEILING",
         "VALIDATION_ENABLED_BY_DEFAULT",
     ]
@@ -208,7 +196,6 @@ def main():
     print("=" * 60)
     print("📌 If .env.local exists, it should take priority over .env")
     print("📌 Local development should use docker-compose database")
-    print("📌 Production should use Supabase database")
     print("=" * 60)
 
 
