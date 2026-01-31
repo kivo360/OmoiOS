@@ -1,0 +1,131 @@
+---
+title: Understanding Spec-Driven Development
+description: Learn how spec-driven development works in OmoiOS and why it's the key to effective multi-agent orchestration.
+author: OmoiOS Team
+date: 2026-01-29
+category: Tutorials
+tags: [specs, development, workflow]
+featured: false
+---
+
+# Understanding Spec-Driven Development
+
+At the heart of OmoiOS is spec-driven development - a methodology that transforms natural language descriptions into working software through a structured workflow.
+
+## What is a Spec?
+
+A spec in OmoiOS is a high-level description of what you want to build. Unlike traditional requirements documents, specs are:
+
+- **Conversational** - Written in natural language
+- **Outcome-focused** - Describe what, not how
+- **Iterative** - Can be refined through feedback
+
+### Example Spec
+
+Here's a simple spec for a notification system:
+
+```
+Add a notification system that:
+- Sends email notifications for important events
+- Shows in-app notifications with a badge counter
+- Allows users to configure notification preferences
+- Supports digest mode (daily summary vs. real-time)
+```
+
+## The Spec Lifecycle
+
+Every spec in OmoiOS goes through a defined lifecycle:
+
+### 1. Explore Phase
+
+When you create a spec, OmoiOS first explores your codebase to understand:
+
+- Existing patterns and conventions
+- Related code and dependencies
+- Potential integration points
+- Technical constraints
+
+This exploration happens automatically through specialized explorer agents.
+
+### 2. Requirements Phase
+
+Based on the exploration, OmoiOS generates detailed requirements:
+
+- Functional requirements (what the feature does)
+- Non-functional requirements (performance, security)
+- Edge cases and error handling
+- Integration requirements
+
+You review these requirements and provide feedback before proceeding.
+
+### 3. Design Phase
+
+With approved requirements, OmoiOS creates a technical design:
+
+- Architecture decisions
+- Data models and schemas
+- API contracts
+- Component structure
+
+The design phase ensures everyone (including agents) understands the approach.
+
+### 4. Tasks Phase
+
+The design is broken down into atomic, parallelizable tasks:
+
+- Each task has clear acceptance criteria
+- Dependencies between tasks are identified
+- Tasks are sized for efficient agent execution
+
+### 5. Execution Phase
+
+Finally, developer agents pick up tasks and implement them:
+
+- Code is written following your project's conventions
+- Tests are generated alongside implementation
+- Code reviews happen automatically
+
+## Best Practices for Writing Specs
+
+### Be Specific About Outcomes
+
+**Good:**
+```
+Allow users to export their data in CSV and JSON formats,
+including all projects, tasks, and comments.
+```
+
+**Less Good:**
+```
+Add export functionality.
+```
+
+### Include Constraints
+
+If you have specific requirements, state them:
+
+```
+Build a search feature that:
+- Returns results in under 200ms
+- Supports fuzzy matching
+- Works without requiring a reindex
+```
+
+### Reference Existing Patterns
+
+OmoiOS understands your codebase, so you can reference existing code:
+
+```
+Add pagination to the task list, similar to how
+we handle pagination in the project list.
+```
+
+## Next Steps
+
+- [Creating Your First Spec](/docs/guides/creating-specs)
+- [Spec Templates and Examples](/docs/reference/spec-templates)
+- [Advanced Spec Patterns](/docs/guides/advanced-specs)
+
+---
+
+*Have questions about spec-driven development? Check our [documentation](/docs) or reach out to the team.*

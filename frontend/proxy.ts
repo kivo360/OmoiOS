@@ -12,6 +12,11 @@ const PUBLIC_ROUTES = [
   "/reset-password",
   "/verify-email",
   "/callback",
+  "/docs",
+  "/blog",
+  "/feed.xml",
+  "/sitemap.xml",
+  "/robots.txt",
 ]
 
 // Routes exempt from onboarding enforcement

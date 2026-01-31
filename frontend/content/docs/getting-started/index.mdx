@@ -1,0 +1,63 @@
+---
+title: Overview
+description: Get up and running with OmoiOS in minutes
+---
+
+# Getting Started
+
+Welcome to OmoiOS! This guide will help you get started with the platform.
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+- **Node.js 22+** installed
+- **Python 3.11+** installed
+- **Docker** and **Docker Compose** installed
+- A **Supabase** account for authentication
+
+## Quick Start
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/your-org/omoios.git
+cd omoios
+```
+
+### 2. Install Dependencies
+
+OmoiOS uses `uv` for Python and `pnpm` for JavaScript:
+
+```bash
+# Install all dependencies
+just install
+```
+
+### 3. Configure Environment
+
+Copy the example environment files:
+
+```bash
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+```
+
+### 4. Start Development Services
+
+```bash
+# Start all services with hot-reload
+just dev-all
+```
+
+This will start:
+- **Backend API** at `http://localhost:18000`
+- **Frontend** at `http://localhost:3000`
+- **PostgreSQL** at `localhost:15432`
+- **Redis** at `localhost:16379`
+
+## Next Steps
+
+- [Installation Guide](/docs/getting-started/installation) - Detailed installation instructions
+- [Quick Start](/docs/getting-started/quick-start) - Create your first project
+- [Concepts](/docs/getting-started/concepts) - Understand the core concepts

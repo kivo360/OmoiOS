@@ -118,6 +118,11 @@ const PUBLIC_ROUTES = [
   "/reset-password",
   "/verify-email",
   "/callback",
+  "/docs",
+  "/blog",
+  "/feed.xml",
+  "/sitemap.xml",
+  "/robots.txt",
 ]
 
 // Routes that should redirect to main app if already authenticated

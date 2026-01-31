@@ -1,233 +1,407 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-@layer base {
-  :root {
-    /* OmoiOS Clean White Theme */
+/* ==========================================================================
+   Fumadocs UI Styles
+   ========================================================================== */
+@import 'fumadocs-ui/css/neutral.css';
+@import 'fumadocs-ui/css/preset.css';
 
-    /* Background colors */
-    --background: 0 0% 100%;             /* #FFFFFF Pure white */
-    --foreground: 0 0% 9%;               /* #171717 Near black */
+/* Include fumadocs-ui components in Tailwind's content scanning */
+@source '../node_modules/fumadocs-ui/dist/**/*.js';
 
-    /* =======================================================================
-       Landing Page Colors - Clean White Theme
-       ======================================================================= */
+/* ==========================================================================
+   Tailwind v4 Theme Configuration
+   ========================================================================== */
+@theme {
+  /* Typography */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
-    /* Accent (Neutral dark - professional) */
-    --landing-accent: 0 0% 9%;                   /* #171717 - Dark accent */
-    --landing-accent-light: 0 0% 20%;            /* #333333 - Lighter */
-    --landing-accent-dark: 0 0% 4%;              /* #0A0A0A - Darker */
-    --landing-accent-foreground: 0 0% 100%;      /* White text on accent */
+  /* Container */
+  --container-2xl: 1400px;
 
-    /* Landing Backgrounds */
-    --landing-bg: 0 0% 100%;                     /* #FFFFFF - Pure white */
-    --landing-bg-muted: 0 0% 98%;                /* #FAFAFA - Very light gray */
-    --landing-bg-warm: 0 0% 96%;                 /* #F5F5F5 - Light gray */
-    --landing-bg-dark: 0 0% 4%;                  /* #0A0A0A - Near black */
+  /* Border Radius */
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
 
-    /* Landing Text */
-    --landing-text: 0 0% 9%;                     /* #171717 - Near black */
-    --landing-text-muted: 0 0% 45%;              /* #737373 - Gray */
-    --landing-text-subtle: 0 0% 64%;             /* #A3A3A3 - Light gray */
-    --landing-text-inverse: 0 0% 100%;           /* #FFFFFF */
+  /* Colors - Light Mode (uses CSS variables from :root) */
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
 
-    /* Landing Borders */
-    --landing-border: 0 0% 90%;                  /* #E5E5E5 - Light border */
-    --landing-border-accent: 0 0% 9%;            /* Uses accent color */
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
 
-    /* Landing Gradient Stops */
-    --landing-gradient-from: 0 0% 9%;            /* #171717 */
-    --landing-gradient-to: 0 0% 4%;              /* #0A0A0A */
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
 
-    /* Card/Surface */
-    --card: 0 0% 100%;               /* #FFFFFF White surfaces */
-    --card-foreground: 0 0% 9%;      /* #171717 */
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
 
-    /* Popover */
-    --popover: 0 0% 100%;            /* #FFFFFF */
-    --popover-foreground: 0 0% 9%;   /* #171717 */
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
 
-    /* Primary - Dark accent */
-    --primary: 0 0% 9%;              /* #171717 */
-    --primary-foreground: 0 0% 100%; /* #FFFFFF */
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
 
-    /* Secondary */
-    --secondary: 0 0% 96%;           /* #F5F5F5 Light gray */
-    --secondary-foreground: 0 0% 9%; /* #171717 */
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
 
-    /* Muted */
-    --muted: 0 0% 96%;               /* #F5F5F5 Light gray */
-    --muted-foreground: 0 0% 45%;    /* #737373 Secondary text */
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
 
-    /* Accent */
-    --accent: 0 0% 96%;              /* #F5F5F5 Hover state */
-    --accent-foreground: 0 0% 9%;    /* #171717 */
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-info: hsl(var(--info));
+  --color-tertiary: hsl(var(--tertiary));
 
-    /* Destructive - Red */
-    --destructive: 0 84% 60%;        /* #EF4444 */
-    --destructive-foreground: 0 0% 100%;
+  /* Chart colors */
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-chart-5: hsl(var(--chart-5));
 
-    /* Borders */
-    --border: 0 0% 90%;              /* #E5E5E5 Light borders */
-    --input: 0 0% 90%;               /* #E5E5E5 */
-    --ring: 0 0% 9%;                 /* #171717 Focus ring */
+  /* Sidebar colors */
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-primary: hsl(var(--sidebar-primary));
+  --color-sidebar-primary-foreground: hsl(var(--sidebar-primary-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-accent-foreground: hsl(var(--sidebar-accent-foreground));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --color-sidebar-ring: hsl(var(--sidebar-ring));
 
-    /* Radius */
-    --radius: 0.5rem;
+  /* Landing page colors */
+  --color-landing-accent: hsl(var(--landing-accent));
+  --color-landing-accent-light: hsl(var(--landing-accent-light));
+  --color-landing-accent-dark: hsl(var(--landing-accent-dark));
+  --color-landing-accent-foreground: hsl(var(--landing-accent-foreground));
+  --color-landing-bg: hsl(var(--landing-bg));
+  --color-landing-bg-muted: hsl(var(--landing-bg-muted));
+  --color-landing-bg-warm: hsl(var(--landing-bg-warm));
+  --color-landing-bg-dark: hsl(var(--landing-bg-dark));
+  --color-landing-text: hsl(var(--landing-text));
+  --color-landing-text-muted: hsl(var(--landing-text-muted));
+  --color-landing-text-subtle: hsl(var(--landing-text-subtle));
+  --color-landing-text-inverse: hsl(var(--landing-text-inverse));
+  --color-landing-border: hsl(var(--landing-border));
+  --color-landing-border-accent: hsl(var(--landing-border-accent) / 0.3);
 
-    /* Custom semantic colors */
-    --success: 142 71% 45%;          /* #22C55E Green */
-    --warning: 38 92% 50%;           /* #F59E0B Amber */
-    --info: 217 91% 60%;             /* #3B82F6 Blue */
+  /* Forward Fumadocs colors to theme - using amber/gold brand color */
+  --color-fd-primary: oklch(0.75 0.18 55);  /* Amber gold #F59E0B */
+  --color-fd-primary-foreground: oklch(0.15 0 0);  /* Dark text on amber */
+  --color-fd-secondary: var(--color-secondary);
+  --color-fd-secondary-foreground: var(--color-secondary-foreground);
+  --color-fd-background: var(--color-background);
+  --color-fd-foreground: var(--color-foreground);
+  --color-fd-muted: var(--color-muted);
+  --color-fd-muted-foreground: var(--color-muted-foreground);
+  --color-fd-accent: var(--color-accent);
+  --color-fd-accent-foreground: var(--color-accent-foreground);
+  --color-fd-popover: var(--color-popover);
+  --color-fd-popover-foreground: var(--color-popover-foreground);
+  --color-fd-card: var(--color-card);
+  --color-fd-card-foreground: var(--color-card-foreground);
+  --color-fd-border: var(--color-border);
+  --color-fd-ring: var(--color-ring);
 
-    /* Tertiary text */
-    --tertiary: 0 0% 64%;            /* #A3A3A3 Placeholder */
+  /* Animations */
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+  --animate-collapsible-down: collapsible-down 0.2s ease-out;
+  --animate-collapsible-up: collapsible-up 0.2s ease-out;
+}
 
-    /* Chart colors */
-    --chart-1: 142 71% 45%;          /* Success green */
-    --chart-2: 217 91% 60%;          /* Info blue */
-    --chart-3: 38 92% 50%;           /* Warning amber */
-    --chart-4: 0 84% 60%;            /* Destructive red */
-    --chart-5: 0 0% 45%;             /* Muted gray */
-
-    /* Sidebar */
-    --sidebar-background: 0 0% 98%;  /* #FAFAFA */
-    --sidebar-foreground: 0 0% 9%;   /* #171717 */
-    --sidebar-primary: 0 0% 9%;      /* #171717 */
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;      /* #F5F5F5 Hover */
-    --sidebar-accent-foreground: 0 0% 9%;
-    --sidebar-border: 0 0% 90%;      /* #E5E5E5 */
-    --sidebar-ring: 0 0% 9%;         /* #171717 */
+@keyframes accordion-down {
+  from {
+    height: 0;
   }
-
-  .dark {
-    /* OmoiOS Dark Theme - Clean dark */
-
-    /* Background colors */
-    --background: 0 0% 4%;           /* #0A0A0A */
-    --foreground: 0 0% 98%;          /* #FAFAFA */
-
-    /* =======================================================================
-       Landing Page Dark Mode Colors
-       ======================================================================= */
-    --landing-bg: 0 0% 4%;                       /* #0A0A0A */
-    --landing-bg-muted: 0 0% 9%;                 /* #171717 */
-    --landing-bg-warm: 0 0% 7%;                  /* #121212 */
-    --landing-bg-dark: 0 0% 2%;                  /* #050505 */
-    --landing-text: 0 0% 98%;                    /* #FAFAFA */
-    --landing-text-muted: 0 0% 64%;              /* #A3A3A3 */
-    --landing-text-subtle: 0 0% 45%;             /* #737373 */
-    --landing-text-inverse: 0 0% 9%;             /* #171717 */
-    --landing-border: 0 0% 18%;                  /* #2E2E2E */
-
-    /* Card/Surface */
-    --card: 0 0% 9%;                 /* #171717 */
-    --card-foreground: 0 0% 98%;     /* #FAFAFA */
-
-    /* Popover */
-    --popover: 0 0% 9%;              /* #171717 */
-    --popover-foreground: 0 0% 98%;  /* #FAFAFA */
-
-    /* Primary */
-    --primary: 0 0% 98%;             /* #FAFAFA */
-    --primary-foreground: 0 0% 9%;   /* #171717 */
-
-    /* Secondary */
-    --secondary: 0 0% 15%;           /* #262626 */
-    --secondary-foreground: 0 0% 98%; /* #FAFAFA */
-
-    /* Muted */
-    --muted: 0 0% 15%;               /* #262626 */
-    --muted-foreground: 0 0% 64%;    /* #A3A3A3 */
-
-    /* Accent */
-    --accent: 0 0% 15%;              /* #262626 Hover */
-    --accent-foreground: 0 0% 98%;   /* #FAFAFA */
-
-    /* Destructive */
-    --destructive: 0 62% 50%;        /* Darker red for dark mode */
-    --destructive-foreground: 0 0% 100%;
-
-    /* Borders */
-    --border: 0 0% 18%;              /* #2E2E2E */
-    --input: 0 0% 18%;               /* #2E2E2E */
-    --ring: 0 0% 98%;                /* #FAFAFA */
-
-    /* Custom semantic colors */
-    --success: 142 71% 45%;          /* Green */
-    --warning: 38 92% 50%;           /* Amber */
-    --info: 217 91% 60%;             /* Blue */
-
-    /* Tertiary text */
-    --tertiary: 0 0% 45%;            /* #737373 */
-
-    /* Chart colors - adjusted for dark mode */
-    --chart-1: 142 71% 45%;
-    --chart-2: 217 91% 60%;
-    --chart-3: 38 92% 50%;
-    --chart-4: 0 62% 50%;
-    --chart-5: 0 0% 64%;
-
-    /* Sidebar */
-    --sidebar-background: 0 0% 7%;   /* #121212 */
-    --sidebar-foreground: 0 0% 98%;  /* #FAFAFA */
-    --sidebar-primary: 0 0% 98%;     /* #FAFAFA */
-    --sidebar-primary-foreground: 0 0% 9%;
-    --sidebar-accent: 0 0% 15%;      /* #262626 */
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 0 0% 18%;      /* #2E2E2E */
-    --sidebar-ring: 0 0% 98%;
+  to {
+    height: var(--radix-accordion-content-height);
   }
 }
 
-@layer base {
-  * {
-    @apply border-border;
+@keyframes accordion-up {
+  from {
+    height: var(--radix-accordion-content-height);
   }
-
-  /* Smooth in-page anchor navigation (respects reduced motion). */
-  @media (prefers-reduced-motion: no-preference) {
-    html {
-      scroll-behavior: smooth;
-    }
-  }
-
-  /* Offset anchor targets to account for the fixed marketing navbar. */
-  .landing-page :where(section[id], div[id]) {
-    scroll-margin-top: 7rem;
-  }
-
-  body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+  to {
+    height: 0;
   }
 }
 
-@layer utilities {
-  /* Git-style line change colors */
-  .text-git-add {
-    color: hsl(var(--success));
+@keyframes collapsible-down {
+  from {
+    height: 0;
+    opacity: 0;
   }
-  .text-git-delete {
-    color: hsl(var(--destructive));
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
   }
+}
 
-  /* JetBrains Mono for code/line counts */
-  .font-mono-code {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
   }
+  to {
+    height: 0;
+    opacity: 0;
+  }
+}
 
-  /* Time group header styling */
-  .time-group-header {
-    @apply text-[11px] uppercase tracking-wider text-muted-foreground font-medium;
-  }
+/* ==========================================================================
+   CSS Variables for Theme
+   ========================================================================== */
+:root {
+  /* OmoiOS Clean White Theme */
 
-  /* Hover state */
-  .hover-warm {
-    @apply hover:bg-accent transition-colors duration-150;
+  /* Background colors */
+  --background: 0 0% 100%;             /* #FFFFFF Pure white */
+  --foreground: 0 0% 9%;               /* #171717 Near black */
+
+  /* =======================================================================
+     Landing Page Colors - Clean White Theme
+     ======================================================================= */
+
+  /* Accent (Neutral dark - professional) */
+  --landing-accent: 0 0% 9%;                   /* #171717 - Dark accent */
+  --landing-accent-light: 0 0% 20%;            /* #333333 - Lighter */
+  --landing-accent-dark: 0 0% 4%;              /* #0A0A0A - Darker */
+  --landing-accent-foreground: 0 0% 100%;      /* White text on accent */
+
+  /* Landing Backgrounds */
+  --landing-bg: 0 0% 100%;                     /* #FFFFFF - Pure white */
+  --landing-bg-muted: 0 0% 98%;                /* #FAFAFA - Very light gray */
+  --landing-bg-warm: 0 0% 96%;                 /* #F5F5F5 - Light gray */
+  --landing-bg-dark: 0 0% 4%;                  /* #0A0A0A - Near black */
+
+  /* Landing Text */
+  --landing-text: 0 0% 9%;                     /* #171717 - Near black */
+  --landing-text-muted: 0 0% 45%;              /* #737373 - Gray */
+  --landing-text-subtle: 0 0% 64%;             /* #A3A3A3 - Light gray */
+  --landing-text-inverse: 0 0% 100%;           /* #FFFFFF */
+
+  /* Landing Borders */
+  --landing-border: 0 0% 90%;                  /* #E5E5E5 - Light border */
+  --landing-border-accent: 0 0% 9%;            /* Uses accent color */
+
+  /* Landing Gradient Stops */
+  --landing-gradient-from: 0 0% 9%;            /* #171717 */
+  --landing-gradient-to: 0 0% 4%;              /* #0A0A0A */
+
+  /* Card/Surface */
+  --card: 0 0% 100%;               /* #FFFFFF White surfaces */
+  --card-foreground: 0 0% 9%;      /* #171717 */
+
+  /* Popover */
+  --popover: 0 0% 100%;            /* #FFFFFF */
+  --popover-foreground: 0 0% 9%;   /* #171717 */
+
+  /* Primary - Dark accent */
+  --primary: 0 0% 9%;              /* #171717 */
+  --primary-foreground: 0 0% 100%; /* #FFFFFF */
+
+  /* Secondary */
+  --secondary: 0 0% 96%;           /* #F5F5F5 Light gray */
+  --secondary-foreground: 0 0% 9%; /* #171717 */
+
+  /* Muted */
+  --muted: 0 0% 96%;               /* #F5F5F5 Light gray */
+  --muted-foreground: 0 0% 45%;    /* #737373 Secondary text */
+
+  /* Accent */
+  --accent: 0 0% 96%;              /* #F5F5F5 Hover state */
+  --accent-foreground: 0 0% 9%;    /* #171717 */
+
+  /* Destructive - Red */
+  --destructive: 0 84% 60%;        /* #EF4444 */
+  --destructive-foreground: 0 0% 100%;
+
+  /* Borders */
+  --border: 0 0% 90%;              /* #E5E5E5 Light borders */
+  --input: 0 0% 90%;               /* #E5E5E5 */
+  --ring: 0 0% 9%;                 /* #171717 Focus ring */
+
+  /* Radius */
+  --radius: 0.5rem;
+
+  /* Custom semantic colors */
+  --success: 142 71% 45%;          /* #22C55E Green */
+  --warning: 38 92% 50%;           /* #F59E0B Amber */
+  --info: 217 91% 60%;             /* #3B82F6 Blue */
+
+  /* Tertiary text */
+  --tertiary: 0 0% 64%;            /* #A3A3A3 Placeholder */
+
+  /* Chart colors */
+  --chart-1: 142 71% 45%;          /* Success green */
+  --chart-2: 217 91% 60%;          /* Info blue */
+  --chart-3: 38 92% 50%;           /* Warning amber */
+  --chart-4: 0 84% 60%;            /* Destructive red */
+  --chart-5: 0 0% 45%;             /* Muted gray */
+
+  /* Sidebar */
+  --sidebar-background: 0 0% 98%;  /* #FAFAFA */
+  --sidebar-foreground: 0 0% 9%;   /* #171717 */
+  --sidebar-primary: 0 0% 9%;      /* #171717 */
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 0 0% 96%;      /* #F5F5F5 Hover */
+  --sidebar-accent-foreground: 0 0% 9%;
+  --sidebar-border: 0 0% 90%;      /* #E5E5E5 */
+  --sidebar-ring: 0 0% 9%;         /* #171717 */
+}
+
+.dark {
+  /* OmoiOS Dark Theme - Clean dark */
+
+  /* Background colors */
+  --background: 0 0% 4%;           /* #0A0A0A */
+  --foreground: 0 0% 98%;          /* #FAFAFA */
+
+  /* =======================================================================
+     Landing Page Dark Mode Colors
+     ======================================================================= */
+  --landing-bg: 0 0% 4%;                       /* #0A0A0A */
+  --landing-bg-muted: 0 0% 9%;                 /* #171717 */
+  --landing-bg-warm: 0 0% 7%;                  /* #121212 */
+  --landing-bg-dark: 0 0% 2%;                  /* #050505 */
+  --landing-text: 0 0% 98%;                    /* #FAFAFA */
+  --landing-text-muted: 0 0% 64%;              /* #A3A3A3 */
+  --landing-text-subtle: 0 0% 45%;             /* #737373 */
+  --landing-text-inverse: 0 0% 9%;             /* #171717 */
+  --landing-border: 0 0% 18%;                  /* #2E2E2E */
+
+  /* Card/Surface */
+  --card: 0 0% 9%;                 /* #171717 */
+  --card-foreground: 0 0% 98%;     /* #FAFAFA */
+
+  /* Popover */
+  --popover: 0 0% 9%;              /* #171717 */
+  --popover-foreground: 0 0% 98%;  /* #FAFAFA */
+
+  /* Primary */
+  --primary: 0 0% 98%;             /* #FAFAFA */
+  --primary-foreground: 0 0% 9%;   /* #171717 */
+
+  /* Secondary */
+  --secondary: 0 0% 15%;           /* #262626 */
+  --secondary-foreground: 0 0% 98%; /* #FAFAFA */
+
+  /* Muted */
+  --muted: 0 0% 15%;               /* #262626 */
+  --muted-foreground: 0 0% 64%;    /* #A3A3A3 */
+
+  /* Accent */
+  --accent: 0 0% 15%;              /* #262626 Hover */
+  --accent-foreground: 0 0% 98%;   /* #FAFAFA */
+
+  /* Destructive */
+  --destructive: 0 62% 50%;        /* Darker red for dark mode */
+  --destructive-foreground: 0 0% 100%;
+
+  /* Borders */
+  --border: 0 0% 18%;              /* #2E2E2E */
+  --input: 0 0% 18%;               /* #2E2E2E */
+  --ring: 0 0% 98%;                /* #FAFAFA */
+
+  /* Custom semantic colors */
+  --success: 142 71% 45%;          /* Green */
+  --warning: 38 92% 50%;           /* Amber */
+  --info: 217 91% 60%;             /* Blue */
+
+  /* Tertiary text */
+  --tertiary: 0 0% 45%;            /* #737373 */
+
+  /* Chart colors - adjusted for dark mode */
+  --chart-1: 142 71% 45%;
+  --chart-2: 217 91% 60%;
+  --chart-3: 38 92% 50%;
+  --chart-4: 0 62% 50%;
+  --chart-5: 0 0% 64%;
+
+  /* Sidebar */
+  --sidebar-background: 0 0% 7%;   /* #121212 */
+  --sidebar-foreground: 0 0% 98%;  /* #FAFAFA */
+  --sidebar-primary: 0 0% 98%;     /* #FAFAFA */
+  --sidebar-primary-foreground: 0 0% 9%;
+  --sidebar-accent: 0 0% 15%;      /* #262626 */
+  --sidebar-accent-foreground: 0 0% 98%;
+  --sidebar-border: 0 0% 18%;      /* #2E2E2E */
+  --sidebar-ring: 0 0% 98%;
+}
+
+/* ==========================================================================
+   Fumadocs Dark Mode - Amber/Gold Brand Accent
+   ========================================================================== */
+.dark {
+  --color-fd-primary: oklch(0.75 0.18 55);  /* Amber gold #F59E0B */
+  --color-fd-primary-foreground: oklch(0.15 0 0);  /* Dark text on amber */
+}
+
+/* ==========================================================================
+   Base Styles
+   ========================================================================== */
+* {
+  border-color: hsl(var(--border));
+}
+
+/* Smooth in-page anchor navigation (respects reduced motion). */
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
   }
+}
+
+/* Offset anchor targets to account for the fixed marketing navbar. */
+.landing-page :where(section[id], div[id]) {
+  scroll-margin-top: 7rem;
+}
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* ==========================================================================
+   Utility Classes
+   ========================================================================== */
+
+/* Git-style line change colors */
+.text-git-add {
+  color: hsl(var(--success));
+}
+.text-git-delete {
+  color: hsl(var(--destructive));
+}
+
+/* JetBrains Mono for code/line counts */
+.font-mono-code {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+/* Time group header styling */
+.time-group-header {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: hsl(var(--muted-foreground));
+  font-weight: 500;
+}
+
+/* Hover state */
+.hover-warm {
+  transition: background-color 150ms;
+}
+.hover-warm:hover {
+  background-color: hsl(var(--accent));
 }
 
 /* ==========================================================================
@@ -236,11 +410,12 @@
 
 /* Base KaTeX styling */
 .katex-display {
-  @apply my-4 overflow-x-auto overflow-y-hidden;
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .katex {
-  @apply text-base;
   font-size: 1.1em;
 }
 
@@ -268,12 +443,12 @@
 
 /* Display math block styling */
 .katex-display > .katex {
-  @apply text-center;
+  text-align: center;
 }
 
 /* Inline math styling */
 .katex:not(.katex-display .katex) {
-  @apply inline;
+  display: inline;
 }
 
 /* ==========================================================================
@@ -282,12 +457,16 @@
 
 /* Mermaid container */
 .mermaid {
-  @apply flex justify-center items-center w-full;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
 }
 
 /* SVG styling within mermaid diagrams */
 .mermaid svg {
-  @apply max-w-full h-auto;
+  max-width: 100%;
+  height: auto;
 }
 
 /* Dark mode mermaid text visibility */
@@ -318,76 +497,76 @@
    Landing Page Utility Classes
    ========================================================================== */
 
-@layer utilities {
-  /* Landing page gradient text effect */
-  .landing-gradient-text {
-    @apply bg-clip-text text-transparent;
-    background-image: linear-gradient(
-      135deg,
-      hsl(var(--landing-accent)) 0%,
-      hsl(var(--landing-accent-light)) 100%
-    );
-  }
+/* Landing page gradient text effect */
+.landing-gradient-text {
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  background-image: linear-gradient(
+    135deg,
+    hsl(var(--landing-accent)) 0%,
+    hsl(var(--landing-accent-light)) 100%
+  );
+}
 
-  /* Landing page CTA gradient background */
-  .landing-gradient-cta {
-    background-image: linear-gradient(
-      135deg,
-      hsl(var(--landing-gradient-from)) 0%,
-      hsl(var(--landing-gradient-to)) 100%
-    );
-  }
+/* Landing page CTA gradient background */
+.landing-gradient-cta {
+  background-image: linear-gradient(
+    135deg,
+    hsl(var(--landing-gradient-from)) 0%,
+    hsl(var(--landing-gradient-to)) 100%
+  );
+}
 
-  /* Landing page dark section gradient */
-  .landing-gradient-dark {
-    background-image: linear-gradient(
-      180deg,
-      #171717 0%,
-      #0a0a0a 50%,
-      #000000 100%
-    );
-  }
+/* Landing page dark section gradient */
+.landing-gradient-dark {
+  background-image: linear-gradient(
+    180deg,
+    #171717 0%,
+    #0a0a0a 50%,
+    #000000 100%
+  );
+}
 
-  /* Landing page card shadow */
-  .landing-shadow-lg {
-    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-  }
+/* Landing page card shadow */
+.landing-shadow-lg {
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+}
 
-  /* Landing page accent glow shadow */
-  .landing-shadow-accent {
-    box-shadow: 0 4px 24px hsl(var(--landing-accent) / 0.1);
-  }
+/* Landing page accent glow shadow */
+.landing-shadow-accent {
+  box-shadow: 0 4px 24px hsl(var(--landing-accent) / 0.1);
+}
 
-  /* Landing page accent border glow */
-  .landing-border-glow {
-    box-shadow: 0 0 0 1px hsl(var(--landing-accent) / 0.2),
-                0 4px 12px hsl(var(--landing-accent) / 0.1);
-  }
+/* Landing page accent border glow */
+.landing-border-glow {
+  box-shadow: 0 0 0 1px hsl(var(--landing-accent) / 0.2),
+              0 4px 12px hsl(var(--landing-accent) / 0.1);
+}
 
-  /* Landing page hover state for cards */
-  .landing-card-hover {
-    @apply transition-all duration-200;
-  }
+/* Landing page hover state for cards */
+.landing-card-hover {
+  transition: all 200ms;
+}
 
-  .landing-card-hover:hover {
-    @apply -translate-y-1;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-  }
+.landing-card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
 
-  /* Landing page section backgrounds */
-  .landing-section-white {
-    background-color: hsl(var(--landing-bg));
-  }
+/* Landing page section backgrounds */
+.landing-section-white {
+  background-color: hsl(var(--landing-bg));
+}
 
-  .landing-section-muted {
-    background-color: hsl(var(--landing-bg-muted));
-  }
+.landing-section-muted {
+  background-color: hsl(var(--landing-bg-muted));
+}
 
-  .landing-section-warm {
-    background-color: hsl(var(--landing-bg-warm));
-  }
+.landing-section-warm {
+  background-color: hsl(var(--landing-bg-warm));
+}
 
-  .landing-section-dark {
-    background-color: hsl(var(--landing-bg-dark));
-  }
+.landing-section-dark {
+  background-color: hsl(var(--landing-bg-dark));
 }
