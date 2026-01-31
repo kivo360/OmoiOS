@@ -39,7 +39,7 @@ interface PlanOption {
 const PLANS: PlanOption[] = [
   {
     id: "free",
-    name: "Free",
+    name: "Starter",
     price: "$0",
     priceNote: "forever",
     icon: <Zap className="h-5 w-5" />,
@@ -54,12 +54,12 @@ const PLANS: PlanOption[] = [
   {
     id: "pro",
     name: "Pro",
-    price: "$50",
+    price: "$299",
     priceNote: "/month",
     icon: <Crown className="h-5 w-5" />,
     features: [
-      "5 concurrent agents",
-      "100 workflows/month",
+      "3 concurrent agents",
+      "50 workflows/month",
       "50GB storage",
       "BYO API keys",
       "Priority support",
@@ -67,21 +67,21 @@ const PLANS: PlanOption[] = [
     accentColor: "bg-purple-500",
   },
   {
-    id: "lifetime",
-    name: "Founding Member",
-    price: "$299",
-    priceNote: "one-time",
+    id: "team",
+    name: "Team",
+    price: "$999",
+    priceNote: "/month",
     icon: <Infinity className="h-5 w-5" />,
     features: [
-      "5 concurrent agents",
-      "50 workflows/month",
-      "50GB storage",
+      "10 concurrent agents",
+      "Unlimited workflows",
+      "500GB storage",
       "BYO API keys",
-      "Lifetime access",
-      "Early feature access",
+      "Dedicated support",
+      "Team collaboration",
     ],
     highlighted: true,
-    urgencyText: "Only 87 spots left!",
+    urgencyText: "Most popular for growing teams",
     accentColor: "bg-emerald-500",
   },
 ]
@@ -187,11 +187,10 @@ export function PlanSelectStep() {
       return
     }
 
-    if (selectedPlan === "lifetime") {
-      // Start Stripe checkout for lifetime
+    if (selectedPlan === "pro" || selectedPlan === "team") {
+      // Start Stripe checkout for paid plans
       setIsProcessing(true)
       try {
-        // Need org ID - use the one from onboarding or create one
         const orgId = data.organizationId
         if (!orgId) {
           toast({
@@ -202,9 +201,15 @@ export function PlanSelectStep() {
           return
         }
 
-        const result = await createLifetimeCheckout.mutateAsync({ orgId })
-        window.location.href = result.checkout_url
-      } catch (error) {
+        // TODO: Create subscription checkout for pro/team plans
+        // For now, redirect to contact for enterprise-level pricing
+        toast({
+          title: "Let's get you set up",
+          description: "Our team will reach out to complete your subscription setup.",
+        })
+        updateData({ selectedPlan })
+        nextStep()
+      } catch {
         toast({
           title: "Error",
           description: "Failed to start checkout. Please try again.",
@@ -213,18 +218,6 @@ export function PlanSelectStep() {
       } finally {
         setIsProcessing(false)
       }
-      return
-    }
-
-    if (selectedPlan === "pro") {
-      // For now, skip to complete and show billing later
-      // In production, this would start a Stripe subscription checkout
-      toast({
-        title: "Coming soon",
-        description: "Pro subscriptions will be available shortly. Continuing with free tier.",
-      })
-      updateData({ selectedPlan: "free" })
-      nextStep()
       return
     }
   }
@@ -385,7 +378,7 @@ export function PlanSelectStep() {
             disabled={isLoading}
             className={cn(
               "w-full",
-              selectedPlan === "lifetime" && "bg-emerald-600 hover:bg-emerald-700"
+              selectedPlan === "team" && "bg-emerald-600 hover:bg-emerald-700"
             )}
           >
             {isLoading ? (
@@ -395,12 +388,7 @@ export function PlanSelectStep() {
               </>
             ) : selectedPlan === "free" ? (
               <>
-                Continue with Free
-                <ArrowRight className="ml-2 h-5 w-5" />
-              </>
-            ) : selectedPlan === "lifetime" ? (
-              <>
-                Claim Founding Member Access
+                Continue with Starter
                 <ArrowRight className="ml-2 h-5 w-5" />
               </>
             ) : (
@@ -465,7 +453,7 @@ function PlanCard({
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
             plan.id === "free" && "bg-slate-500/10 text-slate-500",
             plan.id === "pro" && "bg-purple-500/10 text-purple-500",
-            plan.id === "lifetime" && "bg-emerald-500/10 text-emerald-500"
+            plan.id === "team" && "bg-emerald-500/10 text-emerald-500"
           )}
         >
           {plan.icon}

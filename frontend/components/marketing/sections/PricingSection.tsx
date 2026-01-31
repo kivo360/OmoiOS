@@ -27,7 +27,7 @@ interface PricingTier {
 
 const pricingTiers: PricingTier[] = [
   {
-    name: "Free",
+    name: "Starter",
     price: 0,
     period: "/month",
     description: "Try autonomous engineering",
@@ -36,20 +36,19 @@ const pricingTiers: PricingTier[] = [
       "5 workflows per month",
       "1 project",
       "Community support",
-      "Work queues when limit hit",
     ],
     cta: "Start Free",
     href: "/register",
   },
   {
     name: "Pro",
-    price: 50,
+    price: 299,
     period: "/month",
     description: "Ship faster with parallel agents",
     features: [
-      "5 concurrent agents",
-      "100 workflows per month",
-      "5 projects",
+      "3 concurrent agents",
+      "50 workflows per month",
+      "Unlimited projects",
       "Bring your own API keys",
       "Priority support",
       "Advanced analytics",
@@ -60,17 +59,18 @@ const pricingTiers: PricingTier[] = [
   },
   {
     name: "Team",
-    price: 150,
+    price: 999,
     period: "/month",
     description: "Scale your engineering output",
     features: [
       "10 concurrent agents",
-      "500 workflows per month",
+      "Unlimited workflows",
       "Unlimited projects",
       "Bring your own API keys",
       "Team collaboration",
       "Role-based access",
       "Dedicated support",
+      "Custom integrations",
     ],
     cta: "Get Team",
     href: "/register?plan=team",
@@ -182,17 +182,21 @@ export function PricingSection({ className, id }: PricingSectionProps) {
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          className="mx-auto mt-12 max-w-2xl text-center"
+          className="mx-auto mt-12 max-w-2xl rounded-lg border border-landing-border bg-white p-6 text-center"
         >
-          <p className="text-landing-text-muted">
-            Need more?{" "}
-            <a
-              href="mailto:hello@omoios.dev"
-              className="font-medium text-landing-accent underline-offset-4 hover:underline"
-            >
-              Contact us for Enterprise pricing
-            </a>
+          <h3 className="text-xl font-semibold text-landing-text">Enterprise</h3>
+          <p className="mt-2 text-landing-text-muted">
+            Unlimited agents, dedicated support, custom SLAs, and on-premise deployment options.
           </p>
+          <p className="mt-4 text-2xl font-bold text-landing-text">
+            Starting at $5,000/month
+          </p>
+          <Button
+            className="mt-4 bg-landing-accent text-white hover:bg-landing-accent/90"
+            asChild
+          >
+            <a href="mailto:enterprise@omoios.dev">Talk to Sales</a>
+          </Button>
         </motion.div>
       </div>
     </section>
