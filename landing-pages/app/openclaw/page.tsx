@@ -10,8 +10,8 @@ import {
   OpenClawConfigSection,
   OpenClawUseCasesSection,
   OpenClawConsultingSection,
+  OpenClawFooterSection,
 } from "@/components/openclaw"
-import { FooterSection } from "@/components/marketing"
 
 export default function OpenClawPage() {
   return (
@@ -34,7 +34,7 @@ export default function OpenClawPage() {
 
       <OpenClawConsultingSection />
 
-      <FooterSection />
+      <OpenClawFooterSection />
     </div>
   )
 }
