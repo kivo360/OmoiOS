@@ -1,3 +1,4 @@
+export { OpenClawNavbar } from "./OpenClawNavbar"
 export { OpenClawHeroSection } from "./sections/HeroSection"
 export { IsThisForYouSection } from "./sections/IsThisForYouSection"
 export { OpenClawFeaturesSection } from "./sections/FeaturesSection"

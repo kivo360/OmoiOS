@@ -44,7 +44,7 @@ const features = [
 
 export function OpenClawFeaturesSection() {
   return (
-    <section className="bg-landing-bg-muted py-20 md:py-32">
+    <section id="features" className="bg-landing-bg-muted py-20 md:py-32">
       <div className="container mx-auto px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}

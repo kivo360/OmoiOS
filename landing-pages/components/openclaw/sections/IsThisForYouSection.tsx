@@ -19,7 +19,7 @@ const notForYou = [
 
 export function IsThisForYouSection() {
   return (
-    <section className="bg-landing-bg py-16 md:py-24">
+    <section id="why" className="bg-landing-bg py-16 md:py-24">
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-4xl">
           <motion.div
