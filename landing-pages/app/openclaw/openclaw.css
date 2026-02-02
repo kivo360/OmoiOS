@@ -1,0 +1,7 @@
+/* OpenClaw-specific branding colors */
+:root {
+  --openclaw-accent: 173 100% 30%;
+  --openclaw-accent-light: 173 100% 40%;
+  --openclaw-accent-dark: 173 100% 20%;
+  --openclaw-success: 142 71% 45%;
+}

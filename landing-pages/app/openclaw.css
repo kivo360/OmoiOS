@@ -1,0 +1,8 @@
+/* OpenClaw-specific branding colors */
+:root {
+  /* OpenClaw Brand Colors - Green/Teal accent */
+  --openclaw-accent: 173 100% 30%;     /* #00BFA5 - Teal */
+  --openclaw-accent-light: 173 100% 40%; /* #66FFCC - Lighter teal */
+  --openclaw-accent-dark: 173 100% 20%;    /* #00664D - Darker teal */
+  --openclaw-success: 142 71% 45%;           /* #22C55E - Green */
+}

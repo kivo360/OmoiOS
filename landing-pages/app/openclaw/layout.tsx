@@ -1,0 +1,53 @@
+import type { Metadata } from "next"
+import "../globals.css"
+import "./openclaw.css"
+
+export const metadata: Metadata = {
+  title: "OpenClaw - Deploy Autonomous Bots with Proactive Automation",
+  description:
+    "OpenClaw: Your personal AI assistant running on your devices. Multi-channel support (WhatsApp, Telegram, Discord, Slack), proactive cron jobs, and excellent configurations. We handle deployment.",
+  keywords: [
+    "OpenClaw",
+    "autonomous bot",
+    "AI assistant",
+    "proactive automation",
+    "cron jobs",
+    "interval timers",
+    "multi-channel AI",
+    "bot deployment",
+    "consulting",
+    "Clawdbot",
+  ],
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    title: "OpenClaw - Deploy Autonomous Bots with Proactive Automation",
+    description:
+      "Deploy autonomous bots with proactive interval timers. Your personal AI assistant on WhatsApp, Telegram, Discord, Slack and more. Expert consulting available.",
+    url: "https://omoios.dev/openclaw",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "OpenClaw - Autonomous Bots That Work While You Sleep",
+    description:
+      "Deploy autonomous bots with proactive automation. Your personal AI assistant that handles deployment and configuration for you.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+}
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className="font-sans">
+        {children}
+      </body>
+    </html>
+  )
+}
