@@ -35,6 +35,8 @@ Contains two types of content:
 | [Sub-Niche Targeting](./sub_niche_targeting.md) | Software sub-niches 2 layers deep with pain points + messaging | Choosing which niche to focus on first |
 | [Cross-Market Niche Ideas](./cross_market_niche_ideas.md) | 15 non-software markets with evaluation framework | Exploring opportunities beyond software engineering |
 | [Reality Outreach Playbook](./reality_contact_outreach_playbook.md) | 2-week outreach sprint with daily actions | Actually doing outreach; tracking reality contact |
+| [Hook Frameworks](./hook-frameworks.md) | 8 proven hook structures for grabbing attention | Writing posts, headlines, landing page copy |
+| [David Ogilvy's Writing Rules](./david-ogilvy-writing-rules.md) | 10 rules for clear, effective writing | Improving all marketing copy |
 | [swipe_file/](./swipe_file/) | Example tweets, posts, copy inspiration | Reference for generating social content |
 
 ---

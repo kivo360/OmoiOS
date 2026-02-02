@@ -1,0 +1,8 @@
+export { OpenClawHeroSection } from "./sections/HeroSection"
+export { IsThisForYouSection } from "./sections/IsThisForYouSection"
+export { OpenClawFeaturesSection } from "./sections/FeaturesSection"
+export { BeforeAfterSection } from "./sections/BeforeAfterSection"
+export { OpenClawCronSection } from "./sections/CronSection"
+export { OpenClawConfigSection } from "./sections/ConfigSection"
+export { OpenClawUseCasesSection } from "./sections/UseCasesSection"
+export { OpenClawConsultingSection } from "./sections/ConsultingSection"
