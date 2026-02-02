@@ -44,7 +44,7 @@ export function OpenClawNavbar({ className }: OpenClawNavbarProps) {
               <li key={item.name}>
                 <Link
                   href={item.link}
-                  className="rounded-full px-4 py-2 text-sm font-medium text-landing-text-muted transition-colors hover:bg-landing-bg-muted hover:text-landing-text"
+                  className="whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium text-landing-text-muted transition-colors hover:bg-landing-bg-muted hover:text-landing-text"
                 >
                   {item.name}
                 </Link>
