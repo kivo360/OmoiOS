@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { Check, Book, Rocket, Crown, Zap, Clock, Headphones } from "lucide-react"
+import { Check, Book, Rocket, Crown, Zap, Clock, Headphones, Shield, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
 const pricingTiers = [
@@ -130,6 +130,22 @@ export function OpenClawConsultingSection() {
             DIY or done-for-you — your call. Every package includes security hardening,
             production deployment, and a bot that actually works.
           </p>
+
+          {/* Urgency + Guarantee */}
+          <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="inline-flex items-center gap-2 rounded-full bg-amber-500/20 border border-amber-500/30 px-4 py-2">
+              <AlertCircle className="h-4 w-4 text-amber-400" />
+              <span className="text-sm font-medium text-amber-300">
+                Only 5 setup slots left this month
+              </span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/20 border border-emerald-500/30 px-4 py-2">
+              <Shield className="h-4 w-4 text-emerald-400" />
+              <span className="text-sm font-medium text-emerald-300">
+                30-day money-back guarantee
+              </span>
+            </div>
+          </div>
         </motion.div>
 
         {/* Pricing Tiers */}
