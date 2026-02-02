@@ -160,7 +160,7 @@ export default async function Image() {
               lineHeight: 1.5,
             }}
           >
-            Autonomous bots that work while you sleep.
+            We deploy your AI bot in 48 hours. You do nothing.
           </div>
 
           {/* Feature pills */}
