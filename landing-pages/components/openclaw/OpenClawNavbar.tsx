@@ -55,9 +55,9 @@ export function OpenClawNavbar({ className }: OpenClawNavbarProps) {
           {/* CTA */}
           <Link
             href="#consulting"
-            className="ml-2 flex items-center gap-2 rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
+            className="ml-2 flex items-center gap-2 whitespace-nowrap rounded-full bg-slate-900 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-slate-800"
           >
-            Get Started Free
+            Get Started
             <ArrowRight className="h-4 w-4" />
           </Link>
         </motion.div>
