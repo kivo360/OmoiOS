@@ -1,6 +1,7 @@
 "use client"
 
 import {
+  OpenClawNavbar,
   OpenClawHeroSection,
   IsThisForYouSection,
   OpenClawFeaturesSection,
@@ -10,12 +11,12 @@ import {
   OpenClawUseCasesSection,
   OpenClawConsultingSection,
 } from "@/components/openclaw"
-import { MarketingNavbar, FooterSection } from "@/components/marketing"
+import { FooterSection } from "@/components/marketing"
 
 export default function OpenClawPage() {
   return (
     <div className="min-h-screen bg-landing-bg">
-      <MarketingNavbar />
+      <OpenClawNavbar />
 
       <OpenClawHeroSection />
 
