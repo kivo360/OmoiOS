@@ -3,6 +3,7 @@ import "../globals.css"
 import "./openclaw.css"
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://openclaw.omoios.dev"),
   title: "OpenClaw - Deploy Autonomous Bots with Proactive Automation",
   description:
     "OpenClaw: Your personal AI assistant running on your devices. Multi-channel support (WhatsApp, Telegram, Discord, Slack), proactive cron jobs, and excellent configurations. We handle deployment.",
