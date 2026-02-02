@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Bot, Clock, Shield, Zap, MessageSquare, Sparkles } from "lucide-react"
+import { Bot, Clock, Shield, Zap, MessageSquare, Sparkles, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { NumberTicker } from "@/components/ui/number-ticker"
 
@@ -39,7 +39,15 @@ const stats = [
 export function OpenClawHeroSection() {
   return (
     <section className="relative overflow-hidden bg-landing-bg py-20 md:py-32">
-      <div className="container mx-auto px-4">
+      {/* Urgency Banner */}
+      <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-amber-500 to-orange-500 py-2 px-4 text-center">
+        <p className="text-sm font-semibold text-white flex items-center justify-center gap-2">
+          <AlertCircle className="h-4 w-4" />
+          Early adopter pricing — Only 5 setup slots left this month
+        </p>
+      </div>
+
+      <div className="container mx-auto px-4 pt-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -87,6 +95,14 @@ export function OpenClawHeroSection() {
           <p className="mt-6 text-sm text-landing-text-muted">
             Join 50+ early adopters already automating their busywork
           </p>
+
+          {/* Guarantee Badge */}
+          <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-50 border border-emerald-200 px-4 py-2">
+            <Shield className="h-4 w-4 text-emerald-600" />
+            <span className="text-sm font-medium text-emerald-700">
+              30-day money-back guarantee — no questions asked
+            </span>
+          </div>
         </motion.div>
 
         {/* Stats Section */}
