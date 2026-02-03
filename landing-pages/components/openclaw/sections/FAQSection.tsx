@@ -67,10 +67,10 @@ function FAQItem({ question, answer, index }: { question: string; answer: string
       <div
         className={cn(
           "overflow-hidden transition-all duration-300 ease-out",
-          isOpen ? "max-h-48 opacity-100" : "max-h-0 opacity-0"
+          isOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
         )}
       >
-        <p className="px-6 pb-4 pt-2 text-base text-landing-text-muted leading-relaxed">
+        <p className="px-6 pb-5 pt-2 text-base text-landing-text-muted leading-relaxed">
           {answer}
         </p>
       </div>
