@@ -54,7 +54,7 @@ const monthlySupport = {
   period: "/month",
   description: "Keep your AI assistant running perfectly. Cancel anytime.",
   icon: Headphones,
-  ctaLink: "https://buy.stripe.com/bJe28qgQje2c13ScvD1Jm04",
+  ctaLink: "https://buy.stripe.com/4gM14marV5vG3c0brz1Jm07",
   features: [
     "24/7 monitoring",
     "Auto-recovery if something breaks",
