@@ -45,7 +45,7 @@ export function OpenClawHeroSection() {
           <div className="mb-6 inline-flex items-center justify-center rounded-full border border-landing-border bg-landing-bg-muted px-4 py-2">
             <MessageSquare className="mr-2 h-4 w-4 text-landing-accent" />
             <span className="text-sm font-medium text-landing-text-muted">
-              For relocation consultants & service businesses
+              For consultants, coaches & service businesses
             </span>
           </div>
 
@@ -77,9 +77,9 @@ export function OpenClawHeroSection() {
             </Link>
           </div>
 
-          {/* Social proof */}
+          {/* Social proof - real results */}
           <p className="mt-6 text-sm text-landing-text-muted">
-            Join 50+ relocation consultants already automating their client intake
+            Setup takes 48 hours. You'll be automating client intake by this weekend.
           </p>
 
           {/* Guarantee Badge */}

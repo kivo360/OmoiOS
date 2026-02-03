@@ -4,9 +4,9 @@ import { motion } from "framer-motion"
 import { AlertTriangle } from "lucide-react"
 
 const painPoints = [
-  'You answer "What documents do I need?" 20 times a day',
+  "You answer the same questions over and over again",
   "Leads go cold because you took too long to reply",
-  "You're glued to WhatsApp from 6am to midnight",
+  "You're glued to your phone from 6am to midnight",
   "Following up manually is eating your life",
   "You know you're leaving money on the table",
 ]
