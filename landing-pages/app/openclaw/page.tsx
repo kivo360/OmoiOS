@@ -9,6 +9,7 @@ import {
   OpenClawConsultingSection,
   OpenClawFooterSection,
   FAQSection,
+  TestimonialSection,
 } from "@/components/openclaw"
 
 export default function OpenClawPage() {
@@ -27,6 +28,9 @@ export default function OpenClawPage() {
 
       {/* How It Works: 3 simple steps */}
       <OpenClawCronSection />
+
+      {/* Social Proof */}
+      <TestimonialSection />
 
       {/* Pricing: $49 / $99 one-time + $29/mo maintenance */}
       <OpenClawConsultingSection />
