@@ -7,8 +7,8 @@ import { Menu, X, ArrowRight, Bot } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const navItems = [
-  { name: "Why", link: "#why" },
-  { name: "Features", link: "#features" },
+  { name: "Problem", link: "#why" },
+  { name: "Solution", link: "#features" },
   { name: "How It Works", link: "#how-it-works" },
   { name: "Pricing", link: "#consulting" },
 ]
