@@ -1,7 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { AlertTriangle } from "lucide-react"
+import { useState } from "react"
+import { Check } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 const painPoints = [
   "You answer the same questions over and over again",
@@ -10,6 +12,38 @@ const painPoints = [
   "Following up manually is eating your life",
   "You know you're leaving money on the table",
 ]
+
+function CheckboxItem({ item, index }: { item: string; index: number }) {
+  const [checked, setChecked] = useState(false)
+
+  return (
+    <motion.li
+      initial={{ opacity: 0, x: -10 }}
+      whileInView={{ opacity: 1, x: 0 }}
+      viewport={{ once: true }}
+      transition={{ delay: index * 0.1 }}
+      className="flex items-start gap-4"
+    >
+      <button
+        onClick={() => setChecked(!checked)}
+        className={cn(
+          "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-all duration-200",
+          checked
+            ? "bg-amber-500 border-amber-500"
+            : "bg-transparent border-amber-500/50 hover:border-amber-500"
+        )}
+      >
+        {checked && <Check className="h-4 w-4 text-white" />}
+      </button>
+      <span className={cn(
+        "text-lg transition-colors duration-200",
+        checked ? "text-white" : "text-gray-300"
+      )}>
+        {item}
+      </span>
+    </motion.li>
+  )
+}
 
 export function IsThisForYouSection() {
   return (
@@ -25,24 +59,13 @@ export function IsThisForYouSection() {
             <h2 className="text-3xl font-bold text-white md:text-4xl">
               Sound familiar?
             </h2>
+            <p className="mt-3 text-gray-400">Click all that apply</p>
           </motion.div>
 
           <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-8 md:p-10">
             <ul className="space-y-5">
               {painPoints.map((item, index) => (
-                <motion.li
-                  key={item}
-                  initial={{ opacity: 0, x: -10 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: index * 0.1 }}
-                  className="flex items-start gap-4"
-                >
-                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20">
-                    <AlertTriangle className="h-3.5 w-3.5 text-amber-400" />
-                  </div>
-                  <span className="text-lg text-gray-200">{item}</span>
-                </motion.li>
+                <CheckboxItem key={item} item={item} index={index} />
               ))}
             </ul>
           </div>
@@ -54,7 +77,7 @@ export function IsThisForYouSection() {
             transition={{ delay: 0.5 }}
             className="mt-8 text-center text-lg text-gray-400"
           >
-            If you checked 3+, OpenClaw will pay for itself in the first week.
+            Check 3+? OpenClaw will pay for itself in the first week.
           </motion.p>
         </div>
       </div>
