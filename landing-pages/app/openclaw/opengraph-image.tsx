@@ -2,7 +2,7 @@ import { ImageResponse } from "next/og"
 
 export const runtime = "edge"
 
-export const alt = "OpenClaw - Stop Babysitting ChatGPT. Start Delegating."
+export const alt = "OpenClaw - Your AI Assistant That Handles Clients While You Sleep"
 export const size = {
   width: 1200,
   height: 630,
@@ -113,29 +113,29 @@ export default async function Image() {
           >
             <span
               style={{
-                fontSize: "58px",
+                fontSize: "52px",
                 fontFamily: "Montserrat",
                 fontWeight: 400,
                 color: "#ffffff",
                 lineHeight: 1.1,
               }}
             >
-              Stop Babysitting
+              Your AI Assistant
             </span>
             <span
               style={{
-                fontSize: "58px",
+                fontSize: "52px",
                 fontFamily: "Montserrat",
                 fontWeight: 400,
                 color: "#ffffff",
                 lineHeight: 1.1,
               }}
             >
-              ChatGPT.
+              That Handles
             </span>
             <span
               style={{
-                fontSize: "58px",
+                fontSize: "52px",
                 fontFamily: "Montserrat",
                 fontWeight: 400,
                 background: "linear-gradient(135deg, #fbbf24 0%, #f59e0b 35%, #ea580c 100%)",
@@ -144,7 +144,7 @@ export default async function Image() {
                 lineHeight: 1.1,
               }}
             >
-              Start Delegating.
+              Clients While You Sleep
             </span>
           </div>
 
@@ -152,7 +152,7 @@ export default async function Image() {
           <div
             style={{
               display: "flex",
-              fontSize: "22px",
+              fontSize: "20px",
               fontFamily: "Montserrat",
               fontWeight: 300,
               color: "rgba(255,230,200,0.6)",
@@ -160,7 +160,7 @@ export default async function Image() {
               lineHeight: 1.5,
             }}
           >
-            We deploy your AI bot in 48 hours. You do nothing.
+            Stop answering the same WhatsApp questions 50 times a day.
           </div>
 
           {/* Feature pills */}

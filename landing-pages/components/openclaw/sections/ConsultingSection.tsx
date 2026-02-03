@@ -2,105 +2,63 @@
 
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { Check, Book, Rocket, Crown, Zap, Clock, Headphones, Shield, AlertCircle } from "lucide-react"
+import { Check, Rocket, Crown, Clock, Headphones, Shield, AlertCircle } from "lucide-react"
 import Link from "next/link"
 
 const pricingTiers = [
   {
-    name: "DIY Guide",
-    price: "$39",
-    period: "one-time",
-    description: "Set it up yourself with our expert guidance",
-    icon: Book,
-    iconColor: "bg-slate-600",
-    features: [
-      "Step-by-step installation guide",
-      "Video walkthrough included",
-      "Troubleshooting documentation",
-      "Community Discord access",
-      "Email support for questions",
-    ],
-    cta: "Get the Guide",
-    ctaLink: "https://buy.stripe.com/fZucN47fJf6gfYM1QZ1Jm00",
-    popular: false,
-  },
-  {
     name: "Starter",
-    price: "$449",
+    price: "$49",
     period: "one-time",
-    description: "We handle the setup. You start automating.",
+    description: "Full setup on your device. Start automating today.",
     icon: Rocket,
     iconColor: "bg-blue-500",
     features: [
-      "Full VPS or Mac deployment",
-      "1 messaging channel configured",
-      "10 skills pre-configured",
-      "Security hardening included",
-      "Basic cron job setup",
-      "48-hour email support",
+      "Full setup on your device",
+      "1 channel (WhatsApp OR Telegram)",
+      "FAQ automation",
+      "Lead qualification",
+      "Basic follow-ups",
+      "Email support",
       "Ready in 48 hours",
     ],
-    cta: "Get Started",
+    cta: "Get Started — $49",
     ctaLink: "https://buy.stripe.com/4gMfZgfMfaQ05k81QZ1Jm01",
     popular: false,
   },
   {
     name: "Pro",
-    price: "$899",
+    price: "$99",
     period: "one-time",
-    description: "Complete setup with custom automation.",
+    description: "Everything in Starter, plus multi-channel & training.",
     icon: Crown,
     iconColor: "bg-amber-500",
     features: [
       "Everything in Starter, plus:",
-      "3 messaging channels configured",
-      "25 custom skills setup",
+      "3 channels connected",
+      "Calendar booking integration",
       "Custom workflow automation",
-      "1-on-1 training session",
-      "Migration from existing tools",
-      "7-day priority support",
+      "1-on-1 training call",
+      "Priority support",
       "Ready in 48 hours",
     ],
-    cta: "Go Pro",
+    cta: "Go Pro — $99",
     ctaLink: "https://buy.stripe.com/aFa14mbvZ3nybIw8fn1Jm02",
     popular: true,
-  },
-  {
-    name: "Enterprise",
-    price: "$1,299",
-    period: "one-time",
-    description: "White-glove service for businesses.",
-    icon: Zap,
-    iconColor: "bg-purple-500",
-    features: [
-      "Everything in Pro, plus:",
-      "Unlimited channels configured",
-      "50+ custom skills setup",
-      "CRM & database integration",
-      "Team training (up to 5 people)",
-      "Custom skill development",
-      "30-day priority support",
-      "Dedicated phone line setup",
-      "Ready in 72 hours",
-    ],
-    cta: "Contact Us",
-    ctaLink: "https://buy.stripe.com/dRmfZg8jN2ju8wk3Z71Jm03",
-    popular: false,
   },
 ]
 
 const monthlySupport = {
-  name: "Ongoing Support",
-  price: "$99",
+  name: "Maintenance",
+  price: "$29",
   period: "/month",
-  description: "Keep your AI assistant running perfectly",
+  description: "Keep your AI assistant running perfectly. Cancel anytime.",
   icon: Headphones,
   ctaLink: "https://buy.stripe.com/bJe28qgQje2c13ScvD1Jm04",
   features: [
-    "24/7 monitoring & alerts",
-    "Proactive issue resolution",
-    "Monthly performance review",
-    "Skill updates & maintenance",
+    "24/7 monitoring",
+    "Auto-recovery if something breaks",
+    "Monthly optimization",
     "Priority support queue",
     "Cancel anytime",
   ],
@@ -124,11 +82,11 @@ export function OpenClawConsultingSection() {
           </div>
 
           <h2 className="mb-4 text-3xl font-bold tracking-tight text-white md:text-4xl">
-            Pick Your Setup. Start Automating Today.
+            Simple Pricing. No Surprises.
           </h2>
           <p className="mx-auto max-w-2xl text-lg text-gray-400">
-            DIY or done-for-you — your call. Every package includes security hardening,
-            production deployment, and a bot that actually works.
+            One-time setup fee. No monthly subscriptions required.
+            Add optional maintenance if you want hands-off peace of mind.
           </p>
 
           {/* Urgency + Guarantee */}
@@ -149,7 +107,7 @@ export function OpenClawConsultingSection() {
         </motion.div>
 
         {/* Pricing Tiers */}
-        <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
           {pricingTiers.map((tier, index) => (
             <motion.div
               key={tier.name}
@@ -294,7 +252,7 @@ export function OpenClawConsultingSection() {
           </div>
         </motion.div>
 
-        {/* Free Consultation CTA */}
+        {/* Final CTA */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -303,17 +261,20 @@ export function OpenClawConsultingSection() {
           className="mt-16 text-center"
         >
           <h3 className="mb-4 text-2xl font-semibold text-white">
-            Not sure which one fits?
+            Stop Being a Slave to Your Inbox
           </h3>
-          <p className="mb-6 text-base text-gray-400">
-            Book a free 30-min call. We'll map out your workflows and recommend the right setup. No pressure.
+          <p className="mb-6 max-w-xl mx-auto text-base text-gray-400">
+            You got into this business to help people relocate — not to answer the same questions 50 times a day.
+            Let OpenClaw handle the busywork. You handle the business.
           </p>
-          <a
-            href="mailto:kevin@omoios.dev?subject=OpenClaw%20Strategy%20Call&body=Hi%20Kevin%2C%0A%0AI%27m%20interested%20in%20learning%20more%20about%20OpenClaw.%0A%0A"
-            className="inline-flex items-center rounded-xl bg-white px-8 py-4 font-semibold text-slate-900 transition-all duration-300 hover:bg-gray-100 shadow-lg"
+          <Link
+            href={pricingTiers[0].ctaLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center rounded-xl landing-gradient-cta px-8 py-4 font-semibold text-white transition-all duration-300 hover:opacity-90 shadow-lg"
           >
-            Book Free Strategy Call
-          </a>
+            Get Started — $49
+          </Link>
         </motion.div>
       </div>
     </section>

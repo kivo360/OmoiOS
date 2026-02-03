@@ -1,44 +1,44 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { Bot, Clock, MessageSquare, Shield, Zap, Activity } from "lucide-react"
+import { MessageSquare, Users, Calendar, Clock, CheckCircle, Eye } from "lucide-react"
 
 const features = [
   {
-    icon: Bot,
-    title: "Run a Whole Team",
-    subtitle: "Multi-Agent System",
-    description: "Deploy multiple bots at once — each with its own job, tools, and personality. Zero extra cost.",
+    icon: MessageSquare,
+    title: "Answers FAQs Instantly",
+    subtitle: "Automatic Responses",
+    description: "Documents, timelines, costs — your bot handles the questions you're tired of answering.",
   },
   {
-    icon: MessageSquare,
-    title: "One Bot, Every Chat",
-    subtitle: "Omnichannel Support",
-    description: "WhatsApp, Slack, Discord, Telegram, iMessage — all synced. Reply from anywhere.",
+    icon: Users,
+    title: "Qualifies Leads for You",
+    subtitle: "Lead Qualification",
+    description: "Filters out tire-kickers before they reach you. Only serious inquiries get through.",
+  },
+  {
+    icon: Calendar,
+    title: "Books Consultations",
+    subtitle: "Calendar Integration",
+    description: "Syncs with your calendar and books appointments automatically. No back-and-forth.",
   },
   {
     icon: Clock,
-    title: "Acts Before You Ask",
-    subtitle: "Proactive Automation",
-    description: "Morning briefs at 7am. Status updates at noon. Weekly reports on Monday. All automatic.",
+    title: "Follows Up Automatically",
+    subtitle: "Automated Follow-ups",
+    description: "Cold leads get nurtured. Hot leads get reminded. You never forget to follow up again.",
   },
   {
-    icon: Activity,
-    title: "Never Goes Down",
-    subtitle: "Always-On Reliability",
-    description: "Built-in health checks with auto-recovery. Your bot fixes itself — no babysitting required.",
+    icon: CheckCircle,
+    title: "Works 24/7",
+    subtitle: "Always On",
+    description: "Responds to inquiries at 3am. Handles weekend questions. Never takes a day off.",
   },
   {
-    icon: Shield,
-    title: "Privacy by Default",
-    subtitle: "Your Data, Your Control",
-    description: "Runs on YOUR devices. No cloud middleman. No subscription fees. Open-source forever.",
-  },
-  {
-    icon: Zap,
-    title: "Does What You Need",
-    subtitle: "500+ Skills Ready",
-    description: "Gmail, Calendar, Notion, Shopify, Stripe — and hundreds more. Or build your own.",
+    icon: Eye,
+    title: "Full Visibility",
+    subtitle: "Review Everything",
+    description: "See every conversation. Adjust responses anytime. You're always in control.",
   },
 ]
 
@@ -53,11 +53,11 @@ export function OpenClawFeaturesSection() {
           className="mx-auto mb-16 max-w-2xl text-center"
         >
           <h2 className="mb-4 text-3xl font-bold tracking-tight text-landing-text md:text-4xl">
-            Built for People Who Hate Repetitive Work
+            What if your WhatsApp replied for you?
           </h2>
           <p className="mx-auto max-w-2xl text-lg text-landing-text-muted">
-            Enterprise-grade automation that respects your privacy.
-            Full control. No vendor lock-in. Actually useful.
+            OpenClaw is an AI assistant that lives in your WhatsApp, Telegram, or email.
+            It knows your services, your pricing, and your process — and handles the repetitive stuff automatically.
           </p>
         </motion.div>
 
