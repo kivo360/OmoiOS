@@ -252,29 +252,44 @@ export function OpenClawConsultingSection() {
           </div>
         </motion.div>
 
-        {/* Final CTA */}
+        {/* What happens next */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ delay: 0.6, duration: 0.5 }}
-          className="mt-16 text-center"
+          className="mt-16"
         >
-          <h3 className="mb-4 text-2xl font-semibold text-white">
-            Stop Being a Slave to Your Inbox
-          </h3>
-          <p className="mb-6 max-w-xl mx-auto text-base text-gray-400">
-            You got into this business to help people relocate — not to answer the same questions 50 times a day.
-            Let OpenClaw handle the busywork. You handle the business.
-          </p>
-          <Link
-            href={pricingTiers[0].ctaLink}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center rounded-xl landing-gradient-cta px-8 py-4 font-semibold text-white transition-all duration-300 hover:opacity-90 shadow-lg"
-          >
-            Get Started — $49
-          </Link>
+          <div className="mx-auto max-w-2xl rounded-2xl border border-slate-700 bg-slate-800/50 p-8 text-center">
+            <h3 className="mb-4 text-xl font-semibold text-white">
+              What happens after you buy?
+            </h3>
+            <ol className="text-left text-gray-300 space-y-3 mb-6">
+              <li className="flex items-start gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-landing-accent text-sm font-bold text-white">1</span>
+                <span>You'll get an email within 2 hours to schedule a quick onboarding call</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-landing-accent text-sm font-bold text-white">2</span>
+                <span>We'll ask about your services, FAQs, and how you want the bot to respond</span>
+              </li>
+              <li className="flex items-start gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-landing-accent text-sm font-bold text-white">3</span>
+                <span>Within 48 hours, your AI assistant is live and handling inquiries</span>
+              </li>
+            </ol>
+            <p className="text-sm text-gray-400 mb-6">
+              Don't love it? Full refund within 30 days. No questions asked.
+            </p>
+            <Link
+              href={pricingTiers[0].ctaLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center rounded-xl landing-gradient-cta px-8 py-4 font-semibold text-white transition-all duration-300 hover:opacity-90 shadow-lg"
+            >
+              Get Started — $49
+            </Link>
+          </div>
         </motion.div>
       </div>
     </section>

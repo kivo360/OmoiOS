@@ -13,10 +13,11 @@ export const metadata: Metadata = {
     "WhatsApp automation",
     "client intake automation",
     "lead qualification",
-    "relocation consultant",
     "service business automation",
     "calendar booking bot",
     "automated follow-ups",
+    "consultant automation",
+    "coach automation",
   ],
   openGraph: {
     type: "website",
