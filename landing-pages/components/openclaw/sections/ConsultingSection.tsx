@@ -23,7 +23,7 @@ const pricingTiers = [
       "Ready in 48 hours",
     ],
     cta: "Get Started — $49",
-    ctaLink: "https://buy.stripe.com/4gMfZgfMfaQ05k81QZ1Jm01",
+    ctaLink: "https://buy.stripe.com/eVq5kCfMf8HS7sg67f1Jm05",
     popular: false,
   },
   {
@@ -43,7 +43,7 @@ const pricingTiers = [
       "Ready in 48 hours",
     ],
     cta: "Go Pro — $99",
-    ctaLink: "https://buy.stripe.com/aFa14mbvZ3nybIw8fn1Jm02",
+    ctaLink: "https://buy.stripe.com/fZu4gy57Be2ceUI3Z71Jm06",
     popular: true,
   },
 ]
