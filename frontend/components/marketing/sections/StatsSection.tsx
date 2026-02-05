@@ -37,7 +37,7 @@ interface StatsSectionProps {
 
 export function StatsSection({ className }: StatsSectionProps) {
   return (
-    <section className={cn("bg-landing-bg-warm py-20 md:py-28", className)}>
+    <section className={cn("bg-landing-bg-warm py-16 md:py-24", className)}>
       <div className="container mx-auto px-4">
         {/* Section Header */}
         <motion.div
@@ -76,22 +76,6 @@ export function StatsSection({ className }: StatsSectionProps) {
           ))}
         </div>
 
-        {/* Testimonial Quote */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ delay: 0.4 }}
-          className="mx-auto mt-16 max-w-2xl text-center"
-        >
-          <blockquote className="text-lg italic text-landing-text-muted">
-            &ldquo;I wrote what I wanted Monday morning. Had a working PR to review by lunch.
-            I didn&apos;t touch a board, chase updates, or attend a single standup.&rdquo;
-          </blockquote>
-          <cite className="mt-4 block text-sm text-landing-text-subtle">
-            — Engineering Lead, Series A Startup
-          </cite>
-        </motion.div>
       </div>
     </section>
   )

@@ -59,7 +59,7 @@ interface FAQSectionProps {
 
 export function FAQSection({ className, id }: FAQSectionProps) {
   return (
-    <section id={id} className={cn("bg-landing-bg py-20 md:py-32", className)}>
+    <section id={id} className={cn("bg-landing-bg py-16 md:py-24", className)}>
       <div className="container mx-auto px-4">
         {/* Section Header */}
         <motion.div
