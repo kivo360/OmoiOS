@@ -11,7 +11,7 @@ interface NightShiftSectionProps {
 
 export function NightShiftSection({ className }: NightShiftSectionProps) {
   return (
-    <section className={cn("bg-landing-bg-muted py-20 md:py-32", className)}>
+    <section className={cn("bg-landing-bg-muted py-16 md:py-24", className)}>
       <div className="container mx-auto px-4">
         <div className="mx-auto max-w-4xl">
           {/* Section Header */}

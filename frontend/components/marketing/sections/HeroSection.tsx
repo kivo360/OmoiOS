@@ -9,18 +9,9 @@ import { ArrowRight, Play, Loader2 } from "lucide-react"
 import { FlipWords } from "@/components/ui/flip-words"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { cn } from "@/lib/utils"
 
 const heroWords = ["shipped features", "merged PRs", "done work", "real results"]
-
-const avatars = [
-  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=james", fallback: "JD" },
-  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=sarah", fallback: "SK" },
-  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=mike", fallback: "MP" },
-  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=alex", fallback: "AL" },
-  { src: "https://api.dicebear.com/7.x/avataaars/svg?seed=rachel", fallback: "RK" },
-]
 
 interface HeroSectionProps {
   className?: string
@@ -45,7 +36,7 @@ export function HeroSection({ className }: HeroSectionProps) {
   return (
     <section
       className={cn(
-        "relative overflow-hidden bg-landing-bg px-4 pb-20 pt-32 md:pb-32 md:pt-40",
+        "relative overflow-hidden bg-landing-bg px-4 pb-16 pt-28 md:pb-24 md:pt-36",
         className
       )}
     >
@@ -144,46 +135,6 @@ export function HeroSection({ className }: HeroSectionProps) {
             </div>
           </motion.div>
 
-          {/* Social Proof */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.4 }}
-            className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row"
-          >
-            {/* Avatar Stack */}
-            <div className="flex -space-x-3">
-              {avatars.map((avatar, i) => (
-                <Avatar
-                  key={i}
-                  className="h-10 w-10 border-2 border-white ring-0"
-                >
-                  <AvatarImage src={avatar.src} />
-                  <AvatarFallback className="bg-landing-bg-muted text-xs text-landing-text-muted">
-                    {avatar.fallback}
-                  </AvatarFallback>
-                </Avatar>
-              ))}
-            </div>
-
-            {/* Stars & Count */}
-            <div className="flex items-center gap-2">
-              <div className="flex text-yellow-400">
-                {[...Array(5)].map((_, i) => (
-                  <svg
-                    key={i}
-                    className="h-4 w-4 fill-current"
-                    viewBox="0 0 20 20"
-                  >
-                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                  </svg>
-                ))}
-              </div>
-              <span className="text-sm text-landing-text-muted">
-                Trusted by <span className="font-semibold text-landing-text">500+</span> engineers
-              </span>
-            </div>
-          </motion.div>
         </div>
 
         {/* Dashboard Preview */}

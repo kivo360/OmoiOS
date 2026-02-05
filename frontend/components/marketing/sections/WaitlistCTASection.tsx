@@ -47,7 +47,7 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
   return (
     <section
       className={cn(
-        "relative overflow-hidden bg-landing-bg-dark py-24 md:py-32",
+        "relative overflow-hidden bg-landing-bg-dark py-16 md:py-24",
         className
       )}
     >
@@ -158,10 +158,6 @@ export function WaitlistCTASection({ className }: WaitlistCTASectionProps) {
               </Button>
             </form>
 
-            {/* Trust note */}
-            <p className="mt-4 text-sm text-gray-400">
-              Join <span className="font-semibold text-landing-accent">500+</span> engineers already building with OmoiOS
-            </p>
           </motion.div>
 
           {/* Trust Elements */}
