@@ -87,5 +87,10 @@ backend/omoios.db
 node_modules/
 pnpm-lock.yaml
 
+# Rust (tools/resmgr)
+**/target/
+**/*.rs.bk
+
 # System files
 ITERATION_NOTES.md
+.vercel

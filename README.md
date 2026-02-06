@@ -6,6 +6,21 @@ OmoiOS orchestrates multiple AI agents through adaptive, phase-based workflows w
 
 ---
 
+## 📖 Start Here: Architecture Overview
+
+> **New to the codebase?** Start with **[ARCHITECTURE.md](./ARCHITECTURE.md)** — a comprehensive guide to the six core systems that power OmoiOS:
+>
+> 1. **Planning System** — Spec-sandbox state machine (EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC)
+> 2. **Execution System** — OrchestratorWorker → DaytonaSpawner → ClaudeSandboxWorker pipeline
+> 3. **Discovery System** — Adaptive workflow branching (Hephaestus pattern)
+> 4. **Readjustment System** — MonitoringLoop with IntelligentGuardian and Conductor
+> 5. **Memory & Context System** — Pattern RAG and cross-phase context aggregation
+> 6. **DAG Merge System** — Parallel work convergence with conflict resolution
+>
+> **Current Status**: Core systems are implemented and need integration testing before production use.
+
+---
+
 ## Monorepo Architecture
 
 This project uses **uv workspaces** for unified Python dependency management across all packages.
@@ -359,6 +374,7 @@ vercel deploy
 
 ## Learn More
 
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — Complete system architecture (START HERE)
 - [Product Vision](docs/product_vision.md)
 - [Phase System](docs/design/workflows/omoios_phase_system_comparison.md)
 - [Frontend Package](docs/FRONTEND_PACKAGE.md)

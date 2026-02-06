@@ -64,7 +64,9 @@ This automatically loads from `.env` / `.env.local` files with proper precedence
 
 ## Documentation
 
-See `../docs/` for complete documentation:
+**Start here**: [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — Complete system architecture overview
+
+Additional documentation in `../docs/`:
 - Architecture: `../docs/design/`
 - Requirements: `../docs/requirements/`
 - Implementation: `../docs/implementation/`

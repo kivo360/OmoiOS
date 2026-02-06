@@ -49,9 +49,10 @@ from dateutil import parser as date_parser
 from pathlib import Path
 import argparse
 
-# Import swipe file parser
+# Import swipe file parser and tracker
 sys.path.insert(0, str(Path(__file__).parent))
 from swipe_file_parser import get_posts_by_category, SwipeFilePost
+from post_tracker import PostTracker, filter_unused_posts
 
 # ============================================================================
 # Configuration
@@ -187,14 +188,25 @@ def is_bip_post(post: SwipeFilePost) -> bool:
     return False
 
 
-def load_posts_from_swipe_files(prioritize_engagement: bool = True) -> tuple[list[SwipeFilePost], list[SwipeFilePost]]:
+def load_posts_from_swipe_files(
+    prioritize_engagement: bool = True,
+    tracker: PostTracker | None = None,
+) -> tuple[list[SwipeFilePost], list[SwipeFilePost]]:
     """
     Load posts from swipe files and separate into BIP and regular.
+    Filters out posts that have already been used (tracked).
 
     Returns:
         (bip_posts, regular_posts)
     """
     posts_by_category = get_posts_by_category()
+
+    # Filter out already-used posts if tracker provided
+    if tracker:
+        for category in posts_by_category:
+            posts_by_category[category] = filter_unused_posts(
+                posts_by_category[category], tracker
+            )
 
     bip_posts = []
     regular_posts = []
@@ -229,6 +241,7 @@ def build_schedule(
     num_weeks: int = 1,
     include_bip: bool = True,
     prioritize_engagement: bool = True,
+    tracker: PostTracker | None = None,
 ) -> list[dict]:
     """
     Build a unified schedule for the specified number of weeks.
@@ -237,9 +250,10 @@ def build_schedule(
     - BIP posts go at 8pm (golden hour) - best engagement time
     - Regular posts fill remaining slots
     - No overlap - each slot has exactly one post
+    - Filters out already-used posts via tracker
     """
-    # Load posts from markdown files
-    bip_posts, regular_posts = load_posts_from_swipe_files(prioritize_engagement)
+    # Load posts from markdown files (filtered by tracker if provided)
+    bip_posts, regular_posts = load_posts_from_swipe_files(prioritize_engagement, tracker)
 
     print(f"✓ Loaded {len(bip_posts)} BIP posts, {len(regular_posts)} regular posts from swipe files")
 
@@ -396,6 +410,11 @@ def main():
     log(f"✓ Schedule: {start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')} ({args.weeks} week{'s' if args.weeks > 1 else ''})")
     log(f"✓ Timezone: {args.timezone}")
 
+    # Initialize tracker for persistent history
+    tracker = PostTracker()
+    tracker_stats = tracker.get_stats()
+    log(f"📊 Tracker: {tracker_stats['total_tracked']} posts already used")
+
     # Build schedule
     log("\n📚 Loading posts from swipe files...")
     include_bip = not args.no_bip
@@ -406,6 +425,7 @@ def main():
         num_weeks=args.weeks,
         include_bip=include_bip,
         prioritize_engagement=prioritize_engagement,
+        tracker=tracker,
     )
 
     bip_count = sum(1 for s in schedule if s["destination"] == "BIP")
@@ -467,8 +487,17 @@ def main():
             sig = content[:80].strip().lower()
 
         if sig in existing_signatures:
-            log(f"           ⏭️  SKIPPED (duplicate)")
+            log(f"           ⏭️  SKIPPED (duplicate in Typefully)")
             skipped += 1
+            # Still track as used since it's already in Typefully
+            content_for_tracking = content[0] if isinstance(content, list) else content
+            tracker.mark_used(
+                content=content_for_tracking,
+                category=item["category"],
+                source_file=item.get("source_file", "unknown"),
+                platform="typefully",
+                scheduled_date=item["datetime"].isoformat(),
+            )
             continue
 
         if args.dry_run:
@@ -499,6 +528,17 @@ def main():
             log(f"           ✓ Created: {draft_id}")
             created += 1
             existing_signatures.add(sig)
+
+            # Track this post as used
+            content_for_tracking = content[0] if isinstance(content, list) else content
+            tracker.mark_used(
+                content=content_for_tracking,
+                category=item["category"],
+                source_file=item.get("source_file", "unknown"),
+                platform="typefully",
+                scheduled_date=item["datetime"].isoformat(),
+                typefully_draft_id=str(draft_id),
+            )
 
             # Rate limiting
             remaining = rate_info.get("remaining")

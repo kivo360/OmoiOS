@@ -1,0 +1,101 @@
+id,first_name,last_name,full_name,title,email,email_status,linkedin_url,company_name,company_website,company_size,company_funding_stage,company_industry,company_linkedin_url,location,score,pulled_at,conversion_score,title_category,email_variant
+5d4d7da1a3ae614d0194928e,Suki,,,Immigration and Relocation Consultant Team Lead,suki@aims.sg,verified,,AIMS Immigration & Relocation Specialist,,,,,,,2,2026-02-03T17:17:45.671829,14,consultant,A
+54a5fb027468693442206eb8,Milica,,,Legal Advisor/Immigration Specialist,milica@tulexabogados.com,verified,,TULEX   INTERNATIONAL LAWYERS SPAIN,,,,,,,2,2026-02-03T17:17:44.906880,12,consultant,B
+5d5b78d7f65125d1c03c2a76,Aaron,,,Relocation Consultant,chan@aims.sg,verified,,AIMS Immigration & Relocation Specialist,,,,,,,2,2026-02-03T17:17:44.907010,12,consultant,A
+54a3ee75746869367620ac1e,Chitra,,,Relocation Consultant,chitra.gunapala@cs-mobility.com,verified,,CS Mobility,,,,,,,2,2026-02-03T17:17:45.671128,12,consultant,B
+61995cb44198f4000162d9a3,Julia,,,Relocation Consultant,julia.chow@cs-mobility.com,verified,,CS Mobility,,,,,,,2,2026-02-03T17:17:45.671295,12,consultant,A
+68664ec0bd30740001abef28,Shirlee,,,Relocation Consultant,shirlee.tay@altairglobal.com,verified,,Altair Global,,,,,,,2,2026-02-03T17:17:45.671354,12,consultant,B
+5e64a77f51eafc00011b6880,Ervan,,,Visa Consultant,ervan@letsmoveindonesia.com,verified,,LMI Consultancy,,,,,,,2,2026-02-03T17:17:45.671373,12,consultant,A
+630488c65b6f8700012b97f1,Marta,,,Relocation Consultant,mvo@eresrelocation.com,verified,,Eres Relocation Europe,,,,,,,2,2026-02-03T17:17:45.671436,12,consultant,B
+54a9ad30746869339977b016,Matteo,,,Visa Consultant,matteo.berta@visa-milano.it,verified,,STM & PARTNERS,,,,,,,2,2026-02-03T17:17:45.671810,12,consultant,A
+6127889eadd58b00014459fc,Silvia,,,Relocation Consultant,s.garcia@eresrelocation.com,verified,,Eres Relocation Europe,,,,,,,2,2026-02-03T17:17:45.671826,12,consultant,B
+6428314186d68f0001951bff,Ni,,,Visa Consultant,nariswari@lmiconsultancy.com,verified,,LMI Consultancy,,,,,,,2,2026-02-03T17:17:45.671832,12,consultant,A
+5d648d0ba3ae6198492d922e,Elena,,,Relocation Consultant,e.lopez-amor@eresrelocation.com,verified,,Eres Relocation Europe,,,,,,,2,2026-02-03T17:17:45.671848,12,consultant,B
+54c1b8e87468697af7f70b3d,Giovanna,,,Relocation Consultant,giovanna@uniquerelo.com.br,verified,,Unique Relocation,,,,,,,2,2026-02-03T17:17:45.671859,12,consultant,A
+66d493958238b6000162a4b0,Shenani,,,Immigration Consultant & Administrative Specialist,shenani@walkerdavis.net,extrapolated,,Walker Davis Consultants,,,,,,,1,2026-02-03T17:17:45.671806,12,consultant,B
+66fd67b7a5c8530001bd9ed2,Claudio,,,"Co-Founder and CEO, Founder and Director",c.poggio@juneco.it,verified,,JUNECO,,,,,,,4,2026-02-03T17:17:44.906824,11,founder_owner,A
+54a1fd2c7468693cdd815703,Andhika,,,"Co-Founder and Director, Founder & CEO",andhika.baramuli@inensunan.com,verified,,PT Inensunan Mills Indonesia,,,,,,,4,2026-02-03T17:17:44.906839,11,founder_owner,B
+54a5d0d07468693b8c9714ab,Prashant,,,"Founder, Director and CEO",prashant.kothari@alt-alpha.com,verified,,Alpha Alternatives,,,,,,,4,2026-02-03T17:17:45.671254,11,founder_owner,A
+60e2dbea00730c0001a81ac5,Rachie,,,Founder | Director | CEO,rachie.hui@skill-frontiers.com,verified,,Skill Frontiers Pte Ltd,,,,,,,4,2026-02-03T17:17:45.671407,11,founder_owner,B
+54ebbee6746869444cd9771b,Anup,,,Founder CEO and Director,anup@securityquotient.io,verified,,Security Quotient,,,,,,,4,2026-02-03T17:17:45.671787,11,founder_owner,A
+67a311a362c4250001b40287,Francis,,,CEO/Director/Co-founder,francis.lew@penguinsecurities.sg,verified,,Penguin Securities,,,,,,,4,2026-02-03T17:17:45.671803,11,founder_owner,B
+54a421127468693209240f2f,Alphonsus,,,"Founder, Director, CEO",alphonsus.tan@advent-star.com,verified,,Advent Star Pte Ltd,,,,,,,4,2026-02-03T17:17:45.671839,11,founder_owner,A
+66fc9f9a0cbf900001671e70,Akira,,,Founder / CEO / Director,amorishita@bushiroad.com,verified,,Bushiroad Inc.,,,,,,,4,2026-02-03T17:17:45.671843,11,founder_owner,B
+6103a00cf9347a00019ccd1a,Philibert,,,CEO - Owner & Founder,philibert@asia-relocation.com,verified,,"ASIA RELOCATION (Philippines, Vietnam, Thailand)",,,,,,,2,2026-02-03T17:17:44.126518,11,founder_owner,A
+671fe0fa72852d0001e1481e,Arnaldo,,,Owner CEO and Founder,arnaldo@quorumservices.com.br,verified,,QUORUM SERVICES,,,,,,,2,2026-02-03T17:17:44.906763,11,founder_owner,B
+66f79739ebc1990001520c36,John,,,Founder/CEO/Owner,john@freightspeed.ie,verified,,FreightSpeed Group,,,,,,,2,2026-02-03T17:17:44.906782,11,founder_owner,A
+614ae35b174bae000107d787,Domenico,,,Founder - Owner - CEO,dsalzano@s4bt.it,verified,,S4BT - Solutions for Business & Technology,,,,,,,2,2026-02-03T17:17:44.906808,11,founder_owner,B
+54a270987468693cdd4b2323,Assuero,,,CEO / Owner / Founder,assuero.bruno@lacasachevoglio.com,verified,,LaCASAcheVOGLIO - Advanced Real Estate Services,,,,,,,2,2026-02-03T17:17:44.906878,11,founder_owner,A
+5e83e6f2834a7c0001ec39a9,Fernando,,,CEO & Owner & Founder,fernando.rincon@vestypro.es,verified,,VYP Vestypro Group,,,,,,,2,2026-02-03T17:17:44.906886,11,founder_owner,B
+57db1af1a6da984be85ba7e4,Eric,,,"Founder, Owner & CEO",eantones@nuobit.com,verified,,"NuoBiT Solutions, S.L.",,,,,,,2,2026-02-03T17:17:44.906910,11,founder_owner,A
+65246ef167e9670001d8afa9,Luciano,,,Immigration Advisor,luciano@theimmigrationoffice.com,verified,,The Immigration Office,,,,,,,2,2026-02-03T17:17:45.671778,11,consultant,B
+66fa601dfc0afa0001cfb322,Bernd,,,CEO/Owner and Founder,bernd.maerkle@mobilemodularsolutions.com,verified,,MMS - Mobile Modular Solutions S.r.l.,,,,,,,2,2026-02-03T17:17:45.671821,11,founder_owner,A
+5f0dcd22a1c69e0001061456,Gianfranco,,,Immigration Advisor,gianfrancorojas@sagardoylegalexpat.com,verified,,Sagardoy Legal & Expat,,,,,,,2,2026-02-03T17:17:45.671823,11,consultant,B
+66fa3c4416af6200011c3a44,Riccardo,,,"Chief Executive Officer, Founder and Owner",iacometti.r@taleagroupspa.com,extrapolated,,Talea Group,,,,,,,1,2026-02-03T17:17:44.906800,11,founder_owner,A
+66ac9a690cadfe00012a7721,Sarah,,,Visa Consultant,sarah.jane@atpi.com,verified,,ATPI,,,,,,,2,2026-02-03T17:17:44.906883,9,consultant,B
+54a71322746869705a1e1513,Megha,,,Relocation Consultant,megha.thakkar@relocity.com,verified,,"Relocity, Inc.",,,,,,,2,2026-02-03T17:17:44.906921,9,consultant,A
+68261cd18ab9f8000110fc20,Ximena,,,Relocation Consultant,ximenavidal@contactochile.cl,verified,,ContactoChile i.r.s.,,,,,,,2,2026-02-03T17:17:45.671449,9,consultant,B
+54a4be17746869320906a15f,Graziella,,,Relocation Consultant,graziella@portugalbuyersagent.com,verified,,Goldcrest Real Estate,,,,,,,2,2026-02-03T17:17:45.671728,9,consultant,A
+54c2290d7468697af70f8d80,Magesh,,,Visa Consultant,sivaraman@y-axis.com,verified,,Y-Axis Overseas Careers,,,,,,,2,2026-02-03T17:17:45.671762,9,consultant,B
+66459af4533b4800011baf2b,Winona,,,Visa Consultant,winona.salsabila@os-selnajaya.com,verified,,PT OS SELNAJAYA INDONESIA,,,,,,,2,2026-02-03T17:17:45.671775,9,consultant,A
+633f39fa51eb9b000112a28c,Manuela,,,Visa Consultant,manuela.souza@cibt.com,verified,,CIBT,,,,,,,2,2026-02-03T17:17:45.671785,9,consultant,B
+6662903bc1488a00014f8581,Arvin,,,Visa Consultant,abanaticla@ifza.com,verified,,International Free Zone Authority | IFZA,,,,,,,2,2026-02-03T17:17:45.671790,9,consultant,A
+68c5c8b24a614100017462bc,Phuong,,,Visa Consultant,phuongnhi.nguyen@idp.com,verified,,IDP Education Ltd,,,,,,,2,2026-02-03T17:17:45.671862,9,consultant,B
+679fff1e16682c00016e9466,Alishba,,,Relocation Advisor,alishba@hofmigration.com,extrapolated,,HOF Migration,,,,,,,1,2026-02-03T17:17:44.906757,9,consultant,A
+651fcf90f067ea000140eaf2,Saliza,,,Visa Consultant,saliza.maideen@cibt.com,extrapolated,,CIBT,,,,,,,1,2026-02-03T17:17:45.671313,9,consultant,B
+622c67c8af382e0001a2c34c,Maria,,,Real Estate Advisor/ Relocation Consultant,zampoka@oikies.net,extrapolated,,Oikies Real Estate,,,,,,,1,2026-02-03T17:17:45.671798,9,consultant,A
+61ebe81847b58a000139b892,Robin,,,Visa Consultant,robin@afcholidays.com,extrapolated,,AFC Holidays,,,,,,,1,2026-02-03T17:17:45.671857,9,consultant,B
+64248ef31d78160001c8cbd6,John,,,Immigration Consultant/ Sales Advisor,john@roccitizenship.com,verified,,ROC Citizenship,,,,,,,2,2026-02-03T17:17:44.126353,8,consultant,A
+54a31be67468692e714c0255,Gisela,,,Owner/Founder CEO,gisela.turazzini@blackbird.es,verified,,BLACKBIRD,,,,,,,2,2026-02-03T17:17:44.126492,8,founder_owner,B
+56395205a6da9859a2006640,Markus,,,"CEO, Co-Founder & Owner",markus@avantcha.com,verified,,AVANTCHA Tea,,,,,,,2,2026-02-03T17:17:44.126538,8,founder_owner,A
+54c217137468691639477577,Matteo,,,CEO - Founder & Owner,matteo.ciarapica@wolftank.com,verified,,Wolftank Latinoamérica LTDA,,,,,,,2,2026-02-03T17:17:44.126546,8,founder_owner,B
+66f82507ae47ef00017c0a9b,Samantha,,,"Founder, Owner & CEO",samc@thesocialcraft.com,verified,,The Social Craft,,,,,,,2,2026-02-03T17:17:44.906737,8,founder_owner,A
+664c961921a80600016393dd,Luciano,,,Founder | CEO | Owner,renzo@letitroll.com.br,verified,,Let it Roll Agência,,,,,,,2,2026-02-03T17:17:44.906765,8,founder_owner,B
+54a2cba07468693fdae5563d,Umran,,,CEO / Founder / Owner,umran@yalla-vape.com,verified,,Yalla,,,,,,,2,2026-02-03T17:17:44.906768,8,founder_owner,A
+66f5146ec33fa10001d8ef28,Luca,,,"CEO, Owner, Founder",l.causser@nordpas.com,verified,,NORDPAS14000,,,,,,,2,2026-02-03T17:17:44.906774,8,founder_owner,B
+60ed3d43b3014200010eaa8c,Michele,,,"Founder, Owner & CEO",michele.feroli@siralab.com,verified,,Siralab Robotics,,,,,,,2,2026-02-03T17:17:44.906777,8,founder_owner,A
+5ff9b62782107100018e8726,Chitra,,,"Owner, Founder and Chief Executive Officer",chitra@martinhal.com,verified,,Martinhal Residences,,,,,,,2,2026-02-03T17:17:44.906780,8,founder_owner,B
+66f81514ae47ef00017763c2,Fabio,,,"Owner, Founder and CEO",f.dilupo@operadigitale.it,verified,,Opera Digitale,,,,,,,2,2026-02-03T17:17:44.906785,8,founder_owner,A
+54ec11f5746869444c4f4c49,Massimo,,,"Co-Founder, Owner and CEO",massimo.ruggieri@arcipelago-it.it,verified,,Arcipelago IT S.r.l.,,,,,,,2,2026-02-03T17:17:44.906794,8,founder_owner,B
+66ecf70370be520001266bf4,Rudi,,,"CEO, Owner and Founder",rudi.bragagni@ironstechnology.it,verified,,Iron's Technology s.r.l.,,,,,,,2,2026-02-03T17:17:44.906797,8,founder_owner,A
+54ead59a74686931b82b0302,Armando,,,Owner Founder and CEO,armando.bernal@mktools.com.co,verified,,Marketing Tools,,,,,,,2,2026-02-03T17:17:44.906803,8,founder_owner,B
+57d4c848a6da9853defb88d0,Ivica,,,CEO (Owner and Founder),iperica@umium.hr,verified,,UMiUM Advisory,,,,,,,2,2026-02-03T17:17:44.906806,8,founder_owner,A
+54a498927468693676ded053,Manel,,,"Founder, Owner and CEO",maneldelgado@gestpalvalles.com,verified,,"GESTPAL VALLÉS, S.L.",,,,,,,2,2026-02-03T17:17:44.906811,8,founder_owner,B
+671e2e39d7a71f0001da1f5a,Constanca,,,"Founder, Owner & CEO",geral@genevet.pt,verified,,Genevet,,,,,,,2,2026-02-03T17:17:44.906816,8,founder_owner,A
+57dd1d4da6da987b0d8a868b,Marco,,,Founder Owner & CEO,mgruppi@shiremusicfestival.com,verified,,Shire Music Festival,,,,,,,2,2026-02-03T17:17:44.906819,8,founder_owner,B
+54a2cd497468693cddffec3d,Daniele,,,Founder / Owner & Chief Executive Officer,daniele.candido@luxervenice.it,verified,,Luxer Venice,,,,,,,2,2026-02-03T17:17:44.906830,8,founder_owner,A
+54a456b4746869367655c23f,Marco,,,"Owner, CEO and Founder",marco@acumapharma.it,verified,,ACUMApharma,,,,,,,2,2026-02-03T17:17:44.906833,8,founder_owner,B
+5571322573696461d2c60e00,Samir,,,"Owner, CEO & Founder",shaddad@haddad.hr,verified,,Haddad doo,,,,,,,2,2026-02-03T17:17:44.906841,8,founder_owner,A
+54a517fa7468692abf92757c,Roberto,,,Owner & Founder-CEO,robertoa@videora.net,verified,,VideoRA,,,,,,,2,2026-02-03T17:17:44.906844,8,founder_owner,B
+66fd95c9fb83f20001c154b3,Aoon,,,Founder / CEO / Owner,aoon@infinitperformance.co.uk,verified,,Infinit Performance Dubai,,,,,,,2,2026-02-03T17:17:44.906847,8,founder_owner,A
+68146bf1729f120001dba9c2,Rui,,,Founder Owner and CEO,ruimartins@barcelbordados.com,verified,,BarcelBordados,,,,,,,2,2026-02-03T17:17:44.906850,8,founder_owner,B
+602f4d049190740001c50560,Adriana,,,"Founder and CEO, Owner",adriana@exposki.com.br,verified,,ExpoSKI,,,,,,,2,2026-02-03T17:17:44.906852,8,founder_owner,A
+54a55d8b7468692cf0e64592,Eleonora,,,Founder | Owner | C.E.O.,e.zampaglione@marteinternational.it,verified,,Mar-Te International Srl,,,,,,,2,2026-02-03T17:17:44.906858,8,founder_owner,B
+680d6fc77d7f670001006c04,Antonio,,,Owner/Founder CEO,antonio.valagao@valagao.com,verified,,Valagão Ventures,,,,,,,2,2026-02-03T17:17:44.906864,8,founder_owner,A
+54aacecc74686923665a201b,Renato,,,"Founder, Owner and CEO",renato.monta@dminformatica.it,verified,,DM Informatica S.r.l.,,,,,,,2,2026-02-03T17:17:44.906866,8,founder_owner,B
+5e64cc947a8d3a00014fd6b5,Sagi,,,"Owner and Founder, CEO",srozen@noaharkholdings.com,verified,,Noah's Ark Developments,,,,,,,2,2026-02-03T17:17:44.906872,8,founder_owner,A
+54a507677468693b8c600577,Sara,,,"Founder, Owner and CEO",sara.carrion@classicalautodetailers.com,verified,,Classical Auto Detailers,,,,,,,2,2026-02-03T17:17:44.906875,8,founder_owner,B
+54a5bbeb7468693b8c1022a4,Olaf,,,"CEO, Founder, Owner",olaf.gieschen@birkkeland.de,verified,,Birkkeland GmbH,,,,,,,2,2026-02-03T17:17:44.906905,8,founder_owner,A
+54a94b967468693399418b10,Daniele,,,"Founder, Owner and CEO",daniele.bassetto@quaga.it,verified,,Quaga Sas,,,,,,,2,2026-02-03T17:17:44.906907,8,founder_owner,B
+60ffb5205aa24900010ff843,Enrique,,,CEO/Founder/Owner,ecp@ibercentro.com,verified,,IberCentro || Sistemas de Información - SAAS -,,,,,,,2,2026-02-03T17:17:44.906918,8,founder_owner,A
+5dc69f8d1da2e90001bf0991,Gesiri,,,"Chief Executive Officer, Founder / Owner",gesiri.gambung@eternitymode.com,verified,,Eternity Mode Sdn Bhd,,,,,,,2,2026-02-03T17:17:44.906931,8,founder_owner,B
+6112cf95cac44f000160deea,Wilmer,,,Owner - Founder CEO,wilmerrojas@sertrex.es,verified,,Sertrex,,,,,,,2,2026-02-03T17:17:44.906942,8,founder_owner,A
+54a1c83e74686945fa3d8d10,Andika,,,Founder/ Owner & CEO,andika@syafaat.com,verified,,Syafa'at Marcomm,,,,,,,2,2026-02-03T17:17:44.906966,8,founder_owner,B
+5f4e4b3df665f40001ce8fb3,Hugo,,,CEO/Founder/Owner,hugolopes@trickingportugal.com,verified,,Academia Tricking Portugal,,,,,,,2,2026-02-03T17:17:44.906982,8,founder_owner,A
+57dd3900a6da987b3d3d0c97,Carlos,,,CEO/Founder/Owner,carlos.campo@infinitypilates.es,verified,,INFINITY Pilates Oviedo,,,,,,,2,2026-02-03T17:17:44.906995,8,founder_owner,B
+54a81264746869705af7665f,Mohamed,,,Global Mobility and Immigration Consultant,mabdelmageed@fragomen.com,verified,,Fragomen,,,,,,,2,2026-02-03T17:17:45.671113,8,consultant,A
+66f5e80ac5abd30001645d25,Andrea,,,"Owner,ceo&founder",andreacolzani@c-hotel.it,verified,,C-HOTEL&SPA,,,,,,,2,2026-02-03T17:17:45.671236,8,founder_owner,B
+66ed1019c5c5500001d148df,Bella,,,Immigration Advisor,bella.alba@resify.es,verified,,RESIFY,,,,,,,2,2026-02-03T17:17:45.671782,8,consultant,A
+611502df6ad4c30001589f81,Istofani,,,"Founder & CEO, Business Owner, Founder & CEO",istofani@fitacademy.id,verified,,Fitacademy.id,,,,,,,2,2026-02-03T17:17:45.671845,8,founder_owner,B
+683d12bb886c9e0001daf942,Francesco,,,Immigration and Global Mobility Consultant,francesco.mancini@ey.com,extrapolated,,EY,,,,,,,1,2026-02-03T17:17:45.671771,8,consultant,A
+613a1f607b8bc000015f5e09,Claudia,,,Immigration Lawyer,claudia@brs-mobility.com,verified,,BRS GLOBAL MOBILITY,,,,,,,2,2026-02-03T17:17:42.526228,7,lawyer,B
+68441649d1c32000014e9481,Athanasia,,,Immigration Attorney,akogiou@machas-partners.com,verified,,Machas & Partners Law Firm,,,,,,,2,2026-02-03T17:17:42.526244,7,lawyer,A
+66accbfbbcb5be0001e3c95c,Laura,,,Immigration Attorney,lchavarria@immigrationcr.com,verified,,ImmigrationCR,,,,,,,2,2026-02-03T17:17:43.327319,7,lawyer,B
+61b44728382edf0001e8ca36,Mercan,,,Immigration Attorney,investors@mercan.com,verified,,Mercan Group Middle East Office,,,,,,,2,2026-02-03T17:17:43.327417,7,lawyer,A
+57dda1c8a6da987af53a0f84,Touch,,,Relocation Specialist,t.sao@interpol.int,verified,,INTERPOL,,,,,,,2,2026-02-03T17:17:45.671795,7,specialist,B
+5dfb5b19dae2cc00012b7831,Caroline,,,Immigration Lawyer,caroline.gregorio@lopes.law,verified,,"LOPES LAW, PLLC",,,,,,,2,2026-02-03T17:17:42.526191,4,lawyer,A
+5e7c09289fd7700001b48a18,Alessia,,,Immigration Lawyer,alessia.peschiera@lexidy.com,verified,,Lexidy,,,,,,,2,2026-02-03T17:17:42.526203,4,lawyer,B
+5efc7e71e7f2660001e2d1b7,Inge,,,Immigration Attorney,inge.polz@carbray.es,verified,,Carbray International,,,,,,,2,2026-02-03T17:17:42.526230,4,lawyer,A
+64299f1713c17a0001135c1e,Ilp,,,Immigration Lawyer,uae@ilpuk.com,verified,,ILPUK Official,,,,,,,2,2026-02-03T17:17:42.526241,4,lawyer,B
+6198766d2a854e0001aad307,Amanda,,,Immigration Attorney,amanda@freshportugal.com,verified,,Fresh Portugal,,,,,,,2,2026-02-03T17:17:42.526248,4,lawyer,A
+6422c2199dd18600018436a0,Denise,,,Immigration Attorney,dpianazza@fragomen.com,verified,,Fragomen,,,,,,,2,2026-02-03T17:17:42.526255,4,lawyer,B

@@ -95,6 +95,114 @@ AGENCY_ICP = {
     ],
 }
 
+# Relocation Services ICP: Anyone who helps people move between countries
+# Broader than just lawyers - includes consultants, advisors, accountants, etc.
+RELOCATION_SERVICES_ICP = {
+    "person_titles": [
+        # Consultants & Advisors (prioritize these - easier to talk to)
+        "relocation consultant",
+        "relocation specialist",
+        "relocation advisor",
+        "immigration consultant",
+        "visa consultant",
+        "expat consultant",
+        "expat advisor",
+        "global mobility consultant",
+        "global mobility specialist",
+        "mobility consultant",
+        # Business/Founders
+        "founder",
+        "co-founder",
+        "owner",
+        "managing director",
+        "director",
+        "ceo",
+        # Accountants & Tax
+        "international tax",
+        "expat tax",
+        "cross-border tax",
+        # Immigration (non-lawyer)
+        "immigration specialist",
+        "immigration advisor",
+        "immigration officer",
+        # Lawyers (still include but not the focus)
+        "immigration lawyer",
+        "immigration attorney",
+    ],
+    "person_locations": [
+        # Popular expat destinations - expanded
+        "United Arab Emirates",
+        "Dubai",
+        "Portugal",
+        "Spain",
+        "Panama",
+        "Mexico",
+        "Costa Rica",
+        "Paraguay",
+        "Uruguay",
+        "Colombia",
+        "Argentina",
+        "Brazil",
+        "Thailand",
+        "Malaysia",
+        "Singapore",
+        "Indonesia",
+        "Vietnam",
+        "Philippines",
+        "Ecuador",
+        "Chile",
+        "Peru",
+        "Dominican Republic",
+        "Belize",
+        "Nicaragua",
+        "Greece",
+        "Italy",
+        "Croatia",
+        "Cyprus",
+        "Malta",
+        "Ireland",
+    ],
+}
+
+# Non-lawyer focused ICP for better balance
+RELOCATION_CONSULTANTS_ICP = {
+    "person_titles": [
+        "relocation consultant",
+        "relocation specialist",
+        "relocation advisor",
+        "relocation manager",
+        "expat consultant",
+        "expat advisor",
+        "expat specialist",
+        "global mobility consultant",
+        "global mobility specialist",
+        "global mobility manager",
+        "mobility consultant",
+        "visa consultant",
+        "visa specialist",
+        "immigration consultant",
+        "immigration specialist",
+    ],
+    "person_locations": [
+        "United Arab Emirates",
+        "Portugal",
+        "Spain",
+        "Panama",
+        "Mexico",
+        "Costa Rica",
+        "Paraguay",
+        "Uruguay",
+        "Colombia",
+        "Thailand",
+        "Malaysia",
+        "Singapore",
+        "Indonesia",
+    ],
+}
+
+# Keep the old name as alias for backward compatibility
+IMMIGRATION_LAWYER_ICP = RELOCATION_SERVICES_ICP
+
 
 # =============================================================================
 # Data Classes
@@ -138,6 +246,7 @@ class ApolloClient:
         self.session.headers.update({
             "Content-Type": "application/json",
             "Cache-Control": "no-cache",
+            "X-Api-Key": api_key,  # API key must be in header
         })
 
     def search_people(
@@ -151,17 +260,27 @@ class ApolloClient:
 
         This endpoint is FREE and doesn't consume credits.
         It returns basic info but NOT emails.
-        """
-        url = f"{APOLLO_BASE_URL}/mixed_people/search"
 
-        payload = {
-            "api_key": self.api_key,
+        Note: Apollo API expects filters as query parameters, not JSON body.
+        """
+        # Build query parameters - Apollo uses array notation for lists
+        params = {
             "page": page,
             "per_page": per_page,
-            **filters,
         }
 
-        response = self.session.post(url, json=payload)
+        # Convert filters to query params with array notation
+        for key, value in filters.items():
+            if isinstance(value, list):
+                # Apollo expects array params like person_titles[]=value1&person_titles[]=value2
+                params[f"{key}[]"] = value
+            else:
+                params[key] = value
+
+        # Use api_search endpoint (free, doesn't consume credits) instead of search
+        url = f"{APOLLO_BASE_URL}/mixed_people/api_search"
+
+        response = self.session.post(url, params=params)
         response.raise_for_status()
 
         return response.json()
@@ -175,7 +294,6 @@ class ApolloClient:
         url = f"{APOLLO_BASE_URL}/people/match"
 
         payload = {
-            "api_key": self.api_key,
             "id": person_id,
             "reveal_personal_emails": False,
         }
@@ -185,35 +303,30 @@ class ApolloClient:
 
         return response.json()
 
-    def bulk_enrich(self, person_ids: list[str]) -> list[dict]:
+    def bulk_enrich(self, person_ids: list[str], verbose: bool = True) -> list[dict]:
         """
-        Bulk enrich multiple people.
+        Enrich multiple people one at a time.
 
         WARNING: This COSTS CREDITS (1 per person).
-        Max 10 per request.
+        Uses single enrichment endpoint for reliability.
         """
-        url = f"{APOLLO_BASE_URL}/people/bulk_match"
-
         results = []
 
-        # Process in batches of 10
-        for i in range(0, len(person_ids), 10):
-            batch = person_ids[i:i+10]
+        for i, person_id in enumerate(person_ids):
+            if verbose and (i + 1) % 10 == 0:
+                print(f"    Enriched {i + 1}/{len(person_ids)}...")
 
-            payload = {
-                "api_key": self.api_key,
-                "ids": batch,
-                "reveal_personal_emails": False,
-            }
+            try:
+                enriched = self.enrich_person(person_id)
+                if enriched and enriched.get("person"):
+                    results.append(enriched["person"])
+            except Exception as e:
+                if verbose:
+                    print(f"    Warning: Could not enrich {person_id}: {e}")
+                continue
 
-            response = self.session.post(url, json=payload)
-            response.raise_for_status()
-
-            data = response.json()
-            results.extend(data.get("matches", []))
-
-            # Rate limiting
-            time.sleep(0.5)
+            # Rate limiting - be nice to the API
+            time.sleep(0.3)
 
         return results
 
@@ -246,45 +359,80 @@ def parse_person(person: dict) -> Lead:
     )
 
 
-def score_lead(lead: Lead) -> int:
+def score_lead(lead: Lead, icp_type: str = "primary") -> int:
     """Score a lead based on fit signals."""
     score = 0
 
-    # Funding stage scoring
-    funding = (lead.company_funding_stage or "").lower()
-    if "series_b" in funding or "series b" in funding:
-        score += 3  # Sweet spot
-    elif "series_a" in funding or "series a" in funding:
-        score += 2
-    elif "series_c" in funding or "series c" in funding:
-        score += 2
+    # Immigration lawyer scoring
+    if icp_type == "immigration":
+        title = (lead.title or "").lower()
+        industry = (lead.company_industry or "").lower()
 
-    # Company size scoring
-    try:
-        size = int(lead.company_size or 0)
-        if 100 <= size <= 300:
-            score += 3  # Sweet spot
-        elif 50 <= size < 100:
+        # Title scoring for immigration
+        if any(kw in title for kw in ["immigration", "visa", "relocation"]):
+            score += 3  # Direct match
+        elif any(kw in title for kw in ["founder", "owner", "managing partner", "principal"]):
+            score += 3  # Decision maker
+        elif "partner" in title:
             score += 2
-        elif 300 < size <= 500:
+        elif "lawyer" in title or "attorney" in title:
+            score += 2
+        elif "consultant" in title:
+            score += 2
+        elif "director" in title:
             score += 1
-    except (ValueError, TypeError):
-        pass
 
-    # Title scoring
-    title = (lead.title or "").lower()
-    if "vp" in title or "vice president" in title:
-        score += 2
-    elif "director" in title:
-        score += 2
-    elif "head" in title:
-        score += 2
-    elif "cto" in title:
-        score += 3  # Direct decision maker
-    elif "manager" in title:
-        score += 1
+        # Industry fit
+        if any(kw in industry for kw in ["legal", "law", "immigration"]):
+            score += 2
 
-    # Has email
+        # Small firm bonus (more likely to need automation)
+        try:
+            size = int(lead.company_size or 0)
+            if 1 <= size <= 20:
+                score += 2  # Sweet spot - small enough to need help
+            elif 21 <= size <= 50:
+                score += 1
+        except (ValueError, TypeError):
+            pass
+
+    else:
+        # Original engineering ICP scoring
+        # Funding stage scoring
+        funding = (lead.company_funding_stage or "").lower()
+        if "series_b" in funding or "series b" in funding:
+            score += 3  # Sweet spot
+        elif "series_a" in funding or "series a" in funding:
+            score += 2
+        elif "series_c" in funding or "series c" in funding:
+            score += 2
+
+        # Company size scoring
+        try:
+            size = int(lead.company_size or 0)
+            if 100 <= size <= 300:
+                score += 3  # Sweet spot
+            elif 50 <= size < 100:
+                score += 2
+            elif 300 < size <= 500:
+                score += 1
+        except (ValueError, TypeError):
+            pass
+
+        # Title scoring
+        title = (lead.title or "").lower()
+        if "vp" in title or "vice president" in title:
+            score += 2
+        elif "director" in title:
+            score += 2
+        elif "head" in title:
+            score += 2
+        elif "cto" in title:
+            score += 3  # Direct decision maker
+        elif "manager" in title:
+            score += 1
+
+    # Has email (universal)
     if lead.email and lead.email_status == "verified":
         score += 2
     elif lead.email:
@@ -309,7 +457,18 @@ def pull_leads(
 ) -> list[Lead]:
     """Pull leads from Apollo based on ICP criteria."""
 
-    filters = PRIMARY_ICP if icp_type == "primary" else AGENCY_ICP
+    if icp_type == "primary":
+        filters = PRIMARY_ICP
+    elif icp_type == "agency":
+        filters = AGENCY_ICP
+    elif icp_type == "immigration":
+        filters = IMMIGRATION_LAWYER_ICP
+    elif icp_type == "relocation":
+        filters = RELOCATION_SERVICES_ICP
+    elif icp_type == "consultants":
+        filters = RELOCATION_CONSULTANTS_ICP
+    else:
+        filters = PRIMARY_ICP
 
     leads = []
     page = 1
@@ -326,6 +485,9 @@ def pull_leads(
             response = client.search_people(filters, page=page, per_page=per_page)
         except requests.exceptions.HTTPError as e:
             print(f"Error: {e}")
+            # Print response body for debugging
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response: {e.response.text}")
             break
 
         people = response.get("people", [])
@@ -337,20 +499,25 @@ def pull_leads(
 
         for person in people:
             lead = parse_person(person)
-            lead.score = score_lead(lead)
+            lead.score = score_lead(lead, icp_type)
             leads.append(lead)
 
             if len(leads) >= max_leads:
                 break
 
+        total_entries = response.get("total_entries", 0)
         if verbose:
-            print(f"Got {len(people)} leads (total: {len(leads)})")
+            print(f"Got {len(people)} leads (total: {len(leads)}, available: {total_entries})")
 
-        # Check if we've hit the end
-        pagination = response.get("pagination", {})
-        total_pages = pagination.get("total_pages", 1)
+        # Check if we've hit the end - api_search doesn't return pagination
+        # so we check if we got fewer results than requested
+        if len(people) < per_page:
+            if verbose:
+                print("  Reached end of results.")
+            break
 
-        if page >= total_pages:
+        # Also check total_entries if available
+        if total_entries > 0 and len(leads) >= total_entries:
             break
 
         page += 1
@@ -431,6 +598,10 @@ def print_summary(leads: list[Lead]):
 
     print(f"\nTotal leads: {len(leads)}")
 
+    if not leads:
+        print("No leads to analyze.")
+        return
+
     # With emails
     with_email = [l for l in leads if l.email]
     print(f"With email: {len(with_email)} ({len(with_email)/len(leads)*100:.1f}%)")
@@ -489,9 +660,9 @@ def main():
 
     parser.add_argument(
         "--icp",
-        choices=["primary", "agency", "both"],
+        choices=["primary", "agency", "immigration", "relocation", "consultants", "both", "all"],
         default="primary",
-        help="Which ICP to search (default: primary)"
+        help="Which ICP to search: primary (eng leaders), agency (tech agencies), immigration/relocation (relocation services), consultants (non-lawyer consultants), both (primary+agency), all (default: primary)"
     )
 
     parser.add_argument(
@@ -530,7 +701,7 @@ def main():
     all_leads = []
 
     # Pull primary ICP
-    if args.icp in ["primary", "both"]:
+    if args.icp in ["primary", "both", "all"]:
         leads = pull_leads(
             client,
             icp_type="primary",
@@ -540,10 +711,20 @@ def main():
         all_leads.extend(leads)
 
     # Pull agency ICP
-    if args.icp in ["agency", "both"]:
+    if args.icp in ["agency", "both", "all"]:
         leads = pull_leads(
             client,
             icp_type="agency",
+            max_leads=args.max_leads,
+            verbose=verbose,
+        )
+        all_leads.extend(leads)
+
+    # Pull immigration lawyer ICP
+    if args.icp == "immigration" or args.icp == "all":
+        leads = pull_leads(
+            client,
+            icp_type="immigration",
             max_leads=args.max_leads,
             verbose=verbose,
         )

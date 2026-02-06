@@ -3,8 +3,8 @@ title: "Build in Public Posts"
 category: build-in-public
 tags: [transparency, progress, honest, updates, development]
 description: "Honest progress updates and transparent development insights"
-post_count: 12
-last_updated: 2026-01-13
+post_count: 13
+last_updated: 2026-02-04
 # Scheduling constraints
 scheduling:
   best_days: [friday]
@@ -224,5 +224,73 @@ what's NOT next:
 - magic that replaces engineers
 
 honesty > hype
+```
+
+---
+
+### BIP: Your Landing Page Is Lying To You (PostHog Reality Check)
+<!-- PINNABLE: true -->
+<!-- EVERGREEN: true -->
+<!-- HIGH_VALUE: true -->
+
+```
+you're getting traffic to your site.
+
+you think people are interested.
+
+then you watch the posthog sessions.
+
+reality:
+- avg session: 8 seconds
+- scroll depth: 23%
+- nobody clicks the CTA
+- they land, scan, leave
+
+my landing page is pretty.
+it doesn't SAY anything.
+
+"ai-powered development orchestration"
+"scale engineering without scaling headcount"
+
+what does that MEAN to someone who just landed?
+
+nothing.
+
+i watched 47 sessions this week.
+the pattern is brutal:
+1. land on page
+2. read headline
+3. scroll slightly
+4. leave
+
+they're not bouncing because they're not interested.
+they're bouncing because i didn't give them a reason to stay.
+
+here's what i'm changing:
+
+❌ before: "orchestrate agent swarms"
+✅ after: "your devs ship 2x more without working 2x harder"
+
+❌ before: features list
+✅ after: problem → solution → proof in 5 seconds
+
+❌ before: pretty gradients
+✅ after: screenshot of actual value
+
+the lesson:
+
+LOOK AT YOUR POSTHOG SESSIONS.
+
+not your analytics dashboard.
+not your traffic numbers.
+
+watch actual humans interact with your site.
+
+it's uncomfortable.
+it's humbling.
+it's the fastest way to stop lying to yourself.
+
+shipping the new landing page this week.
+will post the before/after with real session data.
 ```
 
