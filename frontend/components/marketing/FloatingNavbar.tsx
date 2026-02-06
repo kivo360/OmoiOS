@@ -33,7 +33,7 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
 
       {/* Mobile Header */}
       <header className="fixed left-0 right-0 top-11 z-50 md:hidden">
-        <div className="mx-4 mt-4 flex items-center justify-between rounded-full border border-landing-border bg-white/80 px-4 py-2 backdrop-blur-md">
+        <div className="mx-4 mt-4 flex items-center justify-between rounded-full border border-landing-border bg-landing-bg/80 px-4 py-2 backdrop-blur-md">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
             <OmoiOSLogo size="sm" textClassName="text-landing-text" />
@@ -59,7 +59,7 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="mx-4 mt-2 overflow-hidden rounded-2xl border border-landing-border bg-white shadow-lg"
+              className="mx-4 mt-2 overflow-hidden rounded-2xl border border-landing-border bg-landing-bg shadow-lg"
             >
               <nav className="p-4">
                 <ul className="space-y-2">
