@@ -203,6 +203,70 @@ RELOCATION_CONSULTANTS_ICP = {
 # Keep the old name as alias for backward compatibility
 IMMIGRATION_LAWYER_ICP = RELOCATION_SERVICES_ICP
 
+# Simplo-profile ICP: International moving/logistics founders
+# Based on Bogdan Petrea (Simplo) win - serial entrepreneur, multi-company,
+# bootstrapped, 25-100 employees, international groupage/moving/logistics,
+# EU + LATAM corridors, high-touch coordination pain
+SIMPLO_PROFILE_ICP = {
+    "person_titles": [
+        # Relocation/Moving specific titles (narrow on title, broad on location)
+        "relocation consultant",
+        "relocation specialist",
+        "relocation manager",
+        "relocation director",
+        "relocation advisor",
+        "moving coordinator",
+        "move manager",
+        "global mobility manager",
+        "global mobility director",
+        "global mobility consultant",
+        "global mobility specialist",
+        "mobility consultant",
+        "mobility manager",
+        "immigration consultant",
+        "immigration specialist",
+        "visa consultant",
+        "expat consultant",
+        "expat advisor",
+        "expat specialist",
+        "destination services",
+    ],
+    "organization_num_employees_ranges": [
+        "1,10",
+        "11,20",
+        "21,50",
+        "51,100",
+        "101,200",
+    ],
+}
+
+# Broader version: founders/owners at moving/logistics companies
+SIMPLO_FOUNDERS_ICP = {
+    "person_titles": [
+        "founder",
+        "co-founder",
+        "owner",
+        "managing director",
+        "ceo",
+        "general manager",
+        "director",
+        "operations manager",
+        "operations director",
+    ],
+    "q_organization_keyword_tags": [
+        "relocation",
+        "moving",
+        "logistics",
+        "freight",
+    ],
+    "organization_num_employees_ranges": [
+        "1,10",
+        "11,20",
+        "21,50",
+        "51,100",
+    ],
+}
+
 
 # =============================================================================
 # Data Classes
@@ -363,8 +427,52 @@ def score_lead(lead: Lead, icp_type: str = "primary") -> int:
     """Score a lead based on fit signals."""
     score = 0
 
+    # Simplo-profile scoring: international moving/logistics founders
+    if icp_type == "simplo":
+        title = (lead.title or "").lower()
+        company = (lead.company_name or "").lower()
+        industry = (lead.company_industry or "").lower()
+
+        # Title scoring - founders/owners are gold
+        if any(kw in title for kw in ["founder", "co-founder", "owner", "ceo"]):
+            score += 5  # Decision maker, feels the pain directly
+        elif any(kw in title for kw in ["managing director", "general manager"]):
+            score += 4
+        elif any(kw in title for kw in ["operations manager", "operations director", "head of operations", "logistics manager"]):
+            score += 4  # Lives the coordination pain daily
+        elif any(kw in title for kw in ["director", "manager"]):
+            score += 2
+        elif "consultant" in title:
+            score += 3
+
+        # Moving/relocation/logistics keywords in title
+        if any(kw in title for kw in ["relocation", "moving", "logistics", "mobility", "move manager"]):
+            score += 3
+
+        # Company name signals (moving/logistics companies)
+        if any(kw in company for kw in ["moving", "movers", "relocation", "removals", "logistics", "freight", "cargo", "transport", "groupage"]):
+            score += 3
+
+        # Industry fit
+        if any(kw in industry for kw in ["logistics", "moving", "relocation", "transportation", "freight", "supply chain"]):
+            score += 2
+
+        # Company size - sweet spot is 10-100 (big enough to have pain, small enough to buy)
+        try:
+            size = int(lead.company_size or 0)
+            if 25 <= size <= 100:
+                score += 4  # Simplo sweet spot
+            elif 10 <= size < 25:
+                score += 3
+            elif 1 <= size < 10:
+                score += 2
+            elif size > 100:
+                score -= 1  # Getting too big, may have internal solutions
+        except (ValueError, TypeError):
+            score += 1  # Unknown = assume small
+
     # Immigration lawyer scoring
-    if icp_type == "immigration":
+    elif icp_type == "immigration":
         title = (lead.title or "").lower()
         industry = (lead.company_industry or "").lower()
 
@@ -467,6 +575,10 @@ def pull_leads(
         filters = RELOCATION_SERVICES_ICP
     elif icp_type == "consultants":
         filters = RELOCATION_CONSULTANTS_ICP
+    elif icp_type == "simplo":
+        filters = SIMPLO_PROFILE_ICP
+    elif icp_type == "simplo_founders":
+        filters = SIMPLO_FOUNDERS_ICP
     else:
         filters = PRIMARY_ICP
 
@@ -660,9 +772,9 @@ def main():
 
     parser.add_argument(
         "--icp",
-        choices=["primary", "agency", "immigration", "relocation", "consultants", "both", "all"],
+        choices=["primary", "agency", "immigration", "relocation", "consultants", "simplo", "both", "all"],
         default="primary",
-        help="Which ICP to search: primary (eng leaders), agency (tech agencies), immigration/relocation (relocation services), consultants (non-lawyer consultants), both (primary+agency), all (default: primary)"
+        help="Which ICP to search: primary (eng leaders), agency (tech agencies), immigration/relocation (relocation services), consultants (non-lawyer consultants), simplo (intl moving/logistics founders), both (primary+agency), all (default: primary)"
     )
 
     parser.add_argument(
@@ -725,6 +837,25 @@ def main():
         leads = pull_leads(
             client,
             icp_type="immigration",
+            max_leads=args.max_leads,
+            verbose=verbose,
+        )
+        all_leads.extend(leads)
+
+    # Pull Simplo-profile ICP (both title-based and founder-based)
+    if args.icp == "simplo":
+        leads = pull_leads(
+            client,
+            icp_type="simplo",
+            max_leads=args.max_leads,
+            verbose=verbose,
+        )
+        all_leads.extend(leads)
+        if verbose:
+            print(f"\nNow pulling founders at moving/logistics companies...")
+        leads = pull_leads(
+            client,
+            icp_type="simplo_founders",
             max_leads=args.max_leads,
             verbose=verbose,
         )

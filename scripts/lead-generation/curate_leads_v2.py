@@ -34,6 +34,9 @@ GOOD_SIGNALS = [
     "consulting", "consultancy", "services", "solutions", "partners",
     "associates", "group", "global", "immigration", "relocation",
     "visa", "expat", "mobility",
+    # Simplo-profile: international moving/logistics
+    "moving", "movers", "removals", "logistics", "freight",
+    "cargo", "transport", "groupage", "destination",
 ]
 
 
@@ -87,22 +90,30 @@ def score_for_conversion(lead: dict) -> int:
     if 'expat' in title:
         score += 4
 
+    # Simplo-profile: operations/logistics leaders (coordination pain)
+    if any(kw in title for kw in ['operations', 'logistics', 'supply chain']):
+        score += 4
+    if any(kw in title for kw in ['moving', 'movers', 'move manager']):
+        score += 5
+
     # === COMPANY SIGNALS ===
     # Small firm signals
     if any(sig in company for sig in GOOD_SIGNALS):
         score += 3
 
-    # Company size (smaller = better)
+    # Company size - Simplo sweet spot is 25-100
     try:
         size = int(lead.get('company_size') or 0)
-        if 1 <= size <= 10:
-            score += 6  # Tiny = owner feels pain
-        elif 11 <= size <= 25:
-            score += 4
-        elif 26 <= size <= 50:
-            score += 2
-        elif size > 100:
-            score -= 2  # Getting too big
+        if 25 <= size <= 100:
+            score += 6  # Simplo sweet spot - big enough pain, small enough to buy
+        elif 10 <= size < 25:
+            score += 5
+        elif 1 <= size < 10:
+            score += 3  # Very small, may not have budget
+        elif 101 <= size <= 200:
+            score += 2  # Still possible
+        elif size > 200:
+            score -= 2  # Too big
     except (ValueError, TypeError):
         score += 2  # Unknown = assume small
 
@@ -114,6 +125,8 @@ def categorize_title(title: str) -> str:
     title = title.lower()
     if any(kw in title for kw in ['founder', 'owner', 'ceo', 'co-founder']):
         return 'founder_owner'
+    elif any(kw in title for kw in ['operations', 'logistics', 'supply chain', 'moving']):
+        return 'operations'
     elif any(kw in title for kw in ['lawyer', 'attorney']):
         return 'lawyer'
     elif any(kw in title for kw in ['consultant', 'advisor']):
