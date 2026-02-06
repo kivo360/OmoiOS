@@ -1,0 +1,15 @@
+[package]
+name = "resmgr"
+version = "0.1.0"
+edition = "2021"
+description = "Lightweight macOS resource monitor daemon — watches memory pressure, kills idle dev servers, sends notifications"
+
+[dependencies]
+sysinfo = "0.33"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8.19"
+log = "0.4"
+env_logger = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread", "time", "macros"] }
+mac-notification-sys = "0.6"
+dirs = "5"
