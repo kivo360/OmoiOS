@@ -830,6 +830,17 @@ class DaytonaSpawnerService:
                     },
                 },
             )
+
+            # Kick off preview setup in background for frontend tasks (non-blocking)
+            if self._is_frontend_task(task_id):
+                asyncio.create_task(
+                    self._setup_preview_for_sandbox(
+                        sandbox_id=sandbox_id,
+                        task_id=task_id,
+                        project_id=project_id,
+                    )
+                )
+
             return sandbox_id
 
         except Exception as e:
@@ -848,6 +859,104 @@ class DaytonaSpawnerService:
                 )
 
             raise RuntimeError(f"Failed to spawn sandbox: {e}") from e
+
+    # ========================================================================
+    # Live Preview Integration (Phase 1)
+    # ========================================================================
+
+    # Capabilities that indicate a frontend task needing a preview
+    FRONTEND_INDICATORS = frozenset(
+        {"vite", "next", "react", "vue", "frontend", "preview", "ui", "web"}
+    )
+
+    def _is_frontend_task(self, task_id: str) -> bool:
+        """Check if a task has frontend capabilities that warrant a live preview.
+
+        Looks at the task's required_capabilities for frontend indicators.
+        Returns False if no DB is available or task cannot be found.
+        """
+        if not self.db:
+            return False
+
+        try:
+            from omoi_os.models.task import Task
+
+            with self.db.get_session() as session:
+                task = session.query(Task).filter(Task.id == task_id).first()
+                if not task or not task.required_capabilities:
+                    return False
+                caps = {c.lower() for c in task.required_capabilities}
+                return bool(caps & self.FRONTEND_INDICATORS)
+        except Exception as e:
+            logger.debug(f"[PREVIEW] Could not check frontend task: {e}")
+            return False
+
+    async def _setup_preview_for_sandbox(
+        self,
+        sandbox_id: str,
+        task_id: str,
+        project_id: Optional[str] = None,
+        port: int = 3000,
+        framework: str = "vite",
+    ) -> None:
+        """Set up a live preview for a sandbox (runs in background).
+
+        This is best-effort: if preview setup fails, the task continues
+        normally without a preview URL. The preview lifecycle is tracked
+        via PreviewSession records in the database.
+
+        Args:
+            sandbox_id: Daytona sandbox ID
+            task_id: Task that owns this sandbox
+            project_id: Optional project ID
+            port: Dev server port (default 3000)
+            framework: Framework name for metadata
+        """
+        if not self.db or not self.event_bus:
+            logger.debug("[PREVIEW] Skipping preview setup: no db or event_bus")
+            return
+
+        try:
+            from omoi_os.services.preview_manager import PreviewManager
+
+            manager = PreviewManager(db=self.db, event_bus=self.event_bus)
+
+            # Create preview record in PENDING status
+            preview = await manager.create_preview(
+                sandbox_id=sandbox_id,
+                task_id=task_id,
+                project_id=project_id,
+                port=port,
+                framework=framework,
+            )
+
+            logger.info(
+                "[PREVIEW] Preview session created for frontend task",
+                extra={
+                    "preview_id": preview.id,
+                    "sandbox_id": sandbox_id,
+                    "task_id": task_id,
+                    "port": port,
+                    "framework": framework,
+                },
+            )
+
+            # Note: The actual dev server startup and readiness polling
+            # will be handled by the sandbox worker script or a follow-up
+            # API call. The spawner creates the record so the frontend
+            # knows a preview is expected. The worker (or orchestrator)
+            # will call mark_starting() and mark_ready() when the dev
+            # server boots.
+
+        except ValueError as e:
+            # Preview already exists for this sandbox (idempotent)
+            logger.info(f"[PREVIEW] Preview already exists: {e}")
+        except Exception as e:
+            # Best-effort: don't fail the task spawn
+            logger.warning(
+                f"[PREVIEW] Failed to set up preview: {e}",
+                extra={"sandbox_id": sandbox_id, "task_id": task_id},
+            )
 
     async def spawn_for_phase(
         self,

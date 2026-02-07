@@ -54,6 +54,7 @@ from omoi_os.api.routes import (
     onboarding,
     organizations,
     phases,
+    preview,
     projects,
     quality,
     reasoning,
@@ -1098,6 +1099,7 @@ app.include_router(validation.router, prefix="/api/validation", tags=["validatio
 app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
 app.include_router(sandbox.router, prefix="/api/v1/sandboxes", tags=["sandboxes"])
+app.include_router(preview.router, prefix="/api/v1/preview", tags=["preview"])
 app.include_router(
     branch_workflow.router, prefix="/api/v1/branch-workflow", tags=["branch-workflow"]
 )
