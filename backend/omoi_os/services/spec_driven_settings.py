@@ -235,3 +235,36 @@ class SpecDrivenSettingsService:
                 )
 
         return entries
+
+
+async def update_settings_partial(
+    service: SpecDrivenSettingsService,
+    project_id: str,
+    updates: dict,
+    user_id: str,
+) -> SpecDrivenOptionsSchema:
+    """Update settings with partial data (PATCH semantics).
+
+    Gets current settings, merges with provided updates, and saves.
+
+    Args:
+        service: SpecDrivenSettingsService instance
+        project_id: Project ID to update
+        updates: Dict of field names to new values (only provided fields)
+        user_id: ID of user making the change
+
+    Returns:
+        Updated SpecDrivenOptionsSchema
+    """
+    # Get current settings
+    current = await service.get_settings(project_id)
+    current_dict = current.model_dump()
+
+    # Merge updates
+    for key, value in updates.items():
+        if value is not None:
+            current_dict[key] = value
+
+    # Create new schema and update
+    new_settings = SpecDrivenOptionsSchema(**current_dict)
+    return await service.update_settings(project_id, new_settings, user_id)
