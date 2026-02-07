@@ -1,0 +1,32 @@
+repos:
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args:
+          - --baseline
+          - .secrets.baseline
+        exclude: |
+          (?x)^(
+            .*\.lock$|
+            .*pnpm-lock\.yaml$|
+            .*\.venv/.*|
+            .*node_modules/.*|
+            .*\.env\.example$
+          )$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+      - id: check-case-conflict
+      - id: check-merge-conflict
+      - id: check-yaml
+        args: ['--allow-multiple-documents']
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+        args: ['--markdown-linebreak-ext=md']
+      - id: no-commit-to-branch
+        args: ['--branch', 'main']
+        stages: [pre-commit]
