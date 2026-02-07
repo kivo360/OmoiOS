@@ -12,6 +12,7 @@ from pydantic import Field
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.memory import MemoryService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
@@ -21,6 +22,7 @@ _db: Optional[DatabaseService] = None
 _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
+_memory_service: Optional[MemoryService] = None
 _collaboration_service: Optional[Any] = None
 
 
@@ -29,6 +31,7 @@ def initialize_mcp_services(
     event_bus: EventBusService,
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
+    memory_service: Optional[MemoryService] = None,
     collaboration_service: Optional[Any] = None,
 ) -> None:
     """Initialize global services for MCP server.
@@ -38,13 +41,21 @@ def initialize_mcp_services(
         event_bus: Event bus service
         task_queue: Task queue service
         discovery_service: Discovery service
+        memory_service: Optional memory service for task memory search
         collaboration_service: Optional collaboration service for agent messaging
     """
-    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global \
+        _db, \
+        _event_bus, \
+        _task_queue, \
+        _discovery_service, \
+        _memory_service, \
+        _collaboration_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
+    _memory_service = memory_service
     _collaboration_service = collaboration_service
 
 
@@ -1032,6 +1043,182 @@ def get_workflow_graph(
             "success": True,
             "ticket_id": ticket_id,
             **graph,
+        }
+
+
+# ============================================================================
+# Memory Tools (task memory search and retrieval)
+# ============================================================================
+
+
+@mcp.tool()
+def find_memory(
+    ctx: Context,
+    task_description: str = Field(
+        ...,
+        min_length=3,
+        description="Description of the task to find similar memories for",
+    ),
+    search_mode: str = Field(
+        default="hybrid",
+        description="Search mode: 'semantic', 'keyword', or 'hybrid' (default)",
+    ),
+    memory_types: Optional[List[str]] = Field(
+        default=None,
+        description="Optional list of memory types to filter by (e.g., ['error_fix', 'discovery'])",
+    ),
+    success_only: bool = Field(
+        default=False,
+        description="Only return successful task executions",
+    ),
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum number of results to return (1-20)",
+    ),
+    similarity_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score for semantic search (0.0-1.0)",
+    ),
+) -> Dict[str, Any]:
+    """Find similar past task memories using semantic, keyword, or hybrid search.
+
+    Use this tool to retrieve relevant past solutions before starting a new task.
+    Searches through task execution memories to find patterns, solutions, and
+    learnings that may help with the current task.
+
+    The tool supports three search modes:
+    - semantic: Vector similarity search using embeddings
+    - keyword: Full-text search using PostgreSQL tsvector
+    - hybrid: Combines both using Reciprocal Rank Fusion (recommended)
+
+    Memory types available for filtering:
+    - error_fix: Fixes for errors and bugs
+    - discovery: General discoveries during execution
+    - decision: Architectural or implementation decisions
+    - learning: Lessons learned from task execution
+    - warning: Gotchas and things to watch out for
+    - codebase_knowledge: Knowledge about codebase structure
+
+    Args:
+        task_description: Description of the task to find similar memories for
+        search_mode: Search mode (semantic, keyword, or hybrid)
+        memory_types: Optional list of memory types to filter by
+        success_only: Only return successful task executions
+        top_k: Maximum number of results to return
+        similarity_threshold: Minimum similarity score for semantic search
+
+    Returns:
+        Dictionary with success status and list of matching memories
+    """
+    # Import TaskMemory model for reuse count updates
+
+    try:
+        if not _db or not _memory_service:
+            return {
+                "success": False,
+                "error": "Memory service not initialized",
+                "error_code": "SERVICE_NOT_INITIALIZED",
+                "memories": [],
+            }
+
+        # Validate search_mode
+        valid_modes = {"semantic", "keyword", "hybrid"}
+        if search_mode not in valid_modes:
+            return {
+                "success": False,
+                "error": f"Invalid search_mode: {search_mode}. Must be one of: {', '.join(valid_modes)}",
+                "error_code": "INVALID_SEARCH_MODE",
+                "memories": [],
+            }
+
+        with _db.get_session() as session:
+            # Perform search using MemoryService
+            results = _memory_service.search_similar(
+                session=session,
+                task_description=task_description,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold,
+                success_only=success_only,
+                memory_types=memory_types,
+                search_mode=search_mode,
+            )
+
+            # Note: MemoryService.search_similar already increments reused_count
+            # for returned results, so we don't need to do it again here.
+            # However, we need to ensure the session is committed to persist changes.
+            session.commit()
+
+            # Format results including reused_count
+            formatted_results = []
+            for result in results:
+                formatted_results.append(
+                    {
+                        "memory_id": result.memory_id,
+                        "task_id": result.task_id,
+                        "summary": result.summary,
+                        "success": result.success,
+                        "similarity_score": round(result.similarity_score, 4),
+                        "reused_count": result.reused_count,
+                        "semantic_score": round(result.semantic_score, 4)
+                        if result.semantic_score
+                        else None,
+                        "keyword_score": round(result.keyword_score, 4)
+                        if result.keyword_score
+                        else None,
+                    }
+                )
+
+            # Publish event for observability
+            if _event_bus:
+                _event_bus.publish(
+                    SystemEvent(
+                        event_type="memory.searched_via_mcp",
+                        entity_type="task_memory",
+                        entity_id="search",
+                        payload={
+                            "task_description": task_description[:100],
+                            "result_count": len(formatted_results),
+                            "search_mode": search_mode,
+                            "success_only": success_only,
+                            "memory_types": memory_types,
+                            "top_k": top_k,
+                            "similarity_threshold": similarity_threshold,
+                        },
+                    )
+                )
+
+            ctx.info(
+                f"Found {len(formatted_results)} memories matching '{task_description[:50]}...' "
+                f"(mode: {search_mode})"
+            )
+
+            return {
+                "success": True,
+                "search_mode": search_mode,
+                "result_count": len(formatted_results),
+                "memories": formatted_results,
+            }
+
+    except ValueError as e:
+        # Handle validation errors (e.g., invalid memory type)
+        return {
+            "success": False,
+            "error": str(e),
+            "error_code": "VALIDATION_ERROR",
+            "memories": [],
+        }
+    except Exception as e:
+        # Handle unexpected errors
+        ctx.warning(f"Error in find_memory: {e}")
+        return {
+            "success": False,
+            "error": f"Search failed: {str(e)}",
+            "error_code": "SEARCH_ERROR",
+            "memories": [],
         }
 
 
