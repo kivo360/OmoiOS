@@ -16,7 +16,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-
 # revision identifiers, used by Alembic.
 revision: str = "035_sandbox_events_table"
 down_revision: Union[str, None] = "034_fix_pgvector_dimensions"
@@ -32,7 +31,9 @@ def upgrade() -> None:
         sa.Column("sandbox_id", sa.String(length=100), nullable=False),
         sa.Column("event_type", sa.String(length=100), nullable=False),
         sa.Column("event_data", JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("source", sa.String(length=50), nullable=False, server_default="agent"),
+        sa.Column(
+            "source", sa.String(length=50), nullable=False, server_default="agent"
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),

@@ -160,7 +160,8 @@ class TicketWorkflowOrchestrator:
                 ticket_id=ticket.id,
                 from_phase=previous_phase_id,
                 to_phase=ticket.phase_id,
-                transition_reason=reason or f"Status transition: {from_status} → {to_status}",
+                transition_reason=reason
+                or f"Status transition: {from_status} → {to_status}",
                 transitioned_by=initiated_by,
                 artifacts=None,
             )
@@ -282,7 +283,9 @@ class TicketWorkflowOrchestrator:
                 raise ValueError(f"Ticket {ticket_id} not found")
 
             # Validate regression transition
-            if not is_valid_transition(ticket.status, to_status, is_blocked=ticket.is_blocked):
+            if not is_valid_transition(
+                ticket.status, to_status, is_blocked=ticket.is_blocked
+            ):
                 raise InvalidTransitionError(
                     f"Invalid regression from {ticket.status} to {to_status}"
                 )
@@ -304,7 +307,7 @@ class TicketWorkflowOrchestrator:
             if "regressions" not in current_context:
                 current_context["regressions"] = []
             current_context["regressions"].append(regression_context)
-            
+
             ticket.context = current_context
             ticket.updated_at = utc_now()
             session.commit()
@@ -484,26 +487,24 @@ class TicketWorkflowOrchestrator:
                     continue  # Not yet at threshold
 
                 # Check for task progress (any completed tasks in last threshold period)
-                has_progress = self._has_task_progress(
-                    session, ticket.id, threshold
-                )
+                has_progress = self._has_task_progress(session, ticket.id, threshold)
 
                 if not has_progress:
                     # Classify blocker type
                     # Use sync fallback for now (async version available)
                     blocker_type = self._classify_blocker_sync(session, ticket)
-                    results.append({
-                        "ticket_id": ticket.id,
-                        "should_block": True,
-                        "blocker_type": blocker_type,
-                        "time_in_state_minutes": time_in_state.total_seconds() / 60,
-                    })
+                    results.append(
+                        {
+                            "ticket_id": ticket.id,
+                            "should_block": True,
+                            "blocker_type": blocker_type,
+                            "time_in_state_minutes": time_in_state.total_seconds() / 60,
+                        }
+                    )
 
         return results
 
-    def _has_task_progress(
-        self, session, ticket_id: str, threshold: timedelta
-    ) -> bool:
+    def _has_task_progress(self, session, ticket_id: str, threshold: timedelta) -> bool:
         """Check if ticket has had task progress within threshold period."""
         cutoff = utc_now() - threshold
 
@@ -587,7 +588,9 @@ class TicketWorkflowOrchestrator:
             pending_tasks=pending_tasks[:5] if pending_tasks else [],
         )
 
-        system_prompt = template_service.render_system_prompt("system/blocker_analysis.md.j2")
+        system_prompt = template_service.render_system_prompt(
+            "system/blocker_analysis.md.j2"
+        )
 
         # Run analysis using LLM service
         llm = get_llm_service()
@@ -620,9 +623,7 @@ class TicketWorkflowOrchestrator:
         # Default classification
         return "waiting_on_clarification"
 
-    def _create_remediation_task(
-        self, ticket_id: str, blocker_type: str
-    ) -> None:
+    def _create_remediation_task(self, ticket_id: str, blocker_type: str) -> None:
         """
         Create remediation task based on blocker classification per REQ-TKT-BL-003.
 
@@ -656,4 +657,3 @@ class TicketWorkflowOrchestrator:
             except Exception:
                 # Fail silently - remediation task creation is best effort
                 pass
-

@@ -127,9 +127,7 @@ def list_requirements(spec_id: str) -> Optional[list]:
     print(f"Listing requirements for spec: {spec_id}")
     try:
         with httpx.Client(timeout=API_TIMEOUT) as client:
-            response = client.get(
-                f"{API_BASE}/api/v1/specs/{spec_id}/requirements"
-            )
+            response = client.get(f"{API_BASE}/api/v1/specs/{spec_id}/requirements")
             response.raise_for_status()
             reqs = response.json()
             print(f"✅ Found {len(reqs)} requirement(s)")

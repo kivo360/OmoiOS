@@ -88,7 +88,9 @@ class ExplorationEvaluator(BaseEvaluator):
 
         # Check 7: Has explored files list (proves actual exploration happened)
         explored_files = data.get("explored_files", [])
-        has_explored_files = isinstance(explored_files, list) and len(explored_files) > 0
+        has_explored_files = (
+            isinstance(explored_files, list) and len(explored_files) > 0
+        )
         checks.append(("explored_files", has_explored_files))
 
         # Check 8: Has technology stack

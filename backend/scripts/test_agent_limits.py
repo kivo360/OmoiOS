@@ -8,7 +8,6 @@ from subscriptions when claiming tasks.
 Run: cd backend && uv run python scripts/test_agent_limits.py
 """
 
-import asyncio
 import sys
 from uuid import uuid4
 
@@ -75,27 +74,43 @@ class AgentLimitTester:
                     session.delete(task)
 
             for ticket_id in self.test_ids["tickets"]:
-                ticket = session.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+                ticket = (
+                    session.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+                )
                 if ticket:
                     session.delete(ticket)
 
             for project_id in self.test_ids["projects"]:
-                project = session.query(Project).filter(Project.id == project_id).first()
+                project = (
+                    session.query(Project).filter(Project.id == project_id).first()
+                )
                 if project:
                     session.delete(project)
 
             for sub_id in self.test_ids["subscriptions"]:
-                sub = session.query(Subscription).filter(Subscription.id == sub_id).first()
+                sub = (
+                    session.query(Subscription)
+                    .filter(Subscription.id == sub_id)
+                    .first()
+                )
                 if sub:
                     session.delete(sub)
 
             for ba_id in self.test_ids["billing_accounts"]:
-                ba = session.query(BillingAccount).filter(BillingAccount.id == ba_id).first()
+                ba = (
+                    session.query(BillingAccount)
+                    .filter(BillingAccount.id == ba_id)
+                    .first()
+                )
                 if ba:
                     session.delete(ba)
 
             for org_id in self.test_ids["orgs"]:
-                org = session.query(Organization).filter(Organization.id == org_id).first()
+                org = (
+                    session.query(Organization)
+                    .filter(Organization.id == org_id)
+                    .first()
+                )
                 if org:
                     session.delete(org)
 
@@ -198,9 +213,7 @@ class AgentLimitTester:
         self.test_ids["tickets"].append(ticket_id)
         return ticket
 
-    def create_task(
-        self, session, ticket: Ticket, status: str = "pending"
-    ) -> Task:
+    def create_task(self, session, ticket: Ticket, status: str = "pending") -> Task:
         """Create a test task."""
         task_id = str(uuid4())
         task = Task(
@@ -264,10 +277,14 @@ class AgentLimitTester:
         with self.db.get_session() as session:
             user = self.create_test_user(session)
 
-            for tier in [SubscriptionTier.FREE, SubscriptionTier.PRO, SubscriptionTier.TEAM]:
+            for tier in [
+                SubscriptionTier.FREE,
+                SubscriptionTier.PRO,
+                SubscriptionTier.TEAM,
+            ]:
                 org = self.create_test_org(session, user)
                 ba = self.create_billing_account(session, org)
-                sub = self.create_subscription(session, org, ba, tier)
+                self.create_subscription(session, org, ba, tier)
                 session.commit()
 
                 expected = TIER_LIMITS[tier]["agents_limit"]
@@ -276,9 +293,7 @@ class AgentLimitTester:
                 passed = actual == expected
                 all_passed = all_passed and passed
                 print_result(
-                    f"{tier.value} tier",
-                    passed,
-                    f"expected {expected}, got {actual}"
+                    f"{tier.value} tier", passed, f"expected {expected}, got {actual}"
                 )
 
         return all_passed
@@ -289,7 +304,7 @@ class AgentLimitTester:
             user = self.create_test_user(session)
             org = self.create_test_org(session, user)
             ba = self.create_billing_account(session, org)
-            sub = self.create_subscription(session, org, ba, SubscriptionTier.PRO)
+            self.create_subscription(session, org, ba, SubscriptionTier.PRO)
             project = self.create_project(session, org, user)
             ticket = self.create_ticket(session, project)
 
@@ -306,11 +321,7 @@ class AgentLimitTester:
             expected = 3  # running + assigned + claiming
 
             passed = count == expected
-            print_result(
-                "Running count",
-                passed,
-                f"expected {expected}, got {count}"
-            )
+            print_result("Running count", passed, f"expected {expected}, got {count}")
             return passed
 
     def test_can_spawn_agent(self) -> bool:
@@ -322,7 +333,7 @@ class AgentLimitTester:
             org = self.create_test_org(session, user)
             ba = self.create_billing_account(session, org)
             # FREE tier = 1 agent limit
-            sub = self.create_subscription(session, org, ba, SubscriptionTier.FREE)
+            self.create_subscription(session, org, ba, SubscriptionTier.FREE)
             project = self.create_project(session, org, user)
             ticket = self.create_ticket(session, project)
             session.commit()
@@ -351,7 +362,7 @@ class AgentLimitTester:
             org = self.create_test_org(session, user)
             ba = self.create_billing_account(session, org)
             # FREE tier = 1 agent limit
-            sub = self.create_subscription(session, org, ba, SubscriptionTier.FREE)
+            self.create_subscription(session, org, ba, SubscriptionTier.FREE)
             project = self.create_project(session, org, user)
             ticket = self.create_ticket(session, project)
 
@@ -359,7 +370,7 @@ class AgentLimitTester:
             self.create_task(session, ticket, status="running")
 
             # Create a pending task that SHOULD be blocked
-            pending_task = self.create_task(session, ticket, status="pending")
+            self.create_task(session, ticket, status="pending")
             session.commit()
 
         # Try to claim - should return None because org is at capacity
@@ -369,7 +380,7 @@ class AgentLimitTester:
         print_result(
             "Task claiming blocked when org at limit",
             passed,
-            f"claimed task: {claimed.id if claimed else 'None'}"
+            f"claimed task: {claimed.id if claimed else 'None'}",
         )
         return passed
 
@@ -388,15 +399,15 @@ class AgentLimitTester:
             print_result(
                 "No subscription defaults to FREE",
                 passed,
-                f"expected {expected}, got {limit}"
+                f"expected {expected}, got {limit}",
             )
             return passed
 
 
 def main():
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("  🧪 Agent Limit Enforcement Tests")
-    print("="*60)
+    print("=" * 60)
 
     tester = AgentLimitTester()
     return tester.run_tests()

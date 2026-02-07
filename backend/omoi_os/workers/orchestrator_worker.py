@@ -61,35 +61,41 @@ stats = {
 # Task type categories for execution mode determination
 # These task types are research/analysis focused and do NOT produce code changes.
 # They get execution_mode="exploration" which disables git validation requirements.
-EXPLORATION_TASK_TYPES = frozenset([
-    # Codebase exploration and analysis
-    "explore_codebase",
-    "analyze_codebase",
-    "analyze_requirements",  # Research task - doesn't write code
-    "analyze_dependencies",
-    # Spec and requirements creation (produces docs, not code)
-    "create_spec",
-    "create_requirements",
-    "create_design",
-    "create_tickets",
-    "create_tasks",
-    "define_feature",
-    "generate_prd",  # Dynamic PRD generation (produces docs, not code)
-    # Research and discovery
-    "research",
-    "discover",
-    "investigate",
-])
+EXPLORATION_TASK_TYPES = frozenset(
+    [
+        # Codebase exploration and analysis
+        "explore_codebase",
+        "analyze_codebase",
+        "analyze_requirements",  # Research task - doesn't write code
+        "analyze_dependencies",
+        # Spec and requirements creation (produces docs, not code)
+        "create_spec",
+        "create_requirements",
+        "create_design",
+        "create_tickets",
+        "create_tasks",
+        "define_feature",
+        "generate_prd",  # Dynamic PRD generation (produces docs, not code)
+        # Research and discovery
+        "research",
+        "discover",
+        "investigate",
+    ]
+)
 
-VALIDATION_TASK_TYPES = frozenset([
-    "validate",
-    "validate_implementation",
-    "review_code",
-    "run_tests",
-])
+VALIDATION_TASK_TYPES = frozenset(
+    [
+        "validate",
+        "validate_implementation",
+        "review_code",
+        "run_tests",
+    ]
+)
 
 
-def get_execution_mode(task_type: str) -> Literal["exploration", "implementation", "validation"]:
+def get_execution_mode(
+    task_type: str,
+) -> Literal["exploration", "implementation", "validation"]:
     """Determine execution mode based on task type (fallback method).
 
     This is the fallback for when LLM-based analysis is unavailable.
@@ -145,7 +151,10 @@ async def analyze_task_requirements(
 
     if task_analyzer is None:
         # Lazy initialization if not already done in init_services
-        from omoi_os.services.task_requirements_analyzer import get_task_requirements_analyzer
+        from omoi_os.services.task_requirements_analyzer import (
+            get_task_requirements_analyzer,
+        )
+
         task_analyzer = get_task_requirements_analyzer()
 
     return await task_analyzer.analyze(
@@ -215,7 +224,7 @@ def handle_validation_failed(event_data: dict) -> None:
         logger.error("database_not_initialized_for_validation_handling")
         return
 
-    event_type = event_data.get("event_type", "TASK_VALIDATION_FAILED")
+    event_data.get("event_type", "TASK_VALIDATION_FAILED")
     task_id = event_data.get("entity_id")
     payload = event_data.get("payload", {})
     iteration = payload.get("iteration", 0)
@@ -234,7 +243,6 @@ def handle_validation_failed(event_data: dict) -> None:
 
     try:
         from omoi_os.models.task import Task
-        from sqlalchemy import select
 
         with db.get_session() as session:
             task = session.query(Task).filter(Task.id == task_id).first()
@@ -271,6 +279,7 @@ def handle_validation_failed(event_data: dict) -> None:
             # Publish TASK_STATUS_CHANGED event for WebSocket/sidebar updates
             if event_bus:
                 from omoi_os.services.event_bus import SystemEvent
+
                 event_bus.publish(
                     SystemEvent(
                         event_type="TASK_STATUS_CHANGED",
@@ -331,14 +340,18 @@ async def orchestrator_loop():
     # 3. Validation fails (so we can reset task for re-implementation)
     try:
         event_bus.subscribe("TASK_CREATED", handle_task_event)
-        event_bus.subscribe("TICKET_CREATED", handle_task_event)  # Tickets also trigger tasks
+        event_bus.subscribe(
+            "TICKET_CREATED", handle_task_event
+        )  # Tickets also trigger tasks
         # Subscribe to completion events to spawn more tasks when slots open
         event_bus.subscribe("SANDBOX_agent.completed", handle_task_event)
         event_bus.subscribe("SANDBOX_agent.failed", handle_task_event)
         event_bus.subscribe("SANDBOX_agent.error", handle_task_event)
         # Subscribe to validation events for the revision workflow
         event_bus.subscribe("TASK_VALIDATION_FAILED", handle_validation_failed)
-        event_bus.subscribe("TASK_VALIDATION_PASSED", handle_task_event)  # Just for wakeup/metrics
+        event_bus.subscribe(
+            "TASK_VALIDATION_PASSED", handle_task_event
+        )  # Just for wakeup/metrics
         logger.info(
             "event_subscriptions_registered",
             events=[
@@ -352,7 +365,9 @@ async def orchestrator_loop():
             ],
         )
     except Exception as e:
-        logger.warning("event_subscription_failed", error=str(e), fallback="polling_only")
+        logger.warning(
+            "event_subscription_failed", error=str(e), fallback="polling_only"
+        )
 
     # Check if sandbox execution is enabled
     from omoi_os.config import get_app_settings
@@ -501,16 +516,22 @@ async def orchestrator_loop():
                                 # Base64 encoding avoids shell escaping issues with JSON
                                 # Now includes spec requirements, design, and acceptance criteria
                                 import base64
-                                from omoi_os.services.task_context_builder import TaskContextBuilder
+                                from omoi_os.services.task_context_builder import (
+                                    TaskContextBuilder,
+                                )
 
                                 # Build comprehensive task context including spec data
                                 try:
                                     context_builder = TaskContextBuilder(db=db)
-                                    full_context = await context_builder.build_context(str(task.id))
+                                    full_context = await context_builder.build_context(
+                                        str(task.id)
+                                    )
                                     task_data = full_context.to_dict()
 
                                     # Also include the markdown version for system prompt injection
-                                    task_data["_markdown_context"] = full_context.to_markdown()
+                                    task_data["_markdown_context"] = (
+                                        full_context.to_markdown()
+                                    )
 
                                     log.info(
                                         "built_full_task_context",
@@ -546,9 +567,15 @@ async def orchestrator_loop():
                                     if task.result:
                                         if task.result.get("revision_feedback"):
                                             task_data["revision"] = {
-                                                "feedback": task.result["revision_feedback"],
-                                                "recommendations": task.result.get("revision_recommendations", []),
-                                                "iteration": task.result.get("validation_iteration"),
+                                                "feedback": task.result[
+                                                    "revision_feedback"
+                                                ],
+                                                "recommendations": task.result.get(
+                                                    "revision_recommendations", []
+                                                ),
+                                                "iteration": task.result.get(
+                                                    "validation_iteration"
+                                                ),
                                             }
 
                                 # Base64 encode to avoid shell escaping issues
@@ -559,7 +586,9 @@ async def orchestrator_loop():
 
                                 if ticket.project:
                                     # Inject project ID for spec CLI syncing
-                                    extra_env["OMOIOS_PROJECT_ID"] = str(ticket.project.id)
+                                    extra_env["OMOIOS_PROJECT_ID"] = str(
+                                        ticket.project.id
+                                    )
                                     log.info(
                                         "project_found_for_ticket",
                                         ticket_id=str(ticket.id),
@@ -567,7 +596,11 @@ async def orchestrator_loop():
                                         project_name=ticket.project.name,
                                         github_owner=ticket.project.github_owner,
                                         github_repo=ticket.project.github_repo,
-                                        created_by=str(ticket.project.created_by) if ticket.project.created_by else None,
+                                        created_by=(
+                                            str(ticket.project.created_by)
+                                            if ticket.project.created_by
+                                            else None
+                                        ),
                                     )
                                     if ticket.project.created_by:
                                         user_id_for_token = ticket.project.created_by
@@ -577,7 +610,9 @@ async def orchestrator_loop():
                                         # This handles older projects created before we tracked created_by
                                         if ticket.user_id:
                                             user_id_for_token = ticket.user_id
-                                            extra_env["USER_ID"] = str(user_id_for_token)
+                                            extra_env["USER_ID"] = str(
+                                                user_id_for_token
+                                            )
                                             log.info(
                                                 "using_ticket_user_id_fallback",
                                                 project_id=str(ticket.project.id),
@@ -635,7 +670,9 @@ async def orchestrator_loop():
                                         user_id=str(user_id_for_token),
                                         user_email=user.email,
                                         has_attributes=bool(attrs),
-                                        attribute_keys=list(attrs.keys()) if attrs else [],
+                                        attribute_keys=(
+                                            list(attrs.keys()) if attrs else []
+                                        ),
                                     )
                                     github_token = attrs.get("github_access_token")
                                     if github_token:
@@ -643,14 +680,20 @@ async def orchestrator_loop():
                                         log.info(
                                             "github_token_found",
                                             user_id=str(user_id_for_token),
-                                            token_prefix=github_token[:10] + "..." if len(github_token) > 10 else "***",
+                                            token_prefix=(
+                                                github_token[:10] + "..."
+                                                if len(github_token) > 10
+                                                else "***"
+                                            ),
                                         )
                                     else:
                                         log.warning(
                                             "no_github_token_in_user_attributes",
                                             user_id=str(user_id_for_token),
                                             user_email=user.email,
-                                            available_attrs=list(attrs.keys()) if attrs else [],
+                                            available_attrs=(
+                                                list(attrs.keys()) if attrs else []
+                                            ),
                                             msg="User has no github_access_token in attributes - repo clone will fail",
                                         )
                                 else:
@@ -749,11 +792,17 @@ async def orchestrator_loop():
                         # Extract spec-skill settings from task.execution_config
                         # This is set by the frontend when workflow_mode="spec_driven"
                         require_spec_skill = False
-                        if task.execution_config and isinstance(task.execution_config, dict):
-                            require_spec_skill = task.execution_config.get("require_spec_skill", False)
+                        if task.execution_config and isinstance(
+                            task.execution_config, dict
+                        ):
+                            require_spec_skill = task.execution_config.get(
+                                "require_spec_skill", False
+                            )
 
                         # Get project_id from extra_env (set earlier from ticket.project.id)
-                        project_id = extra_env.get("OMOIOS_PROJECT_ID") if extra_env else None
+                        project_id = (
+                            extra_env.get("OMOIOS_PROJECT_ID") if extra_env else None
+                        )
 
                         log.info(
                             "spec_skill_config",
@@ -792,7 +841,10 @@ async def orchestrator_loop():
                             )
                             if task_obj:
                                 # Double-check task doesn't already have a different sandbox
-                                if task_obj.sandbox_id and task_obj.sandbox_id != sandbox_id:
+                                if (
+                                    task_obj.sandbox_id
+                                    and task_obj.sandbox_id != sandbox_id
+                                ):
                                     log.error(
                                         "task_sandbox_id_conflict",
                                         existing_sandbox_id=task_obj.sandbox_id,
@@ -911,20 +963,30 @@ async def orchestrator_loop():
                             if ticket:
                                 extra_env["TICKET_ID"] = str(ticket.id)
                                 extra_env["TICKET_TITLE"] = ticket.title or ""
-                                extra_env["TICKET_DESCRIPTION"] = ticket.description or ""
+                                extra_env["TICKET_DESCRIPTION"] = (
+                                    ticket.description or ""
+                                )
 
                                 # Build full task context with validation mode flag
-                                from omoi_os.services.task_context_builder import TaskContextBuilder
+                                from omoi_os.services.task_context_builder import (
+                                    TaskContextBuilder,
+                                )
 
                                 try:
                                     context_builder = TaskContextBuilder(db=db)
-                                    full_context = context_builder.build_context_sync(str(validation_task.id))
+                                    full_context = context_builder.build_context_sync(
+                                        str(validation_task.id)
+                                    )
                                     task_data = full_context.to_dict()
 
                                     # Add validation-specific flags
                                     task_data["validation_mode"] = True
-                                    task_data["implementation_result"] = validation_task.result or {}
-                                    task_data["_markdown_context"] = full_context.to_markdown()
+                                    task_data["implementation_result"] = (
+                                        validation_task.result or {}
+                                    )
+                                    task_data["_markdown_context"] = (
+                                        full_context.to_markdown()
+                                    )
 
                                     val_log.info(
                                         "built_validation_context",
@@ -941,7 +1003,8 @@ async def orchestrator_loop():
                                         "task": {
                                             "id": str(validation_task.id),
                                             "type": validation_task.task_type,
-                                            "description": validation_task.description or "",
+                                            "description": validation_task.description
+                                            or "",
                                             "priority": validation_task.priority,
                                             "phase_id": validation_task.phase_id,
                                         },
@@ -953,7 +1016,8 @@ async def orchestrator_loop():
                                             "context": ticket.context or {},
                                         },
                                         "validation_mode": True,
-                                        "implementation_result": validation_task.result or {},
+                                        "implementation_result": validation_task.result
+                                        or {},
                                     }
 
                                 task_json = json.dumps(task_data)
@@ -988,7 +1052,11 @@ async def orchestrator_loop():
                                 id=agent_id,
                                 agent_type="validator",
                                 phase_id=val_phase_id,
-                                capabilities=["validation", "code-review", "test-runner"],
+                                capabilities=[
+                                    "validation",
+                                    "code-review",
+                                    "test-runner",
+                                ],
                                 status="RUNNING",
                                 tags=["sandbox", "daytona", "validation"],
                                 health_status="healthy",
@@ -1021,7 +1089,9 @@ async def orchestrator_loop():
                         # Update sandbox_id in database
                         with db.get_session() as session:
                             task_obj = (
-                                session.query(Task).filter(Task.id == validation_task.id).first()
+                                session.query(Task)
+                                .filter(Task.id == validation_task.id)
+                                .first()
                             )
                             if task_obj:
                                 task_obj.sandbox_id = sandbox_id
@@ -1110,7 +1180,11 @@ async def stale_task_cleanup_loop():
     global db, queue
 
     # Check if stale cleanup is enabled
-    stale_cleanup_enabled = os.getenv("STALE_TASK_CLEANUP_ENABLED", "true").lower() in ("true", "1", "yes")
+    stale_cleanup_enabled = os.getenv("STALE_TASK_CLEANUP_ENABLED", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
     if not stale_cleanup_enabled:
         logger.info("stale_task_cleanup_disabled_via_env")
         return
@@ -1129,7 +1203,9 @@ async def stale_task_cleanup_loop():
     # Default: 15 second check interval - quick detection of stale tasks
     # Default: 60 second threshold for claiming tasks (should be quick)
     stale_threshold_minutes = int(os.getenv("STALE_TASK_THRESHOLD_MINUTES", "3"))
-    stale_claiming_threshold_seconds = int(os.getenv("STALE_CLAIMING_THRESHOLD_SECONDS", "60"))
+    stale_claiming_threshold_seconds = int(
+        os.getenv("STALE_CLAIMING_THRESHOLD_SECONDS", "60")
+    )
     check_interval = int(os.getenv("STALE_TASK_CHECK_INTERVAL_SECONDS", "15"))
 
     logger.info(
@@ -1188,7 +1264,11 @@ async def idle_sandbox_check_loop():
     global db, event_bus
 
     # Check if idle detection is enabled
-    idle_detection_enabled = os.getenv("IDLE_DETECTION_ENABLED", "true").lower() in ("true", "1", "yes")
+    idle_detection_enabled = os.getenv("IDLE_DETECTION_ENABLED", "true").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
     if not idle_detection_enabled:
         logger.info("idle_detection_disabled_via_env")
         return
@@ -1271,7 +1351,9 @@ async def init_services():
     from omoi_os.services.task_queue import TaskQueueService
     from omoi_os.services.event_bus import EventBusService
     from omoi_os.services.agent_registry import AgentRegistryService
-    from omoi_os.services.task_requirements_analyzer import get_task_requirements_analyzer
+    from omoi_os.services.task_requirements_analyzer import (
+        get_task_requirements_analyzer,
+    )
     from omoi_os.services.phase_gate import PhaseGateService
     from omoi_os.services.phase_progression_service import get_phase_progression_service
     from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
@@ -1327,7 +1409,10 @@ async def init_services():
     logger.info(
         "service_initialized",
         service="phase_progression",
-        hooks=["Hook1:TaskCompletion->PhaseAdvance", "Hook2:PhaseTransition->TaskSpawn"],
+        hooks=[
+            "Hook1:TaskCompletion->PhaseAdvance",
+            "Hook2:PhaseTransition->TaskSpawn",
+        ],
     )
 
     # Synthesis Service (automatic result merging for parallel task coordination)

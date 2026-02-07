@@ -11,32 +11,32 @@ from typing import Any, Dict, List, Optional
 
 class AgentType(str, Enum):
     """Agent type identifiers."""
-    
-    PLANNER = "planner"           # Read-only analysis, creates tasks
-    IMPLEMENTER = "implementer"   # Full execution, writes code
-    VALIDATOR = "validator"       # Reviews work, runs tests
+
+    PLANNER = "planner"  # Read-only analysis, creates tasks
+    IMPLEMENTER = "implementer"  # Full execution, writes code
+    VALIDATOR = "validator"  # Reviews work, runs tests
     DIAGNOSTICIAN = "diagnostician"  # Analyzes stuck workflows
-    COORDINATOR = "coordinator"   # Orchestrates other agents
+    COORDINATOR = "coordinator"  # Orchestrates other agents
 
 
 @dataclass
 class ToolSet:
     """Collection of tools for an agent."""
-    
+
     # OpenHands SDK tools (built-in)
     terminal: bool = True
     file_editor: bool = True
     grep: bool = True
     glob: bool = True
     task_tracker: bool = False  # For planning mode
-    
+
     # MCP tools (by category)
-    mcp_tickets: bool = True       # Create, update, resolve tickets
-    mcp_tasks: bool = True         # Create, update tasks
-    mcp_collaboration: bool = True # Send messages, request handoffs
-    mcp_history: bool = True       # Get trajectories, phase history
-    mcp_discovery: bool = True     # Record discoveries, branch workflows
-    
+    mcp_tickets: bool = True  # Create, update, resolve tickets
+    mcp_tasks: bool = True  # Create, update tasks
+    mcp_collaboration: bool = True  # Send messages, request handoffs
+    mcp_history: bool = True  # Get trajectories, phase history
+    mcp_discovery: bool = True  # Record discoveries, branch workflows
+
     def get_sdk_tools(self) -> List[str]:
         """Get list of SDK tool names to enable."""
         tools = []
@@ -51,7 +51,7 @@ class ToolSet:
         if self.task_tracker:
             tools.append("task_tracker")
         return tools
-    
+
     def get_mcp_categories(self) -> List[str]:
         """Get list of MCP tool categories to enable."""
         categories = []
@@ -71,42 +71,42 @@ class ToolSet:
 @dataclass
 class AgentTemplate:
     """Template for creating agents with specific capabilities."""
-    
+
     agent_type: AgentType
     name: str
     description: str
-    
+
     # Tool configuration
     tools: ToolSet = field(default_factory=ToolSet)
-    
+
     # Prompt configuration
     system_prompt_prefix: str = ""  # Added before phase prompt
     system_prompt_suffix: str = ""  # Added after phase prompt
-    
+
     # Behavior configuration
-    read_only: bool = False          # If True, can't modify files
-    max_iterations: int = 50         # Max agent loop iterations
-    require_approval: bool = False   # Require human approval for actions
-    
+    read_only: bool = False  # If True, can't modify files
+    max_iterations: int = 50  # Max agent loop iterations
+    require_approval: bool = False  # Require human approval for actions
+
     # Phase restrictions (None = all phases allowed)
     allowed_phases: Optional[List[str]] = None
-    
+
     # Additional context to inject
     context_injections: Dict[str, Any] = field(default_factory=dict)
-    
+
     def build_system_prompt(self, phase_prompt: Optional[str] = None) -> str:
         """Build complete system prompt with template + phase instructions."""
         parts = []
-        
+
         if self.system_prompt_prefix:
             parts.append(self.system_prompt_prefix)
-        
+
         if phase_prompt:
             parts.append(phase_prompt)
-        
+
         if self.system_prompt_suffix:
             parts.append(self.system_prompt_suffix)
-        
+
         return "\n\n---\n\n".join(parts) if parts else ""
 
 
@@ -341,31 +341,31 @@ AGENT_TEMPLATES: Dict[AgentType, AgentTemplate] = {
 
 def get_template(agent_type: AgentType | str) -> AgentTemplate:
     """Get agent template by type.
-    
+
     Args:
         agent_type: AgentType enum or string identifier
-        
+
     Returns:
         AgentTemplate for the specified type
-        
+
     Raises:
         ValueError: If agent type not found
     """
     if isinstance(agent_type, str):
         agent_type = AgentType(agent_type)
-    
+
     if agent_type not in AGENT_TEMPLATES:
         raise ValueError(f"Unknown agent type: {agent_type}")
-    
+
     return AGENT_TEMPLATES[agent_type]
 
 
 def get_template_for_phase(phase_id: str) -> AgentTemplate:
     """Get the default agent template for a phase.
-    
+
     Args:
         phase_id: Phase identifier (e.g., PHASE_IMPLEMENTATION)
-        
+
     Returns:
         Appropriate AgentTemplate for the phase
     """
@@ -378,7 +378,7 @@ def get_template_for_phase(phase_id: str) -> AgentTemplate:
         "PHASE_DONE": AgentType.COORDINATOR,
         "PHASE_BLOCKED": AgentType.DIAGNOSTICIAN,
     }
-    
+
     agent_type = phase_to_template.get(phase_id, AgentType.IMPLEMENTER)
     return get_template(agent_type)
 
@@ -386,4 +386,3 @@ def get_template_for_phase(phase_id: str) -> AgentTemplate:
 def list_templates() -> List[AgentTemplate]:
     """List all available agent templates."""
     return list(AGENT_TEMPLATES.values())
-

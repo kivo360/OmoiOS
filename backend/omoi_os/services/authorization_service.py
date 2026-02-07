@@ -14,6 +14,7 @@ from omoi_os.models.organization import Organization, OrganizationMembership, Ro
 
 class ActorType(str, Enum):
     """Type of actor (user or agent)."""
+
     USER = "user"
     AGENT = "agent"
 
@@ -35,12 +36,12 @@ class AuthorizationService:
     ) -> Tuple[bool, str, Dict]:
         """
         Check if actor is authorized to perform action.
-        
+
         Priority order:
         1. Super admin (users only)
         2. Organization role (RBAC)
         3. Explicit deny (future: ABAC policies)
-        
+
         Args:
             actor_id: UUID of user or agent
             actor_type: ActorType.USER or ActorType.AGENT
@@ -48,7 +49,7 @@ class AuthorizationService:
             organization_id: Organization context
             resource_type: Optional resource type
             resource_id: Optional specific resource ID
-        
+
         Returns:
             Tuple of (allowed, reason, details)
             - allowed: bool - whether action is permitted
@@ -58,14 +59,12 @@ class AuthorizationService:
         details = {
             "matched_roles": [],
             "evaluation_order": [],
-            "actor_type": actor_type.value
+            "actor_type": actor_type.value,
         }
 
         # 1. Check super admin (users only)
         if actor_type == ActorType.USER:
-            user_result = await self.db.execute(
-                select(User).where(User.id == actor_id)
-            )
+            user_result = await self.db.execute(select(User).where(User.id == actor_id))
             user = user_result.scalar_one_or_none()
 
             if user and user.is_super_admin:
@@ -80,7 +79,11 @@ class AuthorizationService:
         if rbac_check["allowed"]:
             details["matched_roles"] = rbac_check["roles"]
             details["evaluation_order"].append("org_role")
-            return True, f"Authorized via role: {', '.join(rbac_check['roles'])}", details
+            return (
+                True,
+                f"Authorized via role: {', '.join(rbac_check['roles'])}",
+                details,
+            )
 
         # 3. Future: Check ABAC policies
         # 4. Future: Check explicit deny policies
@@ -88,11 +91,7 @@ class AuthorizationService:
         return False, "No matching authorization found", details
 
     async def _check_org_rbac(
-        self,
-        actor_id: UUID,
-        actor_type: ActorType,
-        organization_id: UUID,
-        action: str
+        self, actor_id: UUID, actor_type: ActorType, organization_id: UUID, action: str
     ) -> Dict:
         """Check organization-level RBAC permissions."""
         # Build query based on actor type
@@ -101,7 +100,7 @@ class AuthorizationService:
                 select(OrganizationMembership)
                 .where(
                     OrganizationMembership.user_id == actor_id,
-                    OrganizationMembership.organization_id == organization_id
+                    OrganizationMembership.organization_id == organization_id,
                 )
                 .options(selectinload(OrganizationMembership.role))
             )
@@ -110,7 +109,7 @@ class AuthorizationService:
                 select(OrganizationMembership)
                 .where(
                     OrganizationMembership.agent_id == actor_id,
-                    OrganizationMembership.organization_id == organization_id
+                    OrganizationMembership.organization_id == organization_id,
                 )
                 .options(selectinload(OrganizationMembership.role))
             )
@@ -140,7 +139,7 @@ class AuthorizationService:
                 if parent_check["allowed"]:
                     return {
                         "allowed": True,
-                        "roles": [role.name] + parent_check["roles"]
+                        "roles": [role.name] + parent_check["roles"],
                     }
 
         return {"allowed": False, "roles": []}
@@ -161,7 +160,7 @@ class AuthorizationService:
                 if parent_check["allowed"]:
                     return {
                         "allowed": True,
-                        "roles": [role.name] + parent_check["roles"]
+                        "roles": [role.name] + parent_check["roles"],
                     }
 
         return {"allowed": False, "roles": []}
@@ -169,7 +168,7 @@ class AuthorizationService:
     def _has_permission(self, permissions: List[str], required: str) -> bool:
         """
         Check if permission list contains required permission (with wildcards).
-        
+
         Examples:
             permissions=["org:*"], required="org:read" → True
             permissions=["project:read"], required="project:write" → False
@@ -186,23 +185,21 @@ class AuthorizationService:
         # Check wildcards
         parts = required.split(":")
         for i in range(len(parts)):
-            wildcard = ":".join(parts[:i + 1]) + ":*"
+            wildcard = ":".join(parts[: i + 1]) + ":*"
             if wildcard in permissions:
                 return True
 
         return False
 
     async def get_user_permissions(
-        self,
-        user_id: UUID,
-        organization_id: UUID
+        self, user_id: UUID, organization_id: UUID
     ) -> List[str]:
         """Get all permissions for user in organization."""
         result = await self.db.execute(
             select(OrganizationMembership)
             .where(
                 OrganizationMembership.user_id == user_id,
-                OrganizationMembership.organization_id == organization_id
+                OrganizationMembership.organization_id == organization_id,
             )
             .options(selectinload(OrganizationMembership.role))
         )
@@ -227,51 +224,40 @@ class AuthorizationService:
         return list(set(all_permissions))  # Remove duplicates
 
     async def is_organization_member(
-        self,
-        actor_id: UUID,
-        actor_type: ActorType,
-        organization_id: UUID
+        self, actor_id: UUID, actor_type: ActorType, organization_id: UUID
     ) -> bool:
         """Check if actor is a member of organization."""
         if actor_type == ActorType.USER:
             query = select(OrganizationMembership).where(
                 OrganizationMembership.user_id == actor_id,
-                OrganizationMembership.organization_id == organization_id
+                OrganizationMembership.organization_id == organization_id,
             )
         else:
             query = select(OrganizationMembership).where(
                 OrganizationMembership.agent_id == actor_id,
-                OrganizationMembership.organization_id == organization_id
+                OrganizationMembership.organization_id == organization_id,
             )
 
         result = await self.db.execute(query)
         return result.scalar_one_or_none() is not None
 
-    async def is_organization_owner(
-        self,
-        user_id: UUID,
-        organization_id: UUID
-    ) -> bool:
+    async def is_organization_owner(self, user_id: UUID, organization_id: UUID) -> bool:
         """Check if user is organization owner."""
         result = await self.db.execute(
             select(Organization).where(
-                Organization.id == organization_id,
-                Organization.owner_id == user_id
+                Organization.id == organization_id, Organization.owner_id == user_id
             )
         )
         return result.scalar_one_or_none() is not None
 
-    async def get_user_organizations(
-        self,
-        user_id: UUID
-    ) -> List[Dict]:
+    async def get_user_organizations(self, user_id: UUID) -> List[Dict]:
         """Get all organizations user is a member of."""
         result = await self.db.execute(
             select(OrganizationMembership)
             .where(OrganizationMembership.user_id == user_id)
             .options(
                 selectinload(OrganizationMembership.organization),
-                selectinload(OrganizationMembership.role)
+                selectinload(OrganizationMembership.role),
             )
         )
         memberships = result.scalars().all()
@@ -283,8 +269,7 @@ class AuthorizationService:
                 "organization_slug": membership.organization.slug,
                 "role": membership.role.name,
                 "permissions": membership.role.permissions,
-                "joined_at": membership.joined_at
+                "joined_at": membership.joined_at,
             }
             for membership in memberships
         ]
-

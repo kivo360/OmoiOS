@@ -15,7 +15,6 @@ from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
-
 # Global services (injected at startup)
 _db: Optional[DatabaseService] = None
 _event_bus: Optional[EventBusService] = None
@@ -946,9 +945,9 @@ def get_task(
             "priority": task.priority,
             "created_at": task.created_at.isoformat() if task.created_at else None,
             "started_at": task.started_at.isoformat() if task.started_at else None,
-            "completed_at": task.completed_at.isoformat()
-            if task.completed_at
-            else None,
+            "completed_at": (
+                task.completed_at.isoformat() if task.completed_at else None
+            ),
             "dependencies": task.dependencies or [],
         }
 
@@ -992,9 +991,9 @@ def get_task_discoveries(
                     "discovery_type": d.discovery_type,
                     "description": d.description,
                     "spawned_task_ids": d.spawned_task_ids,
-                    "discovered_at": d.discovered_at.isoformat()
-                    if d.discovered_at
-                    else None,
+                    "discovered_at": (
+                        d.discovered_at.isoformat() if d.discovered_at else None
+                    ),
                     "resolution_status": d.resolution_status,
                     "priority_boost": d.priority_boost,
                 }
@@ -1306,9 +1305,9 @@ def get_phase_history(
                     "to_phase": entry.to_phase_id,
                     "triggered_by_agent_id": entry.triggered_by_agent_id,
                     "reason": entry.reason,
-                    "created_at": entry.created_at.isoformat()
-                    if entry.created_at
-                    else None,
+                    "created_at": (
+                        entry.created_at.isoformat() if entry.created_at else None
+                    ),
                     "duration_seconds": duration,
                 }
             )
@@ -1382,9 +1381,9 @@ def get_task_timeline(
             "timing": {
                 "created_at": task.created_at.isoformat() if task.created_at else None,
                 "started_at": task.started_at.isoformat() if task.started_at else None,
-                "completed_at": task.completed_at.isoformat()
-                if task.completed_at
-                else None,
+                "completed_at": (
+                    task.completed_at.isoformat() if task.completed_at else None
+                ),
                 "duration_seconds": duration_seconds,
             },
             "execution": {
@@ -1532,9 +1531,9 @@ def get_discoveries_by_type(
                     "source_task_id": d.source_task_id,
                     "description": d.description,
                     "spawned_task_ids": d.spawned_task_ids,
-                    "discovered_at": d.discovered_at.isoformat()
-                    if d.discovered_at
-                    else None,
+                    "discovered_at": (
+                        d.discovered_at.isoformat() if d.discovered_at else None
+                    ),
                     "resolution_status": d.resolution_status,
                     "priority_boost": d.priority_boost,
                 }

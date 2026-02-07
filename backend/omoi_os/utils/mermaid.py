@@ -15,7 +15,6 @@ import asyncio
 import logging
 import os
 import re
-import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -33,18 +32,15 @@ SPECIAL_CHARS_IN_CONTENT = frozenset("{}/|<>")
 # Excludes special shape syntaxes like [( )], [[ ]], [/ \] where the special char
 # is immediately followed by content and closing with the corresponding char
 NODE_RECT_PATTERN = re.compile(
-    r'(\b[A-Za-z_][A-Za-z0-9_]*)\s*(\[)(?!\[.*\]\]|\(.*\)\]|/.*\\\])([^\]]+)(\])'
+    r"(\b[A-Za-z_][A-Za-z0-9_]*)\s*(\[)(?!\[.*\]\]|\(.*\)\]|/.*\\\])([^\]]+)(\])"
 )
 
 # Pattern to match subgraph declarations without quotes
-SUBGRAPH_PATTERN = re.compile(
-    r'(subgraph\s+)([^"\n][^\n]*?)(\n|$)'
-)
+SUBGRAPH_PATTERN = re.compile(r'(subgraph\s+)([^"\n][^\n]*?)(\n|$)')
 
 # Pattern to extract mermaid code blocks from markdown
 MERMAID_BLOCK_PATTERN = re.compile(
-    r'```mermaid\s*\n(.*?)\n```',
-    re.DOTALL | re.IGNORECASE
+    r"```mermaid\s*\n(.*?)\n```", re.DOTALL | re.IGNORECASE
 )
 
 
@@ -103,7 +99,7 @@ def _quote_node_label(match: re.Match) -> str:
 
     if _needs_quoting(content):
         # Escape any existing double quotes in the content
-        escaped_content = content.replace('"', '#quot;')
+        escaped_content = content.replace('"', "#quot;")
         return f'{node_id}{bracket_open}"{escaped_content}"{bracket_close}'
 
     return match.group(0)
@@ -127,7 +123,7 @@ def _quote_subgraph_label(match: re.Match) -> str:
         return match.group(0)
 
     # Contains spaces or special characters - needs quoting
-    if ' ' in label or any(char in label for char in SPECIAL_CHARS_IN_CONTENT):
+    if " " in label or any(char in label for char in SPECIAL_CHARS_IN_CONTENT):
         return f'{keyword}"{label}"{trailing}'
 
     return match.group(0)
@@ -191,10 +187,11 @@ def sanitize_markdown_mermaid_blocks(markdown_content: str) -> str:
     Returns:
         Markdown with sanitized Mermaid blocks
     """
+
     def replace_block(match: re.Match) -> str:
         original_code = match.group(1)
         sanitized_code = sanitize_mermaid_diagram(original_code)
-        return f'```mermaid\n{sanitized_code}\n```'
+        return f"```mermaid\n{sanitized_code}\n```"
 
     return MERMAID_BLOCK_PATTERN.sub(replace_block, markdown_content)
 
@@ -204,10 +201,7 @@ def _check_mermaid_cli_available() -> bool:
     try:
         # Check if npx is available
         result = subprocess.run(
-            ['npx', '--version'],
-            capture_output=True,
-            text=True,
-            timeout=5
+            ["npx", "--version"], capture_output=True, text=True, timeout=5
         )
         return result.returncode == 0
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
@@ -215,8 +209,7 @@ def _check_mermaid_cli_available() -> bool:
 
 
 async def validate_mermaid_with_cli(
-    code: str,
-    timeout_seconds: float = 10.0
+    code: str, timeout_seconds: float = 10.0
 ) -> MermaidValidationResult:
     """Validate Mermaid diagram syntax using mermaid-cli.
 
@@ -236,9 +229,7 @@ async def validate_mermaid_with_cli(
     """
     if not code or not code.strip():
         return MermaidValidationResult(
-            is_valid=False,
-            error_message="Empty diagram code",
-            original_code=code
+            is_valid=False, error_message="Empty diagram code", original_code=code
         )
 
     # First, try sanitizing the code
@@ -253,7 +244,7 @@ async def validate_mermaid_with_cli(
             is_valid=True,  # Can't validate, assume valid
             error_message="mermaid-cli not available for validation",
             sanitized_code=sanitized,
-            original_code=code
+            original_code=code,
         )
 
     # Create temp file for input
@@ -263,31 +254,30 @@ async def validate_mermaid_with_cli(
     try:
         # Write diagram to temp file
         with tempfile.NamedTemporaryFile(
-            mode='w',
-            suffix='.mmd',
-            delete=False,
-            encoding='utf-8'
+            mode="w", suffix=".mmd", delete=False, encoding="utf-8"
         ) as f:
             f.write(sanitized)
             input_file = f.name
 
         # Create temp output path
-        output_file = tempfile.mktemp(suffix='.svg')
+        output_file = tempfile.mktemp(suffix=".svg")
 
         # Run mermaid-cli
         process = await asyncio.create_subprocess_exec(
-            'npx', '@mermaid-js/mermaid-cli',
-            '-i', input_file,
-            '-o', output_file,
-            '--quiet',
+            "npx",
+            "@mermaid-js/mermaid-cli",
+            "-i",
+            input_file,
+            "-o",
+            output_file,
+            "--quiet",
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
+            stderr=asyncio.subprocess.PIPE,
         )
 
         try:
             stdout, stderr = await asyncio.wait_for(
-                process.communicate(),
-                timeout=timeout_seconds
+                process.communicate(), timeout=timeout_seconds
             )
         except asyncio.TimeoutError:
             process.kill()
@@ -296,29 +286,28 @@ async def validate_mermaid_with_cli(
                 is_valid=False,
                 error_message="Mermaid validation timed out",
                 sanitized_code=sanitized,
-                original_code=code
+                original_code=code,
             )
 
         if process.returncode == 0:
             return MermaidValidationResult(
-                is_valid=True,
-                sanitized_code=sanitized,
-                original_code=code
+                is_valid=True, sanitized_code=sanitized, original_code=code
             )
         else:
-            error_output = stderr.decode('utf-8') if stderr else stdout.decode('utf-8')
+            error_output = stderr.decode("utf-8") if stderr else stdout.decode("utf-8")
             # Clean up error message
             error_lines = [
-                line for line in error_output.split('\n')
-                if line.strip() and not line.startswith('Generating')
+                line
+                for line in error_output.split("\n")
+                if line.strip() and not line.startswith("Generating")
             ]
-            error_message = '\n'.join(error_lines) or "Unknown validation error"
+            error_message = "\n".join(error_lines) or "Unknown validation error"
 
             return MermaidValidationResult(
                 is_valid=False,
                 error_message=error_message,
                 sanitized_code=sanitized,
-                original_code=code
+                original_code=code,
             )
 
     except Exception as e:
@@ -327,7 +316,7 @@ async def validate_mermaid_with_cli(
             is_valid=False,
             error_message=f"Validation error: {str(e)}",
             sanitized_code=sanitized,
-            original_code=code
+            original_code=code,
         )
     finally:
         # Cleanup temp files
@@ -344,8 +333,7 @@ async def validate_mermaid_with_cli(
 
 
 def validate_mermaid_sync(
-    code: str,
-    timeout_seconds: float = 10.0
+    code: str, timeout_seconds: float = 10.0
 ) -> MermaidValidationResult:
     """Synchronous version of validate_mermaid_with_cli.
 

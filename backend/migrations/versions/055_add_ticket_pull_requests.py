@@ -14,7 +14,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "055_add_ticket_pull_requests"
 down_revision: Union[str, Sequence[str], None] = "88c08d730f8c"
@@ -96,7 +95,13 @@ def downgrade() -> None:
     op.drop_index("idx_pr_repo", table_name="ticket_pull_requests")
     op.drop_index("idx_unique_ticket_pr", table_name="ticket_pull_requests")
     op.drop_index("ix_ticket_pull_requests_state", table_name="ticket_pull_requests")
-    op.drop_index("ix_ticket_pull_requests_repo_name", table_name="ticket_pull_requests")
-    op.drop_index("ix_ticket_pull_requests_repo_owner", table_name="ticket_pull_requests")
-    op.drop_index("ix_ticket_pull_requests_ticket_id", table_name="ticket_pull_requests")
+    op.drop_index(
+        "ix_ticket_pull_requests_repo_name", table_name="ticket_pull_requests"
+    )
+    op.drop_index(
+        "ix_ticket_pull_requests_repo_owner", table_name="ticket_pull_requests"
+    )
+    op.drop_index(
+        "ix_ticket_pull_requests_ticket_id", table_name="ticket_pull_requests"
+    )
     op.drop_table("ticket_pull_requests")

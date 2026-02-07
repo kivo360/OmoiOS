@@ -98,7 +98,9 @@ class ContextService:
         truncated = summary[:max_tokens].rsplit(" ", 1)[0]
         return f"{truncated} ..."
 
-    def get_context_for_phase(self, ticket_id: str, target_phase: str) -> dict[str, Any]:
+    def get_context_for_phase(
+        self, ticket_id: str, target_phase: str
+    ) -> dict[str, Any]:
         """
         Gather context from all phases preceding the target phase.
 
@@ -123,10 +125,14 @@ class ContextService:
             ticket = self._get_ticket_or_raise(session, ticket_id)
             existing_context = (ticket.context or {}).get("phases", {})
             context_subset: dict[str, Any] = {
-                phase: existing_context[phase] for phase in included if phase in existing_context
+                phase: existing_context[phase]
+                for phase in included
+                if phase in existing_context
             }
 
-            missing_phases = [phase for phase in included if phase not in context_subset]
+            missing_phases = [
+                phase for phase in included if phase not in context_subset
+            ]
             if missing_phases:
                 records = (
                     session.query(PhaseContext)
@@ -205,7 +211,8 @@ class ContextService:
     def _build_phase_summary(self, aggregated: dict[str, Any]) -> str:
         """Compose a short textual summary for a single phase."""
         task_summaries = [
-            task.get("summary") or task.get("task_type") for task in aggregated.get("tasks", [])
+            task.get("summary") or task.get("task_type")
+            for task in aggregated.get("tasks", [])
         ]
         decision_fragment = (
             f"Decisions: {', '.join(aggregated['decisions'])}"
@@ -250,5 +257,3 @@ def _dedupe_preserve_order(items: list[Any]) -> list[Any]:
         seen.add(item)
         result.append(item)
     return result
-
-

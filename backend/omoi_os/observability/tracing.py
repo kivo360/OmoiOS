@@ -47,6 +47,7 @@ def _get_request_id() -> Optional[str]:
         Request ID if available, None otherwise
     """
     from omoi_os.logging import get_request_id
+
     return get_request_id()
 
 
@@ -120,6 +121,7 @@ def trace_external_api(service_name: str, tags: Optional[Dict[str, str]] = None)
                 response = await client.get(f"https://api.github.com/repos/{repo}")
                 return response.json()
     """
+
     def decorator(func: F) -> F:
         @functools.wraps(func)
         async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -198,6 +200,7 @@ def trace_external_api(service_name: str, tags: Optional[Dict[str, str]] = None)
 
         # Return appropriate wrapper based on function type
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper  # type: ignore
         return sync_wrapper  # type: ignore
@@ -205,7 +208,9 @@ def trace_external_api(service_name: str, tags: Optional[Dict[str, str]] = None)
     return decorator
 
 
-def trace_operation(op: str, description: Optional[str] = None, tags: Optional[Dict[str, str]] = None):
+def trace_operation(
+    op: str, description: Optional[str] = None, tags: Optional[Dict[str, str]] = None
+):
     """Decorator to trace any operation with a custom span.
 
     Similar to trace_external_api but for general operations like
@@ -228,6 +233,7 @@ def trace_operation(op: str, description: Optional[str] = None, tags: Optional[D
         def serialize_response(data: dict) -> bytes:
             ...
     """
+
     def decorator(func: F) -> F:
         span_description = description or func.__name__
 
@@ -296,6 +302,7 @@ def trace_operation(op: str, description: Optional[str] = None, tags: Optional[D
                 return func(*args, **kwargs)
 
         import asyncio
+
         if asyncio.iscoroutinefunction(func):
             return async_wrapper  # type: ignore
         return sync_wrapper  # type: ignore
@@ -316,7 +323,9 @@ def trace_db_operation(description: Optional[str] = None):
         async def get_user_by_email(email: str) -> Optional[User]:
             ...
     """
-    return trace_operation(op="db.query", description=description, tags={"category": "database"})
+    return trace_operation(
+        op="db.query", description=description, tags={"category": "database"}
+    )
 
 
 def set_transaction_name(name: str) -> None:
@@ -329,6 +338,7 @@ def set_transaction_name(name: str) -> None:
     """
     try:
         import sentry_sdk
+
         scope = sentry_sdk.get_current_scope()
         if scope.transaction:
             scope.transaction.name = name
@@ -347,6 +357,7 @@ def set_span_tag(key: str, value: str) -> None:
     """
     try:
         import sentry_sdk
+
         span = sentry_sdk.get_current_span()
         if span:
             span.set_tag(key, value)
@@ -365,6 +376,7 @@ def set_span_data(key: str, value: Any) -> None:
     """
     try:
         import sentry_sdk
+
         span = sentry_sdk.get_current_span()
         if span:
             span.set_data(key, value)
@@ -390,6 +402,7 @@ def add_breadcrumb(
     """
     try:
         import sentry_sdk
+
         sentry_sdk.add_breadcrumb(
             message=message,
             category=category,
@@ -416,7 +429,6 @@ def get_trace_headers() -> Dict[str, str]:
     """
     try:
         import sentry_sdk
-        from sentry_sdk.integrations.httpx import _get_headers
 
         # Get the propagation headers from the current scope
         scope = sentry_sdk.get_current_scope()

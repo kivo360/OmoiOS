@@ -31,7 +31,9 @@ class PhaseGateResult(Base):
         index=True,
     )
     phase_id: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    gate_status: Mapped[str] = mapped_column(String(50), nullable=False)  # passed, failed
+    gate_status: Mapped[str] = mapped_column(
+        String(50), nullable=False
+    )  # passed, failed
     validation_result: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     validated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

@@ -47,7 +47,9 @@ class LogfireTracer:
                 )
                 self._configured = True
             except Exception as e:
-                warnings.warn(f"Logfire configuration failed: {e}", RuntimeWarning, stacklevel=2)
+                warnings.warn(
+                    f"Logfire configuration failed: {e}", RuntimeWarning, stacklevel=2
+                )
                 self.enabled = False
 
     @contextmanager

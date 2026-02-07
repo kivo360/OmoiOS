@@ -86,7 +86,9 @@ class DaytonaLocalWorkspace(LocalWorkspace):
         from omoi_os.workspace.daytona import DaytonaWorkspace, DaytonaWorkspaceConfig
 
         # Determine working_dir based on image
-        sandbox_working_dir = "/home/pn" if "nikolaik" in self.sandbox_image else "/workspace"
+        sandbox_working_dir = (
+            "/home/pn" if "nikolaik" in self.sandbox_image else "/workspace"
+        )
 
         config = DaytonaWorkspaceConfig(
             api_key=self.daytona_api_key,

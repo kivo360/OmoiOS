@@ -38,7 +38,9 @@ def serialize_workflow_result(result: WorkflowResult) -> Dict:
         "explanation": result.explanation,
         "evidence": result.evidence,
         "status": result.status,
-        "validated_at": result.validated_at.isoformat() if result.validated_at else None,
+        "validated_at": (
+            result.validated_at.isoformat() if result.validated_at else None
+        ),
         "validation_feedback": result.validation_feedback,
         "created_at": result.created_at.isoformat() if result.created_at else None,
     }
@@ -46,16 +48,22 @@ def serialize_workflow_result(result: WorkflowResult) -> Dict:
 
 # Request/Response Models
 
+
 class ReportResultsRequest(BaseModel):
     """Request to submit task-level results."""
+
     task_id: str = Field(..., description="ID of task being reported on")
     markdown_file_path: str = Field(..., description="Path to markdown result file")
-    result_type: str = Field(..., description="Type: implementation, analysis, fix, design, test, documentation")
+    result_type: str = Field(
+        ...,
+        description="Type: implementation, analysis, fix, design, test, documentation",
+    )
     summary: str = Field(..., description="Brief summary of results")
 
 
 class SubmitResultRequest(BaseModel):
     """Request to submit workflow-level result."""
+
     workflow_id: str = Field(..., description="ID of workflow (ticket)")
     markdown_file_path: str = Field(..., description="Path to result markdown file")
     explanation: Optional[str] = Field(None, description="What was accomplished")
@@ -64,14 +72,18 @@ class SubmitResultRequest(BaseModel):
 
 class ValidateResultRequest(BaseModel):
     """Request to validate workflow result."""
+
     result_id: str = Field(..., description="ID of workflow result to validate")
     validation_passed: bool = Field(..., description="Whether validation passed")
     feedback: str = Field(..., description="Detailed validation feedback")
-    evidence: List[dict] = Field(default_factory=list, description="Evidence items checked")
+    evidence: List[dict] = Field(
+        default_factory=list, description="Evidence items checked"
+    )
 
 
 class AgentResultDTO(BaseModel):
     """Agent result response model."""
+
     result_id: str
     agent_id: str
     task_id: str
@@ -83,22 +95,27 @@ class AgentResultDTO(BaseModel):
     verified_by_validation_id: Optional[str]
     created_at: Optional[str]
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "result_id": "uuid",
-        "agent_id": "agent-uuid",
-        "task_id": "task-uuid",
-        "markdown_file_path": "/path/to/results.md",
-        "result_type": "implementation",
-        "summary": "Implemented feature successfully",
-        "verification_status": "unverified",
-        "verified_at": None,
-        "verified_by_validation_id": None,
-        "created_at": "2025-11-17T12:00:00Z",
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "result_id": "uuid",
+                "agent_id": "agent-uuid",
+                "task_id": "task-uuid",
+                "markdown_file_path": "/path/to/results.md",
+                "result_type": "implementation",
+                "summary": "Implemented feature successfully",
+                "verification_status": "unverified",
+                "verified_at": None,
+                "verified_by_validation_id": None,
+                "created_at": "2025-11-17T12:00:00Z",
+            }
+        }
+    )
 
 
 class WorkflowResultDTO(BaseModel):
     """Workflow result response model."""
+
     result_id: str
     workflow_id: str
     agent_id: str
@@ -110,22 +127,27 @@ class WorkflowResultDTO(BaseModel):
     validation_feedback: Optional[str]
     created_at: Optional[str]
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "result_id": "uuid",
-        "workflow_id": "workflow-uuid",
-        "agent_id": "agent-uuid",
-        "markdown_file_path": "/path/to/solution.md",
-        "explanation": "Found the solution",
-        "evidence": {"items": ["Evidence 1", "Evidence 2"]},
-        "status": "pending_validation",
-        "validated_at": None,
-        "validation_feedback": None,
-        "created_at": "2025-11-17T12:00:00Z",
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "result_id": "uuid",
+                "workflow_id": "workflow-uuid",
+                "agent_id": "agent-uuid",
+                "markdown_file_path": "/path/to/solution.md",
+                "explanation": "Found the solution",
+                "evidence": {"items": ["Evidence 1", "Evidence 2"]},
+                "status": "pending_validation",
+                "validated_at": None,
+                "validation_feedback": None,
+                "created_at": "2025-11-17T12:00:00Z",
+            }
+        }
+    )
 
 
 class SubmitResultResponse(BaseModel):
     """Response for workflow result submission."""
+
     status: str
     result_id: str
     workflow_id: str
@@ -140,14 +162,17 @@ def get_result_service() -> ResultSubmissionService:
     """Get result submission service instance."""
     from omoi_os.api.dependencies import get_db_service, get_event_bus
     from omoi_os.services.phase_loader import PhaseLoader
-    
+
     db = get_db_service()
     event_bus = get_event_bus()
     phase_loader = PhaseLoader()
-    return ResultSubmissionService(db=db, event_bus=event_bus, phase_loader=phase_loader)
+    return ResultSubmissionService(
+        db=db, event_bus=event_bus, phase_loader=phase_loader
+    )
 
 
 # Routes
+
 
 @router.post(
     "/report_results",
@@ -161,15 +186,15 @@ def report_task_results(
     result_service: ResultSubmissionService = Depends(get_result_service),
 ) -> AgentResultDTO:
     """Submit task-level results (AgentResult).
-    
+
     Agents submit results for individual tasks with comprehensive evidence.
     Multiple results can be submitted per task.
-    
+
     **File Validation:**
     - Must be markdown (.md)
     - Maximum 100KB
     - No path traversal
-    
+
     **Requires:** Agent must own the task
     """
     try:
@@ -180,9 +205,9 @@ def report_task_results(
             result_type=request.result_type,
             summary=request.summary,
         )
-        
+
         return AgentResultDTO(**serialize_agent_result(result))
-    
+
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -201,10 +226,10 @@ def submit_workflow_result(
     result_service: ResultSubmissionService = Depends(get_result_service),
 ) -> SubmitResultResponse:
     """Submit workflow-level result (WorkflowResult).
-    
+
     Marks workflow completion with definitive solution.
     Automatically triggers validation if workflow has has_result=true.
-    
+
     **File Validation:**
     - Must be markdown (.md)
     - Maximum 100KB
@@ -218,7 +243,7 @@ def submit_workflow_result(
             explanation=request.explanation,
             evidence=request.evidence,
         )
-        
+
         # Check if workflow has result validation enabled
         validation_triggered = False
         try:
@@ -226,19 +251,18 @@ def submit_workflow_result(
             validation_triggered = config.get("has_result", False)
         except Exception:
             pass
-        
+
         return SubmitResultResponse(
             status="submitted",
             result_id=result.id,
             workflow_id=result.workflow_id,
             agent_id=result.agent_id,
             validation_triggered=validation_triggered,
-            message="Result submitted successfully" + (
-                " and validation triggered" if validation_triggered else ""
-            ),
+            message="Result submitted successfully"
+            + (" and validation triggered" if validation_triggered else ""),
             created_at=result.created_at.isoformat(),
         )
-    
+
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
@@ -256,13 +280,13 @@ def validate_workflow_result(
     result_service: ResultSubmissionService = Depends(get_result_service),
 ) -> Dict:
     """Validate workflow result (validator agents only).
-    
+
     Updates validation status and executes configured on_result_found action.
-    
+
     **Actions:**
     - on_result_found="stop_all": Terminates workflow
     - on_result_found="do_nothing": Logs result, continues workflow
-    
+
     **Requires:** Caller must be validator agent
     """
     try:
@@ -273,12 +297,12 @@ def validate_workflow_result(
             evidence=request.evidence,
             validator_agent_id=validator_id,
         )
-        
+
         return {
             **validation_result,
             "message": f"Validation {'passed' if request.validation_passed else 'failed'} - {validation_result['action_taken']}",
         }
-    
+
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -294,7 +318,7 @@ def get_workflow_results(
     result_service: ResultSubmissionService = Depends(get_result_service),
 ) -> List[WorkflowResultDTO]:
     """Get all workflow-level results for a workflow.
-    
+
     Returns results sorted by creation time.
     """
     results = result_service.list_workflow_results(workflow_id)
@@ -312,10 +336,9 @@ def get_task_results(
     result_service: ResultSubmissionService = Depends(get_result_service),
 ) -> List[AgentResultDTO]:
     """Get all task-level results for a task.
-    
+
     Returns results sorted by creation time.
     Multiple results per task are supported.
     """
     results = result_service.get_task_results(task_id)
     return [AgentResultDTO(**serialize_agent_result(r)) for r in results]
-

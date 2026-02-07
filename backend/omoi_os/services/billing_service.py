@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from omoi_os.models.billing import (
@@ -22,10 +22,13 @@ from omoi_os.models.billing import (
     UsageRecord,
 )
 from omoi_os.models.organization import Organization
-from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
-from omoi_os.services.stripe_service import StripeService, get_stripe_service, load_stripe_settings
+from omoi_os.services.stripe_service import (
+    StripeService,
+    get_stripe_service,
+    load_stripe_settings,
+)
 from omoi_os.utils.datetime import utc_now
 
 logger = logging.getLogger(__name__)
@@ -70,6 +73,7 @@ class BillingService:
         Returns:
             BillingAccount for the organization
         """
+
         def _get_or_create(sess: Session) -> BillingAccount:
             # Try to get existing account
             result = sess.execute(
@@ -133,6 +137,7 @@ class BillingService:
         session: Optional[Session] = None,
     ) -> Optional[BillingAccount]:
         """Get billing account for an organization."""
+
         def _get(sess: Session) -> Optional[BillingAccount]:
             result = sess.execute(
                 select(BillingAccount).where(
@@ -154,6 +159,7 @@ class BillingService:
         session: Optional[Session] = None,
     ) -> BillingAccount:
         """Update billing account status."""
+
         def _update(sess: Session) -> BillingAccount:
             result = sess.execute(
                 select(BillingAccount).where(BillingAccount.id == billing_account_id)
@@ -165,7 +171,9 @@ class BillingService:
             account.status = status.value
             sess.flush()
 
-            logger.info(f"Updated billing account {billing_account_id} status to: {status}")
+            logger.info(
+                f"Updated billing account {billing_account_id} status to: {status}"
+            )
             return account
 
         if session:
@@ -198,6 +206,7 @@ class BillingService:
         Returns:
             Created UsageRecord
         """
+
         def _record(sess: Session) -> UsageRecord:
             # Get or create billing account
             account = self.get_or_create_billing_account(organization_id, sess)
@@ -273,12 +282,13 @@ class BillingService:
         session: Optional[Session] = None,
     ) -> list[UsageRecord]:
         """Get all unbilled usage records for a billing account."""
+
         def _get(sess: Session) -> list[UsageRecord]:
             result = sess.execute(
                 select(UsageRecord).where(
                     UsageRecord.billing_account_id == billing_account_id,
-                    UsageRecord.billed == False,
-                    UsageRecord.free_tier_used == False,  # Only billable usage
+                    UsageRecord.billed is False,
+                    UsageRecord.free_tier_used is False,  # Only billable usage
                 )
             )
             return list(result.scalars().all())
@@ -305,6 +315,7 @@ class BillingService:
         Returns:
             Created Invoice or None if no billable usage
         """
+
         def _generate(sess: Session) -> Optional[Invoice]:
             # Get unbilled usage
             usage_records = self.get_unbilled_usage(billing_account_id, sess)
@@ -336,7 +347,7 @@ class BillingService:
             # Add line items for usage
             for usage in usage_records:
                 invoice.add_line_item(
-                    description=f"Workflow Completion",
+                    description="Workflow Completion",
                     unit_price=usage.unit_price,
                     quantity=usage.quantity,
                     ticket_id=str(usage.ticket_id) if usage.ticket_id else None,
@@ -396,10 +407,9 @@ class BillingService:
         session: Optional[Session] = None,
     ) -> Optional[Invoice]:
         """Get an invoice by ID."""
+
         def _get(sess: Session) -> Optional[Invoice]:
-            result = sess.execute(
-                select(Invoice).where(Invoice.id == invoice_id)
-            )
+            result = sess.execute(select(Invoice).where(Invoice.id == invoice_id))
             return result.scalar_one_or_none()
 
         if session:
@@ -416,6 +426,7 @@ class BillingService:
         session: Optional[Session] = None,
     ) -> list[Invoice]:
         """List invoices for a billing account."""
+
         def _list(sess: Session) -> list[Invoice]:
             query = select(Invoice).where(
                 Invoice.billing_account_id == billing_account_id
@@ -451,11 +462,10 @@ class BillingService:
         Returns:
             Created Payment record
         """
+
         def _process(sess: Session) -> Payment:
             # Get invoice
-            result = sess.execute(
-                select(Invoice).where(Invoice.id == invoice_id)
-            )
+            result = sess.execute(select(Invoice).where(Invoice.id == invoice_id))
             invoice = result.scalar_one_or_none()
             if not invoice:
                 raise ValueError(f"Invoice not found: {invoice_id}")
@@ -496,7 +506,8 @@ class BillingService:
                     customer_id=account.stripe_customer_id,
                     amount_cents=amount_cents,
                     description=f"Invoice {invoice.invoice_number}",
-                    payment_method_id=payment_method_id or account.stripe_payment_method_id,
+                    payment_method_id=payment_method_id
+                    or account.stripe_payment_method_id,
                     metadata={
                         "invoice_id": str(invoice.id),
                         "invoice_number": invoice.invoice_number,
@@ -527,7 +538,9 @@ class BillingService:
                 )
                 invoice.status = InvoiceStatus.PAST_DUE.value
 
-                logger.warning(f"Payment failed for invoice {invoice.invoice_number}: {error_message}")
+                logger.warning(
+                    f"Payment failed for invoice {invoice.invoice_number}: {error_message}"
+                )
 
                 # Publish payment failed event
                 if self.event_bus:
@@ -571,6 +584,7 @@ class BillingService:
         Returns:
             Updated BillingAccount
         """
+
         def _add(sess: Session) -> BillingAccount:
             result = sess.execute(
                 select(BillingAccount).where(BillingAccount.id == billing_account_id)
@@ -582,7 +596,9 @@ class BillingService:
             account.add_credits(amount_usd)
             sess.flush()
 
-            logger.info(f"Added ${amount_usd:.2f} credits to account {billing_account_id}")
+            logger.info(
+                f"Added ${amount_usd:.2f} credits to account {billing_account_id}"
+            )
 
             if self.event_bus:
                 self.event_bus.publish(
@@ -660,7 +676,9 @@ class BillingService:
         with self.db.get_session() as sess:
             account = self.get_billing_account(organization_id, sess)
             if not account:
-                raise ValueError(f"No billing account for organization: {organization_id}")
+                raise ValueError(
+                    f"No billing account for organization: {organization_id}"
+                )
 
             if not account.stripe_customer_id:
                 raise ValueError("Billing account has no Stripe customer")
@@ -705,16 +723,21 @@ class BillingService:
 
             # Check if account is suspended
             if account.status == BillingAccountStatus.SUSPENDED.value:
-                return False, "Account suspended due to payment issues. Please update your payment method."
+                return (
+                    False,
+                    "Account suspended due to payment issues. Please update your payment method.",
+                )
 
             # Check for active subscription
             sub_result = sess.execute(
                 select(Subscription).where(
                     Subscription.organization_id == organization_id,
-                    Subscription.status.in_([
-                        SubscriptionStatus.ACTIVE.value,
-                        SubscriptionStatus.TRIALING.value,
-                    ]),
+                    Subscription.status.in_(
+                        [
+                            SubscriptionStatus.ACTIVE.value,
+                            SubscriptionStatus.TRIALING.value,
+                        ]
+                    ),
                 )
             )
             subscription = sub_result.scalar_one_or_none()
@@ -740,7 +763,10 @@ class BillingService:
                 if account.credit_balance >= self.settings.workflow_price_usd:
                     return True, "overage_credits"
 
-                return False, f"Monthly workflow limit ({workflow_limit}) reached. Add credits or upgrade your plan."
+                return (
+                    False,
+                    f"Monthly workflow limit ({workflow_limit}) reached. Add credits or upgrade your plan.",
+                )
 
             # No subscription - check free tier
             self._check_free_tier_reset(account, sess)
@@ -751,7 +777,10 @@ class BillingService:
             if account.credit_balance >= self.settings.workflow_price_usd:
                 return True, "prepaid_credits"
 
-            return False, "No free workflows remaining. Please add credits or subscribe to a plan."
+            return (
+                False,
+                "No free workflows remaining. Please add credits or subscribe to a plan.",
+            )
 
         if session:
             return _check(session)
@@ -810,10 +839,12 @@ class BillingService:
                 sub_result = sess.execute(
                     select(Subscription).where(
                         Subscription.organization_id == organization_id,
-                        Subscription.status.in_([
-                            SubscriptionStatus.ACTIVE.value,
-                            SubscriptionStatus.TRIALING.value,
-                        ]),
+                        Subscription.status.in_(
+                            [
+                                SubscriptionStatus.ACTIVE.value,
+                                SubscriptionStatus.TRIALING.value,
+                            ]
+                        ),
                     )
                 )
                 subscription = sub_result.scalar_one_or_none()
@@ -874,7 +905,9 @@ class BillingService:
             if not account:
                 # No account yet - use free tier defaults
                 summary["subscription_tier"] = "free"
-                summary["free_workflows_remaining"] = self.settings.free_workflows_per_month
+                summary["free_workflows_remaining"] = (
+                    self.settings.free_workflows_per_month
+                )
                 summary["can_execute"] = True
                 summary["reason"] = "new_account"
                 return summary
@@ -886,10 +919,12 @@ class BillingService:
             sub_result = sess.execute(
                 select(Subscription).where(
                     Subscription.organization_id == organization_id,
-                    Subscription.status.in_([
-                        SubscriptionStatus.ACTIVE.value,
-                        SubscriptionStatus.TRIALING.value,
-                    ]),
+                    Subscription.status.in_(
+                        [
+                            SubscriptionStatus.ACTIVE.value,
+                            SubscriptionStatus.TRIALING.value,
+                        ]
+                    ),
                 )
             )
             subscription = sub_result.scalar_one_or_none()
@@ -934,9 +969,19 @@ class BillingService:
         """Get the start of next month."""
         now = utc_now()
         if now.month == 12:
-            return now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            return now.replace(
+                year=now.year + 1,
+                month=1,
+                day=1,
+                hour=0,
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
         else:
-            return now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            return now.replace(
+                month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0
+            )
 
     def _generate_invoice_number(self) -> str:
         """Generate a unique invoice number."""

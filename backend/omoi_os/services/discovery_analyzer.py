@@ -181,9 +181,9 @@ class DiscoveryAnalyzerService:
                     "description": d.description[:200] if d.description else "",
                     "priority_boost": d.priority_boost,
                     "resolution_status": d.resolution_status,
-                    "spawned_count": len(d.spawned_task_ids)
-                    if d.spawned_task_ids
-                    else 0,
+                    "spawned_count": (
+                        len(d.spawned_task_ids) if d.spawned_task_ids else 0
+                    ),
                 }
             )
 

@@ -94,4 +94,3 @@ if __name__ == "__main__":
 
     # Example: All events (no filters)
     asyncio.run(test_websocket_connection())
-

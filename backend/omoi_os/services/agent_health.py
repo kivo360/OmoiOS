@@ -15,7 +15,9 @@ from omoi_os.utils.datetime import utc_now
 class AgentHealthService:
     """Service for monitoring agent health and managing heartbeats."""
 
-    def __init__(self, db: DatabaseService, status_manager: Optional[AgentStatusManager] = None):
+    def __init__(
+        self, db: DatabaseService, status_manager: Optional[AgentStatusManager] = None
+    ):
         """
         Initialize AgentHealthService.
 
@@ -134,9 +136,9 @@ class AgentHealthService:
                 "agent_id": agent_id,
                 "status": agent.status,
                 "healthy": not is_stale,
-                "last_heartbeat": last_heartbeat.isoformat()
-                if last_heartbeat
-                else None,
+                "last_heartbeat": (
+                    last_heartbeat.isoformat() if last_heartbeat else None
+                ),
                 "time_since_last_heartbeat": time_since_last_heartbeat.total_seconds(),
                 "timeout_seconds": timeout_seconds,
                 "agent_type": agent.agent_type,
@@ -231,18 +233,20 @@ class AgentHealthService:
                         "phase_id": agent.phase_id,
                         "status": agent.status,
                         "healthy": not is_stale,
-                        "last_heartbeat": last_heartbeat.isoformat()
-                        if last_heartbeat
-                        else None,
+                        "last_heartbeat": (
+                            last_heartbeat.isoformat() if last_heartbeat else None
+                        ),
                         "time_since_last_heartbeat": time_since_last_heartbeat,
                         "timeout_seconds": timeout_seconds,
                         "capabilities": agent.capabilities,
-                        "created_at": agent.created_at.isoformat()
-                        if agent.created_at
-                        else None,
-                        "health_status": agent.health_status or "healthy"
-                        if not is_stale
-                        else "stale",
+                        "created_at": (
+                            agent.created_at.isoformat() if agent.created_at else None
+                        ),
+                        "health_status": (
+                            agent.health_status or "healthy"
+                            if not is_stale
+                            else "stale"
+                        ),
                     }
                 )
 

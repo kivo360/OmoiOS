@@ -4,7 +4,17 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
@@ -27,20 +37,17 @@ class Organization(Base):
 
     # Identity
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    slug: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    slug: Mapped[str] = mapped_column(
+        String(255), nullable=False, unique=True, index=True
+    )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Ownership
     owner_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("users.id"),
-        nullable=False,
-        index=True
+        PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )
 
     # Settings
@@ -48,60 +55,46 @@ class Organization(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     settings: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     org_attributes: Mapped[Optional[dict]] = mapped_column(
-        JSONB,
-        nullable=True,
-        comment="ABAC attributes for organization-level policies"
+        JSONB, nullable=True, comment="ABAC attributes for organization-level policies"
     )
 
     # Resource Limits
-    max_concurrent_agents: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
-    max_agent_runtime_hours: Mapped[float] = mapped_column(Float, default=100.0, nullable=False)
+    max_concurrent_agents: Mapped[int] = mapped_column(
+        Integer, default=5, nullable=False
+    )
+    max_agent_runtime_hours: Mapped[float] = mapped_column(
+        Float, default=100.0, nullable=False
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        index=True
+        DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        onupdate=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
     owner: Mapped["User"] = relationship(
-        back_populates="owned_organizations",
-        foreign_keys=[owner_id]
+        back_populates="owned_organizations", foreign_keys=[owner_id]
     )
     memberships: Mapped[list["OrganizationMembership"]] = relationship(
-        back_populates="organization",
-        cascade="all, delete-orphan"
+        back_populates="organization", cascade="all, delete-orphan"
     )
     roles: Mapped[list["Role"]] = relationship(
-        back_populates="organization",
-        cascade="all, delete-orphan"
+        back_populates="organization", cascade="all, delete-orphan"
     )
     projects: Mapped[list["Project"]] = relationship(
-        back_populates="organization",
-        cascade="all, delete-orphan"
+        back_populates="organization", cascade="all, delete-orphan"
     )
     billing_account: Mapped[Optional["BillingAccount"]] = relationship(
-        back_populates="organization",
-        uselist=False,
-        cascade="all, delete-orphan"
+        back_populates="organization", uselist=False, cascade="all, delete-orphan"
     )
     subscription: Mapped[Optional["Subscription"]] = relationship(
-        back_populates="organization",
-        uselist=False,
-        cascade="all, delete-orphan"
+        back_populates="organization", uselist=False, cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        {"comment": "Organizations for multi-tenant resource isolation"}
-    )
+    __table_args__ = {"comment": "Organizations for multi-tenant resource isolation"}
 
 
 class OrganizationMembership(Base):
@@ -110,9 +103,7 @@ class OrganizationMembership(Base):
     __tablename__ = "organization_memberships"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Member (user OR agent, enforced by CHECK constraint)
@@ -120,73 +111,68 @@ class OrganizationMembership(Base):
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
-        index=True
+        index=True,
     )
     agent_id: Mapped[Optional[str]] = mapped_column(
         String,
         ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
-        comment="VARCHAR to match agents.id type"
+        comment="VARCHAR to match agents.id type",
     )
 
     organization_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     role_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("roles.id"),
-        nullable=False
+        PGUUID(as_uuid=True), ForeignKey("roles.id"), nullable=False
     )
 
     # Audit
     invited_by: Mapped[Optional[UUID]] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("users.id"),
-        nullable=True
+        PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
     joined_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now,
-        onupdate=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now, onupdate=utc_now
     )
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship(
-        back_populates="memberships",
-        foreign_keys=[user_id]
+        back_populates="memberships", foreign_keys=[user_id]
     )
     agent: Mapped[Optional["Agent"]] = relationship(
-        back_populates="memberships",
-        foreign_keys=[agent_id]
+        back_populates="memberships", foreign_keys=[agent_id]
     )
-    organization: Mapped["Organization"] = relationship(
-        back_populates="memberships"
-    )
+    organization: Mapped["Organization"] = relationship(back_populates="memberships")
     role: Mapped["Role"] = relationship()
 
     __table_args__ = (
         CheckConstraint(
-            '(user_id IS NOT NULL AND agent_id IS NULL) OR '
-            '(user_id IS NULL AND agent_id IS NOT NULL)',
-            name='check_user_or_agent'
+            "(user_id IS NOT NULL AND agent_id IS NULL) OR "
+            "(user_id IS NULL AND agent_id IS NOT NULL)",
+            name="check_user_or_agent",
         ),
-        Index("idx_user_org", "user_id", "organization_id",
-              unique=True,
-              postgresql_where=text("user_id IS NOT NULL")),
-        Index("idx_agent_org", "agent_id", "organization_id",
-              unique=True,
-              postgresql_where=text("agent_id IS NOT NULL")),
-        {"comment": "Organization membership for users and agents"}
+        Index(
+            "idx_user_org",
+            "user_id",
+            "organization_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+        Index(
+            "idx_agent_org",
+            "agent_id",
+            "organization_id",
+            unique=True,
+            postgresql_where=text("agent_id IS NOT NULL"),
+        ),
+        {"comment": "Organization membership for users and agents"},
     )
 
 
@@ -196,41 +182,35 @@ class Role(Base):
     __tablename__ = "roles"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     organization_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=True,
-        comment="NULL for system roles, set for custom org roles"
+        comment="NULL for system roles, set for custom org roles",
     )
     name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     permissions: Mapped[list[str]] = mapped_column(
         JSONB,
         nullable=False,
-        comment="Array of permission strings (e.g., ['org:read', 'project:*'])"
+        comment="Array of permission strings (e.g., ['org:read', 'project:*'])",
     )
     is_system: Mapped[bool] = mapped_column(
         Boolean,
         default=False,
         nullable=False,
-        comment="True for predefined system roles"
+        comment="True for predefined system roles",
     )
 
     # Role inheritance
     inherits_from: Mapped[Optional[UUID]] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("roles.id", ondelete="SET NULL"),
-        nullable=True
+        PGUUID(as_uuid=True), ForeignKey("roles.id", ondelete="SET NULL"), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
 
     # Relationships
@@ -238,13 +218,11 @@ class Role(Base):
         back_populates="roles"
     )
     parent_role: Mapped[Optional["Role"]] = relationship(
-        remote_side=[id],
-        backref="child_roles"
+        remote_side=[id], backref="child_roles"
     )
 
     __table_args__ = (
         Index("idx_org_role_name", "organization_id", "name", unique=True),
         Index("idx_roles_inherits", "inherits_from"),
-        {"comment": "Roles for RBAC permission management"}
+        {"comment": "Roles for RBAC permission management"},
     )
-

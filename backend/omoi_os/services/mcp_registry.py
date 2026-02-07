@@ -30,7 +30,7 @@ class RegistrationResult:
 class MCPRegistryService:
     """
     Central registry for all MCP server tools with schema validation.
-    
+
     REQ-MCP-REG-001: Server Discovery
     REQ-MCP-REG-002: Schema Validation
     REQ-MCP-REG-003: Version Compatibility
@@ -44,7 +44,9 @@ class MCPRegistryService:
             db: DatabaseService instance
         """
         self.db = db
-        self.version_matrix: Dict[str, Dict[str, List[str]]] = {}  # server_id -> tool_name -> versions
+        self.version_matrix: Dict[str, Dict[str, List[str]]] = (
+            {}
+        )  # server_id -> tool_name -> versions
 
     def register_server(
         self,
@@ -113,7 +115,9 @@ class MCPRegistryService:
                     tool_version = tool_data.get("version")
 
                     # Check version compatibility
-                    if not self._check_version_compatibility(server_id, tool_name, tool_version):
+                    if not self._check_version_compatibility(
+                        server_id, tool_name, tool_version
+                    ):
                         rejected_tools.append(
                             {
                                 "tool_name": tool_name,
@@ -157,7 +161,7 @@ class MCPRegistryService:
                     )
 
             session.commit()
-            
+
             # Access all attributes while session is still active, then expunge
             for tool in registered_tools:
                 # Force load of all attributes
@@ -261,7 +265,7 @@ class MCPRegistryService:
             if server_id:
                 query = query.filter(MCPTool.server_id == server_id)
             if enabled_only:
-                query = query.filter(MCPTool.enabled == True)
+                query = query.filter(MCPTool.enabled is True)
             tools = list(query.all())
             # Access all attributes while session is active, then expunge
             for tool in tools:
@@ -369,4 +373,3 @@ class MCPRegistryService:
             if server:
                 server.last_heartbeat = utc_now()
                 session.commit()
-

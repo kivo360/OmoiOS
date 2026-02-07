@@ -12,7 +12,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
-
 # revision identifiers, used by Alembic.
 revision: str = "025_supabase_auth_integration"
 down_revision: Union[str, None] = "024_add_tsvector_for_hybrid_search"

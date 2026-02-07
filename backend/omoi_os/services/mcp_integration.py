@@ -95,7 +95,7 @@ class MCPInvocationResult:
 class MCPIntegrationService:
     """
     Central service for MCP tool invocations.
-    
+
     REQ-MCP-CALL-001: Structured Request
     REQ-MCP-CALL-004: Fallbacks
     """
@@ -126,12 +126,14 @@ class MCPIntegrationService:
         self.retry_manager = retry_manager
         self.event_bus = event_bus
         self.fallback_config = fallback_config or {}
-        self.circuit_breakers: Dict[str, MCPCircuitBreaker] = {}  # circuit_key -> breaker
+        self.circuit_breakers: Dict[str, MCPCircuitBreaker] = (
+            {}
+        )  # circuit_key -> breaker
 
     async def invoke_tool(self, request: MCPInvocationRequest) -> MCPInvocationResult:
         """
         Invoke MCP tool with full orchestration.
-        
+
         Flow:
         1. Validate request structure
         2. Get tool from registry
@@ -426,7 +428,9 @@ class MCPIntegrationService:
                 fallback_server_id, fallback_tool_name = fallback_key.split(":", 1)
 
                 # Check if fallback tool exists and is enabled
-                fallback_tool = self.registry.get_tool(fallback_server_id, fallback_tool_name)
+                fallback_tool = self.registry.get_tool(
+                    fallback_server_id, fallback_tool_name
+                )
                 if not fallback_tool or not fallback_tool.enabled:
                     continue
 
@@ -569,10 +573,11 @@ class MCPIntegrationService:
                         else None
                     ),
                     "opened_at": (
-                        cb_metrics.opened_at.isoformat() if cb_metrics.opened_at else None
+                        cb_metrics.opened_at.isoformat()
+                        if cb_metrics.opened_at
+                        else None
                     ),
                 }
             )
 
         return metrics
-

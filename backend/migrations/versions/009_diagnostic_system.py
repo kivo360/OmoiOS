@@ -70,9 +70,7 @@ def upgrade() -> None:
         sa.Column("agent_id", sa.String(), nullable=False),
         sa.Column("markdown_file_path", sa.Text(), nullable=False),
         sa.Column("explanation", sa.Text(), nullable=True),
-        sa.Column(
-            "evidence", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("evidence", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "status",
             sa.String(length=32),
@@ -116,7 +114,9 @@ def upgrade() -> None:
         sa.Column("done_tasks_at_trigger", sa.Integer(), nullable=False),
         sa.Column("failed_tasks_at_trigger", sa.Integer(), nullable=False),
         sa.Column("time_since_last_task_seconds", sa.Integer(), nullable=False),
-        sa.Column("tasks_created_count", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "tasks_created_count", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column(
             "tasks_created_ids", postgresql.JSONB(astext_type=sa.Text()), nullable=True
         ),
@@ -179,11 +179,8 @@ def downgrade() -> None:
 
     # Drop agent results
     op.drop_index("ix_agent_results_created_at", table_name="agent_results")
-    op.drop_index(
-        "ix_agent_results_verification_status", table_name="agent_results"
-    )
+    op.drop_index("ix_agent_results_verification_status", table_name="agent_results")
     op.drop_index("ix_agent_results_result_type", table_name="agent_results")
     op.drop_index("ix_agent_results_task_id", table_name="agent_results")
     op.drop_index("ix_agent_results_agent_id", table_name="agent_results")
     op.drop_table("agent_results")
-

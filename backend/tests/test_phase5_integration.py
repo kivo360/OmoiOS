@@ -62,7 +62,7 @@ def test_phase5_complete_workflow_integration(
     """
     Test complete Phase 5 integration:
     Memory → Discovery → Board → Quality
-    
+
     Scenario:
     1. Load workflow from YAML (board + phases)
     2. Execute task and store in memory
@@ -256,9 +256,7 @@ def test_quality_prediction_uses_memory_patterns(
         assert prediction["confidence"] > 0.0  # Some confidence
 
 
-def test_board_wip_integration_with_quality(
-    db_service, board_service, quality_checker
-):
+def test_board_wip_integration_with_quality(db_service, board_service, quality_checker):
     """Test that board WIP limits integrate with quality metrics."""
     with db_service.get_session() as session:
         # Load board
@@ -307,7 +305,7 @@ def test_board_wip_integration_with_quality(
         session.commit()
 
         # Check WIP status
-        violations = board_service.check_wip_limits(session=session)
+        board_service.check_wip_limits(session=session)
 
         # Should be at limit but not exceeded
         stats = board_service.get_column_stats(session=session)
@@ -371,4 +369,3 @@ def test_discovery_feeds_memory_patterns(db_service, memory_service, discovery_s
         # Discovery metadata can be used for future pattern learning
         # Memory system now knows: "SQL injection bugs occur in auth validation"
         assert True  # Integration verified
-

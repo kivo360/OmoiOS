@@ -4,8 +4,7 @@ Tests deduplication logic for specs, requirements, tasks, and acceptance criteri
 without requiring a real database or embedding service.
 """
 
-import hashlib
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -19,7 +18,6 @@ from omoi_os.services.spec_dedup import (
     compute_content_hash,
     SpecDeduplicationService,
 )
-
 
 # =============================================================================
 # Test: Text Normalization
@@ -185,9 +183,7 @@ class TestSpecDeduplicationServiceUnit:
         """Create mock embedding service."""
         service = MagicMock()
         # Return a fake embedding
-        service.generate_embedding = MagicMock(
-            return_value=[0.1] * 1536
-        )
+        service.generate_embedding = MagicMock(return_value=[0.1] * 1536)
         return service
 
     @pytest.fixture
@@ -260,7 +256,9 @@ class TestSpecDeduplicationServiceUnit:
         mock_entity.title = "Test Req"
         mock_entity.condition = "When user clicks button"
 
-        preview = dedup_service._get_content_preview(mock_entity, EntityType.REQUIREMENT)
+        preview = dedup_service._get_content_preview(
+            mock_entity, EntityType.REQUIREMENT
+        )
         assert "Test Req:" in preview
         assert "When user" in preview
 

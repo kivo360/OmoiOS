@@ -33,21 +33,26 @@ class EmailService:
     def enabled(self) -> bool:
         return self._enabled
 
-    async def send_verification_email(self, to_email: str, token: str, user_name: Optional[str] = None) -> bool:
+    async def send_verification_email(
+        self, to_email: str, token: str, user_name: Optional[str] = None
+    ) -> bool:
         """Send email verification link."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send verification to {to_email}")
+            logger.warning(
+                f"Email not configured - would send verification to {to_email}"
+            )
             return False
 
         verify_url = f"{self.settings.frontend_url}/verify-email?token={token}"
         name = user_name or "there"
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": "Verify your OmoiOS account",
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": "Verify your OmoiOS account",
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Welcome to OmoiOS!</h2>
                     <p>Hi {name},</p>
@@ -67,29 +72,35 @@ class EmailService:
                         If you didn't create an account with OmoiOS, you can safely ignore this email.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Verification email sent to {to_email}")
             return True
         except Exception as e:
             logger.error(f"Failed to send verification email: {e}")
             return False
 
-    async def send_password_reset_email(self, to_email: str, token: str, user_name: Optional[str] = None) -> bool:
+    async def send_password_reset_email(
+        self, to_email: str, token: str, user_name: Optional[str] = None
+    ) -> bool:
         """Send password reset link."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send password reset to {to_email}")
+            logger.warning(
+                f"Email not configured - would send password reset to {to_email}"
+            )
             return False
 
         reset_url = f"{self.settings.frontend_url}/reset-password?token={token}"
         name = user_name or "there"
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": "Reset your OmoiOS password",
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": "Reset your OmoiOS password",
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Password Reset Request</h2>
                     <p>Hi {name},</p>
@@ -109,15 +120,18 @@ class EmailService:
                         If you didn't request a password reset, you can safely ignore this email.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Password reset email sent to {to_email}")
             return True
         except Exception as e:
             logger.error(f"Failed to send password reset email: {e}")
             return False
 
-    async def send_welcome_email(self, to_email: str, user_name: Optional[str] = None) -> bool:
+    async def send_welcome_email(
+        self, to_email: str, user_name: Optional[str] = None
+    ) -> bool:
         """Send welcome email after verification."""
         if not self._enabled:
             logger.warning(f"Email not configured - would send welcome to {to_email}")
@@ -127,11 +141,12 @@ class EmailService:
         dashboard_url = f"{self.settings.frontend_url}/dashboard"
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": "Welcome to OmoiOS!",
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": "Welcome to OmoiOS!",
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>You're all set!</h2>
                     <p>Hi {name},</p>
@@ -154,8 +169,9 @@ class EmailService:
                         Questions? Reply to this email and we'll help you out.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Welcome email sent to {to_email}")
             return True
         except Exception as e:
@@ -177,11 +193,17 @@ class EmailService:
     ) -> bool:
         """Send payment failure notification."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send payment failed to {to_email}")
+            logger.warning(
+                f"Email not configured - would send payment failed to {to_email}"
+            )
             return False
 
         name = user_name or "there"
-        amount = f"${amount_cents / 100:.2f}" if currency == "usd" else f"{amount_cents / 100:.2f} {currency.upper()}"
+        amount = (
+            f"${amount_cents / 100:.2f}"
+            if currency == "usd"
+            else f"{amount_cents / 100:.2f} {currency.upper()}"
+        )
         billing_url = f"{self.settings.frontend_url}/settings/billing"
 
         # Adjust messaging based on attempt number
@@ -190,21 +212,26 @@ class EmailService:
             urgency_message = "We'll automatically retry your payment in a few days."
         elif attempt_number == 2:
             subject = "Second payment attempt failed"
-            urgency_message = "Please update your payment method to avoid service interruption."
+            urgency_message = (
+                "Please update your payment method to avoid service interruption."
+            )
         else:
             subject = "Final payment notice - Action required"
             urgency_message = "<strong>Your subscription may be canceled if payment is not received soon.</strong>"
 
         retry_info = ""
         if next_retry_date:
-            retry_info = f"<p>Next automatic retry: {next_retry_date.strftime('%B %d, %Y')}</p>"
+            retry_info = (
+                f"<p>Next automatic retry: {next_retry_date.strftime('%B %d, %Y')}</p>"
+            )
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": subject,
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Payment Failed</h2>
                     <p>Hi {name},</p>
@@ -223,9 +250,12 @@ class EmailService:
                         If you have questions about this charge, please reply to this email.
                     </p>
                 </div>
-                """
-            })
-            logger.info(f"Payment failed email sent to {to_email} (attempt {attempt_number})")
+                """,
+                }
+            )
+            logger.info(
+                f"Payment failed email sent to {to_email} (attempt {attempt_number})"
+            )
             return True
         except Exception as e:
             logger.error(f"Failed to send payment failed email: {e}")
@@ -241,11 +271,17 @@ class EmailService:
     ) -> bool:
         """Send payment success confirmation."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send payment success to {to_email}")
+            logger.warning(
+                f"Email not configured - would send payment success to {to_email}"
+            )
             return False
 
         name = user_name or "there"
-        amount = f"${amount_cents / 100:.2f}" if currency == "usd" else f"{amount_cents / 100:.2f} {currency.upper()}"
+        amount = (
+            f"${amount_cents / 100:.2f}"
+            if currency == "usd"
+            else f"{amount_cents / 100:.2f} {currency.upper()}"
+        )
 
         invoice_link = ""
         if invoice_url:
@@ -260,11 +296,12 @@ class EmailService:
             """
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": f"Payment received - {amount}",
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": f"Payment received - {amount}",
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Payment Successful</h2>
                     <p>Hi {name},</p>
@@ -275,8 +312,9 @@ class EmailService:
                         If you have questions about this payment, please reply to this email.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Payment success email sent to {to_email}")
             return True
         except Exception as e:
@@ -292,7 +330,9 @@ class EmailService:
     ) -> bool:
         """Send subscription cancellation notification."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send subscription canceled to {to_email}")
+            logger.warning(
+                f"Email not configured - would send subscription canceled to {to_email}"
+            )
             return False
 
         name = user_name or "there"
@@ -311,11 +351,12 @@ class EmailService:
             message = "Your subscription to OmoiOS has been canceled."
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": subject,
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": subject,
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Subscription Canceled</h2>
                     <p>Hi {name},</p>
@@ -334,8 +375,9 @@ class EmailService:
                         If you canceled by mistake or have feedback, please reply to this email.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Subscription canceled email sent to {to_email}")
             return True
         except Exception as e:
@@ -353,16 +395,24 @@ class EmailService:
     ) -> bool:
         """Send invoice notification."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send invoice generated to {to_email}")
+            logger.warning(
+                f"Email not configured - would send invoice generated to {to_email}"
+            )
             return False
 
         name = user_name or "there"
-        amount = f"${amount_cents / 100:.2f}" if currency == "usd" else f"{amount_cents / 100:.2f} {currency.upper()}"
+        amount = (
+            f"${amount_cents / 100:.2f}"
+            if currency == "usd"
+            else f"{amount_cents / 100:.2f} {currency.upper()}"
+        )
         billing_url = f"{self.settings.frontend_url}/settings/billing"
 
         due_info = ""
         if due_date:
-            due_info = f"<p><strong>Due date:</strong> {due_date.strftime('%B %d, %Y')}</p>"
+            due_info = (
+                f"<p><strong>Due date:</strong> {due_date.strftime('%B %d, %Y')}</p>"
+            )
 
         invoice_button = ""
         if invoice_url:
@@ -387,11 +437,12 @@ class EmailService:
             """
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": f"New invoice for {amount}",
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": f"New invoice for {amount}",
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Invoice Ready</h2>
                     <p>Hi {name},</p>
@@ -404,8 +455,9 @@ class EmailService:
                         If you have questions about this invoice, please reply to this email.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Invoice generated email sent to {to_email}")
             return True
         except Exception as e:
@@ -421,18 +473,21 @@ class EmailService:
     ) -> bool:
         """Send low credits warning."""
         if not self._enabled:
-            logger.warning(f"Email not configured - would send credits low to {to_email}")
+            logger.warning(
+                f"Email not configured - would send credits low to {to_email}"
+            )
             return False
 
         name = user_name or "there"
         billing_url = f"{self.settings.frontend_url}/settings/billing"
 
         try:
-            resend.Emails.send({
-                "from": self.settings.email_from,
-                "to": [to_email],
-                "subject": "Your OmoiOS credits are running low",
-                "html": f"""
+            resend.Emails.send(
+                {
+                    "from": self.settings.email_from,
+                    "to": [to_email],
+                    "subject": "Your OmoiOS credits are running low",
+                    "html": f"""
                 <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto;">
                     <h2>Low Credits Warning</h2>
                     <p>Hi {name},</p>
@@ -450,8 +505,9 @@ class EmailService:
                         Consider upgrading to a subscription plan for better value and automatic renewals.
                     </p>
                 </div>
-                """
-            })
+                """,
+                }
+            )
             logger.info(f"Credits low email sent to {to_email}")
             return True
         except Exception as e:

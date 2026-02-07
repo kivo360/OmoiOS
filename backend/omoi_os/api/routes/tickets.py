@@ -1,6 +1,5 @@
 """Ticket API routes."""
 
-import asyncio
 from typing import Optional
 from uuid import UUID
 
@@ -37,7 +36,6 @@ from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.approval import ApprovalService, InvalidApprovalStateError
 from omoi_os.services.reasoning_listener import log_reasoning_event
-
 
 router = APIRouter()
 
@@ -96,7 +94,9 @@ async def list_tickets(
         if project_id:
             # Verify user has access to the specific project they're filtering by
             if project_id not in [str(pid) for pid in accessible_project_ids]:
-                raise HTTPException(status_code=403, detail="You don't have access to this project")
+                raise HTTPException(
+                    status_code=403, detail="You don't have access to this project"
+                )
             stmt = stmt.filter(Ticket.project_id == project_id)
         if status:
             stmt = stmt.filter(Ticket.status == status)
@@ -115,7 +115,9 @@ async def list_tickets(
 
         # Get total count and paginated results in parallel
         count_stmt = select(func.count()).select_from(stmt.subquery())
-        paginated_stmt = stmt.order_by(Ticket.created_at.desc()).offset(offset).limit(limit)
+        paginated_stmt = (
+            stmt.order_by(Ticket.created_at.desc()).offset(offset).limit(limit)
+        )
 
         # Execute both queries (could be parallelized with gather if on separate sessions)
         count_result = await session.execute(count_stmt)
@@ -217,6 +219,7 @@ async def _generate_embedding_background(
     generation to a background task to reduce user-facing latency.
     """
     from omoi_os.logging import get_logger
+
     logger = get_logger(__name__)
 
     try:
@@ -228,6 +231,7 @@ async def _generate_embedding_background(
             # Store using async session
             async with db.get_async_session() as session:
                 from sqlalchemy import update
+
                 stmt = (
                     update(Ticket)
                     .where(Ticket.id == ticket_id)
@@ -237,7 +241,9 @@ async def _generate_embedding_background(
                 await session.commit()
                 logger.debug(f"Background embedding stored for ticket {ticket_id}")
     except Exception as e:
-        logger.warning(f"Failed to generate embedding in background for ticket {ticket_id}: {e}")
+        logger.warning(
+            f"Failed to generate embedding in background for ticket {ticket_id}: {e}"
+        )
 
 
 async def _trigger_spec_driven_workflow(
@@ -345,6 +351,7 @@ async def _get_organization_id_for_project(
 
     async with db.get_async_session() as session:
         from sqlalchemy import select
+
         result = await session.execute(
             select(Project.organization_id).where(Project.id == project_id)
         )
@@ -390,6 +397,7 @@ async def create_ticket(
     """
     # Log incoming ticket data for debugging
     from omoi_os.logging import get_logger
+
     _logger = get_logger(__name__)
     _logger.info(
         f"create_ticket called: project_id={ticket_data.project_id}, "
@@ -403,11 +411,16 @@ async def create_ticket(
 
     # Auto-create project if github_owner/github_repo provided but no project_id
     # This enables the "select repo, auto-create project" workflow from the frontend
-    if not ticket_data.project_id and ticket_data.github_owner and ticket_data.github_repo:
+    if (
+        not ticket_data.project_id
+        and ticket_data.github_owner
+        and ticket_data.github_repo
+    ):
         from omoi_os.models.project import Project
         from omoi_os.models.organization import OrganizationMembership
         from omoi_os.logging import get_logger
         from sqlalchemy import select, or_
+
         logger = get_logger(__name__)
 
         logger.info(
@@ -521,7 +534,9 @@ async def create_ticket(
     ticket_title = ticket_data.title
     if ticket_data.workflow_mode == "quick":
         try:
-            from omoi_os.services.title_generation_service import get_title_generation_service
+            from omoi_os.services.title_generation_service import (
+                get_title_generation_service,
+            )
 
             title_service = get_title_generation_service()
             # Use description (the full prompt) as context for better title generation
@@ -534,8 +549,11 @@ async def create_ticket(
         except Exception as e:
             # Fallback to provided title if generation fails
             import structlog
+
             logger = structlog.get_logger()
-            logger.warning(f"Failed to generate ticket title, using provided value: {e}")
+            logger.warning(
+                f"Failed to generate ticket title, using provided value: {e}"
+            )
 
     # Use async session for ticket creation
     async with db.get_async_session() as session:
@@ -630,8 +648,16 @@ async def create_ticket(
             queue.enqueue_task(
                 ticket_id=ticket_id_for_task,
                 phase_id=phase_for_task,
-                task_type="implement_feature" if workflow_mode_for_task == "quick" else "analyze_requirements",
-                description=f"Implement: {title_for_task}" if workflow_mode_for_task == "quick" else f"Analyze requirements for: {title_for_task}",
+                task_type=(
+                    "implement_feature"
+                    if workflow_mode_for_task == "quick"
+                    else "analyze_requirements"
+                ),
+                description=(
+                    f"Implement: {title_for_task}"
+                    if workflow_mode_for_task == "quick"
+                    else f"Analyze requirements for: {title_for_task}"
+                ),
                 priority=priority_for_task,
                 session=None,  # Creates own session, ticket already committed
                 execution_config=execution_config,
@@ -712,9 +738,11 @@ async def check_duplicates(
 
     return DuplicateCheckResponse(
         is_duplicate=result.is_duplicate,
-        message=f"Found {len(result.candidates)} similar ticket(s)"
-        if result.is_duplicate
-        else "No duplicates found",
+        message=(
+            f"Found {len(result.candidates)} similar ticket(s)"
+            if result.is_duplicate
+            else "No duplicates found"
+        ),
         candidates=[
             DuplicateCandidateResponse(
                 ticket_id=c.ticket_id,

@@ -322,10 +322,14 @@ async def oauth_callback(
     if connect_user_id is not None:
         success = oauth_service.connect_provider_to_user(connect_user_id, oauth_info)
         if not success:
-            return RedirectResponse(url=f"{frontend_url}?error=user_not_found&connect=true")
+            return RedirectResponse(
+                url=f"{frontend_url}?error=user_not_found&connect=true"
+            )
 
         username = oauth_info.raw_data.get("login", "")
-        logger.info(f"Successfully connected {provider} account @{username} to user {connect_user_id}")
+        logger.info(
+            f"Successfully connected {provider} account @{username} to user {connect_user_id}"
+        )
 
         # Redirect to frontend with connect success params (no tokens needed - user already logged in)
         redirect_url = (

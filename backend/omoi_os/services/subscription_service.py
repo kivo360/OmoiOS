@@ -11,8 +11,6 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from omoi_os.models.billing import BillingAccount, BillingAccountStatus
-from omoi_os.models.organization import Organization
 from omoi_os.models.subscription import (
     Subscription,
     SubscriptionStatus,
@@ -70,16 +68,19 @@ class SubscriptionService:
         Returns:
             Created Subscription
         """
+
         def _create(sess: Session) -> Subscription:
             # Check for existing subscription
             existing = sess.execute(
                 select(Subscription).where(
                     Subscription.organization_id == organization_id,
-                    Subscription.status.in_([
-                        SubscriptionStatus.ACTIVE.value,
-                        SubscriptionStatus.TRIALING.value,
-                        SubscriptionStatus.PAUSED.value,
-                    ])
+                    Subscription.status.in_(
+                        [
+                            SubscriptionStatus.ACTIVE.value,
+                            SubscriptionStatus.TRIALING.value,
+                            SubscriptionStatus.PAUSED.value,
+                        ]
+                    ),
                 )
             ).scalar_one_or_none()
 
@@ -158,17 +159,23 @@ class SubscriptionService:
 
         Returns the most recently created active subscription if multiple exist.
         """
+
         def _get(sess: Session) -> Optional[Subscription]:
             result = sess.execute(
-                select(Subscription).where(
+                select(Subscription)
+                .where(
                     Subscription.organization_id == organization_id,
-                    Subscription.status.in_([
-                        SubscriptionStatus.ACTIVE.value,
-                        SubscriptionStatus.TRIALING.value,
-                        SubscriptionStatus.PAST_DUE.value,
-                        SubscriptionStatus.PAUSED.value,
-                    ])
-                ).order_by(Subscription.created_at.desc()).limit(1)
+                    Subscription.status.in_(
+                        [
+                            SubscriptionStatus.ACTIVE.value,
+                            SubscriptionStatus.TRIALING.value,
+                            SubscriptionStatus.PAST_DUE.value,
+                            SubscriptionStatus.PAUSED.value,
+                        ]
+                    ),
+                )
+                .order_by(Subscription.created_at.desc())
+                .limit(1)
             )
             return result.scalar_one_or_none()
 
@@ -184,6 +191,7 @@ class SubscriptionService:
         session: Optional[Session] = None,
     ) -> Optional[Subscription]:
         """Get subscription by ID."""
+
         def _get(sess: Session) -> Optional[Subscription]:
             result = sess.execute(
                 select(Subscription).where(Subscription.id == subscription_id)
@@ -208,6 +216,7 @@ class SubscriptionService:
         Returns:
             Tuple of (can_use, reason)
         """
+
         def _check(sess: Session) -> tuple[bool, str]:
             subscription = self.get_subscription(organization_id, sess)
 
@@ -238,6 +247,7 @@ class SubscriptionService:
         Returns:
             True if workflow was consumed, False if limit reached
         """
+
         def _use(sess: Session) -> bool:
             subscription = self.get_subscription(organization_id, sess)
 
@@ -281,6 +291,7 @@ class SubscriptionService:
         Returns:
             Updated Subscription
         """
+
         def _reset(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -328,6 +339,7 @@ class SubscriptionService:
         Returns:
             Updated Subscription
         """
+
         def _upgrade(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -389,6 +401,7 @@ class SubscriptionService:
         Returns:
             Updated Subscription
         """
+
         def _downgrade(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -398,7 +411,9 @@ class SubscriptionService:
 
             if at_period_end:
                 # Store pending downgrade in config
-                subscription.subscription_config = subscription.subscription_config or {}
+                subscription.subscription_config = (
+                    subscription.subscription_config or {}
+                )
                 subscription.subscription_config["pending_tier"] = new_tier.value
                 logger.info(
                     f"Scheduled downgrade for subscription {subscription_id} "
@@ -456,6 +471,7 @@ class SubscriptionService:
         Returns:
             Updated Subscription
         """
+
         def _cancel(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -506,6 +522,7 @@ class SubscriptionService:
         Returns:
             Updated Subscription
         """
+
         def _reactivate(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -542,6 +559,7 @@ class SubscriptionService:
         session: Optional[Session] = None,
     ) -> Subscription:
         """Pause a subscription."""
+
         def _pause(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -567,6 +585,7 @@ class SubscriptionService:
         session: Optional[Session] = None,
     ) -> Subscription:
         """Resume a paused subscription."""
+
         def _resume(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -606,6 +625,7 @@ class SubscriptionService:
         Returns:
             Created lifetime Subscription
         """
+
         def _create(sess: Session) -> Subscription:
             # Create base subscription
             subscription = self.create_subscription(
@@ -658,6 +678,7 @@ class SubscriptionService:
         Returns:
             Created BYO Subscription
         """
+
         def _create(sess: Session) -> Subscription:
             # Create base subscription
             subscription = self.create_subscription(
@@ -695,6 +716,7 @@ class SubscriptionService:
         session: Optional[Session] = None,
     ) -> Subscription:
         """Update BYO providers list for a subscription."""
+
         def _update(sess: Session) -> Subscription:
             subscription = self.get_subscription_by_id(subscription_id, sess)
             if not subscription:
@@ -737,6 +759,7 @@ class SubscriptionService:
         Returns:
             Updated Subscription
         """
+
         def _sync(sess: Session) -> Subscription:
             # Get local subscription
             result = sess.execute(

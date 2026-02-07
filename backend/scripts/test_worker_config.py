@@ -61,6 +61,7 @@ def reload_worker_module():
     """Reload the worker module to pick up new environment variables."""
     import importlib
     import omoi_os.workers.claude_sandbox_worker as worker_module
+
     importlib.reload(worker_module)
     return worker_module
 
@@ -83,18 +84,22 @@ def test_default_mode():
     print(f"   disallowed_tools: {config.disallowed_tools}")
 
     # Verify expectations
-    assert config.tools_mode == "default", f"Expected 'default', got '{config.tools_mode}'"
+    assert (
+        config.tools_mode == "default"
+    ), f"Expected 'default', got '{config.tools_mode}'"
     assert config.allowed_tools is None, f"Expected None, got {config.allowed_tools}"
 
     # Test SDK options
     sdk_options = config.to_sdk_options()
-    has_allowed_tools = hasattr(sdk_options, 'allowed_tools') and sdk_options.allowed_tools is not None
+    has_allowed_tools = (
+        hasattr(sdk_options, "allowed_tools") and sdk_options.allowed_tools is not None
+    )
     print(f"\n   SDK allowed_tools set: {has_allowed_tools}")
 
     if has_allowed_tools:
-        print(f"   ⚠️  WARNING: SDK options has allowed_tools when it shouldn't")
+        print("   ⚠️  WARNING: SDK options has allowed_tools when it shouldn't")
     else:
-        print(f"   ✅ SDK will use default preset (includes Skill, Task, etc.)")
+        print("   ✅ SDK will use default preset (includes Skill, Task, etc.)")
 
     return True
 
@@ -116,17 +121,24 @@ def test_replace_mode():
     print(f"   allowed_tools: {config.allowed_tools}")
 
     # Verify expectations
-    assert config.tools_mode == "replace", f"Expected 'replace', got '{config.tools_mode}'"
-    assert config.allowed_tools == ["Read", "Write", "Bash", "Edit"], f"Unexpected: {config.allowed_tools}"
+    assert (
+        config.tools_mode == "replace"
+    ), f"Expected 'replace', got '{config.tools_mode}'"
+    assert config.allowed_tools == [
+        "Read",
+        "Write",
+        "Bash",
+        "Edit",
+    ], f"Unexpected: {config.allowed_tools}"
     assert "Skill" not in config.allowed_tools, "Skill should NOT be in explicit list"
     assert "Task" not in config.allowed_tools, "Task should NOT be in explicit list"
 
-    print(f"\n   ⚠️  WARNING: ALLOWED_TOOLS replaces SDK defaults!")
-    print(f"      Missing tools: Skill, Task, WebSearch, Glob, Grep, etc.")
+    print("\n   ⚠️  WARNING: ALLOWED_TOOLS replaces SDK defaults!")
+    print("      Missing tools: Skill, Task, WebSearch, Glob, Grep, etc.")
 
     # Test SDK options
     sdk_options = config.to_sdk_options()
-    if hasattr(sdk_options, 'allowed_tools') and sdk_options.allowed_tools:
+    if hasattr(sdk_options, "allowed_tools") and sdk_options.allowed_tools:
         print(f"   SDK allowed_tools: {sdk_options.allowed_tools}")
 
     return True
@@ -150,15 +162,20 @@ def test_disallow_mode():
     print(f"   disallowed_tools: {config.disallowed_tools}")
 
     # Verify expectations
-    assert config.tools_mode == "default", f"Expected 'default', got '{config.tools_mode}'"
+    assert (
+        config.tools_mode == "default"
+    ), f"Expected 'default', got '{config.tools_mode}'"
     assert config.allowed_tools is None, "Should use SDK defaults"
-    assert config.disallowed_tools == ["Bash", "Write"], f"Unexpected: {config.disallowed_tools}"
+    assert config.disallowed_tools == [
+        "Bash",
+        "Write",
+    ], f"Unexpected: {config.disallowed_tools}"
 
-    print(f"\n   ✅ SDK will use defaults but block: Bash, Write")
+    print("\n   ✅ SDK will use defaults but block: Bash, Write")
 
     # Test SDK options
     sdk_options = config.to_sdk_options()
-    if hasattr(sdk_options, 'disallowed_tools') and sdk_options.disallowed_tools:
+    if hasattr(sdk_options, "disallowed_tools") and sdk_options.disallowed_tools:
         print(f"   SDK disallowed_tools: {sdk_options.disallowed_tools}")
 
     return True
@@ -184,7 +201,9 @@ def test_mcp_tools():
     if isinstance(config.system_prompt, dict):
         append_text = config.system_prompt.get("append", "")
         has_mcp_docs = "mcp__spec_workflow__" in append_text
-        print(f"   System prompt (preset mode): {config.system_prompt.get('preset', 'N/A')}")
+        print(
+            f"   System prompt (preset mode): {config.system_prompt.get('preset', 'N/A')}"
+        )
     else:
         append_text = config.system_prompt or ""
         has_mcp_docs = "mcp__spec_workflow__" in append_text
@@ -212,21 +231,27 @@ def test_full_config():
     worker = reload_worker_module()
     config = worker.WorkerConfig()
 
-    print(f"\n   Configuration Summary:")
+    print("\n   Configuration Summary:")
     config_dict = config.to_dict()
-    for key in ["tools_mode", "allowed_tools", "disallowed_tools",
-                "enable_skills", "enable_subagents", "enable_spec_tools"]:
+    for key in [
+        "tools_mode",
+        "allowed_tools",
+        "disallowed_tools",
+        "enable_skills",
+        "enable_subagents",
+        "enable_spec_tools",
+    ]:
         print(f"   - {key}: {config_dict.get(key)}")
 
-    print(f"\n   Testing SDK options creation...")
+    print("\n   Testing SDK options creation...")
     sdk_options = config.to_sdk_options()
     print(f"   ✅ SDK options created: {type(sdk_options).__name__}")
 
     # Check for MCP servers
-    if hasattr(sdk_options, 'mcp_servers') and sdk_options.mcp_servers:
+    if hasattr(sdk_options, "mcp_servers") and sdk_options.mcp_servers:
         print(f"   ✅ MCP servers configured: {list(sdk_options.mcp_servers.keys())}")
     else:
-        print(f"   ℹ️  No MCP servers in SDK options (may be added at runtime)")
+        print("   ℹ️  No MCP servers in SDK options (may be added at runtime)")
 
     # Check custom agents
     agents = config.get_custom_agents()
@@ -258,6 +283,7 @@ def run_all_tests():
         except Exception as e:
             print(f"\n   ❌ FAILED: {e}")
             import traceback
+
             traceback.print_exc()
             results.append((name, False))
 
@@ -293,7 +319,7 @@ def main():
         "--mode",
         choices=["all", "default", "replace", "disallow", "mcp", "full"],
         default="all",
-        help="Test mode to run"
+        help="Test mode to run",
     )
     args = parser.parse_args()
 
@@ -315,6 +341,7 @@ def main():
         except Exception as e:
             print(f"\n❌ Test '{args.mode}' failed: {e}")
             import traceback
+
             traceback.print_exc()
             success = False
 

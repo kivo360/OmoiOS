@@ -182,8 +182,8 @@ class IntelligentGuardian:
                 # Note: Uses auto-routing to handle both sandbox and legacy agents
                 # For sandbox agents, this queries sandbox_events table
                 # For legacy agents, this queries agent_logs table
-                trajectory_data = self.trajectory_context.build_accumulated_context_auto(
-                    agent_id
+                trajectory_data = (
+                    self.trajectory_context.build_accumulated_context_auto(agent_id)
                 )
 
                 if not trajectory_data:
@@ -938,7 +938,7 @@ class IntelligentGuardian:
                         loop = asyncio.get_event_loop()
                         if loop.is_running():
                             # Already in async context, create task
-                            future = asyncio.ensure_future(
+                            asyncio.ensure_future(
                                 self._sandbox_intervention(intervention, task)
                             )
                             # Can't await in sync context, but task is scheduled

@@ -4,7 +4,6 @@ from datetime import timedelta
 
 import pytest
 
-from omoi_os.config import TaskQueueSettings
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
@@ -41,7 +40,12 @@ def task_with_priority(db_service: DatabaseService, sample_ticket: Ticket) -> Ta
 class TestTaskScorerPriority:
     """Test priority component of scoring (REQ-TQM-PRI-002)."""
 
-    def test_priority_critical(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_priority_critical(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test CRITICAL priority score is 1.0."""
         with db_service.get_session() as session:
             task = Task(
@@ -89,7 +93,12 @@ class TestTaskScorerPriority:
 class TestTaskScorerAge:
     """Test age component of scoring (REQ-TQM-PRI-002)."""
 
-    def test_age_normalized(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_age_normalized(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test age is normalized correctly."""
         now = utc_now()
         old_time = now - timedelta(seconds=1800)  # 30 minutes ago
@@ -115,7 +124,12 @@ class TestTaskScorerAge:
             # Should include age component
             assert score > 0.225  # Base priority (0.225) + some age component
 
-    def test_age_capped(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_age_capped(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test age is capped at AGE_CEILING."""
         now = utc_now()
         very_old_time = now - timedelta(seconds=7200)  # 2 hours ago (> AGE_CEILING)
@@ -144,7 +158,12 @@ class TestTaskScorerAge:
 class TestTaskScorerDeadline:
     """Test deadline component of scoring (REQ-TQM-PRI-002, REQ-TQM-PRI-003)."""
 
-    def test_deadline_within_window(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_deadline_within_window(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test deadline within SLA_URGENCY_WINDOW gets boost."""
         now = utc_now()
         deadline = now + timedelta(seconds=600)  # 10 minutes from now (< 15 min window)
@@ -167,9 +186,16 @@ class TestTaskScorerDeadline:
             # Should have deadline component AND SLA boost
             # Base score (priority=0.225 + deadline component) * 1.25 (SLA_BOOST_MULTIPLIER)
             # MEDIUM priority: 0.225 base, deadline within window adds ~0.1, SLA boost multiplies by 1.25
-            assert score > 0.4  # Should be higher than normal medium priority task (~0.225)
+            assert (
+                score > 0.4
+            )  # Should be higher than normal medium priority task (~0.225)
 
-    def test_deadline_past(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_deadline_past(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test deadline in past gets maximum urgency."""
         now = utc_now()
         past_deadline = now - timedelta(seconds=100)  # 100 seconds ago
@@ -194,7 +220,12 @@ class TestTaskScorerDeadline:
             # Base score (0.225 + 0.15) * 1.25 = 0.46875
             assert score > 0.4
 
-    def test_deadline_far_future(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_deadline_far_future(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test deadline far in future has no impact."""
         now = utc_now()
         future_deadline = now + timedelta(hours=2)  # 2 hours from now
@@ -222,7 +253,12 @@ class TestTaskScorerDeadline:
 class TestTaskScorerBlocker:
     """Test blocker component of scoring (REQ-TQM-PRI-002)."""
 
-    def test_blocker_count(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_blocker_count(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test tasks that block others get higher score."""
         now = utc_now()
 
@@ -276,7 +312,9 @@ class TestTaskScorerBlocker:
                 session.refresh(non_blocking_task)
                 session.expunge(non_blocking_task)
 
-            score_without_blockers = task_scorer.compute_score(non_blocking_task, now=now)
+            score_without_blockers = task_scorer.compute_score(
+                non_blocking_task, now=now
+            )
 
             # Score with blockers should be higher
             assert score_with_blockers > score_without_blockers
@@ -285,7 +323,12 @@ class TestTaskScorerBlocker:
 class TestTaskScorerRetry:
     """Test retry penalty component of scoring (REQ-TQM-PRI-002)."""
 
-    def test_retry_penalty(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_retry_penalty(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test retry penalty reduces score."""
         now = utc_now()
 
@@ -334,7 +377,12 @@ class TestTaskScorerRetry:
 class TestTaskScorerStarvation:
     """Test starvation guard (REQ-TQM-PRI-004)."""
 
-    def test_starvation_floor(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_starvation_floor(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test starvation guard applies floor score."""
         now = utc_now()
         starved_time = now - timedelta(seconds=7300)  # > 2 hours (STARVATION_LIMIT)
@@ -359,7 +407,12 @@ class TestTaskScorerStarvation:
             # STARVATION_FLOOR_SCORE = 0.6
             assert score >= 0.6  # Floor score applied
 
-    def test_starvation_not_applied(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_starvation_not_applied(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test starvation guard not applied to recent tasks."""
         now = utc_now()
         recent_time = now - timedelta(seconds=1800)  # 30 minutes (< 2 hours)
@@ -388,7 +441,10 @@ class TestTaskScorerComposite:
     """Test composite score calculation (REQ-TQM-PRI-002)."""
 
     def test_composite_score_all_factors(
-        self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
     ):
         """Test composite score with all factors."""
         now = utc_now()
@@ -473,6 +529,7 @@ class TestTaskScorerIntegration:
         low_task_id = low_task.id  # Extract ID before session expires
         with task_queue_service.db.get_session() as session:
             from omoi_os.models.task import Task
+
             task = session.get(Task, low_task_id)
             task.deadline_at = now + timedelta(seconds=300)  # 5 minutes
             session.commit()
@@ -521,7 +578,12 @@ class TestTaskScorerIntegration:
             scores.append(task.score)
         assert scores == sorted(scores, reverse=True)
 
-    def test_update_task_score(self, task_scorer: TaskScorer, db_service: DatabaseService, sample_ticket: Ticket):
+    def test_update_task_score(
+        self,
+        task_scorer: TaskScorer,
+        db_service: DatabaseService,
+        sample_ticket: Ticket,
+    ):
         """Test update_task_score updates score in database."""
         with db_service.get_session() as session:
             task = Task(
@@ -545,4 +607,3 @@ class TestTaskScorerIntegration:
         with db_service.get_session() as session:
             task = session.get(Task, task_id)
             assert task.score == updated_score
-

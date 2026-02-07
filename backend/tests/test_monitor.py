@@ -50,8 +50,8 @@ class TestMetricsCollection:
 
     def test_collect_agent_metrics(self, monitor_service, db_service):
         """Test collecting agent metrics."""
-        agent1 = create_test_agent(db_service, status="idle")
-        agent2 = create_test_agent(db_service, status="running")
+        create_test_agent(db_service, status="idle")
+        create_test_agent(db_service, status="running")
 
         metrics = monitor_service.collect_agent_metrics()
 

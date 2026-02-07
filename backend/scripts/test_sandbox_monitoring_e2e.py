@@ -56,12 +56,15 @@ class TestOutcome:
 @dataclass
 class SandboxTaskInfo:
     """Simple data class to hold task info outside of session scope."""
+
     id: str
     status: str
     sandbox_id: str
 
 
-def test_sandbox_tasks_exist(db: DatabaseService) -> tuple[TestOutcome, list[SandboxTaskInfo]]:
+def test_sandbox_tasks_exist(
+    db: DatabaseService,
+) -> tuple[TestOutcome, list[SandboxTaskInfo]]:
     """Check for sandbox tasks in the database.
 
     PASS: At least one sandbox task exists (any status)
@@ -85,15 +88,13 @@ def test_sandbox_tasks_exist(db: DatabaseService) -> tuple[TestOutcome, list[San
 
             # Convert to simple data objects before session closes
             task_infos = [
-                SandboxTaskInfo(
-                    id=str(t.id),
-                    status=t.status,
-                    sandbox_id=t.sandbox_id
-                )
+                SandboxTaskInfo(id=str(t.id), status=t.status, sandbox_id=t.sandbox_id)
                 for t in sandbox_tasks
             ]
 
-            running_tasks = [t for t in task_infos if t.status in ["running", "assigned"]]
+            running_tasks = [
+                t for t in task_infos if t.status in ["running", "assigned"]
+            ]
             print(f"   ✅ Found {len(task_infos)} sandbox task(s) total")
             print(f"   ℹ️  {len(running_tasks)} are currently running/assigned")
 
@@ -127,7 +128,7 @@ def test_monitoring_loop_detection(
         monitoring_loop = MonitoringLoop(db, event_bus, config)
         sandbox_ids = monitoring_loop._get_active_sandbox_agent_ids()
 
-        print(f"   ✅ Method executed successfully")
+        print("   ✅ Method executed successfully")
         print(f"   ℹ️  Found {len(sandbox_ids)} active sandbox IDs")
         for sid in sandbox_ids[:3]:
             print(f"      - {sid[:40]}...")
@@ -142,7 +143,9 @@ def test_monitoring_loop_detection(
         return TestOutcome(TestResult.FAIL, str(e))
 
 
-def test_guardian_detection(db: DatabaseService, has_running_tasks: bool) -> TestOutcome:
+def test_guardian_detection(
+    db: DatabaseService, has_running_tasks: bool
+) -> TestOutcome:
     """Test IntelligentGuardian._get_active_sandbox_agent_ids().
 
     PASS: Method executes successfully
@@ -153,7 +156,7 @@ def test_guardian_detection(db: DatabaseService, has_running_tasks: bool) -> Tes
         guardian = IntelligentGuardian(db)
         sandbox_ids = guardian._get_active_sandbox_agent_ids()
 
-        print(f"   ✅ Method executed successfully")
+        print("   ✅ Method executed successfully")
         print(f"   ℹ️  Found {len(sandbox_ids)} active sandbox IDs")
         for sid in sandbox_ids[:3]:
             print(f"      - {sid[:40]}...")
@@ -167,7 +170,9 @@ def test_guardian_detection(db: DatabaseService, has_running_tasks: bool) -> Tes
         return TestOutcome(TestResult.FAIL, str(e))
 
 
-def test_conductor_detection(db: DatabaseService, has_running_tasks: bool) -> TestOutcome:
+def test_conductor_detection(
+    db: DatabaseService, has_running_tasks: bool
+) -> TestOutcome:
     """Test ConductorService._get_active_sandbox_agent_ids().
 
     PASS: Method executes successfully
@@ -179,7 +184,7 @@ def test_conductor_detection(db: DatabaseService, has_running_tasks: bool) -> Te
         with db.get_session() as session:
             sandbox_ids = conductor._get_active_sandbox_agent_ids(session)
 
-            print(f"   ✅ Method executed successfully")
+            print("   ✅ Method executed successfully")
             print(f"   ℹ️  Found {len(sandbox_ids)} active sandbox IDs")
             for sid in sandbox_ids[:3]:
                 print(f"      - {sid[:40]}...")
@@ -193,7 +198,9 @@ def test_conductor_detection(db: DatabaseService, has_running_tasks: bool) -> Te
         return TestOutcome(TestResult.FAIL, str(e))
 
 
-def test_trajectory_context(db: DatabaseService, sandbox_tasks: list[SandboxTaskInfo]) -> TestOutcome:
+def test_trajectory_context(
+    db: DatabaseService, sandbox_tasks: list[SandboxTaskInfo]
+) -> TestOutcome:
     """Test TrajectoryContext.get_sandbox_id_for_agent().
 
     NOTE: This method only returns sandbox_ids for ACTIVE (running/assigned) tasks
@@ -228,7 +235,7 @@ def test_trajectory_context(db: DatabaseService, sandbox_tasks: list[SandboxTask
         result = trajectory.get_sandbox_id_for_agent(sandbox_id)
 
         if result == sandbox_id:
-            print(f"   ✅ get_sandbox_id_for_agent() correctly returns sandbox_id")
+            print("   ✅ get_sandbox_id_for_agent() correctly returns sandbox_id")
             print(f"      Input:  {sandbox_id[:40]}...")
             print(f"      Output: {result[:40]}...")
             return TestOutcome(TestResult.PASS)
@@ -242,7 +249,9 @@ def test_trajectory_context(db: DatabaseService, sandbox_tasks: list[SandboxTask
 
 
 def test_agent_output_collector(
-    db: DatabaseService, event_bus: EventBusService, sandbox_tasks: list[SandboxTaskInfo]
+    db: DatabaseService,
+    event_bus: EventBusService,
+    sandbox_tasks: list[SandboxTaskInfo],
 ) -> TestOutcome:
     """Test AgentOutputCollector.get_sandbox_id_for_agent().
 
@@ -277,7 +286,7 @@ def test_agent_output_collector(
         result = collector.get_sandbox_id_for_agent(sandbox_id)
 
         if result == sandbox_id:
-            print(f"   ✅ get_sandbox_id_for_agent() correctly returns sandbox_id")
+            print("   ✅ get_sandbox_id_for_agent() correctly returns sandbox_id")
             print(f"      Input:  {sandbox_id[:40]}...")
             print(f"      Output: {result[:40]}...")
             return TestOutcome(TestResult.PASS)
@@ -290,7 +299,9 @@ def test_agent_output_collector(
         return TestOutcome(TestResult.FAIL, str(e))
 
 
-def test_trajectory_summary(db: DatabaseService, sandbox_tasks: list[SandboxTaskInfo]) -> TestOutcome:
+def test_trajectory_summary(
+    db: DatabaseService, sandbox_tasks: list[SandboxTaskInfo]
+) -> TestOutcome:
     """Test the trajectory summary query (excludes heartbeats).
 
     PASS: Query returns valid data with correct count math
@@ -316,7 +327,7 @@ def test_trajectory_summary(db: DatabaseService, sandbox_tasks: list[SandboxTask
         trajectory = result["trajectory_events"]
         heartbeats = result["heartbeat_summary"]["count"]
 
-        print(f"   ✅ Trajectory summary retrieved successfully")
+        print("   ✅ Trajectory summary retrieved successfully")
         print(f"      Total events:      {total}")
         print(f"      Trajectory events: {trajectory} (non-heartbeat)")
         print(f"      Heartbeats:        {heartbeats} (aggregated)")
@@ -335,11 +346,12 @@ def test_trajectory_summary(db: DatabaseService, sandbox_tasks: list[SandboxTask
             print(f"   ❌ Count mismatch: {trajectory} + {heartbeats} != {total}")
             return TestOutcome(
                 TestResult.FAIL,
-                f"Count mismatch: {trajectory} + {heartbeats} != {total}"
+                f"Count mismatch: {trajectory} + {heartbeats} != {total}",
             )
     except Exception as e:
         print(f"   ❌ Failed: {e}")
         import traceback
+
         traceback.print_exc()
         return TestOutcome(TestResult.FAIL, str(e))
 
@@ -377,32 +389,28 @@ def main():
     has_running_tasks = any(t.status in ["running", "assigned"] for t in sandbox_tasks)
 
     # Tests 2-4: Detection methods (should work even without running tasks)
-    results.append((
-        "MonitoringLoop Detection",
-        test_monitoring_loop_detection(db, event_bus, has_running_tasks)
-    ))
-    results.append((
-        "Guardian Detection",
-        test_guardian_detection(db, has_running_tasks)
-    ))
-    results.append((
-        "Conductor Detection",
-        test_conductor_detection(db, has_running_tasks)
-    ))
+    results.append(
+        (
+            "MonitoringLoop Detection",
+            test_monitoring_loop_detection(db, event_bus, has_running_tasks),
+        )
+    )
+    results.append(
+        ("Guardian Detection", test_guardian_detection(db, has_running_tasks))
+    )
+    results.append(
+        ("Conductor Detection", test_conductor_detection(db, has_running_tasks))
+    )
 
     # Tests 5-7: Require sandbox tasks to test properly
-    results.append((
-        "TrajectoryContext",
-        test_trajectory_context(db, sandbox_tasks)
-    ))
-    results.append((
-        "AgentOutputCollector",
-        test_agent_output_collector(db, event_bus, sandbox_tasks)
-    ))
-    results.append((
-        "Trajectory Summary",
-        test_trajectory_summary(db, sandbox_tasks)
-    ))
+    results.append(("TrajectoryContext", test_trajectory_context(db, sandbox_tasks)))
+    results.append(
+        (
+            "AgentOutputCollector",
+            test_agent_output_collector(db, event_bus, sandbox_tasks),
+        )
+    )
+    results.append(("Trajectory Summary", test_trajectory_summary(db, sandbox_tasks)))
 
     # Print summary
     print("\n" + "=" * 70)
@@ -430,7 +438,9 @@ def main():
             print(f"   {status}: {test_name}")
 
     print("\n" + "-" * 70)
-    print(f"   Total: {len(results)} | Passed: {passed} | Failed: {failed} | Skipped: {skipped}")
+    print(
+        f"   Total: {len(results)} | Passed: {passed} | Failed: {failed} | Skipped: {skipped}"
+    )
 
     if failed == 0:
         if skipped > 0:

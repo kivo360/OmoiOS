@@ -13,10 +13,14 @@ logger = logging.getLogger(__name__)
 class SystemEvent(BaseModel):
     """System-wide orchestration event (not OpenHands conversation events)."""
 
-    event_type: str = Field(..., description="Event type: TASK_ASSIGNED, TASK_COMPLETED, etc.")
+    event_type: str = Field(
+        ..., description="Event type: TASK_ASSIGNED, TASK_COMPLETED, etc."
+    )
     entity_type: str = Field(..., description="Entity type: ticket, task, agent")
     entity_id: str = Field(..., description="ID of the entity")
-    payload: Dict[str, Any] = Field(default_factory=dict, description="Event payload data")
+    payload: Dict[str, Any] = Field(
+        default_factory=dict, description="Event payload data"
+    )
 
 
 class EventBusService:
@@ -40,6 +44,7 @@ class EventBusService:
         if redis_url is None:
             try:
                 from omoi_os.config import get_app_settings
+
                 redis_url = get_app_settings().redis.url
             except Exception:
                 pass  # Will be handled below
@@ -47,10 +52,13 @@ class EventBusService:
         # Validate URL has a proper host (not just "redis://" or local-only)
         # Check for minimal valid URL pattern (redis://host or redis://host:port)
         from urllib.parse import urlparse
+
         parsed = urlparse(redis_url) if redis_url else None
 
         if not parsed or not parsed.hostname:
-            logger.warning("Redis URL not configured or invalid, EventBus will be disabled")
+            logger.warning(
+                "Redis URL not configured or invalid, EventBus will be disabled"
+            )
             return
 
         try:
@@ -92,7 +100,9 @@ class EventBusService:
         except redis.exceptions.ConnectionError:
             logger.warning("Redis connection lost during publish")
 
-    def subscribe(self, event_type: str, callback: Callable[[SystemEvent], None]) -> None:
+    def subscribe(
+        self, event_type: str, callback: Callable[[SystemEvent], None]
+    ) -> None:
         """
         Subscribe to event type.
 

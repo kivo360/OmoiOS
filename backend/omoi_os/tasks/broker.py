@@ -54,7 +54,7 @@ def _get_broker() -> ListQueueBroker:
     redis_url = _get_redis_url()
 
     # Log without exposing credentials
-    safe_url = redis_url.split('@')[-1] if '@' in redis_url else redis_url
+    safe_url = redis_url.split("@")[-1] if "@" in redis_url else redis_url
     logger.info(
         "Initializing taskiq broker",
         redis_host=safe_url,
@@ -81,6 +81,7 @@ broker = _get_broker()
 # =============================================================================
 # Logging Middleware
 # =============================================================================
+
 
 class LoggingMiddleware(TaskiqMiddleware):
     """Middleware to log all task execution with structured logging."""
@@ -120,7 +121,9 @@ class LoggingMiddleware(TaskiqMiddleware):
                 task_id=message.task_id,
                 task_name=message.task_name,
                 execution_time=result.execution_time,
-                return_value_type=type(result.return_value).__name__ if result.return_value else None,
+                return_value_type=(
+                    type(result.return_value).__name__ if result.return_value else None
+                ),
             )
 
     async def on_error(
@@ -147,6 +150,7 @@ broker.add_middlewares(LoggingMiddleware())
 # =============================================================================
 # Taskiq Event Hooks for Lifecycle Logging
 # =============================================================================
+
 
 @broker.on_event(TaskiqEvents.WORKER_STARTUP)
 async def on_worker_startup(state: TaskiqState) -> None:

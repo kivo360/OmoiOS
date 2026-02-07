@@ -250,7 +250,7 @@ class TaskRequirementsAnalyzer:
                     "requires_pr": requirements.requires_pull_request,
                     "requires_code": requirements.requires_code_changes,
                     "reasoning": requirements.reasoning[:100],
-                }
+                },
             )
 
             return requirements
@@ -258,12 +258,14 @@ class TaskRequirementsAnalyzer:
         except Exception as e:
             logger.error(
                 "Failed to analyze task requirements, using defaults",
-                extra={"error": str(e), "task_type": task_type}
+                extra={"error": str(e), "task_type": task_type},
             )
             # Return safe defaults that assume implementation
             return self._get_default_requirements(task_type)
 
-    def _get_default_requirements(self, task_type: Optional[str] = None) -> TaskRequirements:
+    def _get_default_requirements(
+        self, task_type: Optional[str] = None
+    ) -> TaskRequirements:
         """Get default requirements when LLM analysis fails.
 
         Falls back to the original hardcoded logic as a safety net.

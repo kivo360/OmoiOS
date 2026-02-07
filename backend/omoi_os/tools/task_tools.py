@@ -13,7 +13,12 @@ from pydantic import Field
 from rich.text import Text
 
 from openhands.sdk import Action, Observation, TextContent
-from openhands.sdk.tool import ToolDefinition, ToolAnnotations, ToolExecutor, register_tool
+from openhands.sdk.tool import (
+    ToolDefinition,
+    ToolAnnotations,
+    ToolExecutor,
+    register_tool,
+)
 
 from omoi_os.tools.protocols import (
     DatabaseServiceProtocol,
@@ -133,12 +138,8 @@ class GetWorkflowGraphAction(Action):
 class ListPendingTasksAction(Action):
     """List pending tasks for a ticket or phase."""
 
-    ticket_id: Optional[str] = Field(
-        default=None, description="Filter by ticket ID"
-    )
-    phase_id: Optional[str] = Field(
-        default=None, description="Filter by phase ID"
-    )
+    ticket_id: Optional[str] = Field(default=None, description="Filter by ticket ID")
+    phase_id: Optional[str] = Field(default=None, description="Filter by phase ID")
     limit: int = Field(default=20, ge=1, le=100, description="Maximum tasks to return")
 
 
@@ -154,7 +155,9 @@ class TaskObservation(Observation):
     payload: dict = Field(default_factory=dict)
 
     @classmethod
-    def ok(cls, message: str, task_id: Optional[str] = None, payload: dict = None) -> "TaskObservation":
+    def ok(
+        cls, message: str, task_id: Optional[str] = None, payload: dict = None
+    ) -> "TaskObservation":
         return cls(
             content=[TextContent(type="text", text=message)],
             success=True,
@@ -197,7 +200,9 @@ class CreateTaskExecutor(ToolExecutor[CreateTaskAction, TaskObservation]):
         conversation: "LocalConversation | None" = None,
     ) -> TaskObservation:
         if _db is None or _task_queue is None:
-            return TaskObservation.error("Task tools not initialized. Call initialize_task_tool_services first.")
+            return TaskObservation.error(
+                "Task tools not initialized. Call initialize_task_tool_services first."
+            )
 
         try:
             with _db.get_session() as session:
@@ -217,7 +222,11 @@ class CreateTaskExecutor(ToolExecutor[CreateTaskAction, TaskObservation]):
 
                 task_id = str(task.id)
 
-                if _discovery_service and action.discovery_type and action.source_task_id:
+                if (
+                    _discovery_service
+                    and action.discovery_type
+                    and action.source_task_id
+                ):
                     _discovery_service.record_discovery(
                         source_task_id=action.source_task_id,
                         discovery_type=action.discovery_type,
@@ -231,6 +240,7 @@ class CreateTaskExecutor(ToolExecutor[CreateTaskAction, TaskObservation]):
 
                 if _event_bus:
                     from omoi_os.models.events import SystemEvent
+
                     _event_bus.publish(
                         SystemEvent(
                             event_type="TASK_CREATED",
@@ -285,12 +295,16 @@ class UpdateTaskStatusExecutor(ToolExecutor[UpdateTaskStatusAction, TaskObservat
 
             if _event_bus:
                 from omoi_os.models.events import SystemEvent
+
                 _event_bus.publish(
                     SystemEvent(
                         event_type=f"TASK_{action.status.upper()}",
                         entity_type="task",
                         entity_id=action.task_id,
-                        payload={"status": action.status, "result_summary": action.result_summary},
+                        payload={
+                            "status": action.status,
+                            "result_summary": action.result_summary,
+                        },
                     )
                 )
 
@@ -342,7 +356,9 @@ class GetTaskExecutor(ToolExecutor[GetTaskAction, TaskObservation]):
             return TaskObservation.error(f"Failed to get task: {str(e)}")
 
 
-class GetTaskDiscoveriesExecutor(ToolExecutor[GetTaskDiscoveriesAction, TaskObservation]):
+class GetTaskDiscoveriesExecutor(
+    ToolExecutor[GetTaskDiscoveriesAction, TaskObservation]
+):
     """Executor for getting task discoveries."""
 
     def __call__(
@@ -355,7 +371,9 @@ class GetTaskDiscoveriesExecutor(ToolExecutor[GetTaskDiscoveriesAction, TaskObse
 
         try:
             with _db.get_session() as session:
-                discoveries = _discovery_service.get_task_discoveries(action.task_id, session=session)
+                discoveries = _discovery_service.get_task_discoveries(
+                    action.task_id, session=session
+                )
                 return TaskObservation.ok(
                     message=f"Found {len(discoveries)} discoveries for task {action.task_id}",
                     task_id=action.task_id,
@@ -378,7 +396,9 @@ class GetWorkflowGraphExecutor(ToolExecutor[GetWorkflowGraphAction, TaskObservat
 
         try:
             with _db.get_session() as session:
-                graph = _discovery_service.get_workflow_graph(action.ticket_id, session=session)
+                graph = _discovery_service.get_workflow_graph(
+                    action.ticket_id, session=session
+                )
                 return TaskObservation.ok(
                     message=f"Workflow graph for ticket {action.ticket_id}",
                     payload={"graph": graph},
@@ -477,7 +497,9 @@ class UpdateTaskStatusTool(ToolDefinition[UpdateTaskStatusAction, TaskObservatio
     """Tool for updating task status."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["UpdateTaskStatusTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["UpdateTaskStatusTool"]:
         return [
             cls(
                 description=(
@@ -523,7 +545,9 @@ class GetTaskDiscoveriesTool(ToolDefinition[GetTaskDiscoveriesAction, TaskObserv
     """Tool for getting task discoveries."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["GetTaskDiscoveriesTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["GetTaskDiscoveriesTool"]:
         return [
             cls(
                 description=(
@@ -547,7 +571,9 @@ class GetWorkflowGraphTool(ToolDefinition[GetWorkflowGraphAction, TaskObservatio
     """Tool for getting workflow graph."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["GetWorkflowGraphTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["GetWorkflowGraphTool"]:
         return [
             cls(
                 description=(
@@ -571,7 +597,9 @@ class ListPendingTasksTool(ToolDefinition[ListPendingTasksAction, TaskObservatio
     """Tool for listing pending tasks."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["ListPendingTasksTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["ListPendingTasksTool"]:
         return [
             cls(
                 description=(

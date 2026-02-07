@@ -34,7 +34,6 @@ Requirements:
 
 import argparse
 import asyncio
-import json
 import logging
 import os
 import sys
@@ -54,11 +53,14 @@ logger = logging.getLogger(__name__)
 async def fetch_spec_from_api(api_base_url: str, spec_id: str) -> dict:
     """Fetch spec details from the API."""
     import httpx
+
     async with httpx.AsyncClient() as client:
         resp = await client.get(f"{api_base_url}/api/v1/specs/{spec_id}")
         if resp.status_code != 200:
             logger.error(f"Failed to fetch spec: {resp.status_code} - {resp.text}")
-            raise ValueError(f"Spec {spec_id} not found. Create it first in the frontend.")
+            raise ValueError(
+                f"Spec {spec_id} not found. Create it first in the frontend."
+            )
         return resp.json()
 
 
@@ -205,27 +207,29 @@ def main():
     parser.add_argument(
         "--spec-id",
         default=os.environ.get("SPEC_ID"),
-        help="Spec UUID to execute (or set SPEC_ID env var)"
+        help="Spec UUID to execute (or set SPEC_ID env var)",
     )
     parser.add_argument(
-        "--dir", "-d",
+        "--dir",
+        "-d",
         default=os.environ.get("WORKSPACE_DIR", "."),
-        help="Working directory (codebase to analyze)"
+        help="Working directory (codebase to analyze)",
     )
     parser.add_argument(
         "--api-url",
         default=os.environ.get("CALLBACK_URL", "http://localhost:8000"),
-        help="API server base URL"
+        help="API server base URL",
     )
     parser.add_argument(
-        "--model", "-m",
+        "--model",
+        "-m",
         default=os.environ.get("MODEL", "claude-sonnet-4-20250514"),
-        help="Claude model to use"
+        help="Claude model to use",
     )
     parser.add_argument(
         "--sandbox-id",
         default=os.environ.get("SANDBOX_ID"),
-        help="Custom sandbox ID (generated if not provided)"
+        help="Custom sandbox ID (generated if not provided)",
     )
 
     args = parser.parse_args()
@@ -239,13 +243,15 @@ def main():
         sys.exit(1)
 
     # Run
-    exit_code = asyncio.run(run_worker_locally(
-        spec_id=args.spec_id,
-        working_dir=args.dir,
-        api_base_url=args.api_url,
-        model=args.model,
-        sandbox_id=args.sandbox_id,
-    ))
+    exit_code = asyncio.run(
+        run_worker_locally(
+            spec_id=args.spec_id,
+            working_dir=args.dir,
+            api_base_url=args.api_url,
+            model=args.model,
+            sandbox_id=args.sandbox_id,
+        )
+    )
 
     sys.exit(exit_code)
 

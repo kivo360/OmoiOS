@@ -12,7 +12,6 @@ from pydantic import BaseModel
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.github_api import GitHubAPIService
 
-
 # ============================================================================
 # Pydantic Models for Tool Results
 # ============================================================================

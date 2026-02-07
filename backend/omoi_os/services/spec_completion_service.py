@@ -6,19 +6,15 @@ This service handles post-completion actions for specs:
 3. Update spec with PR tracking info
 """
 
-import logging
 import re
 from typing import Any, Optional
 from uuid import UUID
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy.orm import selectinload
 
 from omoi_os.logging import get_logger
-from omoi_os.models.project import Project
 from omoi_os.models.spec import Spec, SpecTask
-from omoi_os.models.ticket import Ticket
-from omoi_os.models.user import User
 from omoi_os.services.branch_workflow import BranchWorkflowService
 from omoi_os.services.credentials import CredentialsService
 from omoi_os.services.database import DatabaseService
@@ -108,10 +104,12 @@ class SpecCompletionService:
             body_parts.append("")
 
         # Add spec link
-        body_parts.extend([
-            "---",
-            f"*Automated PR for spec `{spec.id}`*",
-        ])
+        body_parts.extend(
+            [
+                "---",
+                f"*Automated PR for spec `{spec.id}`*",
+            ]
+        )
 
         return "\n".join(body_parts)
 
@@ -150,7 +148,9 @@ class SpecCompletionService:
 
             # Check if branch already exists
             if spec.branch_name:
-                logger.info(f"Branch already exists for spec {spec_id}: {spec.branch_name}")
+                logger.info(
+                    f"Branch already exists for spec {spec_id}: {spec.branch_name}"
+                )
                 return {"success": True, "branch_name": spec.branch_name}
 
             # Get project GitHub info
@@ -290,7 +290,6 @@ class SpecCompletionService:
 
             # Generate PR body
             pr_body = self._generate_pr_body(spec, list(spec.tasks))
-            pr_title = f"feat: {spec.title}"
 
             # Create PR via BranchWorkflowService
             try:

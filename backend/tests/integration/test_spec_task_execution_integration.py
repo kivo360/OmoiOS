@@ -7,18 +7,15 @@ Tests the full execution flow including:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 from omoi_os.models.spec import Spec, SpecTask
-from omoi_os.models.task import Task
-from omoi_os.models.ticket import Ticket
 from omoi_os.services.spec_task_execution import (
     SpecTaskExecutionService,
     ExecutionStats,
     ExecutionResult,
 )
-
 
 # =============================================================================
 # Test: ExecutionStats

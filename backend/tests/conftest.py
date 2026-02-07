@@ -23,7 +23,6 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.task_queue import TaskQueueService
 
-
 # =============================================================================
 # API CLIENT FIXTURES
 # =============================================================================
@@ -232,6 +231,7 @@ def test_database_url() -> str:
     # Try to get from pydantic settings (loads .env/.env.local)
     try:
         from omoi_os.config import get_app_settings
+
         settings = get_app_settings()
         if settings.database.url and "localhost" not in settings.database.url:
             # Use remote database from settings
@@ -265,6 +265,7 @@ def db_service(test_database_url: str) -> Generator[DatabaseService, None, None]
     # For local databases, try to create the database if needed
     if not is_remote:
         from urllib.parse import urlparse
+
         parsed = urlparse(test_database_url)
         db_name = parsed.path.lstrip("/")
 
@@ -327,6 +328,7 @@ def redis_url() -> str:
     # Try to get from pydantic settings (loads .env/.env.local)
     try:
         from omoi_os.config import get_app_settings
+
         settings = get_app_settings()
         if settings.redis.url and "localhost" not in settings.redis.url:
             # Use remote Redis from settings

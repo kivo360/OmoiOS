@@ -462,4 +462,3 @@ def test_get_action_by_id(
     assert retrieved.id == action.id
     assert retrieved.action_type == "cancel_task"
     assert retrieved.target_entity == running_task.id
-

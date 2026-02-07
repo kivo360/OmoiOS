@@ -106,7 +106,7 @@ class SpecTaskExecutionService:
     # The original phase mapping is preserved in ORIGINAL_PHASE_MAP for reference.
     PHASE_MAP = {
         "Requirements": "PHASE_IMPLEMENTATION",  # Changed from PHASE_INITIAL
-        "Design": "PHASE_IMPLEMENTATION",         # Changed from PHASE_INITIAL
+        "Design": "PHASE_IMPLEMENTATION",  # Changed from PHASE_INITIAL
         "Implementation": "PHASE_IMPLEMENTATION",
         "Testing": "PHASE_INTEGRATION",
         "Done": "PHASE_REFACTORING",
@@ -310,9 +310,7 @@ class SpecTaskExecutionService:
             # Register parallel task coordination (join points) for synthesis
             # This wires CoordinationService.join_tasks() to SynthesisService
             if self.coordination and task_mapping:
-                await self._register_parallel_coordination(
-                    spec, task_mapping, stats
-                )
+                await self._register_parallel_coordination(spec, task_mapping, stats)
 
             # Publish execution started event
             if self.event_bus and stats.tasks_created > 0:
@@ -872,6 +870,7 @@ def get_spec_task_execution_service(
     """
     if db is None:
         from omoi_os.services.database import get_db_service
+
         db = get_db_service()
 
     return SpecTaskExecutionService(

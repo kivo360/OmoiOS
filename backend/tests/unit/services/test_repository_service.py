@@ -105,9 +105,7 @@ class TestRepositoryService:
         assert owners[0].login == "testuser"
 
     @pytest.mark.asyncio
-    async def test_check_availability_returns_true_for_404(
-        self, service, mock_client
-    ):
+    async def test_check_availability_returns_true_for_404(self, service, mock_client):
         """Test check_availability returns True when repo doesn't exist."""
         mock_resp = MagicMock()
         mock_resp.status_code = 404
@@ -250,7 +248,9 @@ class TestRepositoryService:
 
         mock_create_resp = MagicMock()
         mock_create_resp.status_code = 422
-        mock_create_resp.json.return_value = {"message": "Repository name already exists"}
+        mock_create_resp.json.return_value = {
+            "message": "Repository name already exists"
+        }
 
         mock_client.get.return_value = mock_user_resp
         mock_client.post.return_value = mock_create_resp

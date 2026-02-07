@@ -29,7 +29,9 @@ def task_validator(db_service: DatabaseService, event_bus_service: EventBusServi
 
 
 @pytest.fixture
-def task_validator_disabled(db_service: DatabaseService, event_bus_service: EventBusService):
+def task_validator_disabled(
+    db_service: DatabaseService, event_bus_service: EventBusService
+):
     """Create a TaskValidatorService with validation disabled."""
     os.environ["TASK_VALIDATION_ENABLED"] = "false"
     validator = TaskValidatorService(db=db_service, event_bus=event_bus_service)
@@ -61,7 +63,9 @@ def sample_project(db_service: DatabaseService, test_user: User) -> Project:
 
 
 @pytest.fixture
-def sample_ticket_with_project(db_service: DatabaseService, sample_project: Project) -> Ticket:
+def sample_ticket_with_project(
+    db_service: DatabaseService, sample_project: Project
+) -> Ticket:
     """Create a sample ticket linked to a project."""
     with db_service.get_session() as session:
         ticket = Ticket(
@@ -80,7 +84,9 @@ def sample_ticket_with_project(db_service: DatabaseService, sample_project: Proj
 
 
 @pytest.fixture
-def running_task_with_sandbox(db_service: DatabaseService, sample_ticket_with_project: Ticket) -> Task:
+def running_task_with_sandbox(
+    db_service: DatabaseService, sample_ticket_with_project: Ticket
+) -> Task:
     """Create a running task with sandbox_id and branch_name."""
     with db_service.get_session() as session:
         task = Task(
@@ -114,7 +120,9 @@ async def test_request_validation_creates_pending_status(
 ):
     """Test that request_validation sets task status to pending_validation."""
     # Mock the spawner to avoid external calls
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         mock_spawn.return_value = {
             "sandbox_id": "validator-sandbox-123",
             "agent_id": str(uuid4()),
@@ -149,7 +157,9 @@ async def test_request_validation_increments_iteration(
     task_id = str(running_task_with_sandbox.id)
     sandbox_id = running_task_with_sandbox.sandbox_id
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         mock_spawn.return_value = {"sandbox_id": "v-1", "agent_id": str(uuid4())}
 
         # First validation
@@ -267,7 +277,9 @@ async def test_request_validation_stores_validator_info(
     validator_sandbox_id = "validator-sandbox-xyz"
     validator_agent_id = str(uuid4())
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         mock_spawn.return_value = {
             "sandbox_id": validator_sandbox_id,
             "agent_id": validator_agent_id,
@@ -401,7 +413,7 @@ async def test_handle_validation_result_publishes_passed_event(
     """Test that passing validation publishes TASK_VALIDATION_PASSED event."""
     task_id = str(running_task_with_sandbox.id)
 
-    with patch.object(event_bus_service, 'publish') as mock_publish:
+    with patch.object(event_bus_service, "publish") as mock_publish:
         await task_validator.handle_validation_result(
             task_id=task_id,
             validator_agent_id=str(uuid4()),
@@ -427,7 +439,7 @@ async def test_handle_validation_result_publishes_failed_event(
     task_id = str(running_task_with_sandbox.id)
     recommendations = ["Fix the tests", "Add error handling"]
 
-    with patch.object(event_bus_service, 'publish') as mock_publish:
+    with patch.object(event_bus_service, "publish") as mock_publish:
         await task_validator.handle_validation_result(
             task_id=task_id,
             validator_agent_id=str(uuid4()),
@@ -458,7 +470,9 @@ async def test_spawn_validator_gets_repo_info(
 ):
     """Test that _spawn_validator extracts repo info from project."""
     # Mock the spawner
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-123")
         mock_get_spawner.return_value = mock_spawner
@@ -475,7 +489,10 @@ async def test_spawn_validator_gets_repo_info(
         call_kwargs = mock_spawner.spawn_for_task.call_args[1]
         extra_env = call_kwargs["extra_env"]
 
-        assert extra_env["GITHUB_REPO"] == f"{sample_project.github_owner}/{sample_project.github_repo}"
+        assert (
+            extra_env["GITHUB_REPO"]
+            == f"{sample_project.github_owner}/{sample_project.github_repo}"
+        )
         assert extra_env["GITHUB_REPO_OWNER"] == sample_project.github_owner
         assert extra_env["GITHUB_REPO_NAME"] == sample_project.github_repo
         assert extra_env["VALIDATION_MODE"] == "true"
@@ -489,7 +506,9 @@ async def test_spawn_validator_gets_branch_name(
     running_task_with_sandbox: Task,
 ):
     """Test that _spawn_validator extracts branch_name from task.result."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-123")
         mock_get_spawner.return_value = mock_spawner
@@ -515,7 +534,9 @@ async def test_spawn_validator_gets_github_token(
     test_user: User,
 ):
     """Test that _spawn_validator extracts GitHub token from project owner."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-123")
         mock_get_spawner.return_value = mock_spawner
@@ -540,7 +561,9 @@ async def test_spawn_validator_creates_agent_record(
     running_task_with_sandbox: Task,
 ):
     """Test that _spawn_validator creates a validator Agent record."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-123")
         mock_get_spawner.return_value = mock_spawner
@@ -570,7 +593,9 @@ async def test_spawn_validator_handles_failure(
     running_task_with_sandbox: Task,
 ):
     """Test that _spawn_validator returns None on failure."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_get_spawner.side_effect = Exception("Daytona unavailable")
 
         result = await task_validator._spawn_validator(
@@ -596,7 +621,9 @@ def test_build_validator_prompt_includes_task_id(task_validator: TaskValidatorSe
     assert "Validation Iteration: 1" in prompt
 
 
-def test_build_validator_prompt_includes_checklist(task_validator: TaskValidatorService):
+def test_build_validator_prompt_includes_checklist(
+    task_validator: TaskValidatorService,
+):
     """Test that validator prompt includes validation checklist."""
     prompt = task_validator._build_validator_prompt("task-123", 1)
 
@@ -641,7 +668,9 @@ async def test_auto_approve_marks_completed(
 # -------------------------------------------------------------------------
 
 
-def test_get_task_validator_factory(db_service: DatabaseService, event_bus_service: EventBusService):
+def test_get_task_validator_factory(
+    db_service: DatabaseService, event_bus_service: EventBusService
+):
     """Test the get_task_validator factory function."""
     validator = get_task_validator(db=db_service, event_bus=event_bus_service)
 
@@ -666,10 +695,12 @@ async def test_request_validation_publishes_event(
     task_id = str(running_task_with_sandbox.id)
     sandbox_id = running_task_with_sandbox.sandbox_id
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         mock_spawn.return_value = {"sandbox_id": "v-1", "agent_id": str(uuid4())}
 
-        with patch.object(event_bus_service, 'publish') as mock_publish:
+        with patch.object(event_bus_service, "publish") as mock_publish:
             await task_validator.request_validation(
                 task_id=task_id,
                 sandbox_id=sandbox_id,

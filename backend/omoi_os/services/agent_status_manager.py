@@ -153,4 +153,3 @@ class AgentStatusManager:
             for transition in transitions:
                 session.expunge(transition)
             return transitions
-

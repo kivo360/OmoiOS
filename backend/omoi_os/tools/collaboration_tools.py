@@ -13,7 +13,12 @@ from pydantic import Field
 from rich.text import Text
 
 from openhands.sdk import Action, Observation, TextContent
-from openhands.sdk.tool import ToolDefinition, ToolAnnotations, ToolExecutor, register_tool
+from openhands.sdk.tool import (
+    ToolDefinition,
+    ToolAnnotations,
+    ToolExecutor,
+    register_tool,
+)
 
 from omoi_os.tools.protocols import CollaborationServiceProtocol
 
@@ -77,7 +82,9 @@ class GetMessagesAction(Action):
         default=True,
         description="Only return unread messages",
     )
-    limit: int = Field(default=20, ge=1, le=100, description="Maximum messages to return")
+    limit: int = Field(
+        default=20, ge=1, le=100, description="Maximum messages to return"
+    )
 
 
 class RequestHandoffAction(Action):
@@ -152,7 +159,9 @@ class CollaborationObservation(Observation):
 # ---------- Executors (ToolExecutor subclasses) ----------
 
 
-class BroadcastMessageExecutor(ToolExecutor[BroadcastMessageAction, CollaborationObservation]):
+class BroadcastMessageExecutor(
+    ToolExecutor[BroadcastMessageAction, CollaborationObservation]
+):
     """Executor for broadcasting messages."""
 
     def __call__(
@@ -161,7 +170,9 @@ class BroadcastMessageExecutor(ToolExecutor[BroadcastMessageAction, Collaboratio
         conversation: "LocalConversation | None" = None,
     ) -> CollaborationObservation:
         if _collab_service is None:
-            return CollaborationObservation.error("Collaboration service not initialized.")
+            return CollaborationObservation.error(
+                "Collaboration service not initialized."
+            )
 
         try:
             _collab_service.broadcast_message(
@@ -171,7 +182,10 @@ class BroadcastMessageExecutor(ToolExecutor[BroadcastMessageAction, Collaboratio
             )
             return CollaborationObservation.ok(
                 message=f"Broadcast {action.message_type} message sent",
-                payload={"message_type": action.message_type, "message": action.message},
+                payload={
+                    "message_type": action.message_type,
+                    "message": action.message,
+                },
             )
         except Exception as e:
             return CollaborationObservation.error(f"Failed to broadcast: {str(e)}")
@@ -186,7 +200,9 @@ class SendMessageExecutor(ToolExecutor[SendMessageAction, CollaborationObservati
         conversation: "LocalConversation | None" = None,
     ) -> CollaborationObservation:
         if _collab_service is None:
-            return CollaborationObservation.error("Collaboration service not initialized.")
+            return CollaborationObservation.error(
+                "Collaboration service not initialized."
+            )
 
         try:
             _collab_service.send_message(
@@ -215,7 +231,9 @@ class GetMessagesExecutor(ToolExecutor[GetMessagesAction, CollaborationObservati
         conversation: "LocalConversation | None" = None,
     ) -> CollaborationObservation:
         if _collab_service is None:
-            return CollaborationObservation.error("Collaboration service not initialized.")
+            return CollaborationObservation.error(
+                "Collaboration service not initialized."
+            )
 
         try:
             messages = _collab_service.get_messages(
@@ -231,7 +249,9 @@ class GetMessagesExecutor(ToolExecutor[GetMessagesAction, CollaborationObservati
             return CollaborationObservation.error(f"Failed to get messages: {str(e)}")
 
 
-class RequestHandoffExecutor(ToolExecutor[RequestHandoffAction, CollaborationObservation]):
+class RequestHandoffExecutor(
+    ToolExecutor[RequestHandoffAction, CollaborationObservation]
+):
     """Executor for requesting handoffs."""
 
     def __call__(
@@ -240,7 +260,9 @@ class RequestHandoffExecutor(ToolExecutor[RequestHandoffAction, CollaborationObs
         conversation: "LocalConversation | None" = None,
     ) -> CollaborationObservation:
         if _collab_service is None:
-            return CollaborationObservation.error("Collaboration service not initialized.")
+            return CollaborationObservation.error(
+                "Collaboration service not initialized."
+            )
 
         try:
             handoff_id = _collab_service.request_handoff(
@@ -259,10 +281,14 @@ class RequestHandoffExecutor(ToolExecutor[RequestHandoffAction, CollaborationObs
                 },
             )
         except Exception as e:
-            return CollaborationObservation.error(f"Failed to request handoff: {str(e)}")
+            return CollaborationObservation.error(
+                f"Failed to request handoff: {str(e)}"
+            )
 
 
-class MarkMessageReadExecutor(ToolExecutor[MarkMessageReadAction, CollaborationObservation]):
+class MarkMessageReadExecutor(
+    ToolExecutor[MarkMessageReadAction, CollaborationObservation]
+):
     """Executor for marking messages as read."""
 
     def __call__(
@@ -271,7 +297,9 @@ class MarkMessageReadExecutor(ToolExecutor[MarkMessageReadAction, CollaborationO
         conversation: "LocalConversation | None" = None,
     ) -> CollaborationObservation:
         if _collab_service is None:
-            return CollaborationObservation.error("Collaboration service not initialized.")
+            return CollaborationObservation.error(
+                "Collaboration service not initialized."
+            )
 
         try:
             _collab_service.mark_message_read(action.message_id)
@@ -280,17 +308,23 @@ class MarkMessageReadExecutor(ToolExecutor[MarkMessageReadAction, CollaborationO
                 payload={"message_id": action.message_id},
             )
         except Exception as e:
-            return CollaborationObservation.error(f"Failed to mark message read: {str(e)}")
+            return CollaborationObservation.error(
+                f"Failed to mark message read: {str(e)}"
+            )
 
 
 # ---------- Tool Definitions ----------
 
 
-class BroadcastMessageTool(ToolDefinition[BroadcastMessageAction, CollaborationObservation]):
+class BroadcastMessageTool(
+    ToolDefinition[BroadcastMessageAction, CollaborationObservation]
+):
     """Tool for broadcasting messages to all agents."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["BroadcastMessageTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["BroadcastMessageTool"]:
         return [
             cls(
                 description=(
@@ -355,7 +389,9 @@ class GetMessagesTool(ToolDefinition[GetMessagesAction, CollaborationObservation
         ]
 
 
-class RequestHandoffTool(ToolDefinition[RequestHandoffAction, CollaborationObservation]):
+class RequestHandoffTool(
+    ToolDefinition[RequestHandoffAction, CollaborationObservation]
+):
     """Tool for requesting handoffs to other agents."""
 
     @classmethod
@@ -379,7 +415,9 @@ class RequestHandoffTool(ToolDefinition[RequestHandoffAction, CollaborationObser
         ]
 
 
-class MarkMessageReadTool(ToolDefinition[MarkMessageReadAction, CollaborationObservation]):
+class MarkMessageReadTool(
+    ToolDefinition[MarkMessageReadAction, CollaborationObservation]
+):
     """Tool for marking messages as read."""
 
     @classmethod

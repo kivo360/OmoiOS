@@ -264,7 +264,10 @@ class GitHubIntegrationService:
                 return await self._handle_pr_closed(payload, owner, repo, pr, pr_number)
         elif action == "synchronize":
             # PR was updated (new commits pushed)
-            return {"success": True, "message": f"PR {pr_number} synchronize event acknowledged"}
+            return {
+                "success": True,
+                "message": f"PR {pr_number} synchronize event acknowledged",
+            }
         elif action == "reopened":
             return await self._handle_pr_reopened(payload, owner, repo, pr, pr_number)
         else:
@@ -318,7 +321,9 @@ class GitHubIntegrationService:
             )
 
             if existing:
-                logger.info(f"PR {pr_number} already linked to ticket {existing.ticket_id}")
+                logger.info(
+                    f"PR {pr_number} already linked to ticket {existing.ticket_id}"
+                )
                 return {
                     "success": True,
                     "message": f"PR {pr_number} already linked to ticket",
@@ -387,7 +392,7 @@ class GitHubIntegrationService:
         5. Publish event
         """
         merge_commit_sha = pr.get("merge_commit_sha")
-        merged_at = pr.get("merged_at")
+        pr.get("merged_at")
 
         with self.db.get_session() as session:
             # Find linked PR record
@@ -407,7 +412,9 @@ class GitHubIntegrationService:
                 pr_body = pr.get("body", "") or ""
                 head_branch = pr.get("head", {}).get("ref", "")
 
-                ticket_id = self._extract_ticket_id_from_pr(pr_title, pr_body, head_branch)
+                ticket_id = self._extract_ticket_id_from_pr(
+                    pr_title, pr_body, head_branch
+                )
                 if not ticket_id:
                     logger.info(f"PR {pr_number} merged but not linked to any ticket")
                     return {
@@ -659,11 +666,12 @@ class GitHubIntegrationService:
         """
         # Pattern for ticket IDs (UUID format or custom format)
         # Matches: ticket-{uuid} or TICKET-{uuid}
-        uuid_pattern = r"ticket-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})"
+        uuid_pattern = (
+            r"ticket-([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})"
+        )
 
         # Pattern for short ticket IDs
         # Matches: ticket-{alphanumeric}
-        short_pattern = r"ticket-([a-zA-Z0-9_-]+)"
 
         # Check title first (most explicit)
         # Look for [TICKET-xxx] or [ticket-xxx] pattern
@@ -726,11 +734,11 @@ class GitHubIntegrationService:
     async def _handle_issue_event(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Handle GitHub issue event."""
         action = payload.get("action")
-        issue = payload.get("issue", {})
+        payload.get("issue", {})
         repository = payload.get("repository", {})
 
-        owner = repository.get("owner", {}).get("login")
-        repo = repository.get("name")
+        repository.get("owner", {}).get("login")
+        repository.get("name")
 
         if action == "opened":
             # Could create a ticket from issue

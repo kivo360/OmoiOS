@@ -98,9 +98,9 @@ class AgentOutputCollector:
                     session.query(AgentLog)
                     .filter_by(agent_id=agent_id)
                     .filter(
-                        AgentLog.log_type.in_([
-                            "output", "message", "input", "intervention", "steering"
-                        ])
+                        AgentLog.log_type.in_(
+                            ["output", "message", "input", "intervention", "steering"]
+                        )
                     )
                     .order_by(AgentLog.created_at.desc())
                     .limit(limit)
@@ -115,7 +115,9 @@ class AgentOutputCollector:
                 for log in logs:
                     timestamp = log.created_at.strftime("%H:%M:%S")
                     log_type = log.log_type.upper()
-                    content = log.message[:200] + ("..." if len(log.message) > 200 else "")
+                    content = log.message[:200] + (
+                        "..." if len(log.message) > 200 else ""
+                    )
                     formatted_logs.append(f"[{timestamp}] {log_type}: {content}")
 
                 return "\n".join(formatted_logs)
@@ -139,7 +141,7 @@ class AgentOutputCollector:
                 "agent.log",
                 "conversation.log",
                 "stderr.log",
-                "stdout.log"
+                "stdout.log",
             ]
 
             for filename in output_files:
@@ -147,7 +149,7 @@ class AgentOutputCollector:
                 if file_path.exists():
                     try:
                         # Get last 20 lines
-                        with open(file_path, 'r', encoding='utf-8') as f:
+                        with open(file_path, "r", encoding="utf-8") as f:
                             lines = f.readlines()
                             if lines:
                                 recent_lines = lines[-20:]
@@ -178,7 +180,11 @@ class AgentOutputCollector:
             except Exception as e:
                 logger.warning(f"Error scanning workspace: {e}")
 
-            return "\n".join(output_sections) if output_sections else "No workspace output files found"
+            return (
+                "\n".join(output_sections)
+                if output_sections
+                else "No workspace output files found"
+            )
 
         except Exception as e:
             logger.error(f"Failed to get workspace output for agent {agent_id}: {e}")
@@ -200,10 +206,12 @@ class AgentOutputCollector:
 
                 # Get current task assigned to this agent
                 from omoi_os.models.task import Task
-                current_task = session.query(Task).filter_by(
-                    assigned_agent_id=str(agent.id),
-                    status="running"
-                ).first()
+
+                current_task = (
+                    session.query(Task)
+                    .filter_by(assigned_agent_id=str(agent.id), status="running")
+                    .first()
+                )
                 if current_task:
                     summary_parts.append(f"Current Task: {current_task.id}")
 
@@ -217,7 +225,9 @@ class AgentOutputCollector:
                 return " | ".join(summary_parts)
 
         except Exception as e:
-            logger.error(f"Failed to get conversation summary for agent {agent_id}: {e}")
+            logger.error(
+                f"Failed to get conversation summary for agent {agent_id}: {e}"
+            )
             return f"Error getting agent status: {str(e)}"
 
     def log_agent_event(
@@ -271,7 +281,7 @@ class AgentOutputCollector:
 
         Replaces tmux session enumeration with database-based
         agent status tracking.
-        
+
         Active agents are those with IDLE or RUNNING status per AgentStatus enum.
         """
         try:
@@ -279,13 +289,11 @@ class AgentOutputCollector:
                 # Define active statuses using AgentStatus enum values
                 # Active = can receive tasks (IDLE or RUNNING)
                 from omoi_os.models.agent_status import AgentStatus
-                
+
                 active_statuses = [AgentStatus.IDLE.value, AgentStatus.RUNNING.value]
 
                 agents = (
-                    session.query(Agent)
-                    .filter(Agent.status.in_(active_statuses))
-                    .all()
+                    session.query(Agent).filter(Agent.status.in_(active_statuses)).all()
                 )
 
                 # Expunge for use outside session
@@ -340,9 +348,7 @@ class AgentOutputCollector:
                 error_logs = (
                     session.query(AgentLog)
                     .filter_by(agent_id=agent_id)
-                    .filter(
-                        AgentLog.log_type.in_(["error", "exception", "failure"])
-                    )
+                    .filter(AgentLog.log_type.in_(["error", "exception", "failure"]))
                     .filter(AgentLog.created_at > utc_now() - timedelta(hours=1))
                     .order_by(AgentLog.created_at.desc())
                     .limit(5)
@@ -370,11 +376,18 @@ class AgentOutputCollector:
                 for log in recent_logs:
                     content_lower = log.message.lower()
                     error_indicators = [
-                        "error", "exception", "traceback", "failed",
-                        "cannot", "unable", "permission denied"
+                        "error",
+                        "exception",
+                        "traceback",
+                        "failed",
+                        "cannot",
+                        "unable",
+                        "permission denied",
                     ]
 
-                    if any(indicator in content_lower for indicator in error_indicators):
+                    if any(
+                        indicator in content_lower for indicator in error_indicators
+                    ):
                         return f"Potential error detected: {log.message}"
 
         except Exception as e:
@@ -432,9 +445,7 @@ class AgentOutputCollector:
         """Check if agent is running in a sandbox."""
         return self.get_sandbox_id_for_agent(agent_id) is not None
 
-    def get_sandbox_output(
-        self, sandbox_id: str, lines: int = 50
-    ) -> str:
+    def get_sandbox_output(self, sandbox_id: str, lines: int = 50) -> str:
         """Get recent output from sandbox events.
 
         Args:
@@ -450,15 +461,17 @@ class AgentOutputCollector:
                     session.query(SandboxEvent)
                     .filter(SandboxEvent.sandbox_id == sandbox_id)
                     .filter(
-                        SandboxEvent.event_type.in_([
-                            "agent.assistant_message",
-                            "agent.tool_use",
-                            "agent.tool_result",
-                            "agent.file_edited",
-                            "agent.error",
-                            "agent.completed",
-                            "agent.message_injected",
-                        ])
+                        SandboxEvent.event_type.in_(
+                            [
+                                "agent.assistant_message",
+                                "agent.tool_use",
+                                "agent.tool_result",
+                                "agent.file_edited",
+                                "agent.error",
+                                "agent.completed",
+                                "agent.message_injected",
+                            ]
+                        )
                     )
                     .order_by(SandboxEvent.created_at.desc())
                     .limit(lines)
@@ -597,20 +610,24 @@ class AgentOutputCollector:
                 summary_parts = []
 
                 if agent:
-                    summary_parts.extend([
-                        f"Agent Type: {agent.agent_type}",
-                        f"Status: {agent.status}",
-                    ])
+                    summary_parts.extend(
+                        [
+                            f"Agent Type: {agent.agent_type}",
+                            f"Status: {agent.status}",
+                        ]
+                    )
                     if agent.last_heartbeat:
                         time_since = (utc_now() - agent.last_heartbeat).total_seconds()
                         summary_parts.append(f"Last Heartbeat: {time_since:.0f}s ago")
 
                 if task:
-                    summary_parts.extend([
-                        f"Task: {task.id}",
-                        f"Task Status: {task.status}",
-                        f"Phase: {task.phase_id or 'None'}",
-                    ])
+                    summary_parts.extend(
+                        [
+                            f"Task: {task.id}",
+                            f"Task Status: {task.status}",
+                            f"Phase: {task.phase_id or 'None'}",
+                        ]
+                    )
 
                 summary_parts.append(f"Sandbox: {sandbox_id}")
 
@@ -670,8 +687,13 @@ class AgentOutputCollector:
                     error = str(event_data.get("error", "")).lower()
 
                     error_indicators = [
-                        "error", "exception", "traceback", "failed",
-                        "cannot", "unable", "permission denied"
+                        "error",
+                        "exception",
+                        "traceback",
+                        "failed",
+                        "cannot",
+                        "unable",
+                        "permission denied",
                     ]
 
                     combined = content + error
@@ -679,7 +701,9 @@ class AgentOutputCollector:
                         return f"Potential error in {event.event_type}: {event_data}"
 
         except Exception as e:
-            logger.error(f"Failed to extract error context for sandbox {sandbox_id}: {e}")
+            logger.error(
+                f"Failed to extract error context for sandbox {sandbox_id}: {e}"
+            )
 
         return "No specific errors detected"
 

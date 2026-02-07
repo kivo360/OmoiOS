@@ -9,7 +9,12 @@ from typing import Optional
 from uuid import UUID
 
 import stripe
-from stripe import StripeError, InvalidRequestError, CardError, SignatureVerificationError
+from stripe import (
+    StripeError,
+    InvalidRequestError,
+    CardError,
+    SignatureVerificationError,
+)
 
 from omoi_os.config import OmoiBaseSettings, get_env_files
 from pydantic_settings import SettingsConfigDict
@@ -26,7 +31,7 @@ class StripeSettings(OmoiBaseSettings):
         env_prefix="STRIPE_",
         env_file=get_env_files(),
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
     )
 
     # API keys (from environment only - never in YAML)
@@ -70,7 +75,9 @@ class StripeService:
         if self.settings.secret_key:
             stripe.api_key = self.settings.secret_key
         else:
-            logger.warning("Stripe API key not configured - payment processing disabled")
+            logger.warning(
+                "Stripe API key not configured - payment processing disabled"
+            )
 
     @property
     def is_configured(self) -> bool:
@@ -177,12 +184,12 @@ class StripeService:
             if set_as_default:
                 stripe.Customer.modify(
                     customer_id,
-                    invoice_settings={
-                        "default_payment_method": payment_method_id
-                    }
+                    invoice_settings={"default_payment_method": payment_method_id},
                 )
 
-            logger.info(f"Attached payment method {payment_method_id} to customer {customer_id}")
+            logger.info(
+                f"Attached payment method {payment_method_id} to customer {customer_id}"
+            )
             return payment_method
         except StripeError as e:
             logger.error(f"Failed to attach payment method: {e.user_message}")
@@ -245,16 +252,18 @@ class StripeService:
             session = stripe.checkout.Session.create(
                 customer=customer_id,
                 payment_method_types=["card"],
-                line_items=[{
-                    "price_data": {
-                        "currency": self.settings.currency,
-                        "product_data": {
-                            "name": description,
+                line_items=[
+                    {
+                        "price_data": {
+                            "currency": self.settings.currency,
+                            "product_data": {
+                                "name": description,
+                            },
+                            "unit_amount": amount_cents,
                         },
-                        "unit_amount": amount_cents,
-                    },
-                    "quantity": 1,
-                }],
+                        "quantity": 1,
+                    }
+                ],
                 mode="payment",
                 success_url=success_url or self.settings.success_url,
                 cancel_url=cancel_url or self.settings.cancel_url,
@@ -288,7 +297,10 @@ class StripeService:
         """
         amount_cents = int(credit_amount_usd * 100)
 
-        metadata = {"credit_purchase": "true", "credit_amount_usd": str(credit_amount_usd)}
+        metadata = {
+            "credit_purchase": "true",
+            "credit_amount_usd": str(credit_amount_usd),
+        }
         if organization_id:
             metadata["organization_id"] = str(organization_id)
 
@@ -372,7 +384,9 @@ class StripeService:
             logger.info(f"Created subscription checkout session: {session.id}")
             return session
         except StripeError as e:
-            logger.error(f"Failed to create subscription checkout session: {e.user_message}")
+            logger.error(
+                f"Failed to create subscription checkout session: {e.user_message}"
+            )
             raise
 
     # ========== Payment Intents (Custom UI Flow) ==========
@@ -446,7 +460,9 @@ class StripeService:
             # Get default payment method if not specified
             if not payment_method_id:
                 customer = stripe.Customer.retrieve(customer_id)
-                payment_method_id = customer.invoice_settings.get("default_payment_method")
+                payment_method_id = customer.invoice_settings.get(
+                    "default_payment_method"
+                )
                 if not payment_method_id:
                     raise ValueError("Customer has no default payment method")
 
@@ -462,11 +478,15 @@ class StripeService:
                 metadata=metadata or {},
             )
 
-            logger.info(f"Charged customer {customer_id} for {amount_cents} cents: {intent.id}")
+            logger.info(
+                f"Charged customer {customer_id} for {amount_cents} cents: {intent.id}"
+            )
             return intent
         except CardError as e:
             # Card was declined
-            logger.warning(f"Card declined for customer {customer_id}: {e.user_message}")
+            logger.warning(
+                f"Card declined for customer {customer_id}: {e.user_message}"
+            )
             raise
         except StripeError as e:
             logger.error(f"Failed to charge customer: {e.user_message}")
@@ -532,7 +552,9 @@ class StripeService:
 
         try:
             refund = stripe.Refund.create(**refund_params)
-            logger.info(f"Created refund: {refund.id} for payment intent: {payment_intent_id}")
+            logger.info(
+                f"Created refund: {refund.id} for payment intent: {payment_intent_id}"
+            )
             return refund
         except StripeError as e:
             logger.error(f"Failed to create refund: {e.user_message}")
@@ -656,10 +678,14 @@ class StripeService:
                 params["status"] = status
 
             invoices = stripe.Invoice.list(**params)
-            logger.info(f"Listed {len(invoices.data)} invoices for customer {customer_id}")
+            logger.info(
+                f"Listed {len(invoices.data)} invoices for customer {customer_id}"
+            )
             return list(invoices.data)
         except StripeError as e:
-            logger.error(f"Failed to list invoices for customer {customer_id}: {e.user_message}")
+            logger.error(
+                f"Failed to list invoices for customer {customer_id}: {e.user_message}"
+            )
             raise
 
 

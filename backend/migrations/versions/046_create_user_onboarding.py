@@ -12,7 +12,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-
 # revision identifiers, used by Alembic.
 revision: str = "046_create_user_onboarding"
 down_revision: Union[str, Sequence[str], None] = "045_add_dependencies_to_tickets"
@@ -32,7 +31,9 @@ def upgrade() -> None:
             nullable=False,
             unique=True,
         ),
-        sa.Column("current_step", sa.String(50), nullable=False, server_default="welcome"),
+        sa.Column(
+            "current_step", sa.String(50), nullable=False, server_default="welcome"
+        ),
         sa.Column(
             "completed_steps",
             postgresql.ARRAY(sa.String),

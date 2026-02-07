@@ -19,7 +19,6 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import NoSuchTableError
 
-
 # revision identifiers, used by Alembic.
 revision: str = "037_claude_session_transcripts"
 down_revision: Union[str, None] = "b52490b4c2a8"

@@ -15,7 +15,7 @@ from omoi_os.utils.datetime import utc_now
 class CompositeAnomalyScorer:
     """
     Composite anomaly scorer per REQ-FT-AN-001.
-    
+
     Computes anomaly_score (0-1) from:
     - Latency deviation (z-score)
     - Error rate trend (EMA)
@@ -112,7 +112,9 @@ class CompositeAnomalyScorer:
             queue_score = self.compute_queue_impact(agent_id, session)
 
             # Normalize each component to [0, 1] range
-            latency_normalized = min(1.0, abs(latency_score) / 3.0)  # z-score > 3 is extreme
+            latency_normalized = min(
+                1.0, abs(latency_score) / 3.0
+            )  # z-score > 3 is extreme
             error_rate_normalized = min(1.0, error_rate_score)
             resource_normalized = min(1.0, resource_score)
             queue_normalized = min(1.0, queue_score)
@@ -198,7 +200,9 @@ class CompositeAnomalyScorer:
         # Compare to baseline (if baseline exists, compute deviation)
         if baseline and baseline.error_rate > 0:
             # Return relative error rate increase
-            baseline_error_rate = float(baseline.error_rate) if baseline.error_rate else 0.0
+            baseline_error_rate = (
+                float(baseline.error_rate) if baseline.error_rate else 0.0
+            )
             if baseline_error_rate > 0:
                 return max(0.0, (ema_value - baseline_error_rate) / baseline_error_rate)
             return ema_value
@@ -233,8 +237,12 @@ class CompositeAnomalyScorer:
         memory_skew = 0.0
 
         # Convert Decimal to float for PostgreSQL compatibility
-        baseline_cpu = float(baseline.cpu_usage_percent) if baseline.cpu_usage_percent else 0.0
-        baseline_memory = float(baseline.memory_usage_mb) if baseline.memory_usage_mb else 0.0
+        baseline_cpu = (
+            float(baseline.cpu_usage_percent) if baseline.cpu_usage_percent else 0.0
+        )
+        baseline_memory = (
+            float(baseline.memory_usage_mb) if baseline.memory_usage_mb else 0.0
+        )
 
         # CPU skew
         if cpu_usage_percent is not None and baseline_cpu > 0:
@@ -245,12 +253,12 @@ class CompositeAnomalyScorer:
         # Memory skew
         if memory_usage_mb is not None and baseline_memory > 0:
             memory_deviation = abs(memory_usage_mb - baseline_memory)
-            memory_skew = min(
-                1.0, memory_deviation / max(baseline_memory, 1.0)
-            )
+            memory_skew = min(1.0, memory_deviation / max(baseline_memory, 1.0))
 
         # Average of CPU and memory skew
-        resource_skew = (cpu_skew + memory_skew) / 2.0 if (cpu_skew or memory_skew) else 0.0
+        resource_skew = (
+            (cpu_skew + memory_skew) / 2.0 if (cpu_skew or memory_skew) else 0.0
+        )
         return resource_skew
 
     def compute_queue_impact(self, agent_id: str, session) -> float:
@@ -297,9 +305,7 @@ class CompositeAnomalyScorer:
             )
 
             for dependent in dependents:
-                if dependent.dependencies and dependent.dependencies.get(
-                    "depends_on"
-                ):
+                if dependent.dependencies and dependent.dependencies.get("depends_on"):
                     depends_on = dependent.dependencies["depends_on"]
                     if isinstance(depends_on, list) and task.id in depends_on:
                         total_dependents += 1
@@ -335,9 +341,7 @@ class CompositeAnomalyScorer:
             result = (
                 session.query(
                     func.avg(
-                        func.extract(
-                            "epoch", Task.completed_at - Task.started_at
-                        )
+                        func.extract("epoch", Task.completed_at - Task.started_at)
                         * 1000
                     ).label("avg_latency_ms")
                 )
@@ -395,4 +399,3 @@ class CompositeAnomalyScorer:
             )
 
             return failed_tasks / total_tasks
-

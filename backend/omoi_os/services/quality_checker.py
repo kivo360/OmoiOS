@@ -138,7 +138,9 @@ class QualityCheckerService:
             task_result_json=task_result_str,
         )
 
-        system_prompt = template_service.render_system_prompt("system/quality_metrics.md.j2")
+        system_prompt = template_service.render_system_prompt(
+            "system/quality_metrics.md.j2"
+        )
 
         try:
             # Run extraction using LLM service
@@ -395,4 +397,3 @@ class QualityCheckerService:
             "overall_passed": overall_passed,
             "metrics": [m.to_dict() for m in metrics],
         }
-

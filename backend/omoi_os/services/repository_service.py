@@ -83,9 +83,7 @@ class RepositoryService:
         # Get organizations user belongs to
         orgs_resp = await self.client.get("/user/orgs")
         if orgs_resp.status_code != 200:
-            logger.warning(
-                f"Failed to fetch organizations: {orgs_resp.status_code}"
-            )
+            logger.warning(f"Failed to fetch organizations: {orgs_resp.status_code}")
             # Return just user on org fetch failure
             return owners
 
@@ -167,7 +165,8 @@ class RepositoryService:
         if resp.status_code not in (200, 201):
             error_data = resp.json()
             raise GitHubAPIError(
-                resp.status_code, error_data.get("message", "Failed to create repository")
+                resp.status_code,
+                error_data.get("message", "Failed to create repository"),
             )
 
         repo_data = resp.json()

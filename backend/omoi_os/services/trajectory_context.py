@@ -794,6 +794,7 @@ class TrajectoryContext:
         @dataclass
         class PseudoAgentLog:
             """Duck-typed AgentLog for sandbox events."""
+
             id: str
             agent_id: str
             log_type: str
@@ -856,9 +857,7 @@ class TrajectoryContext:
         }
         return mapping.get(event_type, "event")
 
-    def _build_message_from_event(
-        self, event_type: str, event_data: dict
-    ) -> str:
+    def _build_message_from_event(self, event_type: str, event_data: dict) -> str:
         """Build a human-readable message from sandbox event data.
 
         Args:
@@ -898,9 +897,7 @@ class TrajectoryContext:
             # Generic fallback
             return message or content or event_type
 
-    def build_sandbox_context(
-        self, agent_id: str, sandbox_id: str
-    ) -> Dict[str, Any]:
+    def build_sandbox_context(self, agent_id: str, sandbox_id: str) -> Dict[str, Any]:
         """Build accumulated context from sandbox events.
 
         This is the sandbox-aware version of build_accumulated_context.
@@ -936,11 +933,7 @@ class TrajectoryContext:
         with self.db.get_session() as session:
             # Get agent and task for context
             agent = session.query(Agent).filter_by(id=agent_id).first()
-            task = (
-                session.query(Task)
-                .filter_by(sandbox_id=sandbox_id)
-                .first()
-            )
+            task = session.query(Task).filter_by(sandbox_id=sandbox_id).first()
 
             # Build conversation history from pseudo-logs
             conversation = self._build_conversation_history(

@@ -46,4 +46,3 @@ class ValidationReview(Base):
     validator_agent: Mapped["Agent"] = relationship(
         "Agent", foreign_keys=[validator_agent_id]
     )
-

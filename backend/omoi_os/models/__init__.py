@@ -43,7 +43,13 @@ from omoi_os.models.playbook_change import PlaybookChange
 from omoi_os.models.promo_code import PromoCode, PromoCodeRedemption, PromoCodeType
 from omoi_os.models.phase_context import PhaseContext
 from omoi_os.models.project import Project
-from omoi_os.models.spec import Spec, SpecAcceptanceCriterion, SpecRequirement, SpecTask, SpecVersion
+from omoi_os.models.spec import (
+    Spec,
+    SpecAcceptanceCriterion,
+    SpecRequirement,
+    SpecTask,
+    SpecVersion,
+)
 from omoi_os.models.user import User
 from omoi_os.models.user_credentials import UserCredential
 from omoi_os.models.user_onboarding import UserOnboarding

@@ -5,11 +5,11 @@ Revises: 015_agent_status_state_machine
 Create Date: 2025-01-28
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "016_ticket_human_approval"
@@ -30,7 +30,9 @@ def upgrade() -> None:
             comment="Approval status: pending_review, approved, rejected, timed_out (REQ-THA-001)",
         ),
     )
-    op.create_index(op.f("ix_tickets_approval_status"), "tickets", ["approval_status"], unique=False)
+    op.create_index(
+        op.f("ix_tickets_approval_status"), "tickets", ["approval_status"], unique=False
+    )
 
     # Add approval_deadline_at column to tickets table (REQ-THA-005)
     op.add_column(
@@ -42,7 +44,12 @@ def upgrade() -> None:
             comment="Deadline for approval timeout (REQ-THA-005)",
         ),
     )
-    op.create_index(op.f("ix_tickets_approval_deadline_at"), "tickets", ["approval_deadline_at"], unique=False)
+    op.create_index(
+        op.f("ix_tickets_approval_deadline_at"),
+        "tickets",
+        ["approval_deadline_at"],
+        unique=False,
+    )
 
     # Add requested_by_agent_id column to tickets table (REQ-THA-005)
     op.add_column(
@@ -83,4 +90,3 @@ def downgrade() -> None:
     # Remove approval_status column
     op.drop_index(op.f("ix_tickets_approval_status"), table_name="tickets")
     op.drop_column("tickets", "approval_status")
-

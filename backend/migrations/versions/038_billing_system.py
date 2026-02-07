@@ -5,6 +5,7 @@ Revises: 037_claude_session_transcripts
 Create Date: 2025-12-23
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -28,22 +29,37 @@ def upgrade() -> None:
         sa.Column("stripe_customer_id", sa.String(length=255), nullable=True),
         sa.Column("stripe_payment_method_id", sa.String(length=255), nullable=True),
         # Account status
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="pending"),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="pending"
+        ),
         # Free tier tracking
-        sa.Column("free_workflows_remaining", sa.Integer(), nullable=False, server_default="5"),
+        sa.Column(
+            "free_workflows_remaining", sa.Integer(), nullable=False, server_default="5"
+        ),
         sa.Column("free_workflows_reset_at", sa.DateTime(timezone=True), nullable=True),
         # Prepaid credits (USD)
         sa.Column("credit_balance", sa.Float(), nullable=False, server_default="0.0"),
         # Billing preferences
-        sa.Column("auto_billing_enabled", sa.Boolean(), nullable=False, server_default="true"),
+        sa.Column(
+            "auto_billing_enabled", sa.Boolean(), nullable=False, server_default="true"
+        ),
         sa.Column("billing_email", sa.String(length=255), nullable=True),
         # Tax information
         sa.Column("tax_id", sa.String(length=100), nullable=True),
         sa.Column("tax_exempt", sa.Boolean(), nullable=False, server_default="false"),
-        sa.Column("billing_address", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "billing_address", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         # Usage statistics (cached)
-        sa.Column("total_workflows_completed", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("total_amount_spent", sa.Float(), nullable=False, server_default="0.0"),
+        sa.Column(
+            "total_workflows_completed",
+            sa.Integer(),
+            nullable=False,
+            server_default="0",
+        ),
+        sa.Column(
+            "total_amount_spent", sa.Float(), nullable=False, server_default="0.0"
+        ),
         # Timestamps
         sa.Column(
             "created_at",
@@ -67,9 +83,17 @@ def upgrade() -> None:
         sa.UniqueConstraint("stripe_customer_id"),
         comment="Billing accounts for organizations with Stripe integration",
     )
-    op.create_index("ix_billing_accounts_organization_id", "billing_accounts", ["organization_id"])
-    op.create_index("ix_billing_accounts_stripe_customer_id", "billing_accounts", ["stripe_customer_id"])
-    op.create_index("ix_billing_accounts_created_at", "billing_accounts", ["created_at"])
+    op.create_index(
+        "ix_billing_accounts_organization_id", "billing_accounts", ["organization_id"]
+    )
+    op.create_index(
+        "ix_billing_accounts_stripe_customer_id",
+        "billing_accounts",
+        ["stripe_customer_id"],
+    )
+    op.create_index(
+        "ix_billing_accounts_created_at", "billing_accounts", ["created_at"]
+    )
 
     # Invoices table
     op.create_table(
@@ -77,12 +101,16 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("invoice_number", sa.String(length=50), nullable=False),
         sa.Column("billing_account_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("ticket_id", sa.String(), nullable=True),  # VARCHAR to match tickets.id
+        sa.Column(
+            "ticket_id", sa.String(), nullable=True
+        ),  # VARCHAR to match tickets.id
         # Stripe integration
         sa.Column("stripe_invoice_id", sa.String(length=255), nullable=True),
         sa.Column("stripe_payment_intent_id", sa.String(length=255), nullable=True),
         # Invoice status
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="draft"),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="draft"
+        ),
         # Billing period
         sa.Column("period_start", sa.DateTime(timezone=True), nullable=True),
         sa.Column("period_end", sa.DateTime(timezone=True), nullable=True),
@@ -95,7 +123,9 @@ def upgrade() -> None:
         sa.Column("amount_due", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("amount_paid", sa.Float(), nullable=False, server_default="0.0"),
         # Currency
-        sa.Column("currency", sa.String(length=3), nullable=False, server_default="usd"),
+        sa.Column(
+            "currency", sa.String(length=3), nullable=False, server_default="usd"
+        ),
         # Line items (JSONB)
         sa.Column(
             "line_items",
@@ -106,7 +136,9 @@ def upgrade() -> None:
         # Invoice details
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("tax_details", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "tax_details", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         # Important dates
         sa.Column("due_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("finalized_at", sa.DateTime(timezone=True), nullable=True),
@@ -141,7 +173,9 @@ def upgrade() -> None:
         comment="Invoices for workflow usage billing",
     )
     op.create_index("ix_invoices_invoice_number", "invoices", ["invoice_number"])
-    op.create_index("ix_invoices_billing_account_id", "invoices", ["billing_account_id"])
+    op.create_index(
+        "ix_invoices_billing_account_id", "invoices", ["billing_account_id"]
+    )
     op.create_index("ix_invoices_ticket_id", "invoices", ["ticket_id"])
     op.create_index("ix_invoices_stripe_invoice_id", "invoices", ["stripe_invoice_id"])
     op.create_index("ix_invoices_status", "invoices", ["status"])
@@ -161,8 +195,12 @@ def upgrade() -> None:
         sa.Column("stripe_charge_id", sa.String(length=255), nullable=True),
         # Payment details
         sa.Column("amount", sa.Float(), nullable=False),
-        sa.Column("currency", sa.String(length=3), nullable=False, server_default="usd"),
-        sa.Column("status", sa.String(length=20), nullable=False, server_default="pending"),
+        sa.Column(
+            "currency", sa.String(length=3), nullable=False, server_default="usd"
+        ),
+        sa.Column(
+            "status", sa.String(length=20), nullable=False, server_default="pending"
+        ),
         # Payment method info (snapshot)
         sa.Column("payment_method_type", sa.String(length=50), nullable=True),
         sa.Column("payment_method_last4", sa.String(length=4), nullable=True),
@@ -176,7 +214,9 @@ def upgrade() -> None:
         # Description
         sa.Column("description", sa.Text(), nullable=True),
         # Extra payment data
-        sa.Column("payment_data", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "payment_data", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         # Timestamps
         sa.Column(
             "created_at",
@@ -205,9 +245,13 @@ def upgrade() -> None:
         sa.UniqueConstraint("stripe_payment_intent_id"),
         comment="Payment records for invoice charges",
     )
-    op.create_index("ix_payments_billing_account_id", "payments", ["billing_account_id"])
+    op.create_index(
+        "ix_payments_billing_account_id", "payments", ["billing_account_id"]
+    )
     op.create_index("ix_payments_invoice_id", "payments", ["invoice_id"])
-    op.create_index("ix_payments_stripe_payment_intent_id", "payments", ["stripe_payment_intent_id"])
+    op.create_index(
+        "ix_payments_stripe_payment_intent_id", "payments", ["stripe_payment_intent_id"]
+    )
     op.create_index("ix_payments_status", "payments", ["status"])
     op.create_index("ix_payments_created_at", "payments", ["created_at"])
     op.create_index("ix_payments_status_created", "payments", ["status", "created_at"])
@@ -217,7 +261,9 @@ def upgrade() -> None:
         "usage_records",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("billing_account_id", postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column("ticket_id", sa.String(), nullable=True),  # VARCHAR to match tickets.id
+        sa.Column(
+            "ticket_id", sa.String(), nullable=True
+        ),  # VARCHAR to match tickets.id
         # Usage type
         sa.Column("usage_type", sa.String(length=50), nullable=False),
         # Quantity and pricing
@@ -225,12 +271,16 @@ def upgrade() -> None:
         sa.Column("unit_price", sa.Float(), nullable=False),
         sa.Column("total_price", sa.Float(), nullable=False),
         # Was free tier used?
-        sa.Column("free_tier_used", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column(
+            "free_tier_used", sa.Boolean(), nullable=False, server_default="false"
+        ),
         # Invoice association
         sa.Column("invoice_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("billed", sa.Boolean(), nullable=False, server_default="false"),
         # Usage details
-        sa.Column("usage_details", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column(
+            "usage_details", postgresql.JSONB(astext_type=sa.Text()), nullable=True
+        ),
         # Timestamps
         sa.Column(
             "recorded_at",
@@ -257,14 +307,22 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         comment="Usage records for workflow billing",
     )
-    op.create_index("ix_usage_records_billing_account_id", "usage_records", ["billing_account_id"])
+    op.create_index(
+        "ix_usage_records_billing_account_id", "usage_records", ["billing_account_id"]
+    )
     op.create_index("ix_usage_records_ticket_id", "usage_records", ["ticket_id"])
     op.create_index("ix_usage_records_usage_type", "usage_records", ["usage_type"])
     op.create_index("ix_usage_records_invoice_id", "usage_records", ["invoice_id"])
     op.create_index("ix_usage_records_billed", "usage_records", ["billed"])
     op.create_index("ix_usage_records_recorded_at", "usage_records", ["recorded_at"])
-    op.create_index("ix_usage_records_unbilled", "usage_records", ["billing_account_id", "billed"])
-    op.create_index("ix_usage_records_recorded", "usage_records", ["billing_account_id", "recorded_at"])
+    op.create_index(
+        "ix_usage_records_unbilled", "usage_records", ["billing_account_id", "billed"]
+    )
+    op.create_index(
+        "ix_usage_records_recorded",
+        "usage_records",
+        ["billing_account_id", "recorded_at"],
+    )
 
 
 def downgrade() -> None:
@@ -302,6 +360,8 @@ def downgrade() -> None:
 
     # Drop billing_accounts table
     op.drop_index("ix_billing_accounts_created_at", table_name="billing_accounts")
-    op.drop_index("ix_billing_accounts_stripe_customer_id", table_name="billing_accounts")
+    op.drop_index(
+        "ix_billing_accounts_stripe_customer_id", table_name="billing_accounts"
+    )
     op.drop_index("ix_billing_accounts_organization_id", table_name="billing_accounts")
     op.drop_table("billing_accounts")

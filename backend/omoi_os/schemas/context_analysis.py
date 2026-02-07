@@ -34,4 +34,3 @@ class ContextSummary(BaseModel):
     phase_summaries: Dict[str, str] = Field(
         default_factory=dict, description="Summary for each phase"
     )
-

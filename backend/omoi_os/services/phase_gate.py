@@ -10,7 +10,6 @@ from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 
-
 PHASE_GATE_REQUIREMENTS: dict[str, dict[str, Any]] = {
     "PHASE_REQUIREMENTS": {
         "required_artifacts": ["requirements_document"],
@@ -92,7 +91,9 @@ class PhaseGateService:
                     .filter(Task.ticket_id == ticket_id, Task.phase_id == phase_id)
                     .all()
                 )
-                tasks_complete = bool(tasks) and all(task.status == "completed" for task in tasks)
+                tasks_complete = bool(tasks) and all(
+                    task.status == "completed" for task in tasks
+                )
 
         requirements_met = not missing_artifacts and tasks_complete
         if not missing_artifacts and not tasks_complete:
@@ -137,7 +138,9 @@ class PhaseGateService:
             if criteria_reasons:
                 blocking_reasons.extend(criteria_reasons)
 
-        gate_status = "passed" if validation_passed and not blocking_reasons else "failed"
+        gate_status = (
+            "passed" if validation_passed and not blocking_reasons else "failed"
+        )
 
         with self.db.get_session() as session:
             result = PhaseGateResult(
@@ -157,7 +160,9 @@ class PhaseGateService:
             session.expunge(result)
             return result
 
-    def collect_artifacts(self, ticket_id: str, phase_id: str) -> list[PhaseGateArtifact]:
+    def collect_artifacts(
+        self, ticket_id: str, phase_id: str
+    ) -> list[PhaseGateArtifact]:
         """Collect artifacts from completed tasks for a ticket and phase."""
         collected: list[PhaseGateArtifact] = []
 
@@ -171,7 +176,8 @@ class PhaseGateService:
                 .all()
             )
             existing_keys = {
-                (artifact.artifact_type, artifact.artifact_path) for artifact in existing
+                (artifact.artifact_type, artifact.artifact_path)
+                for artifact in existing
             }
 
             tasks = (
@@ -261,12 +267,16 @@ class PhaseGateService:
         for artifact_type, rules in criteria.items():
             artifact = artifact_map.get(artifact_type)
             if not artifact:
-                blocking_reasons.append(f"Missing artifact for validation: {artifact_type}")
+                blocking_reasons.append(
+                    f"Missing artifact for validation: {artifact_type}"
+                )
                 continue
 
             content = artifact.artifact_content or {}
             if not isinstance(content, dict):
-                blocking_reasons.append(f"Artifact {artifact_type} missing structured content")
+                blocking_reasons.append(
+                    f"Artifact {artifact_type} missing structured content"
+                )
                 continue
 
             min_length = rules.get("min_length")

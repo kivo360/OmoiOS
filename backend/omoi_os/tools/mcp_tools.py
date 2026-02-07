@@ -85,9 +85,11 @@ class ListMCPToolsExecutor(ToolExecutor[ListMCPToolsAction, MCPToolsObservation]
                 return [
                     {
                         "name": t.name,
-                        "description": t.description[:100] + "..."
-                        if len(t.description) > 100
-                        else t.description,
+                        "description": (
+                            t.description[:100] + "..."
+                            if len(t.description) > 100
+                            else t.description
+                        ),
                     }
                     for t in tools
                 ]
@@ -1022,7 +1024,8 @@ class MCPUpdateTicketAction(Action):
     ticket_id: str = Field(..., description="ID of ticket to update")
     agent_id: str = Field(..., description="ID of agent making the update")
     updates: Dict[str, Any] = Field(
-        ..., description="Dictionary of fields to update (e.g., title, description, priority, tags)"
+        ...,
+        description="Dictionary of fields to update (e.g., title, description, priority, tags)",
     )
     update_comment: Optional[str] = Field(
         default=None, description="Optional comment explaining the update"
@@ -1036,7 +1039,9 @@ class MCPChangeTicketStatusAction(Action):
     agent_id: str = Field(..., description="ID of agent making the change")
     new_status: str = Field(..., description="New status for the ticket")
     comment: str = Field(
-        ..., min_length=10, description="Comment explaining the status change (min 10 chars)"
+        ...,
+        min_length=10,
+        description="Comment explaining the status change (min 10 chars)",
     )
     commit_sha: Optional[str] = Field(
         default=None, description="Optional git commit SHA to link"
@@ -1070,7 +1075,9 @@ class MCPGetTicketsAction(Action):
     ticket_type: Optional[str] = Field(
         default=None, description="Optional ticket type filter"
     )
-    priority: Optional[str] = Field(default=None, description="Optional priority filter")
+    priority: Optional[str] = Field(
+        default=None, description="Optional priority filter"
+    )
     assigned_agent_id: Optional[str] = Field(
         default=None, description="Optional assignee filter"
     )
@@ -1097,9 +1104,7 @@ class MCPLinkCommitAction(Action):
     )
 
 
-class UpdateTicketMCPTool(
-    ToolDefinition[MCPUpdateTicketAction, MCPToolsObservation]
-):
+class UpdateTicketMCPTool(ToolDefinition[MCPUpdateTicketAction, MCPToolsObservation]):
     """Tool to update ticket fields via MCP."""
 
     @classmethod
@@ -1156,9 +1161,7 @@ class ChangeTicketStatusMCPTool(
         ]
 
 
-class SearchTicketsMCPTool(
-    ToolDefinition[MCPSearchTicketsAction, MCPToolsObservation]
-):
+class SearchTicketsMCPTool(ToolDefinition[MCPSearchTicketsAction, MCPToolsObservation]):
     """Tool to search tickets via MCP."""
 
     @classmethod

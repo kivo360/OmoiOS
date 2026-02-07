@@ -250,16 +250,16 @@ async def diagnostic_list_repos(
             "repositories_returned": len(repos_data) if repos_data else 0,
             "estimated_total": total_count,
             "has_more_pages": 'rel="next"' in link_header,
-            "sample_repositories": repos_data[:5]
-            if repos_data
-            else None,  # First 5 repos
-            "all_repo_names": [r["full_name"] for r in repos_data]
-            if repos_data
-            else [],
+            "sample_repositories": (
+                repos_data[:5] if repos_data else None
+            ),  # First 5 repos
+            "all_repo_names": (
+                [r["full_name"] for r in repos_data] if repos_data else []
+            ),
             "token_valid": response.status_code == 200,
-            "error_message": response.text[:500]
-            if response.status_code != 200
-            else None,
+            "error_message": (
+                response.text[:500] if response.status_code != 200 else None
+            ),
         }
 
         logger.info(
@@ -510,7 +510,6 @@ async def create_repository(
     the scaffolding workflow to generate specs, tickets, and tasks.
     """
     from omoi_os.api.dependencies import get_user_organization_ids
-    from omoi_os.models.organization import Organization
 
     attrs = current_user.attributes or {}
     github_token = attrs.get("github_access_token")
@@ -884,8 +883,7 @@ async def disconnect_github(
     # Check if GitHub is connected
     if not attrs.get("github_access_token") and not attrs.get("github_user_id"):
         raise HTTPException(
-            status_code=400,
-            detail="GitHub is not connected to this account."
+            status_code=400, detail="GitHub is not connected to this account."
         )
 
     # Store username for response before clearing
@@ -899,14 +897,15 @@ async def disconnect_github(
     # Update user in database
     with db.get_session() as session:
         from sqlalchemy import update
+
         session.execute(
-            update(User)
-            .where(User.id == current_user.id)
-            .values(attributes=attrs)
+            update(User).where(User.id == current_user.id).values(attributes=attrs)
         )
         session.commit()
 
-    logger.info(f"User {current_user.id} disconnected GitHub account: {github_username}")
+    logger.info(
+        f"User {current_user.id} disconnected GitHub account: {github_username}"
+    )
 
     return {
         "success": True,
@@ -929,19 +928,14 @@ async def admin_disconnect_github_for_user(
     """
     # Check if current user is admin
     if not current_user.is_super_admin:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required."
-        )
+        raise HTTPException(status_code=403, detail="Admin access required.")
 
     with db.get_session() as session:
         from sqlalchemy import select, update
         from uuid import UUID
 
         # Get target user
-        result = session.execute(
-            select(User).where(User.id == UUID(user_id))
-        )
+        result = session.execute(select(User).where(User.id == UUID(user_id)))
         target_user = result.scalar_one_or_none()
 
         if not target_user:
@@ -953,7 +947,7 @@ async def admin_disconnect_github_for_user(
         if not attrs.get("github_access_token") and not attrs.get("github_user_id"):
             raise HTTPException(
                 status_code=400,
-                detail=f"GitHub is not connected for user {target_user.email}."
+                detail=f"GitHub is not connected for user {target_user.email}.",
             )
 
         # Clear GitHub attributes
@@ -962,13 +956,13 @@ async def admin_disconnect_github_for_user(
             del attrs[key]
 
         session.execute(
-            update(User)
-            .where(User.id == UUID(user_id))
-            .values(attributes=attrs)
+            update(User).where(User.id == UUID(user_id)).values(attributes=attrs)
         )
         session.commit()
 
-    logger.info(f"Admin {current_user.email} disconnected GitHub for user {user_id} ({github_username})")
+    logger.info(
+        f"Admin {current_user.email} disconnected GitHub for user {user_id} ({github_username})"
+    )
 
     return {
         "success": True,
@@ -991,10 +985,7 @@ async def admin_disconnect_all_github(
     """
     # Check if current user is admin
     if not current_user.is_super_admin:
-        raise HTTPException(
-            status_code=403,
-            detail="Admin access required."
-        )
+        raise HTTPException(status_code=403, detail="Admin access required.")
 
     disconnected_count = 0
     disconnected_users = []
@@ -1017,21 +1008,23 @@ async def admin_disconnect_all_github(
                     del attrs[key]
 
                 session.execute(
-                    update(User)
-                    .where(User.id == user.id)
-                    .values(attributes=attrs)
+                    update(User).where(User.id == user.id).values(attributes=attrs)
                 )
 
                 disconnected_count += 1
-                disconnected_users.append({
-                    "user_id": str(user.id),
-                    "email": user.email,
-                    "github_username": github_username,
-                })
+                disconnected_users.append(
+                    {
+                        "user_id": str(user.id),
+                        "email": user.email,
+                        "github_username": github_username,
+                    }
+                )
 
         session.commit()
 
-    logger.warning(f"Admin {current_user.email} disconnected GitHub for ALL users ({disconnected_count} users)")
+    logger.warning(
+        f"Admin {current_user.email} disconnected GitHub for ALL users ({disconnected_count} users)"
+    )
 
     return {
         "success": True,

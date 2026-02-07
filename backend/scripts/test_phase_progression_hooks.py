@@ -15,7 +15,6 @@ Tests:
 4. API endpoints: Manual trigger endpoints work correctly
 """
 
-import asyncio
 import sys
 from uuid import uuid4
 
@@ -25,13 +24,11 @@ sys.path.insert(0, ".")
 from omoi_os.config import get_app_settings
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.task_queue import TaskQueueService
-from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.phase_progression_service import (
     PhaseProgressionService,
-    get_phase_progression_service,
     PHASE_INITIAL_TASKS,
-    PRD_GENERATION_TASK,
 )
 from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
 from omoi_os.models.organization import Organization
@@ -39,7 +36,6 @@ from omoi_os.models.project import Project
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.task import Task
 from omoi_os.models.user import User
-from omoi_os.utils.datetime import utc_now
 
 
 def print_header(title: str):
@@ -97,17 +93,25 @@ class PhaseProgressionTester:
                     session.delete(task)
 
             for ticket_id in self.test_ids["tickets"]:
-                ticket = session.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+                ticket = (
+                    session.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+                )
                 if ticket:
                     session.delete(ticket)
 
             for project_id in self.test_ids["projects"]:
-                project = session.query(Project).filter(Project.id == project_id).first()
+                project = (
+                    session.query(Project).filter(Project.id == project_id).first()
+                )
                 if project:
                     session.delete(project)
 
             for org_id in self.test_ids["orgs"]:
-                org = session.query(Organization).filter(Organization.id == org_id).first()
+                org = (
+                    session.query(Organization)
+                    .filter(Organization.id == org_id)
+                    .first()
+                )
                 if org:
                     session.delete(org)
 
@@ -337,12 +341,12 @@ class PhaseProgressionTester:
 
             # Verify task type
             if tasks:
-                expected_type = PHASE_INITIAL_TASKS["PHASE_IMPLEMENTATION"][0]["task_type"]
+                expected_type = PHASE_INITIAL_TASKS["PHASE_IMPLEMENTATION"][0][
+                    "task_type"
+                ]
                 passed = tasks[0].task_type == expected_type
                 all_passed = all_passed and passed
-                print_result(
-                    "Correct task type", passed, f"type={tasks[0].task_type}"
-                )
+                print_result("Correct task type", passed, f"type={tasks[0].task_type}")
 
         return all_passed
 
@@ -390,7 +394,9 @@ class PhaseProgressionTester:
         print_result("PRD detected (has prd_url)", passed, f"has_prd={has_prd}")
 
         # Spawn tasks for ticket without PRD
-        count = self.progression._spawn_phase_tasks(ticket_no_prd_id, "PHASE_REQUIREMENTS")
+        count = self.progression._spawn_phase_tasks(
+            ticket_no_prd_id, "PHASE_REQUIREMENTS"
+        )
 
         passed = count == 1
         all_passed = all_passed and passed
@@ -454,11 +460,7 @@ class PhaseProgressionTester:
 
         # Clean up spawned tasks
         with self.db.get_session() as session:
-            tasks = (
-                session.query(Task)
-                .filter(Task.ticket_id == ticket_id)
-                .all()
-            )
+            tasks = session.query(Task).filter(Task.ticket_id == ticket_id).all()
             for task in tasks:
                 self.test_ids["tasks"].append(task.id)
 

@@ -4,7 +4,7 @@ Tests the SpecStateMachine orchestrator that manages phase execution.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from omoi_os.workers.spec_state_machine import SpecStateMachine, SpecPhase
 
@@ -116,8 +116,12 @@ class TestSpecStateMachine:
         assert SpecPhase.DESIGN in state_machine.evaluators
         assert SpecPhase.TASKS in state_machine.evaluators
 
-        assert isinstance(state_machine.evaluators[SpecPhase.EXPLORE], ExplorationEvaluator)
-        assert isinstance(state_machine.evaluators[SpecPhase.REQUIREMENTS], RequirementEvaluator)
+        assert isinstance(
+            state_machine.evaluators[SpecPhase.EXPLORE], ExplorationEvaluator
+        )
+        assert isinstance(
+            state_machine.evaluators[SpecPhase.REQUIREMENTS], RequirementEvaluator
+        )
         assert isinstance(state_machine.evaluators[SpecPhase.DESIGN], DesignEvaluator)
         assert isinstance(state_machine.evaluators[SpecPhase.TASKS], TaskEvaluator)
 
@@ -215,14 +219,16 @@ class TestSpecStateMachinePhaseExecution:
     async def test_execute_phase_exists(self, state_machine):
         """Test execute_phase method exists and is async."""
         import inspect
-        assert hasattr(state_machine, 'execute_phase')
+
+        assert hasattr(state_machine, "execute_phase")
         assert inspect.iscoroutinefunction(state_machine.execute_phase)
 
     @pytest.mark.asyncio
     async def test_run_exists(self, state_machine):
         """Test run method exists and is async."""
         import inspect
-        assert hasattr(state_machine, 'run')
+
+        assert hasattr(state_machine, "run")
         assert inspect.iscoroutinefunction(state_machine.run)
 
     def test_phase_result_model(self):
@@ -272,7 +278,11 @@ class TestSpecStateMachineIntegration:
         # Requirements phase can access exploration
         phase_data["requirements"] = {
             "requirements": [
-                {"title": "Auth", "condition": "WHEN user logs in", "action": "Create session"}
+                {
+                    "title": "Auth",
+                    "condition": "WHEN user logs in",
+                    "action": "Create session",
+                }
             ]
         }
 
@@ -319,25 +329,27 @@ class TestSpecStateMachineCheckpoints:
     def test_save_checkpoint_exists(self, state_machine):
         """Test save_checkpoint method exists and is async."""
         import inspect
-        assert hasattr(state_machine, 'save_checkpoint')
+
+        assert hasattr(state_machine, "save_checkpoint")
         assert inspect.iscoroutinefunction(state_machine.save_checkpoint)
 
     def test_write_file_checkpoint_exists(self, state_machine):
         """Test _write_file_checkpoint method exists."""
         import inspect
-        assert hasattr(state_machine, '_write_file_checkpoint')
+
+        assert hasattr(state_machine, "_write_file_checkpoint")
         assert inspect.iscoroutinefunction(state_machine._write_file_checkpoint)
 
     @pytest.mark.asyncio
-    async def test_file_checkpoint_creates_directory(self, state_machine, temp_workspace):
+    async def test_file_checkpoint_creates_directory(
+        self, state_machine, temp_workspace
+    ):
         """Test that file checkpoint creates necessary directories."""
-        import os
         from pathlib import Path
 
         # Write a checkpoint
         await state_machine._write_file_checkpoint(
-            SpecPhase.EXPLORE,
-            {"project_type": "web_app", "test": True}
+            SpecPhase.EXPLORE, {"project_type": "web_app", "test": True}
         )
 
         # Check directory was created
@@ -360,7 +372,9 @@ class TestSpecStateMachineCheckpoints:
         await state_machine._write_file_checkpoint(SpecPhase.EXPLORE, test_data)
 
         # Read and verify the checkpoint
-        checkpoint_path = Path(temp_workspace) / ".omoi_os" / "phase_data" / "explore.json"
+        checkpoint_path = (
+            Path(temp_workspace) / ".omoi_os" / "phase_data" / "explore.json"
+        )
         assert checkpoint_path.exists()
 
         with open(checkpoint_path) as f:
@@ -380,7 +394,9 @@ class TestSpecStateMachineCheckpoints:
         design_data = {"architecture": "Layered"}
 
         await state_machine._write_file_checkpoint(SpecPhase.EXPLORE, explore_data)
-        await state_machine._write_file_checkpoint(SpecPhase.REQUIREMENTS, requirements_data)
+        await state_machine._write_file_checkpoint(
+            SpecPhase.REQUIREMENTS, requirements_data
+        )
         await state_machine._write_file_checkpoint(SpecPhase.DESIGN, design_data)
 
         # Verify all checkpoints exist
@@ -415,7 +431,9 @@ class TestSpecStateMachineCheckpoints:
         )
 
     @pytest.mark.asyncio
-    async def test_save_checkpoint_updates_spec(self, state_machine_async_db, temp_workspace):
+    async def test_save_checkpoint_updates_spec(
+        self, state_machine_async_db, temp_workspace
+    ):
         """Test that save_checkpoint updates the spec object."""
         mock_spec = MagicMock()
         mock_spec.phase_data = {"explore": {"project_type": "test"}}
@@ -429,7 +447,9 @@ class TestSpecStateMachineCheckpoints:
         assert mock_spec.last_checkpoint_at is not None
 
     @pytest.mark.asyncio
-    async def test_save_checkpoint_creates_state_file(self, state_machine_async_db, temp_workspace):
+    async def test_save_checkpoint_creates_state_file(
+        self, state_machine_async_db, temp_workspace
+    ):
         """Test that save_checkpoint creates a state.json file."""
         from pathlib import Path
 
@@ -467,9 +487,7 @@ class TestMockSpec:
         from omoi_os.workers.spec_state_machine import _MockSpec
 
         mock = _MockSpec(
-            spec_id="spec-123",
-            title="Test Spec",
-            description="A test specification"
+            spec_id="spec-123", title="Test Spec", description="A test specification"
         )
         assert mock.id == "spec-123"
         assert mock.title == "Test Spec"
@@ -535,14 +553,21 @@ class TestLoadOrCreateMockSpec:
         checkpoint_dir = Path(temp_workspace) / ".omoi_os" / "checkpoints"
         checkpoint_dir.mkdir(parents=True)
         state_file = checkpoint_dir / "state.json"
-        state_file.write_text(json.dumps({
-            "title": "Restored Spec",
-            "description": "A restored spec",
-            "current_phase": "design",
-            "phase_data": {"explore": {"type": "api"}, "requirements": {"reqs": []}},
-            "phase_attempts": {"explore": 1, "requirements": 2},
-            "session_transcripts": {"explore": {"session_id": "sess-123"}},
-        }))
+        state_file.write_text(
+            json.dumps(
+                {
+                    "title": "Restored Spec",
+                    "description": "A restored spec",
+                    "current_phase": "design",
+                    "phase_data": {
+                        "explore": {"type": "api"},
+                        "requirements": {"reqs": []},
+                    },
+                    "phase_attempts": {"explore": 1, "requirements": 2},
+                    "session_transcripts": {"explore": {"session_id": "sess-123"}},
+                }
+            )
+        )
 
         # Load
         mock = state_machine._load_or_create_mock_spec()

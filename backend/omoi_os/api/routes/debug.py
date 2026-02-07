@@ -24,7 +24,6 @@ from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.event_bus import EventBusService
 
-
 router = APIRouter()
 
 
@@ -99,9 +98,7 @@ async def get_task_queue_stats(
 
     with db.get_session() as session:
         stats = (
-            session.query(Task.status, func.count(Task.id))
-            .group_by(Task.status)
-            .all()
+            session.query(Task.status, func.count(Task.id)).group_by(Task.status).all()
         )
         counts = {status: count for status, count in stats}
 
@@ -137,16 +134,20 @@ async def get_pending_tasks(
         result = []
         for task in tasks:
             ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
-            result.append({
-                "task_id": task.id,
-                "task_type": task.task_type,
-                "priority": task.priority,
-                "phase_id": task.phase_id,
-                "ticket_id": task.ticket_id,
-                "ticket_title": ticket.title if ticket else None,
-                "project_id": ticket.project_id if ticket else None,
-                "created_at": task.created_at.isoformat() if task.created_at else None,
-            })
+            result.append(
+                {
+                    "task_id": task.id,
+                    "task_type": task.task_type,
+                    "priority": task.priority,
+                    "phase_id": task.phase_id,
+                    "ticket_id": task.ticket_id,
+                    "ticket_title": ticket.title if ticket else None,
+                    "project_id": ticket.project_id if ticket else None,
+                    "created_at": (
+                        task.created_at.isoformat() if task.created_at else None
+                    ),
+                }
+            )
 
     return {"count": len(result), "tasks": result}
 
@@ -235,10 +236,14 @@ async def get_phase_gate_status(
         ]
 
     # Check if gate passes
-    can_advance = phase_gate.check_gate(ticket_id, current_phase) if current_phase else False
+    can_advance = (
+        phase_gate.check_gate(ticket_id, current_phase) if current_phase else False
+    )
 
     # Get requirements for current phase
-    gate_requirements = phase_gate.get_phase_requirements(current_phase) if current_phase else {}
+    gate_requirements = (
+        phase_gate.get_phase_requirements(current_phase) if current_phase else {}
+    )
 
     # Determine what's missing
     required_artifacts = gate_requirements.get("required_artifacts", [])
@@ -275,14 +280,20 @@ async def get_ticket_tasks_by_phase(
 
         by_phase = defaultdict(list)
         for task in tasks:
-            by_phase[task.phase_id].append({
-                "task_id": task.id,
-                "task_type": task.task_type,
-                "status": task.status,
-                "priority": task.priority,
-                "created_at": task.created_at.isoformat() if task.created_at else None,
-                "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-            })
+            by_phase[task.phase_id].append(
+                {
+                    "task_id": task.id,
+                    "task_type": task.task_type,
+                    "status": task.status,
+                    "priority": task.priority,
+                    "created_at": (
+                        task.created_at.isoformat() if task.created_at else None
+                    ),
+                    "completed_at": (
+                        task.completed_at.isoformat() if task.completed_at else None
+                    ),
+                }
+            )
 
     return {
         "ticket_id": ticket_id,
@@ -420,13 +431,15 @@ async def get_system_health(
 
     # Check event bus
     try:
-        event_bus_healthy = event_bus._redis.ping() if hasattr(event_bus, "_redis") else False
+        event_bus_healthy = (
+            event_bus._redis.ping() if hasattr(event_bus, "_redis") else False
+        )
     except Exception:
         event_bus_healthy = False
 
     # Check phase progression
     try:
-        service = get_phase_progression_service(
+        get_phase_progression_service(
             db=db,
             task_queue=task_queue,
             phase_gate=phase_gate,

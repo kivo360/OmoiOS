@@ -33,7 +33,7 @@ from omoi_os.models.spec import (
     SpecTask as SpecTaskModel,
     SpecVersion as SpecVersionModel,
 )
-from omoi_os.services.billing_service import BillingService, get_billing_service
+from omoi_os.services.billing_service import get_billing_service
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
@@ -70,7 +70,7 @@ async def _list_project_specs_async(
             query = query.filter(SpecModel.status == status)
         # Filter out archived specs by default
         if not include_archived:
-            query = query.filter(SpecModel.archived == False)
+            query = query.filter(SpecModel.archived is False)
         query = query.order_by(SpecModel.created_at.desc())
         result = await session.execute(query)
         specs = result.scalars().all()
@@ -125,9 +125,7 @@ async def _create_spec_async(
         return result.scalar_one()
 
 
-async def _get_spec_async(
-    db: DatabaseService, spec_id: str
-) -> Optional[SpecModel]:
+async def _get_spec_async(db: DatabaseService, spec_id: str) -> Optional[SpecModel]:
     """Get a spec by ID (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
         result = await session.execute(
@@ -495,9 +493,7 @@ async def _update_task_async(
         return task
 
 
-async def _delete_task_async(
-    db: DatabaseService, spec_id: str, task_id: str
-) -> bool:
+async def _delete_task_async(db: DatabaseService, spec_id: str, task_id: str) -> bool:
     """Delete a task (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
         result = await session.execute(
@@ -635,9 +631,7 @@ async def _get_organization_id_for_project(
     Returns None if project not found or has no organization.
     """
     async with db.get_async_session() as session:
-        result = await session.execute(
-            select(Project).filter(Project.id == project_id)
-        )
+        result = await session.execute(select(Project).filter(Project.id == project_id))
         project = result.scalar_one_or_none()
         if not project or not project.organization_id:
             return None
@@ -686,8 +680,13 @@ async def _check_billing_for_spec_execution(
     if not org_id:
         # No organization linked - block execution for safety
         # This prevents specs without proper org setup from consuming resources
-        logger.warning(f"Spec {spec_id} has no linked organization - blocking execution")
-        return False, "Spec is not linked to an organization. Please ensure your project is properly set up."
+        logger.warning(
+            f"Spec {spec_id} has no linked organization - blocking execution"
+        )
+        return (
+            False,
+            "Spec is not linked to an organization. Please ensure your project is properly set up.",
+        )
 
     # Check billing status
     billing_service = get_billing_service(db)
@@ -808,7 +807,7 @@ class DesignArtifact(BaseModel):
                 layer_id = layer.replace(" ", "_").replace("-", "_")
                 lines.append(f"    {layer_id}[{layer}]")
                 if i > 0:
-                    prev_id = layers[i-1].replace(" ", "_").replace("-", "_")
+                    prev_id = layers[i - 1].replace(" ", "_").replace("-", "_")
                     lines.append(f"    {prev_id} --> {layer_id}")
 
         # Handle components
@@ -836,6 +835,7 @@ class DesignArtifact(BaseModel):
         # If nothing was added, just dump as comment
         if len(lines) == 2:
             import json
+
             lines.append(f"    %% Raw data: {json.dumps(arch_data)}")
 
         lines.append("```")
@@ -882,6 +882,7 @@ class DesignArtifact(BaseModel):
         # If nothing was added, just dump as comment
         if len(lines) == 2:
             import json
+
             lines.append(f"    %% Raw data: {json.dumps(dm_data)}")
 
         lines.append("```")
@@ -953,7 +954,9 @@ class SpecResponse(BaseModel):
     description: Optional[str] = None
     status: str  # draft, requirements, design, executing, completed
     phase: str  # Requirements, Design, Implementation, Testing, Done
-    current_phase: str = "explore"  # State machine phase: explore, requirements, design, tasks, sync, complete
+    current_phase: str = (
+        "explore"  # State machine phase: explore, requirements, design, tasks, sync, complete
+    )
     progress: float = 0
     test_coverage: float = 0
     active_agents: int = 0
@@ -1218,7 +1221,9 @@ async def create_spec(
     spec_description = spec.description  # Fallback to provided description
 
     try:
-        from omoi_os.services.title_generation_service import get_title_generation_service
+        from omoi_os.services.title_generation_service import (
+            get_title_generation_service,
+        )
 
         title_service = get_title_generation_service()
         generated = await title_service.generate_spec_title_and_description(
@@ -1293,7 +1298,10 @@ async def update_spec(
         change_details["title"] = {"old": old_spec.title, "new": updates.title}
         change_parts.append("title")
     if updates.description is not None and updates.description != old_spec.description:
-        change_details["description"] = {"old": old_spec.description, "new": updates.description}
+        change_details["description"] = {
+            "old": old_spec.description,
+            "new": updates.description,
+        }
         change_parts.append("description")
     if updates.status is not None and updates.status != old_spec.status:
         change_details["status"] = {"old": old_spec.status, "new": updates.status}
@@ -1377,8 +1385,14 @@ async def update_requirement(
     """Update a requirement."""
     # Use async database operations (non-blocking)
     req = await _update_requirement_async(
-        db, spec_id, req_id, updates.title, updates.condition, updates.action,
-        updates.status, updates.linked_design
+        db,
+        spec_id,
+        req_id,
+        updates.title,
+        updates.condition,
+        updates.action,
+        updates.status,
+        updates.linked_design,
     )
     if not req:
         raise HTTPException(status_code=404, detail="Requirement not found")
@@ -1666,7 +1680,9 @@ async def approve_design(
 @router.get("/{spec_id}/versions", response_model=SpecVersionListResponse)
 async def list_spec_versions(
     spec_id: str,
-    limit: int = Query(20, ge=1, le=100, description="Maximum number of versions to return"),
+    limit: int = Query(
+        20, ge=1, le=100, description="Maximum number of versions to return"
+    ),
     db: DatabaseService = Depends(get_db_service),
 ):
     """List version history for a spec."""
@@ -2035,7 +2051,9 @@ async def execute_spec_tasks(
     except Exception:
         pass  # Coordination optional - parallel synthesis won't work without it
 
-    service = SpecTaskExecutionService(db=db, event_bus=event_bus, coordination=coordination)
+    service = SpecTaskExecutionService(
+        db=db, event_bus=event_bus, coordination=coordination
+    )
 
     # Subscribe to completions if event bus available
     if event_bus:
@@ -2388,7 +2406,9 @@ async def create_spec_pr(
 class LinkTicketsRequest(BaseModel):
     """Request to link tickets to a spec."""
 
-    ticket_ids: List[str] = Field(..., description="List of ticket IDs to link to this spec")
+    ticket_ids: List[str] = Field(
+        ..., description="List of ticket IDs to link to this spec"
+    )
 
 
 class LinkTicketsResponse(BaseModel):
@@ -2423,7 +2443,11 @@ async def _link_tickets_to_spec_async(
         )
         spec = result.scalar_one_or_none()
         if not spec:
-            return {"error": "Spec not found", "linked_count": 0, "already_linked_count": 0}
+            return {
+                "error": "Spec not found",
+                "linked_count": 0,
+                "already_linked_count": 0,
+            }
 
         linked_count = 0
         already_linked_count = 0
@@ -2647,6 +2671,7 @@ async def get_linked_tickets(
 
 class SpecExportFormat(str):
     """Supported export formats."""
+
     JSON = "json"
     MARKDOWN = "markdown"
 
@@ -2739,18 +2764,22 @@ async def export_spec(
         ]
 
         if spec.description:
-            md_lines.extend([
-                "## Description",
-                "",
-                spec.description,
-                "",
-            ])
+            md_lines.extend(
+                [
+                    "## Description",
+                    "",
+                    spec.description,
+                    "",
+                ]
+            )
 
         if spec.requirements:
-            md_lines.extend([
-                "## Requirements",
-                "",
-            ])
+            md_lines.extend(
+                [
+                    "## Requirements",
+                    "",
+                ]
+            )
             for req in spec.requirements:
                 md_lines.append(f"### {req.title}")
                 md_lines.append("")
@@ -2765,43 +2794,57 @@ async def export_spec(
                     md_lines.append("")
 
         if spec.design:
-            md_lines.extend([
-                "## Design",
-                "",
-            ])
+            md_lines.extend(
+                [
+                    "## Design",
+                    "",
+                ]
+            )
             if spec.design.get("architecture"):
-                md_lines.extend([
-                    "### Architecture",
-                    "",
-                    spec.design["architecture"],
-                    "",
-                ])
+                md_lines.extend(
+                    [
+                        "### Architecture",
+                        "",
+                        spec.design["architecture"],
+                        "",
+                    ]
+                )
             if spec.design.get("data_model"):
-                md_lines.extend([
-                    "### Data Model",
-                    "",
-                    spec.design["data_model"],
-                    "",
-                ])
+                md_lines.extend(
+                    [
+                        "### Data Model",
+                        "",
+                        spec.design["data_model"],
+                        "",
+                    ]
+                )
             if spec.design.get("api_spec"):
-                md_lines.extend([
-                    "### API Specification",
-                    "",
-                ])
+                md_lines.extend(
+                    [
+                        "### API Specification",
+                        "",
+                    ]
+                )
                 for ep in spec.design["api_spec"]:
                     endpoint = ep.get("endpoint") or ep.get("path", "")
                     desc = ep.get("description") or ep.get("purpose", "")
-                    md_lines.append(f"- `{ep.get('method', 'GET')} {endpoint}` - {desc}")
+                    md_lines.append(
+                        f"- `{ep.get('method', 'GET')} {endpoint}` - {desc}"
+                    )
                 md_lines.append("")
 
         if spec.tasks:
-            md_lines.extend([
-                "## Tasks",
-                "",
-            ])
+            md_lines.extend(
+                [
+                    "## Tasks",
+                    "",
+                ]
+            )
             for task in spec.tasks:
                 checkbox = "[x]" if task.status == "completed" else "[ ]"
-                md_lines.append(f"- {checkbox} **{task.title}** ({task.priority}, {task.phase})")
+                md_lines.append(
+                    f"- {checkbox} **{task.title}** ({task.priority}, {task.phase})"
+                )
                 if task.description:
                     md_lines.append(f"  - {task.description}")
             md_lines.append("")
@@ -2811,9 +2854,7 @@ async def export_spec(
         return Response(
             content=markdown_content,
             media_type="text/markdown",
-            headers={
-                "Content-Disposition": f"attachment; filename={spec.id}.md"
-            },
+            headers={"Content-Disposition": f"attachment; filename={spec.id}.md"},
         )
     else:
         # Return JSON
@@ -2831,7 +2872,9 @@ class SpecLaunchRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500)
     description: str = Field(..., min_length=1)
     project_id: str
-    auto_execute: bool = Field(default=True, description="Start execution immediately after creation")
+    auto_execute: bool = Field(
+        default=True, description="Start execution immediately after creation"
+    )
 
 
 class SpecLaunchResponse(BaseModel):
@@ -2878,7 +2921,9 @@ async def launch_spec(
         billing_service = get_billing_service(db)
         can_execute, billing_reason = billing_service.can_execute_workflow(org_id)
         if not can_execute:
-            raise HTTPException(status_code=402, detail=f"Execution blocked: {billing_reason}")
+            raise HTTPException(
+                status_code=402, detail=f"Execution blocked: {billing_reason}"
+            )
 
     # 1.5. Generate a clean title and description from user input
     # The user's input is stored in request.description (the full prompt)
@@ -2904,7 +2949,9 @@ async def launch_spec(
     spec_description = request.description  # Fallback to request description
 
     try:
-        from omoi_os.services.title_generation_service import get_title_generation_service
+        from omoi_os.services.title_generation_service import (
+            get_title_generation_service,
+        )
 
         title_service = get_title_generation_service()
         generated = await title_service.generate_spec_title_and_description(
@@ -2982,5 +3029,3 @@ async def launch_spec(
             status_code=500,
             detail=f"Spec created but execution failed to start: {str(e)}",
         )
-
-

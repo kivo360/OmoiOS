@@ -14,7 +14,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "054_add_autonomous_execution_toggle"
 down_revision: Union[str, Sequence[str], None] = "053_add_spec_pr_tracking_fields"

@@ -18,9 +18,7 @@ The validator agent checks:
 - Code review checklist passes (security, quality, maintainability)
 """
 
-import asyncio
 import os
-from datetime import datetime
 from typing import Optional
 from uuid import uuid4
 
@@ -80,8 +78,12 @@ class TaskValidatorService:
     ):
         self.db = db
         self.event_bus = event_bus
-        self._validation_enabled = os.getenv("TASK_VALIDATION_ENABLED", "true").lower() in ("true", "1", "yes")
-        self._max_validation_iterations = int(os.getenv("MAX_VALIDATION_ITERATIONS", "3"))
+        self._validation_enabled = os.getenv(
+            "TASK_VALIDATION_ENABLED", "true"
+        ).lower() in ("true", "1", "yes")
+        self._max_validation_iterations = int(
+            os.getenv("MAX_VALIDATION_ITERATIONS", "3")
+        )
 
     async def request_validation(
         self,
@@ -115,9 +117,7 @@ class TaskValidatorService:
             from sqlalchemy import select
 
             # Get the task
-            result = await session.execute(
-                select(Task).filter(Task.id == task_id)
-            )
+            result = await session.execute(select(Task).filter(Task.id == task_id))
             task = result.scalar_one_or_none()
 
             if not task:
@@ -136,7 +136,9 @@ class TaskValidatorService:
                     "marking as failed"
                 )
                 task.status = "failed"
-                task.error_message = f"Failed validation after {iteration - 1} iterations"
+                task.error_message = (
+                    f"Failed validation after {iteration - 1} iterations"
+                )
                 await session.commit()
                 return ""
 
@@ -204,9 +206,7 @@ class TaskValidatorService:
             from sqlalchemy import select
 
             # Get task
-            result = await session.execute(
-                select(Task).filter(Task.id == task_id)
-            )
+            result = await session.execute(select(Task).filter(Task.id == task_id))
             task = result.scalar_one_or_none()
 
             if not task:
@@ -240,7 +240,9 @@ class TaskValidatorService:
                     "validation_iteration": iteration,
                     "validated_at": utc_now().isoformat(),
                 }
-                logger.info(f"Task {task_id} validation PASSED on iteration {iteration}")
+                logger.info(
+                    f"Task {task_id} validation PASSED on iteration {iteration}"
+                )
 
                 if self.event_bus:
                     # Publish validation passed event
@@ -350,12 +352,18 @@ class TaskValidatorService:
                 # Get task with its ticket and project
                 task = session.query(Task).filter(Task.id == task_id).first()
                 if task and task.ticket_id:
-                    ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                    ticket = (
+                        session.query(Ticket)
+                        .filter(Ticket.id == task.ticket_id)
+                        .first()
+                    )
                     if ticket and ticket.project:
                         project = ticket.project
                         # Set repo info
                         if project.github_owner and project.github_repo:
-                            extra_env["GITHUB_REPO"] = f"{project.github_owner}/{project.github_repo}"
+                            extra_env["GITHUB_REPO"] = (
+                                f"{project.github_owner}/{project.github_repo}"
+                            )
                             extra_env["GITHUB_REPO_OWNER"] = project.github_owner
                             extra_env["GITHUB_REPO_NAME"] = project.github_repo
 
@@ -370,9 +378,15 @@ class TaskValidatorService:
                         # Get GitHub token from project owner
                         if project.created_by:
                             extra_env["USER_ID"] = str(project.created_by)
-                            user = session.query(User).filter(User.id == project.created_by).first()
+                            user = (
+                                session.query(User)
+                                .filter(User.id == project.created_by)
+                                .first()
+                            )
                             if user and user.attributes:
-                                github_token = user.attributes.get("github_access_token")
+                                github_token = user.attributes.get(
+                                    "github_access_token"
+                                )
                                 if github_token:
                                     extra_env["GITHUB_TOKEN"] = github_token
 
@@ -515,6 +529,7 @@ def get_task_validator(
     """Get or create TaskValidatorService instance."""
     if db is None:
         from omoi_os.api.dependencies import get_db_service
+
         db = get_db_service()
 
     return TaskValidatorService(db=db, event_bus=event_bus)

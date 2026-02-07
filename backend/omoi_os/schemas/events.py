@@ -33,8 +33,7 @@ Usage:
     is_progression = event_type in PHASE_PROGRESSION_EVENTS
 """
 
-from typing import FrozenSet, Set
-
+from typing import FrozenSet
 
 # =============================================================================
 # AGENT EVENT TYPES
@@ -151,58 +150,53 @@ class IterationEventTypes:
 #
 # Design principle: Use a blocklist (non-work) rather than allowlist (work)
 # so that NEW event types automatically count as work (fail-safe).
-NON_WORK_EVENTS: FrozenSet[str] = frozenset({
-    # Heartbeats - just keepalive signals, not actual work
-    AgentEventTypes.HEARTBEAT,
-    SpecEventTypes.HEARTBEAT,
-
-    # Started events - initialization, not actual work yet
-    AgentEventTypes.STARTED,
-
-    # Error events - failures don't indicate forward progress
-    AgentEventTypes.ERROR,
-    AgentEventTypes.STREAM_ERROR,
-    SpecEventTypes.PHASE_FAILED,
-    SpecEventTypes.EXECUTION_FAILED,
-    IterationEventTypes.FAILED,
-
-    # Waiting/idle states - ready but not actively working
-    AgentEventTypes.WAITING,
-
-    # Shutdown events - cleanup, not productive work
-    AgentEventTypes.SHUTDOWN,
-
-    # Interrupted events - work was stopped
-    AgentEventTypes.INTERRUPTED,
-})
+NON_WORK_EVENTS: FrozenSet[str] = frozenset(
+    {
+        # Heartbeats - just keepalive signals, not actual work
+        AgentEventTypes.HEARTBEAT,
+        SpecEventTypes.HEARTBEAT,
+        # Started events - initialization, not actual work yet
+        AgentEventTypes.STARTED,
+        # Error events - failures don't indicate forward progress
+        AgentEventTypes.ERROR,
+        AgentEventTypes.STREAM_ERROR,
+        SpecEventTypes.PHASE_FAILED,
+        SpecEventTypes.EXECUTION_FAILED,
+        IterationEventTypes.FAILED,
+        # Waiting/idle states - ready but not actively working
+        AgentEventTypes.WAITING,
+        # Shutdown events - cleanup, not productive work
+        AgentEventTypes.SHUTDOWN,
+        # Interrupted events - work was stopped
+        AgentEventTypes.INTERRUPTED,
+    }
+)
 
 
 # Events that indicate phase/state progression in a workflow.
 # Useful for tracking workflow advancement regardless of specific work done.
-PHASE_PROGRESSION_EVENTS: FrozenSet[str] = frozenset({
-    # Spec phase transitions
-    SpecEventTypes.PHASE_STARTED,
-    SpecEventTypes.PHASE_COMPLETED,
-
-    # Spec lifecycle milestones
-    SpecEventTypes.EXECUTION_STARTED,
-    SpecEventTypes.EXECUTION_COMPLETED,
-
-    # Sync phase markers
-    SpecEventTypes.SYNC_STARTED,
-    SpecEventTypes.SYNC_COMPLETED,
-
-    # Artifact generation milestones
-    SpecEventTypes.REQUIREMENTS_GENERATED,
-    SpecEventTypes.DESIGN_GENERATED,
-    SpecEventTypes.TASKS_GENERATED,
-
-    # Iteration/continuous mode
-    IterationEventTypes.STARTED,
-    IterationEventTypes.COMPLETED,
-    IterationEventTypes.CONTINUOUS_STARTED,
-    IterationEventTypes.CONTINUOUS_COMPLETED,
-})
+PHASE_PROGRESSION_EVENTS: FrozenSet[str] = frozenset(
+    {
+        # Spec phase transitions
+        SpecEventTypes.PHASE_STARTED,
+        SpecEventTypes.PHASE_COMPLETED,
+        # Spec lifecycle milestones
+        SpecEventTypes.EXECUTION_STARTED,
+        SpecEventTypes.EXECUTION_COMPLETED,
+        # Sync phase markers
+        SpecEventTypes.SYNC_STARTED,
+        SpecEventTypes.SYNC_COMPLETED,
+        # Artifact generation milestones
+        SpecEventTypes.REQUIREMENTS_GENERATED,
+        SpecEventTypes.DESIGN_GENERATED,
+        SpecEventTypes.TASKS_GENERATED,
+        # Iteration/continuous mode
+        IterationEventTypes.STARTED,
+        IterationEventTypes.COMPLETED,
+        IterationEventTypes.CONTINUOUS_STARTED,
+        IterationEventTypes.CONTINUOUS_COMPLETED,
+    }
+)
 
 
 # =============================================================================

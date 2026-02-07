@@ -87,5 +87,3 @@ def get_session() -> Iterator[Session]:
         raise
     finally:
         session.close()
-
-

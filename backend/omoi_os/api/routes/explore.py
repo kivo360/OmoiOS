@@ -15,7 +15,6 @@ from omoi_os.models.explore import ExploreConversation, ExploreMessage
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
-
 router = APIRouter(prefix="/explore", tags=["explore"])
 
 
@@ -557,7 +556,9 @@ async def _send_message_async(
         await session.flush()
 
         # Update conversation metadata
-        conv.last_message = ai_content[:100] + "..." if len(ai_content) > 100 else ai_content
+        conv.last_message = (
+            ai_content[:100] + "..." if len(ai_content) > 100 else ai_content
+        )
 
         # Update title if this is the first user message
         count_result = await session.execute(

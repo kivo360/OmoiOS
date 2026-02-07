@@ -51,16 +51,22 @@ class TaskMemory(Base):
     )
     # ACE workflow fields (REQ-MEM-ACE-001)
     goal: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, comment="What the agent was trying to accomplish (REQ-MEM-ACE-001)"
+        Text,
+        nullable=True,
+        comment="What the agent was trying to accomplish (REQ-MEM-ACE-001)",
     )
     result: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True, comment="What actually happened (REQ-MEM-ACE-001)"
     )
     feedback: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True, comment="Output from environment (stdout, stderr, test results) (REQ-MEM-ACE-001)"
+        Text,
+        nullable=True,
+        comment="Output from environment (stdout, stderr, test results) (REQ-MEM-ACE-001)",
     )
     tool_usage: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSONB, nullable=True, comment="Tools used during task execution (REQ-MEM-ACE-001)"
+        JSONB,
+        nullable=True,
+        comment="Tools used during task execution (REQ-MEM-ACE-001)",
     )
     context_embedding: Mapped[Optional[List[float]]] = mapped_column(
         ARRAY(Float, dimensions=1),

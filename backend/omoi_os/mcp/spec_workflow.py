@@ -425,7 +425,7 @@ async def get_task(args: dict[str, Any]) -> dict[str, Any]:
                     )
                     if ticket_response.status_code == 200:
                         ticket = ticket_response.json()
-                        output += f"## Parent Ticket Context\n\n"
+                        output += "## Parent Ticket Context\n\n"
                         output += f"**Ticket Title:** {ticket['title']}\n"
                         output += f"**Ticket Status:** {ticket['status']}\n\n"
                         if ticket.get("description"):

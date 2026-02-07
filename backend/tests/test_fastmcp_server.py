@@ -21,7 +21,7 @@ async def mcp_client():
     event_bus = EventBusService(redis_url="redis://localhost:16379")
     task_queue = TaskQueueService(db)
     discovery_service = DiscoveryService(event_bus)
-    
+
     # Initialize MCP server with services
     initialize_mcp_services(
         db=db,
@@ -29,7 +29,7 @@ async def mcp_client():
         task_queue=task_queue,
         discovery_service=discovery_service,
     )
-    
+
     # Create client connected to in-memory server
     async with Client(mcp) as client:
         yield client
@@ -39,9 +39,9 @@ async def mcp_client():
 async def test_list_tools(mcp_client):
     """Test listing available tools."""
     tools = await mcp_client.list_tools()
-    
+
     assert len(tools) > 0
-    
+
     # Check for expected tools
     tool_names = [tool.name for tool in tools]
     assert "create_ticket" in tool_names
@@ -63,11 +63,11 @@ async def test_create_ticket_tool(mcp_client):
             "description": "This is a test ticket for FastMCP testing",
             "ticket_type": "task",
             "priority": "medium",
-        }
+        },
     )
-    
+
     assert result is not None
-    if hasattr(result, 'data'):
+    if hasattr(result, "data"):
         assert isinstance(result.data, dict)
         assert "ticket_id" in result.data or "success" in result.data
 
@@ -83,11 +83,11 @@ async def test_search_tickets_tool(mcp_client):
             "query": "test",
             "search_type": "hybrid",
             "limit": 10,
-        }
+        },
     )
-    
+
     assert result is not None
-    if hasattr(result, 'data'):
+    if hasattr(result, "data"):
         assert isinstance(result.data, dict)
 
 
@@ -96,7 +96,7 @@ async def test_create_task_without_discovery(mcp_client):
     """Test create_task tool without discovery tracking."""
     # Note: This will fail if ticket_id doesn't exist
     # In real tests, create a ticket first or use mocks
-    
+
     result = await mcp_client.call_tool(
         "create_task",
         {
@@ -105,9 +105,9 @@ async def test_create_task_without_discovery(mcp_client):
             "description": "Test task without discovery",
             "task_type": "implementation",
             "priority": "MEDIUM",
-        }
+        },
     )
-    
+
     # May succeed or fail depending on whether ticket exists
     assert result is not None
 
@@ -127,14 +127,14 @@ async def test_create_task_with_discovery(mcp_client):
             "discovery_description": "Memory leak in auth module",
             "source_task_id": "00000000-0000-0000-0000-000000000002",
             "priority_boost": True,
-        }
+        },
     )
-    
+
     # May succeed or fail depending on whether ticket/task exists
     assert result is not None
-    
+
     # If successful, should have discovery data
-    if hasattr(result, 'data') and isinstance(result.data, dict):
+    if hasattr(result, "data") and isinstance(result.data, dict):
         if "discovery" in result.data:
             discovery = result.data["discovery"]
             assert discovery.get("discovery_type") == "bug"
@@ -148,11 +148,11 @@ async def test_get_task_discoveries(mcp_client):
         "get_task_discoveries",
         {
             "task_id": "00000000-0000-0000-0000-000000000002",
-        }
+        },
     )
-    
+
     assert result is not None
-    if hasattr(result, 'data') and isinstance(result.data, dict):
+    if hasattr(result, "data") and isinstance(result.data, dict):
         assert "discoveries" in result.data
         assert isinstance(result.data["discoveries"], list)
 
@@ -164,13 +164,12 @@ async def test_get_workflow_graph(mcp_client):
         "get_workflow_graph",
         {
             "ticket_id": "00000000-0000-0000-0000-000000000001",
-        }
+        },
     )
-    
+
     assert result is not None
-    if hasattr(result, 'data') and isinstance(result.data, dict):
+    if hasattr(result, "data") and isinstance(result.data, dict):
         assert "nodes" in result.data
         assert "edges" in result.data
         assert isinstance(result.data["nodes"], list)
         assert isinstance(result.data["edges"], list)
-

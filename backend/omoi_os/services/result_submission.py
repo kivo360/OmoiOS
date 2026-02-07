@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 class ResultSubmissionService:
     """Service for submitting and validating task-level and workflow-level results.
-    
+
     Handles two types of results:
     1. AgentResult - Task-level achievements with verification tracking
     2. WorkflowResult - Workflow-level completion with automatic validation
@@ -62,17 +62,17 @@ class ResultSubmissionService:
         summary: str,
     ) -> AgentResult:
         """Submit task-level result.
-        
+
         Args:
             agent_id: ID of agent submitting result
             task_id: ID of task being reported on
             markdown_file_path: Path to markdown result file
             result_type: Type of result (implementation, analysis, fix, etc.)
             summary: Brief summary of result
-            
+
         Returns:
             Created AgentResult record
-            
+
         Raises:
             FileNotFoundError: If markdown file doesn't exist
             ValueError: If file validation fails or agent doesn't own task
@@ -91,9 +91,7 @@ class ResultSubmissionService:
                 pass
             elif task.assigned_agent_id != agent_id:
                 # Legacy mode - verify agent owns the task
-                raise ValueError(
-                    f"Task {task_id} is not assigned to agent {agent_id}"
-                )
+                raise ValueError(f"Task {task_id} is not assigned to agent {agent_id}")
 
         # Validate and read file
         markdown_content = read_markdown_file(markdown_file_path)
@@ -138,12 +136,12 @@ class ResultSubmissionService:
         verified: bool,
     ) -> Optional[AgentResult]:
         """Mark task result as verified or disputed.
-        
+
         Args:
             result_id: ID of result to verify
             validation_review_id: ID of validation review that verified it
             verified: True if verified, False if disputed
-            
+
         Returns:
             Updated AgentResult or None if not found
         """
@@ -178,10 +176,10 @@ class ResultSubmissionService:
 
     def get_task_results(self, task_id: str) -> List[AgentResult]:
         """Get all results for a task.
-        
+
         Args:
             task_id: ID of task
-            
+
         Returns:
             List of AgentResult records
         """
@@ -211,17 +209,17 @@ class ResultSubmissionService:
         evidence: Optional[List[str]] = None,
     ) -> WorkflowResult:
         """Submit workflow-level result.
-        
+
         Args:
             workflow_id: ID of workflow (ticket_id)
             agent_id: ID of agent submitting result
             markdown_file_path: Path to result markdown file
             explanation: Optional explanation of what was accomplished
             evidence: Optional list of evidence items
-            
+
         Returns:
             Created WorkflowResult record
-            
+
         Raises:
             FileNotFoundError: If markdown file doesn't exist
             ValueError: If file validation fails
@@ -269,17 +267,17 @@ class ResultSubmissionService:
         validator_agent_id: str,
     ) -> dict:
         """Validate workflow result (validator agents only).
-        
+
         Args:
             result_id: ID of workflow result to validate
             passed: Whether validation passed
             feedback: Validation feedback
             evidence: List of evidence items checked
             validator_agent_id: ID of validator agent
-            
+
         Returns:
             Dict with validation status and action taken
-            
+
         Raises:
             ValueError: If result not found
         """
@@ -358,10 +356,10 @@ class ResultSubmissionService:
 
     def list_workflow_results(self, workflow_id: str) -> List[WorkflowResult]:
         """Get all results for a workflow.
-        
+
         Args:
             workflow_id: ID of workflow (ticket_id)
-            
+
         Returns:
             List of WorkflowResult records
         """
@@ -384,10 +382,10 @@ class ResultSubmissionService:
 
     def _load_workflow_config(self, workflow_id: str) -> dict:
         """Load workflow configuration from YAML.
-        
+
         Args:
             workflow_id: ID of workflow (ticket_id)
-            
+
         Returns:
             Dict with has_result, result_criteria, on_result_found
         """
@@ -434,11 +432,14 @@ class ResultSubmissionService:
 
                 # Get organization from ticket's project
                 if not ticket.project_id:
-                    logger.warning(f"Ticket {workflow_id} has no project, skipping billing")
+                    logger.warning(
+                        f"Ticket {workflow_id} has no project, skipping billing"
+                    )
                     return False
 
                 # Get organization ID from the project
                 from omoi_os.models.project import Project
+
                 project = session.get(Project, ticket.project_id)
                 if not project or not project.organization_id:
                     logger.warning(f"No organization found for ticket {workflow_id}")
@@ -472,6 +473,7 @@ class ResultSubmissionService:
 
         except Exception as e:
             # Log error but don't fail the workflow validation
-            logger.error(f"Failed to record billing usage for workflow {workflow_id}: {e}")
+            logger.error(
+                f"Failed to record billing usage for workflow {workflow_id}: {e}"
+            )
             return False
-

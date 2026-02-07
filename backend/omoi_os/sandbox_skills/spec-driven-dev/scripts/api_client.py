@@ -754,7 +754,9 @@ class OmoiOSClient:
             # Compare API spec (simplified comparison by length and methods)
             api_same = len(existing_api) == len(api_spec)
             if api_same and existing_api:
-                existing_methods = {(e.get("method"), e.get("endpoint")) for e in existing_api}
+                existing_methods = {
+                    (e.get("method"), e.get("endpoint")) for e in existing_api
+                }
                 new_methods = {(e.get("method"), e.get("endpoint")) for e in api_spec}
                 api_same = existing_methods == new_methods
 
@@ -884,9 +886,9 @@ class OmoiOSClient:
                             SyncResult(
                                 item_id=ticket.id,
                                 item_type="ticket",
-                                action=SyncAction.UPDATED
-                                if success
-                                else SyncAction.FAILED,
+                                action=(
+                                    SyncAction.UPDATED if success else SyncAction.FAILED
+                                ),
                                 message=msg,
                             )
                         )
@@ -955,9 +957,9 @@ class OmoiOSClient:
                             SyncResult(
                                 item_id=task.id,
                                 item_type="task",
-                                action=SyncAction.UPDATED
-                                if success
-                                else SyncAction.FAILED,
+                                action=(
+                                    SyncAction.UPDATED if success else SyncAction.FAILED
+                                ),
                                 message=msg,
                             )
                         )
@@ -1400,7 +1402,6 @@ async def run_sync(
 
 
 if __name__ == "__main__":
-    import sys
 
     # Quick test
     async def test():

@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Depends, Header, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from omoi_os.api.dependencies import get_database_service, get_db_session
+from omoi_os.api.dependencies import get_database_service
 from omoi_os.analytics import (
     track_checkout_completed,
     track_subscription_created,
@@ -18,12 +18,13 @@ from omoi_os.analytics import (
     track_payment_succeeded,
 )
 from omoi_os.services.billing_service import BillingService, get_billing_service
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.stripe_service import get_stripe_service, StripeService
-from omoi_os.services.subscription_service import SubscriptionService, get_subscription_service
+from omoi_os.services.subscription_service import (
+    SubscriptionService,
+    get_subscription_service,
+)
 from omoi_os.models.subscription import SubscriptionTier
 from omoi_os.models.promo_code import PromoCode, PromoCodeRedemption, PromoCodeType
 from omoi_os.utils.datetime import utc_now
@@ -35,8 +36,10 @@ router = APIRouter()
 
 # ========== Request/Response Models ==========
 
+
 class BillingAccountResponse(BaseModel):
     """Response model for billing account."""
+
     id: str
     organization_id: str
     stripe_customer_id: Optional[str]
@@ -58,6 +61,7 @@ class BillingAccountResponse(BaseModel):
 
 class InvoiceResponse(BaseModel):
     """Response model for invoice."""
+
     id: str
     invoice_number: str
     billing_account_id: str
@@ -86,6 +90,7 @@ class InvoiceResponse(BaseModel):
 
 class StripeInvoiceResponse(BaseModel):
     """Response model for Stripe invoice (fetched directly from Stripe)."""
+
     id: str  # Stripe invoice ID
     number: Optional[str]  # Invoice number (e.g., "0001-0001")
     status: str  # draft, open, paid, uncollectible, void
@@ -111,6 +116,7 @@ class StripeInvoiceResponse(BaseModel):
 
 class PaymentResponse(BaseModel):
     """Response model for payment."""
+
     id: str
     billing_account_id: str
     invoice_id: Optional[str]
@@ -133,6 +139,7 @@ class PaymentResponse(BaseModel):
 
 class UsageRecordResponse(BaseModel):
     """Response model for usage record."""
+
     id: str
     billing_account_id: str
     ticket_id: Optional[str]
@@ -152,36 +159,46 @@ class UsageRecordResponse(BaseModel):
 
 class CreditPurchaseRequest(BaseModel):
     """Request to purchase credits."""
-    amount_usd: float = Field(..., gt=0, le=1000, description="Amount to purchase (USD)")
+
+    amount_usd: float = Field(
+        ..., gt=0, le=1000, description="Amount to purchase (USD)"
+    )
     success_url: Optional[str] = Field(None, description="Custom success redirect URL")
     cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
 
 
 class LifetimePurchaseRequest(BaseModel):
     """Request to purchase lifetime subscription."""
+
     success_url: Optional[str] = Field(None, description="Custom success redirect URL")
     cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
 
 
 class CheckoutResponse(BaseModel):
     """Response for checkout session creation."""
+
     checkout_url: str
     session_id: str
 
 
 class PortalResponse(BaseModel):
     """Response for customer portal."""
+
     portal_url: str
 
 
 class PaymentMethodRequest(BaseModel):
     """Request to attach a payment method."""
-    payment_method_id: str = Field(..., description="Stripe payment method ID from frontend")
+
+    payment_method_id: str = Field(
+        ..., description="Stripe payment method ID from frontend"
+    )
     set_as_default: bool = Field(True, description="Set as default payment method")
 
 
 class PaymentMethodResponse(BaseModel):
     """Response for payment method."""
+
     id: str
     type: str
     card_brand: Optional[str]
@@ -191,17 +208,22 @@ class PaymentMethodResponse(BaseModel):
 
 class PayInvoiceRequest(BaseModel):
     """Request to pay an invoice."""
-    payment_method_id: Optional[str] = Field(None, description="Specific payment method to use")
+
+    payment_method_id: Optional[str] = Field(
+        None, description="Specific payment method to use"
+    )
 
 
 class StripeConfigResponse(BaseModel):
     """Response with Stripe publishable key for frontend."""
+
     publishable_key: Optional[str]
     is_configured: bool
 
 
 class SubscriptionResponse(BaseModel):
     """Response model for subscription."""
+
     id: str
     organization_id: str
     billing_account_id: str
@@ -232,6 +254,7 @@ class SubscriptionResponse(BaseModel):
 
 class CostBreakdownItem(BaseModel):
     """Model breakdown in cost summary."""
+
     provider: str
     model: str
     cost: float
@@ -241,6 +264,7 @@ class CostBreakdownItem(BaseModel):
 
 class CostSummaryResponse(BaseModel):
     """Response model for cost summary."""
+
     scope_type: str
     scope_id: Optional[str]
     total_cost: float
@@ -251,6 +275,7 @@ class CostSummaryResponse(BaseModel):
 
 class CostRecordResponse(BaseModel):
     """Response model for individual cost record."""
+
     id: str
     task_id: str
     agent_id: Optional[str]
@@ -271,13 +296,18 @@ class CostRecordResponse(BaseModel):
 
 # ========== Promo Code Models ==========
 
+
 class PromoCodeValidateRequest(BaseModel):
     """Request to validate a promo code."""
-    code: str = Field(..., min_length=1, max_length=50, description="Promo code to validate")
+
+    code: str = Field(
+        ..., min_length=1, max_length=50, description="Promo code to validate"
+    )
 
 
 class PromoCodeValidateResponse(BaseModel):
     """Response for promo code validation."""
+
     valid: bool
     code: str
     discount_type: Optional[str] = None
@@ -290,11 +320,15 @@ class PromoCodeValidateResponse(BaseModel):
 
 class PromoCodeRedeemRequest(BaseModel):
     """Request to redeem a promo code."""
-    code: str = Field(..., min_length=1, max_length=50, description="Promo code to redeem")
+
+    code: str = Field(
+        ..., min_length=1, max_length=50, description="Promo code to redeem"
+    )
 
 
 class PromoCodeRedeemResponse(BaseModel):
     """Response for promo code redemption."""
+
     success: bool
     code: str
     discount_type: Optional[str] = None
@@ -305,20 +339,31 @@ class PromoCodeRedeemResponse(BaseModel):
 
 class PromoCodeCreateRequest(BaseModel):
     """Request to create a promo code (admin only)."""
+
     code: str = Field(..., min_length=3, max_length=50, description="Unique promo code")
     description: Optional[str] = Field(None, max_length=500)
-    discount_type: str = Field("full_bypass", description="percentage, fixed_amount, full_bypass, trial_extension")
-    discount_value: int = Field(0, ge=0, description="Percentage (0-100) or cents for fixed amount")
+    discount_type: str = Field(
+        "full_bypass",
+        description="percentage, fixed_amount, full_bypass, trial_extension",
+    )
+    discount_value: int = Field(
+        0, ge=0, description="Percentage (0-100) or cents for fixed amount"
+    )
     trial_days: Optional[int] = Field(None, ge=1, le=365)
     max_uses: Optional[int] = Field(None, ge=1)
     valid_until: Optional[datetime] = None
     applicable_tiers: Optional[list[str]] = None
-    grant_tier: Optional[str] = Field(None, description="Tier to grant for full_bypass codes (pro, team, etc)")
-    grant_duration_months: Optional[int] = Field(None, ge=1, le=36, description="Duration in months (null = lifetime)")
+    grant_tier: Optional[str] = Field(
+        None, description="Tier to grant for full_bypass codes (pro, team, etc)"
+    )
+    grant_duration_months: Optional[int] = Field(
+        None, ge=1, le=36, description="Duration in months (null = lifetime)"
+    )
 
 
 class PromoCodeResponse(BaseModel):
     """Response model for promo code."""
+
     id: str
     code: str
     description: Optional[str]
@@ -342,6 +387,7 @@ class PromoCodeResponse(BaseModel):
 
 # ========== Dependency Injection ==========
 
+
 def get_billing_service_dep(
     db: DatabaseService = Depends(get_database_service),
 ) -> BillingService:
@@ -364,6 +410,7 @@ def get_cost_tracking_service_dep(
 
 
 # ========== API Endpoints ==========
+
 
 @router.get("/config", response_model=StripeConfigResponse)
 async def get_stripe_config(
@@ -392,14 +439,18 @@ async def get_billing_account(
     """
     # Use session context to ensure object is not detached when accessing attributes
     with billing_service.db.get_session() as sess:
-        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        account = billing_service.get_or_create_billing_account(
+            organization_id, session=sess
+        )
         sess.commit()
         # Convert to dict while still in session to avoid DetachedInstanceError
         account_dict = account.to_dict()
     return BillingAccountResponse(**account_dict)
 
 
-@router.post("/account/{organization_id}/payment-method", response_model=PaymentMethodResponse)
+@router.post(
+    "/account/{organization_id}/payment-method", response_model=PaymentMethodResponse
+)
 async def attach_payment_method(
     organization_id: UUID,
     request: PaymentMethodRequest,
@@ -411,7 +462,7 @@ async def attach_payment_method(
 
     The payment_method_id should be obtained from Stripe.js on the frontend.
     """
-    from omoi_os.models.billing import BillingAccount, BillingAccountStatus
+    from omoi_os.models.billing import BillingAccountStatus
 
     # Use single session context for all operations to avoid DetachedInstanceError
     with billing_service.db.get_session() as sess:
@@ -420,7 +471,9 @@ async def attach_payment_method(
             raise HTTPException(status_code=404, detail="Billing account not found")
 
         if not account.stripe_customer_id:
-            raise HTTPException(status_code=400, detail="Billing account has no Stripe customer")
+            raise HTTPException(
+                status_code=400, detail="Billing account has no Stripe customer"
+            )
 
         try:
             payment_method = stripe.attach_payment_method(
@@ -450,7 +503,10 @@ async def attach_payment_method(
             raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/account/{organization_id}/payment-methods", response_model=list[PaymentMethodResponse])
+@router.get(
+    "/account/{organization_id}/payment-methods",
+    response_model=list[PaymentMethodResponse],
+)
 async def list_payment_methods(
     organization_id: UUID,
     billing_service: BillingService = Depends(get_billing_service_dep),
@@ -521,7 +577,10 @@ async def remove_payment_method(
 
 # ========== Credit Purchase ==========
 
-@router.post("/account/{organization_id}/credits/checkout", response_model=CheckoutResponse)
+
+@router.post(
+    "/account/{organization_id}/credits/checkout", response_model=CheckoutResponse
+)
 async def create_credit_checkout(
     organization_id: UUID,
     request: CreditPurchaseRequest,
@@ -549,7 +608,11 @@ async def create_credit_checkout(
 
 # ========== Subscription Management ==========
 
-@router.get("/account/{organization_id}/subscription", response_model=Optional[SubscriptionResponse])
+
+@router.get(
+    "/account/{organization_id}/subscription",
+    response_model=Optional[SubscriptionResponse],
+)
 async def get_subscription(
     organization_id: UUID,
     subscription_service: SubscriptionService = Depends(get_subscription_service_dep),
@@ -560,7 +623,9 @@ async def get_subscription(
     Returns null if no active subscription exists.
     """
     with subscription_service.db.get_session() as sess:
-        subscription = subscription_service.get_subscription(organization_id, session=sess)
+        subscription = subscription_service.get_subscription(
+            organization_id, session=sess
+        )
         if not subscription:
             return None
 
@@ -608,7 +673,9 @@ async def cancel_subscription(
     if not subscription:
         raise HTTPException(status_code=404, detail="No active subscription found")
 
-    subscription_service.cancel_subscription(subscription.id, at_period_end=at_period_end)
+    subscription_service.cancel_subscription(
+        subscription.id, at_period_end=at_period_end
+    )
     return {"status": "success", "message": "Subscription canceled"}
 
 
@@ -625,13 +692,16 @@ async def reactivate_subscription(
         raise HTTPException(status_code=404, detail="No subscription found")
 
     if not subscription.cancel_at_period_end:
-        raise HTTPException(status_code=400, detail="Subscription is not pending cancellation")
+        raise HTTPException(
+            status_code=400, detail="Subscription is not pending cancellation"
+        )
 
     subscription_service.reactivate_subscription(subscription.id)
     return {"status": "success", "message": "Subscription reactivated"}
 
 
 # ========== Promo Code Endpoints ==========
+
 
 @router.post("/promo-codes/validate", response_model=PromoCodeValidateResponse)
 async def validate_promo_code(
@@ -648,16 +718,12 @@ async def validate_promo_code(
     code = request.code.strip().upper()
 
     with db.get_session() as sess:
-        result = sess.execute(
-            select(PromoCode).where(PromoCode.code == code)
-        )
+        result = sess.execute(select(PromoCode).where(PromoCode.code == code))
         promo_code = result.scalar_one_or_none()
 
         if not promo_code:
             return PromoCodeValidateResponse(
-                valid=False,
-                code=code,
-                message="Invalid promo code"
+                valid=False, code=code, message="Invalid promo code"
             )
 
         if not promo_code.is_valid:
@@ -670,11 +736,7 @@ async def validate_promo_code(
             else:
                 message = "This promo code is not valid"
 
-            return PromoCodeValidateResponse(
-                valid=False,
-                code=code,
-                message=message
-            )
+            return PromoCodeValidateResponse(valid=False, code=code, message=message)
 
         # Code is valid
         return PromoCodeValidateResponse(
@@ -685,11 +747,14 @@ async def validate_promo_code(
             grant_tier=promo_code.grant_tier,
             grant_duration_months=promo_code.grant_duration_months,
             description=promo_code.description,
-            message="Promo code is valid!"
+            message="Promo code is valid!",
         )
 
 
-@router.post("/account/{organization_id}/promo-codes/redeem", response_model=PromoCodeRedeemResponse)
+@router.post(
+    "/account/{organization_id}/promo-codes/redeem",
+    response_model=PromoCodeRedeemResponse,
+)
 async def redeem_promo_code(
     organization_id: UUID,
     request: PromoCodeRedeemRequest,
@@ -710,33 +775,31 @@ async def redeem_promo_code(
 
     with db.get_session() as sess:
         # Get promo code
-        result = sess.execute(
-            select(PromoCode).where(PromoCode.code == code)
-        )
+        result = sess.execute(select(PromoCode).where(PromoCode.code == code))
         promo_code = result.scalar_one_or_none()
 
         if not promo_code:
             return PromoCodeRedeemResponse(
-                success=False,
-                code=code,
-                message="Invalid promo code"
+                success=False, code=code, message="Invalid promo code"
             )
 
         if not promo_code.is_valid:
             return PromoCodeRedeemResponse(
                 success=False,
                 code=code,
-                message="This promo code is not valid or has expired"
+                message="This promo code is not valid or has expired",
             )
 
         # Get billing account
-        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        account = billing_service.get_or_create_billing_account(
+            organization_id, session=sess
+        )
 
         # Check if user already redeemed this code
         existing_redemption = sess.execute(
             select(PromoCodeRedemption).where(
                 PromoCodeRedemption.promo_code_id == promo_code.id,
-                PromoCodeRedemption.organization_id == organization_id
+                PromoCodeRedemption.organization_id == organization_id,
             )
         ).scalar_one_or_none()
 
@@ -744,7 +807,7 @@ async def redeem_promo_code(
             return PromoCodeRedeemResponse(
                 success=False,
                 code=code,
-                message="You have already redeemed this promo code"
+                message="You have already redeemed this promo code",
             )
 
         # Handle full_bypass codes - create/upgrade subscription
@@ -752,7 +815,9 @@ async def redeem_promo_code(
             grant_tier = promo_code.grant_tier or "pro"  # Default to pro
 
             # Check for existing subscription
-            existing = subscription_service.get_subscription(organization_id, session=sess)
+            existing = subscription_service.get_subscription(
+                organization_id, session=sess
+            )
 
             if existing:
                 # Upgrade existing subscription
@@ -765,7 +830,7 @@ async def redeem_promo_code(
                     return PromoCodeRedeemResponse(
                         success=False,
                         code=code,
-                        message="Invalid subscription tier configured for this code"
+                        message="Invalid subscription tier configured for this code",
                     )
             else:
                 # Create new subscription
@@ -782,7 +847,7 @@ async def redeem_promo_code(
                     return PromoCodeRedeemResponse(
                         success=False,
                         code=code,
-                        message="Invalid subscription tier configured for this code"
+                        message="Invalid subscription tier configured for this code",
                     )
 
         # Record the redemption
@@ -793,8 +858,16 @@ async def redeem_promo_code(
             organization_id=organization_id,
             discount_type_applied=promo_code.discount_type,
             discount_value_applied=promo_code.discount_value,
-            tier_granted=promo_code.grant_tier if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
-            duration_months_granted=promo_code.grant_duration_months if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
+            tier_granted=(
+                promo_code.grant_tier
+                if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value
+                else None
+            ),
+            duration_months_granted=(
+                promo_code.grant_duration_months
+                if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value
+                else None
+            ),
         )
         sess.add(redemption)
 
@@ -803,11 +876,15 @@ async def redeem_promo_code(
 
         sess.commit()
 
-        logger.info(f"Promo code {code} redeemed for org {organization_id} (type: {promo_code.discount_type})")
+        logger.info(
+            f"Promo code {code} redeemed for org {organization_id} (type: {promo_code.discount_type})"
+        )
 
         # Build success message
         if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value:
-            tier_name = promo_code.grant_tier.title() if promo_code.grant_tier else "Pro"
+            tier_name = (
+                promo_code.grant_tier.title() if promo_code.grant_tier else "Pro"
+            )
             if promo_code.grant_duration_months:
                 message = f"Success! You now have {tier_name} access for {promo_code.grant_duration_months} months"
             else:
@@ -817,7 +894,9 @@ async def redeem_promo_code(
         elif promo_code.discount_type == PromoCodeType.FIXED_AMOUNT.value:
             message = f"Success! ${promo_code.discount_value / 100:.2f} credit applied to your account"
         elif promo_code.discount_type == PromoCodeType.TRIAL_EXTENSION.value:
-            message = f"Success! Your trial has been extended by {promo_code.trial_days} days"
+            message = (
+                f"Success! Your trial has been extended by {promo_code.trial_days} days"
+            )
         else:
             message = "Promo code successfully applied!"
 
@@ -825,9 +904,17 @@ async def redeem_promo_code(
             success=True,
             code=code,
             discount_type=promo_code.discount_type,
-            tier_granted=promo_code.grant_tier if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
-            duration_months_granted=promo_code.grant_duration_months if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value else None,
-            message=message
+            tier_granted=(
+                promo_code.grant_tier
+                if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value
+                else None
+            ),
+            duration_months_granted=(
+                promo_code.grant_duration_months
+                if promo_code.discount_type == PromoCodeType.FULL_BYPASS.value
+                else None
+            ),
+            message=message,
         )
 
 
@@ -854,8 +941,7 @@ async def create_promo_code(
 
         if existing:
             raise HTTPException(
-                status_code=400,
-                detail=f"Promo code '{code}' already exists"
+                status_code=400, detail=f"Promo code '{code}' already exists"
             )
 
         # Validate discount type
@@ -864,7 +950,7 @@ async def create_promo_code(
         except ValueError:
             raise HTTPException(
                 status_code=400,
-                detail=f"Invalid discount_type. Must be one of: {[t.value for t in PromoCodeType]}"
+                detail=f"Invalid discount_type. Must be one of: {[t.value for t in PromoCodeType]}",
             )
 
         # Create promo code
@@ -908,7 +994,7 @@ async def list_promo_codes(
         query = select(PromoCode).order_by(PromoCode.created_at.desc())
 
         if active_only:
-            query = query.where(PromoCode.is_active == True)
+            query = query.where(PromoCode.is_active is True)
 
         result = sess.execute(query)
         codes = result.scalars().all()
@@ -931,9 +1017,7 @@ async def deactivate_promo_code(
     code = code.strip().upper()
 
     with db.get_session() as sess:
-        result = sess.execute(
-            select(PromoCode).where(PromoCode.code == code)
-        )
+        result = sess.execute(select(PromoCode).where(PromoCode.code == code))
         promo_code = result.scalar_one_or_none()
 
         if not promo_code:
@@ -949,8 +1033,10 @@ async def deactivate_promo_code(
 
 # ========== Subscription Checkout ==========
 
+
 class SubscriptionCheckoutRequest(BaseModel):
     """Request to create subscription checkout session."""
+
     tier: str = Field(..., description="Subscription tier: 'pro' or 'team'")
     success_url: Optional[str] = Field(None, description="Custom success redirect URL")
     cancel_url: Optional[str] = Field(None, description="Custom cancel redirect URL")
@@ -978,7 +1064,9 @@ TIER_PRICES = {
 }
 
 
-@router.post("/account/{organization_id}/subscription/checkout", response_model=CheckoutResponse)
+@router.post(
+    "/account/{organization_id}/subscription/checkout", response_model=CheckoutResponse
+)
 async def create_subscription_checkout(
     organization_id: UUID,
     request: SubscriptionCheckoutRequest,
@@ -996,7 +1084,7 @@ async def create_subscription_checkout(
     if tier not in TIER_PRICES:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid tier. Must be one of: {', '.join(TIER_PRICES.keys())}"
+            detail=f"Invalid tier. Must be one of: {', '.join(TIER_PRICES.keys())}",
         )
 
     tier_config = TIER_PRICES[tier]
@@ -1007,14 +1095,23 @@ async def create_subscription_checkout(
         # Check for existing paid subscription
         existing = subscription_service.get_subscription(organization_id, session=sess)
         if existing and existing.is_lifetime:
-            raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
-        if existing and existing.tier in ["pro", "team"] and existing.status == "active":
             raise HTTPException(
                 status_code=400,
-                detail="Organization already has an active paid subscription. Use the customer portal to change plans."
+                detail="Organization already has a lifetime subscription",
+            )
+        if (
+            existing
+            and existing.tier in ["pro", "team"]
+            and existing.status == "active"
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="Organization already has an active paid subscription. Use the customer portal to change plans.",
             )
 
-        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        account = billing_service.get_or_create_billing_account(
+            organization_id, session=sess
+        )
         sess.commit()
         # Extract values while still in session
         account_id = str(account.id)
@@ -1022,8 +1119,13 @@ async def create_subscription_checkout(
 
     # Create Stripe checkout session for subscription
     try:
-        success_url = request.success_url or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
-        cancel_url = request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
+        success_url = (
+            request.success_url
+            or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
+        )
+        cancel_url = (
+            request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
+        )
 
         metadata = {
             "subscription_checkout": "true",
@@ -1036,7 +1138,9 @@ async def create_subscription_checkout(
         # This prevents duplicate checkout sessions if user clicks multiple times
         time_window = int(time.time() // 1800)  # 30-minute windows
         idempotency_base = f"{organization_id}:{tier}:{time_window}"
-        idempotency_key = f"sub_checkout_{hashlib.sha256(idempotency_base.encode()).hexdigest()[:32]}"
+        idempotency_key = (
+            f"sub_checkout_{hashlib.sha256(idempotency_base.encode()).hexdigest()[:32]}"
+        )
 
         # Use price_id if available, otherwise use dynamic pricing
         if tier_config.get("price_id"):
@@ -1076,7 +1180,9 @@ LIFETIME_PRICE_USD = 299.0
 LIFETIME_STRIPE_PRICE_ID = "price_lifetime_omoios"  # Configure in Stripe dashboard
 
 
-@router.post("/account/{organization_id}/lifetime/checkout", response_model=CheckoutResponse)
+@router.post(
+    "/account/{organization_id}/lifetime/checkout", response_model=CheckoutResponse
+)
 async def create_lifetime_checkout(
     organization_id: UUID,
     request: LifetimePurchaseRequest,
@@ -1099,9 +1205,14 @@ async def create_lifetime_checkout(
         # Check for existing lifetime subscription
         existing = subscription_service.get_subscription(organization_id, session=sess)
         if existing and existing.is_lifetime:
-            raise HTTPException(status_code=400, detail="Organization already has a lifetime subscription")
+            raise HTTPException(
+                status_code=400,
+                detail="Organization already has a lifetime subscription",
+            )
 
-        account = billing_service.get_or_create_billing_account(organization_id, session=sess)
+        account = billing_service.get_or_create_billing_account(
+            organization_id, session=sess
+        )
         sess.commit()
         # Extract values while still in session
         account_id = str(account.id)
@@ -1109,8 +1220,13 @@ async def create_lifetime_checkout(
 
     # Create Stripe checkout session for one-time payment
     try:
-        success_url = request.success_url or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
-        cancel_url = request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
+        success_url = (
+            request.success_url
+            or f"{stripe.settings.frontend_url}/billing/success?session_id={{CHECKOUT_SESSION_ID}}"
+        )
+        cancel_url = (
+            request.cancel_url or f"{stripe.settings.frontend_url}/billing/cancel"
+        )
 
         session = stripe.stripe.checkout.Session.create(
             mode="payment",  # One-time payment, not subscription
@@ -1146,6 +1262,7 @@ async def create_lifetime_checkout(
 
 # ========== Customer Portal ==========
 
+
 @router.post("/account/{organization_id}/portal", response_model=PortalResponse)
 async def create_customer_portal(
     organization_id: UUID,
@@ -1168,6 +1285,7 @@ async def create_customer_portal(
 
 
 # ========== Invoices ==========
+
 
 @router.get("/account/{organization_id}/invoices", response_model=list[InvoiceResponse])
 async def list_invoices(
@@ -1209,7 +1327,10 @@ async def list_invoices(
     return [InvoiceResponse(**inv_dict) for inv_dict in invoice_dicts]
 
 
-@router.get("/account/{organization_id}/stripe-invoices", response_model=list[StripeInvoiceResponse])
+@router.get(
+    "/account/{organization_id}/stripe-invoices",
+    response_model=list[StripeInvoiceResponse],
+)
 async def list_stripe_invoices(
     organization_id: UUID,
     status: Optional[str] = None,
@@ -1245,51 +1366,65 @@ async def list_stripe_invoices(
         responses = []
         for inv in stripe_invoices:
             # Convert timestamps
-            period_start = datetime.fromtimestamp(inv.period_start) if inv.period_start else None
-            period_end = datetime.fromtimestamp(inv.period_end) if inv.period_end else None
+            period_start = (
+                datetime.fromtimestamp(inv.period_start) if inv.period_start else None
+            )
+            period_end = (
+                datetime.fromtimestamp(inv.period_end) if inv.period_end else None
+            )
             due_date = datetime.fromtimestamp(inv.due_date) if inv.due_date else None
             created = datetime.fromtimestamp(inv.created)
-            paid_at = datetime.fromtimestamp(inv.status_transitions.paid_at) if inv.status_transitions and inv.status_transitions.paid_at else None
+            paid_at = (
+                datetime.fromtimestamp(inv.status_transitions.paid_at)
+                if inv.status_transitions and inv.status_transitions.paid_at
+                else None
+            )
 
             # Extract line items
             lines = []
             if inv.lines and inv.lines.data:
                 for line in inv.lines.data:
-                    lines.append({
-                        "id": line.id,
-                        "description": line.description,
-                        "amount": line.amount,
-                        "currency": line.currency,
-                        "quantity": line.quantity,
-                    })
+                    lines.append(
+                        {
+                            "id": line.id,
+                            "description": line.description,
+                            "amount": line.amount,
+                            "currency": line.currency,
+                            "quantity": line.quantity,
+                        }
+                    )
 
-            responses.append(StripeInvoiceResponse(
-                id=inv.id,
-                number=inv.number,
-                status=inv.status,
-                amount_due=inv.amount_due,
-                amount_paid=inv.amount_paid,
-                amount_remaining=inv.amount_remaining,
-                subtotal=inv.subtotal,
-                total=inv.total,
-                currency=inv.currency,
-                description=inv.description,
-                customer_email=inv.customer_email,
-                hosted_invoice_url=inv.hosted_invoice_url,
-                invoice_pdf=inv.invoice_pdf,
-                period_start=period_start,
-                period_end=period_end,
-                due_date=due_date,
-                created=created,
-                paid_at=paid_at,
-                lines=lines,
-            ))
+            responses.append(
+                StripeInvoiceResponse(
+                    id=inv.id,
+                    number=inv.number,
+                    status=inv.status,
+                    amount_due=inv.amount_due,
+                    amount_paid=inv.amount_paid,
+                    amount_remaining=inv.amount_remaining,
+                    subtotal=inv.subtotal,
+                    total=inv.total,
+                    currency=inv.currency,
+                    description=inv.description,
+                    customer_email=inv.customer_email,
+                    hosted_invoice_url=inv.hosted_invoice_url,
+                    invoice_pdf=inv.invoice_pdf,
+                    period_start=period_start,
+                    period_end=period_end,
+                    due_date=due_date,
+                    created=created,
+                    paid_at=paid_at,
+                    lines=lines,
+                )
+            )
 
         return responses
 
     except Exception as e:
         logger.error(f"Failed to fetch Stripe invoices: {e}")
-        raise HTTPException(status_code=500, detail="Failed to fetch invoices from Stripe")
+        raise HTTPException(
+            status_code=500, detail="Failed to fetch invoices from Stripe"
+        )
 
 
 @router.get("/invoices/{invoice_id}", response_model=InvoiceResponse)
@@ -1331,7 +1466,10 @@ async def pay_invoice(
         raise HTTPException(status_code=500, detail="Payment processing failed")
 
 
-@router.post("/account/{organization_id}/invoices/generate", response_model=Optional[InvoiceResponse])
+@router.post(
+    "/account/{organization_id}/invoices/generate",
+    response_model=Optional[InvoiceResponse],
+)
 async def generate_invoice(
     organization_id: UUID,
     billing_service: BillingService = Depends(get_billing_service_dep),
@@ -1360,7 +1498,10 @@ async def generate_invoice(
 
 # ========== Usage ==========
 
-@router.get("/account/{organization_id}/usage", response_model=list[UsageRecordResponse])
+
+@router.get(
+    "/account/{organization_id}/usage", response_model=list[UsageRecordResponse]
+)
 async def get_usage(
     organization_id: UUID,
     billed: Optional[bool] = None,
@@ -1380,9 +1521,7 @@ async def get_usage(
         if not account:
             raise HTTPException(status_code=404, detail="Billing account not found")
 
-        query = select(UsageRecord).where(
-            UsageRecord.billing_account_id == account.id
-        )
+        query = select(UsageRecord).where(UsageRecord.billing_account_id == account.id)
 
         if billed is not None:
             query = query.where(UsageRecord.billed == billed)
@@ -1400,6 +1539,7 @@ async def get_usage(
 
 class UsageSummaryResponse(BaseModel):
     """Response model for usage summary."""
+
     subscription_tier: Optional[str]
     workflows_used: int
     workflows_limit: int
@@ -1411,7 +1551,9 @@ class UsageSummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-@router.get("/account/{organization_id}/usage-summary", response_model=UsageSummaryResponse)
+@router.get(
+    "/account/{organization_id}/usage-summary", response_model=UsageSummaryResponse
+)
 async def get_usage_summary(
     organization_id: UUID,
     billing_service: BillingService = Depends(get_billing_service_dep),
@@ -1451,6 +1593,7 @@ async def check_workflow_execution(
 
 
 # ========== Stripe Webhooks ==========
+
 
 @router.post("/webhooks/stripe")
 async def handle_stripe_webhook(
@@ -1541,17 +1684,20 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
         organization_id = metadata.get("organization_id")
         billing_account_id = metadata.get("billing_account_id")
         tier = metadata.get("tier", "pro")
-        stripe_subscription_id = event_data.get("subscription")  # Stripe subscription ID
+        stripe_subscription_id = event_data.get(
+            "subscription"
+        )  # Stripe subscription ID
 
         if organization_id and billing_account_id:
             subscription_service = get_subscription_service(billing_service.db)
 
             with billing_service.db.get_session() as sess:
-                from omoi_os.models.subscription import Subscription, SubscriptionTier, TIER_LIMITS
-                from sqlalchemy import select
+                from omoi_os.models.subscription import SubscriptionTier
 
                 # Check if subscription was already created by customer.subscription.created webhook
-                existing = subscription_service.get_subscription(UUID(organization_id), session=sess)
+                existing = subscription_service.get_subscription(
+                    UUID(organization_id), session=sess
+                )
 
                 if existing and existing.tier in ["pro", "team"]:
                     # Subscription already created by customer.subscription.created with correct tier
@@ -1559,16 +1705,22 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
                     if stripe_subscription_id and not existing.stripe_subscription_id:
                         existing.stripe_subscription_id = stripe_subscription_id
                         sess.commit()
-                    logger.info(f"Subscription already exists for org {organization_id} (tier: {existing.tier})")
+                    logger.info(
+                        f"Subscription already exists for org {organization_id} (tier: {existing.tier})"
+                    )
                     return
 
                 # Cancel any existing free subscription
                 if existing and existing.tier == "free":
                     existing_id = existing.id
-                    subscription_service.cancel_subscription(existing_id, at_period_end=False, session=sess)
+                    subscription_service.cancel_subscription(
+                        existing_id, at_period_end=False, session=sess
+                    )
 
                 # Create the new paid subscription
-                tier_enum = SubscriptionTier.PRO if tier == "pro" else SubscriptionTier.TEAM
+                tier_enum = (
+                    SubscriptionTier.PRO if tier == "pro" else SubscriptionTier.TEAM
+                )
 
                 subscription = subscription_service.create_subscription(
                     organization_id=UUID(organization_id),
@@ -1611,10 +1763,14 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
 
             with billing_service.db.get_session() as sess:
                 # Cancel any existing subscription first
-                existing = subscription_service.get_subscription(UUID(organization_id), session=sess)
+                existing = subscription_service.get_subscription(
+                    UUID(organization_id), session=sess
+                )
                 if existing and not existing.is_lifetime:
                     existing_id = existing.id
-                    subscription_service.cancel_subscription(existing_id, at_period_end=False, session=sess)
+                    subscription_service.cancel_subscription(
+                        existing_id, at_period_end=False, session=sess
+                    )
 
                 # Create lifetime subscription
                 subscription_service.create_lifetime_subscription(
@@ -1624,7 +1780,9 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
                     session=sess,
                 )
                 sess.commit()
-            logger.info(f"Created lifetime subscription for org {organization_id} (${purchase_amount:.2f})")
+            logger.info(
+                f"Created lifetime subscription for org {organization_id} (${purchase_amount:.2f})"
+            )
 
             # Track lifetime checkout in PostHog
             customer_email = event_data.get("customer_email", "")
@@ -1658,7 +1816,9 @@ async def _handle_checkout_completed(event_data: dict, billing_service: BillingS
                 amount_usd=credit_amount,
                 reason="stripe_checkout",
             )
-            logger.info(f"Added ${credit_amount:.2f} credits from checkout for org {organization_id}")
+            logger.info(
+                f"Added ${credit_amount:.2f} credits from checkout for org {organization_id}"
+            )
 
             # Track credits checkout in PostHog
             customer_email = event_data.get("customer_email", "")
@@ -1683,9 +1843,7 @@ async def _handle_payment_succeeded(event_data: dict, billing_service: BillingSe
             from sqlalchemy import select
             from omoi_os.models.billing import Invoice, InvoiceStatus
 
-            result = sess.execute(
-                select(Invoice).where(Invoice.id == UUID(invoice_id))
-            )
+            result = sess.execute(select(Invoice).where(Invoice.id == UUID(invoice_id)))
             invoice = result.scalar_one_or_none()
 
             if invoice and invoice.status != InvoiceStatus.PAID.value:
@@ -1698,8 +1856,11 @@ async def _handle_payment_succeeded(event_data: dict, billing_service: BillingSe
                 # Get organization_id from billing account
                 from omoi_os.models.billing import BillingAccount
                 from sqlalchemy import select as select_query
+
                 account_result = sess.execute(
-                    select_query(BillingAccount).where(BillingAccount.id == invoice.billing_account_id)
+                    select_query(BillingAccount).where(
+                        BillingAccount.id == invoice.billing_account_id
+                    )
                 )
                 account = account_result.scalar_one_or_none()
                 if account:
@@ -1721,9 +1882,7 @@ async def _handle_payment_failed(event_data: dict, billing_service: BillingServi
             from sqlalchemy import select
             from omoi_os.models.billing import Invoice, InvoiceStatus, BillingAccount
 
-            result = sess.execute(
-                select(Invoice).where(Invoice.id == UUID(invoice_id))
-            )
+            result = sess.execute(select(Invoice).where(Invoice.id == UUID(invoice_id)))
             invoice = result.scalar_one_or_none()
 
             if invoice:
@@ -1733,7 +1892,9 @@ async def _handle_payment_failed(event_data: dict, billing_service: BillingServi
 
                 # Track payment failed in PostHog
                 account_result = sess.execute(
-                    select(BillingAccount).where(BillingAccount.id == invoice.billing_account_id)
+                    select(BillingAccount).where(
+                        BillingAccount.id == invoice.billing_account_id
+                    )
                 )
                 account = account_result.scalar_one_or_none()
                 if account:
@@ -1742,7 +1903,9 @@ async def _handle_payment_failed(event_data: dict, billing_service: BillingServi
                         user_id=str(account.organization_id),
                         organization_id=str(account.organization_id),
                         amount_usd=invoice.amount_due,
-                        failure_reason=last_error.get("message") if last_error else None,
+                        failure_reason=(
+                            last_error.get("message") if last_error else None
+                        ),
                     )
 
 
@@ -1758,19 +1921,26 @@ async def _handle_refund(event_data: dict, billing_service: BillingService):
             from omoi_os.models.billing import Payment
 
             result = sess.execute(
-                select(Payment).where(Payment.stripe_payment_intent_id == payment_intent_id)
+                select(Payment).where(
+                    Payment.stripe_payment_intent_id == payment_intent_id
+                )
             )
             payment = result.scalar_one_or_none()
 
             if payment:
                 payment.refund(refund_amount)
                 sess.commit()
-                logger.info(f"Recorded refund of ${refund_amount:.2f} for payment {payment.id}")
+                logger.info(
+                    f"Recorded refund of ${refund_amount:.2f} for payment {payment.id}"
+                )
 
 
 # ========== Subscription Webhook Handlers ==========
 
-async def _handle_subscription_created(event_data: dict, billing_service: BillingService):
+
+async def _handle_subscription_created(
+    event_data: dict, billing_service: BillingService
+):
     """Handle customer.subscription.created event.
 
     Creates or updates local subscription record when subscription is created in Stripe.
@@ -1780,24 +1950,37 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
     from sqlalchemy import select
     from sqlalchemy.exc import IntegrityError
     from omoi_os.models.billing import BillingAccount
-    from omoi_os.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier, TIER_LIMITS
+    from omoi_os.models.subscription import (
+        Subscription,
+        SubscriptionStatus,
+        SubscriptionTier,
+        TIER_LIMITS,
+    )
     from uuid import uuid4
 
     stripe_subscription_id = event_data.get("id")
     stripe_customer_id = event_data.get("customer")
-    stripe_price_id = event_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
-    stripe_product_id = event_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("product")
+    stripe_price_id = (
+        event_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("id")
+    )
+    stripe_product_id = (
+        event_data.get("items", {}).get("data", [{}])[0].get("price", {}).get("product")
+    )
     metadata = event_data.get("metadata", {})
 
     with billing_service.db.get_session() as sess:
         # Find billing account by Stripe customer ID
         result = sess.execute(
-            select(BillingAccount).where(BillingAccount.stripe_customer_id == stripe_customer_id)
+            select(BillingAccount).where(
+                BillingAccount.stripe_customer_id == stripe_customer_id
+            )
         )
         account = result.scalar_one_or_none()
 
         if not account:
-            logger.warning(f"No billing account found for Stripe customer: {stripe_customer_id}")
+            logger.warning(
+                f"No billing account found for Stripe customer: {stripe_customer_id}"
+            )
             return
 
         # Check for existing subscription by Stripe subscription ID (primary dedup check)
@@ -1808,18 +1991,25 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
         ).scalar_one_or_none()
 
         if existing_by_stripe_id:
-            logger.info(f"Subscription already exists for Stripe ID: {stripe_subscription_id}")
+            logger.info(
+                f"Subscription already exists for Stripe ID: {stripe_subscription_id}"
+            )
             return
 
         # Also check for existing active subscription for this organization (secondary dedup)
         existing_active = sess.execute(
-            select(Subscription).where(
+            select(Subscription)
+            .where(
                 Subscription.organization_id == account.organization_id,
-                Subscription.status.in_([
-                    SubscriptionStatus.ACTIVE.value,
-                    SubscriptionStatus.TRIALING.value,
-                ])
-            ).order_by(Subscription.created_at.desc()).limit(1)
+                Subscription.status.in_(
+                    [
+                        SubscriptionStatus.ACTIVE.value,
+                        SubscriptionStatus.TRIALING.value,
+                    ]
+                ),
+            )
+            .order_by(Subscription.created_at.desc())
+            .limit(1)
         ).scalar_one_or_none()
 
         # Determine tier from price ID, metadata, or default to free
@@ -1850,7 +2040,9 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
                 existing_active.stripe_price_id = stripe_price_id
                 existing_active.stripe_product_id = stripe_product_id
                 sess.commit()
-                logger.info(f"Linked existing subscription {existing_active.id} to Stripe ID: {stripe_subscription_id}")
+                logger.info(
+                    f"Linked existing subscription {existing_active.id} to Stripe ID: {stripe_subscription_id}"
+                )
             else:
                 logger.warning(
                     f"Org {account.organization_id} already has active subscription {existing_active.id} "
@@ -1870,9 +2062,21 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
             stripe_price_id=stripe_price_id,
             stripe_product_id=stripe_product_id,
             tier=tier.value,
-            status=SubscriptionStatus.ACTIVE.value if event_data.get("status") == "active" else SubscriptionStatus.TRIALING.value,
-            current_period_start=datetime.fromtimestamp(event_data.get("current_period_start", 0)) if event_data.get("current_period_start") else None,
-            current_period_end=datetime.fromtimestamp(event_data.get("current_period_end", 0)) if event_data.get("current_period_end") else None,
+            status=(
+                SubscriptionStatus.ACTIVE.value
+                if event_data.get("status") == "active"
+                else SubscriptionStatus.TRIALING.value
+            ),
+            current_period_start=(
+                datetime.fromtimestamp(event_data.get("current_period_start", 0))
+                if event_data.get("current_period_start")
+                else None
+            ),
+            current_period_end=(
+                datetime.fromtimestamp(event_data.get("current_period_end", 0))
+                if event_data.get("current_period_end")
+                else None
+            ),
             workflows_limit=limits["workflows_limit"],
             workflows_used=0,
             agents_limit=limits["agents_limit"],
@@ -1888,7 +2092,9 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
         try:
             sess.add(subscription)
             sess.commit()
-            logger.info(f"Created subscription {subscription.id} for org {account.organization_id} (tier: {tier.value})")
+            logger.info(
+                f"Created subscription {subscription.id} for org {account.organization_id} (tier: {tier.value})"
+            )
 
             # Track subscription created in PostHog
             # Get price from tier
@@ -1904,17 +2110,26 @@ async def _handle_subscription_created(event_data: dict, billing_service: Billin
         except IntegrityError as e:
             # Handle race condition - another webhook may have created the subscription
             sess.rollback()
-            logger.warning(f"IntegrityError creating subscription (likely duplicate): {e}")
+            logger.warning(
+                f"IntegrityError creating subscription (likely duplicate): {e}"
+            )
 
 
-async def _handle_subscription_updated(event_data: dict, billing_service: BillingService):
+async def _handle_subscription_updated(
+    event_data: dict, billing_service: BillingService
+):
     """Handle customer.subscription.updated event.
 
     Updates local subscription when Stripe subscription is modified.
     """
     from datetime import datetime
     from sqlalchemy import select
-    from omoi_os.models.subscription import Subscription, SubscriptionStatus, SubscriptionTier, TIER_LIMITS
+    from omoi_os.models.subscription import (
+        Subscription,
+        SubscriptionStatus,
+        SubscriptionTier,
+        TIER_LIMITS,
+    )
 
     stripe_subscription_id = event_data.get("id")
     metadata = event_data.get("metadata", {})
@@ -1928,7 +2143,9 @@ async def _handle_subscription_updated(event_data: dict, billing_service: Billin
         subscription = result.scalar_one_or_none()
 
         if not subscription:
-            logger.warning(f"Subscription not found for Stripe ID: {stripe_subscription_id}")
+            logger.warning(
+                f"Subscription not found for Stripe ID: {stripe_subscription_id}"
+            )
             return
 
         # Update status
@@ -1941,15 +2158,23 @@ async def _handle_subscription_updated(event_data: dict, billing_service: Billin
             "paused": SubscriptionStatus.PAUSED.value,
             "incomplete": SubscriptionStatus.INCOMPLETE.value,
         }
-        subscription.status = status_map.get(stripe_status, SubscriptionStatus.ACTIVE.value)
+        subscription.status = status_map.get(
+            stripe_status, SubscriptionStatus.ACTIVE.value
+        )
 
         # Update period
         if event_data.get("current_period_start"):
-            subscription.current_period_start = datetime.fromtimestamp(event_data["current_period_start"])
+            subscription.current_period_start = datetime.fromtimestamp(
+                event_data["current_period_start"]
+            )
         if event_data.get("current_period_end"):
-            subscription.current_period_end = datetime.fromtimestamp(event_data["current_period_end"])
+            subscription.current_period_end = datetime.fromtimestamp(
+                event_data["current_period_end"]
+            )
 
-        subscription.cancel_at_period_end = event_data.get("cancel_at_period_end", False)
+        subscription.cancel_at_period_end = event_data.get(
+            "cancel_at_period_end", False
+        )
 
         if event_data.get("canceled_at"):
             subscription.canceled_at = datetime.fromtimestamp(event_data["canceled_at"])
@@ -1965,7 +2190,9 @@ async def _handle_subscription_updated(event_data: dict, billing_service: Billin
                 subscription.workflows_limit = limits["workflows_limit"]
                 subscription.agents_limit = limits["agents_limit"]
                 subscription.storage_limit_gb = limits["storage_limit_gb"]
-                logger.info(f"Updated subscription {subscription.id} tier to {new_tier.value}")
+                logger.info(
+                    f"Updated subscription {subscription.id} tier to {new_tier.value}"
+                )
 
                 # Track subscription updated (tier change) in PostHog
                 tier_prices = {"pro": 50, "team": 150, "free": 0}
@@ -1981,10 +2208,14 @@ async def _handle_subscription_updated(event_data: dict, billing_service: Billin
                 pass
 
         sess.commit()
-        logger.info(f"Updated subscription {subscription.id} (status: {subscription.status})")
+        logger.info(
+            f"Updated subscription {subscription.id} (status: {subscription.status})"
+        )
 
 
-async def _handle_subscription_deleted(event_data: dict, billing_service: BillingService):
+async def _handle_subscription_deleted(
+    event_data: dict, billing_service: BillingService
+):
     """Handle customer.subscription.deleted event.
 
     Marks local subscription as canceled when Stripe subscription is deleted.
@@ -2004,7 +2235,9 @@ async def _handle_subscription_deleted(event_data: dict, billing_service: Billin
         subscription = result.scalar_one_or_none()
 
         if not subscription:
-            logger.warning(f"Subscription not found for Stripe ID: {stripe_subscription_id}")
+            logger.warning(
+                f"Subscription not found for Stripe ID: {stripe_subscription_id}"
+            )
             return
 
         old_tier = subscription.tier
@@ -2023,7 +2256,9 @@ async def _handle_subscription_deleted(event_data: dict, billing_service: Billin
         )
 
 
-async def _handle_subscription_invoice_paid(event_data: dict, billing_service: BillingService):
+async def _handle_subscription_invoice_paid(
+    event_data: dict, billing_service: BillingService
+):
     """Handle invoice.paid event for subscription renewals.
 
     Resets usage counters for the new billing period.
@@ -2055,7 +2290,9 @@ async def _handle_subscription_invoice_paid(event_data: dict, billing_service: B
         logger.info(f"Reset usage for subscription {subscription.id} (invoice paid)")
 
 
-async def _handle_subscription_invoice_failed(event_data: dict, billing_service: BillingService):
+async def _handle_subscription_invoice_failed(
+    event_data: dict, billing_service: BillingService
+):
     """Handle invoice.payment_failed event for subscriptions.
 
     Marks subscription as past_due and may trigger dunning.
@@ -2102,6 +2339,7 @@ async def _handle_subscription_invoice_failed(event_data: dict, billing_service:
 
 
 # ========== Cost Tracking Endpoints ==========
+
 
 @router.get(
     "/account/{organization_id}/costs/summary",
@@ -2199,9 +2437,14 @@ async def get_billing_account_costs(
 # Debug/Admin Endpoints (disable before production launch)
 # =============================================================================
 
+
 class TestEmailRequest(BaseModel):
     """Request to send a test billing email."""
-    email_type: str = Field(..., description="Type: payment_failed, payment_success, subscription_canceled, invoice_generated, credits_low")
+
+    email_type: str = Field(
+        ...,
+        description="Type: payment_failed, payment_success, subscription_canceled, invoice_generated, credits_low",
+    )
     to_email: str = Field(..., description="Email address to send to")
 
 
@@ -2253,14 +2496,14 @@ async def send_test_billing_email(
     if request.email_type not in test_data:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid email_type. Valid types: {list(test_data.keys())}"
+            detail=f"Invalid email_type. Valid types: {list(test_data.keys())}",
         )
 
     # Queue the task
     task = await test_email_task.kiq(
         email_type=request.email_type,
         to_email=request.to_email,
-        **test_data[request.email_type]
+        **test_data[request.email_type],
     )
 
     return {
@@ -2297,12 +2540,15 @@ async def get_queue_status():
         for task_data in pending_tasks:
             try:
                 import json
+
                 task = json.loads(task_data)
-                tasks_info.append({
-                    "task_id": task.get("task_id"),
-                    "task_name": task.get("task_name"),
-                    "labels": task.get("labels", {}),
-                })
+                tasks_info.append(
+                    {
+                        "task_id": task.get("task_id"),
+                        "task_name": task.get("task_name"),
+                        "labels": task.get("labels", {}),
+                    }
+                )
             except Exception:
                 tasks_info.append({"raw": str(task_data)[:100]})
 

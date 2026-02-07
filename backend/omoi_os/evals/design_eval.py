@@ -8,7 +8,6 @@ import logging
 from typing import Any
 
 from omoi_os.utils.mermaid import (
-    extract_mermaid_blocks,
     sanitize_mermaid_diagram,
     sanitize_markdown_mermaid_blocks,
 )
@@ -30,9 +29,9 @@ class DesignEvaluator(BaseEvaluator):
     """
 
     # Valid HTTP methods
-    VALID_METHODS = frozenset([
-        "GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"
-    ])
+    VALID_METHODS = frozenset(
+        ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+    )
 
     def evaluate(self, design: Any) -> EvalResult:
         """
@@ -64,7 +63,9 @@ class DesignEvaluator(BaseEvaluator):
         checks = []
 
         # Check 1: Has architecture description
-        architecture = design.get("architecture") or design.get("architecture_overview", "")
+        architecture = design.get("architecture") or design.get(
+            "architecture_overview", ""
+        )
         has_arch = bool(architecture)
         checks.append(("has_architecture", has_arch))
 
@@ -79,9 +80,7 @@ class DesignEvaluator(BaseEvaluator):
 
         # Check 4: Data models have structure
         if isinstance(data_model, list) and data_model:
-            models_have_fields = all(
-                self._model_has_fields(m) for m in data_model
-            )
+            models_have_fields = all(self._model_has_fields(m) for m in data_model)
         elif isinstance(data_model, dict):
             models_have_fields = bool(data_model)
         elif isinstance(data_model, str) and len(data_model) > 50:
@@ -98,18 +97,14 @@ class DesignEvaluator(BaseEvaluator):
 
         # Check 6: Endpoints have required fields (method, path, description)
         if has_api:
-            endpoints_complete = all(
-                self._endpoint_is_complete(e) for e in endpoints
-            )
+            endpoints_complete = all(self._endpoint_is_complete(e) for e in endpoints)
         else:
             endpoints_complete = False
         checks.append(("endpoints_complete", endpoints_complete))
 
         # Check 7: API methods are valid
         if has_api:
-            methods_valid = all(
-                self._method_is_valid(e) for e in endpoints
-            )
+            methods_valid = all(self._method_is_valid(e) for e in endpoints)
         else:
             methods_valid = True  # No endpoints, no invalid methods
         checks.append(("valid_methods", methods_valid))
@@ -183,11 +178,13 @@ class DesignEvaluator(BaseEvaluator):
         """Check if an endpoint has required fields."""
         if not isinstance(endpoint, dict):
             return False
-        return all([
-            endpoint.get("method"),
-            endpoint.get("path"),
-            endpoint.get("description"),
-        ])
+        return all(
+            [
+                endpoint.get("method"),
+                endpoint.get("path"),
+                endpoint.get("description"),
+            ]
+        )
 
     def _method_is_valid(self, endpoint: Any) -> bool:
         """Check if endpoint method is valid HTTP method."""
@@ -196,11 +193,7 @@ class DesignEvaluator(BaseEvaluator):
         method = endpoint.get("method", "")
         return method.upper() in self.VALID_METHODS
 
-    def _validate_and_sanitize_mermaid(
-        self,
-        design: dict,
-        result: EvalResult
-    ) -> dict:
+    def _validate_and_sanitize_mermaid(self, design: dict, result: EvalResult) -> dict:
         """Validate and sanitize any Mermaid diagrams in the design.
 
         This method:
@@ -236,18 +229,14 @@ class DesignEvaluator(BaseEvaluator):
                 if sanitized != content:
                     design[field] = sanitized
                     sanitization_performed = True
-                    logger.info(
-                        f"Sanitized Mermaid diagram in design.{field}"
-                    )
+                    logger.info(f"Sanitized Mermaid diagram in design.{field}")
             elif self._looks_like_mermaid(content):
                 # Direct mermaid code (not in markdown block)
                 sanitized = sanitize_mermaid_diagram(content)
                 if sanitized != content:
                     design[field] = sanitized
                     sanitization_performed = True
-                    logger.info(
-                        f"Sanitized raw Mermaid diagram in design.{field}"
-                    )
+                    logger.info(f"Sanitized raw Mermaid diagram in design.{field}")
 
         if sanitization_performed:
             result.warnings.append(
@@ -283,7 +272,4 @@ class DesignEvaluator(BaseEvaluator):
             "subgraph",
         ]
         content_lower = content.lower().strip()
-        return any(
-            content_lower.startswith(kw.lower())
-            for kw in mermaid_keywords
-        )
+        return any(content_lower.startswith(kw.lower()) for kw in mermaid_keywords)

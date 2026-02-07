@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class PlaybookChange(Base):
     """
     Playbook change record for audit trail (REQ-MEM-ACE-003, REQ-MEM-DM-007).
-    
+
     All modifications to the playbook are recorded here with operation type,
     old/new content, delta, reason, and related memory ID.
     """
@@ -30,44 +30,50 @@ class PlaybookChange(Base):
         String, primary_key=True, default=lambda: str(uuid.uuid4())
     )
     ticket_id: Mapped[str] = mapped_column(
-        String, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True,
-        comment="Ticket (project) this change belongs to"
+        String,
+        ForeignKey("tickets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Ticket (project) this change belongs to",
     )
     playbook_entry_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("playbook_entries.id", ondelete="CASCADE"), nullable=True, index=True,
-        comment="Entry that was changed (null for add operations on deleted entries)"
+        String,
+        ForeignKey("playbook_entries.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+        comment="Entry that was changed (null for add operations on deleted entries)",
     )
-    
+
     # Operation type (REQ-MEM-DM-007)
     operation: Mapped[str] = mapped_column(
-        String(50), nullable=False, index=True,
-        comment="Operation type: add, update, delete (REQ-MEM-DM-007)"
+        String(50),
+        nullable=False,
+        index=True,
+        comment="Operation type: add, update, delete (REQ-MEM-DM-007)",
     )
-    
+
     # Content changes (REQ-MEM-DM-007)
     old_content: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True,
-        comment="Old content before change (REQ-MEM-DM-007)"
+        Text, nullable=True, comment="Old content before change (REQ-MEM-DM-007)"
     )
     new_content: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True,
-        comment="New content after change (REQ-MEM-DM-007)"
+        Text, nullable=True, comment="New content after change (REQ-MEM-DM-007)"
     )
-    
+
     # Structured delta (REQ-MEM-DM-007)
     delta: Mapped[Optional[Dict[str, Any]]] = mapped_column(
-        JSONB, nullable=True,
-        comment="Structured delta representation (REQ-MEM-DM-007)"
+        JSONB, nullable=True, comment="Structured delta representation (REQ-MEM-DM-007)"
     )
-    
+
     # Audit fields (REQ-MEM-DM-007)
     reason: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True,
-        comment="Reason for change (REQ-MEM-DM-007)"
+        Text, nullable=True, comment="Reason for change (REQ-MEM-DM-007)"
     )
     related_memory_id: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True, index=True,
-        comment="Memory ID that triggered this change (REQ-MEM-DM-007)"
+        String,
+        nullable=True,
+        index=True,
+        comment="Memory ID that triggered this change (REQ-MEM-DM-007)",
     )
     changed_at: Mapped[Instant] = mapped_column(
         DateTime(timezone=True),
@@ -77,8 +83,7 @@ class PlaybookChange(Base):
         comment="When this change was made (REQ-MEM-DM-007)",
     )
     changed_by: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True,
-        comment="Agent ID that made this change (REQ-MEM-DM-007)"
+        String, nullable=True, comment="Agent ID that made this change (REQ-MEM-DM-007)"
     )
 
     # Relationships
@@ -108,4 +113,3 @@ class PlaybookChange(Base):
             "changed_at": self.changed_at.isoformat() if self.changed_at else None,
             "changed_by": self.changed_by,
         }
-

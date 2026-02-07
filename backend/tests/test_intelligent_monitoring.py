@@ -653,15 +653,6 @@ class TestConductorService:
         ]
 
         # Mock guardian analyses
-        mock_guardian_analyses = [
-            {
-                "agent_id": sample_agent.id,
-                "alignment_score": 0.8,
-                "trajectory_aligned": True,
-                "needs_steering": False,
-                "current_phase": "PHASE_IMPLEMENTATION",
-            }
-        ]
         mock_session = mock_db.get_session.return_value.__enter__.return_value
         mock_query = Mock()
         mock_filter1 = Mock()

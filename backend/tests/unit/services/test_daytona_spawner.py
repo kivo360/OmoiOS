@@ -29,19 +29,24 @@ class TestDaytonaSpawnerSpawnForPhase:
     @pytest.fixture
     def spawner(self, mock_settings):
         """Create spawner instance with mocked settings."""
-        with patch('omoi_os.services.daytona_spawner.load_daytona_settings', return_value=mock_settings):
+        with patch(
+            "omoi_os.services.daytona_spawner.load_daytona_settings",
+            return_value=mock_settings,
+        ):
             spawner = DaytonaSpawnerService()
             return spawner
 
     def test_spawn_for_phase_exists(self, spawner):
         """Test spawn_for_phase method exists."""
         import inspect
-        assert hasattr(spawner, 'spawn_for_phase')
+
+        assert hasattr(spawner, "spawn_for_phase")
         assert inspect.iscoroutinefunction(spawner.spawn_for_phase)
 
     def test_spawn_for_phase_signature(self, spawner):
         """Test spawn_for_phase has correct signature."""
         import inspect
+
         sig = inspect.signature(spawner.spawn_for_phase)
         params = list(sig.parameters.keys())
 
@@ -69,7 +74,9 @@ class TestDaytonaSpawnerSpawnForPhase:
     @pytest.mark.asyncio
     async def test_spawn_for_phase_generates_sandbox_id(self, spawner):
         """Test spawn_for_phase generates unique sandbox ID."""
-        with patch.object(spawner, '_create_daytona_sandbox', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            spawner, "_create_daytona_sandbox", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = "sandbox-created-123"
 
             result = await spawner.spawn_for_phase(
@@ -81,7 +88,7 @@ class TestDaytonaSpawnerSpawnForPhase:
             # Verify sandbox creation was called
             assert mock_create.called
             # The sandbox ID should contain parts of spec_id and phase
-            call_kwargs = mock_create.call_args[1] if mock_create.call_args[1] else {}
+            mock_create.call_args[1] if mock_create.call_args[1] else {}
             # Check it returned some sandbox ID
             assert result is not None
 
@@ -91,7 +98,9 @@ class TestDaytonaSpawnerSpawnForPhase:
         phases = ["explore", "requirements", "design", "tasks", "sync"]
 
         for phase in phases:
-            with patch.object(spawner, '_create_daytona_sandbox', new_callable=AsyncMock) as mock_create:
+            with patch.object(
+                spawner, "_create_daytona_sandbox", new_callable=AsyncMock
+            ) as mock_create:
                 mock_create.return_value = f"sandbox-{phase}"
 
                 result = await spawner.spawn_for_phase(
@@ -110,7 +119,9 @@ class TestDaytonaSpawnerSpawnForPhase:
             "explore": {"project_type": "web_app", "tech_stack": ["python", "fastapi"]},
         }
 
-        with patch.object(spawner, '_create_daytona_sandbox', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            spawner, "_create_daytona_sandbox", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = "sandbox-123"
 
             await spawner.spawn_for_phase(
@@ -131,7 +142,9 @@ class TestDaytonaSpawnerSpawnForPhase:
         transcript_data = {"messages": [{"role": "user", "content": "test"}]}
         resume_transcript = base64.b64encode(str(transcript_data).encode()).decode()
 
-        with patch.object(spawner, '_create_daytona_sandbox', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            spawner, "_create_daytona_sandbox", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = "sandbox-123"
 
             await spawner.spawn_for_phase(
@@ -152,7 +165,9 @@ class TestDaytonaSpawnerSpawnForPhase:
             "FEATURE_FLAG": "enabled",
         }
 
-        with patch.object(spawner, '_create_daytona_sandbox', new_callable=AsyncMock) as mock_create:
+        with patch.object(
+            spawner, "_create_daytona_sandbox", new_callable=AsyncMock
+        ) as mock_create:
             mock_create.return_value = "sandbox-123"
 
             await spawner.spawn_for_phase(
@@ -187,18 +202,14 @@ class TestDaytonaSpawnerPhaseMapping:
         """Test that all spec phases have a mapping."""
         from omoi_os.schemas.spec_generation import SpecPhase
 
-        expected_phases = [
+        # COMPLETE doesn't need sandbox spawn (it's the terminal state)
+        sandbox_phases = [
             SpecPhase.EXPLORE,
             SpecPhase.REQUIREMENTS,
             SpecPhase.DESIGN,
             SpecPhase.TASKS,
             SpecPhase.SYNC,
-            SpecPhase.COMPLETE,
         ]
-
-        # COMPLETE doesn't need sandbox spawn (it's the terminal state)
-        sandbox_phases = [SpecPhase.EXPLORE, SpecPhase.REQUIREMENTS,
-                         SpecPhase.DESIGN, SpecPhase.TASKS, SpecPhase.SYNC]
 
         for phase in sandbox_phases:
             # Each phase should have a corresponding mode

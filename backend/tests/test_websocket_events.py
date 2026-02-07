@@ -1,14 +1,13 @@
 """Tests for WebSocket event streaming API."""
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from omoi_os.api.main import app
-from omoi_os.api.routes.events import WebSocketEventManager, get_ws_manager
+from omoi_os.api.routes.events import WebSocketEventManager
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 
 
@@ -19,7 +18,9 @@ def event_bus_service(redis_url: str) -> EventBusService:
         import fakeredis
 
         fake_server = fakeredis.FakeStrictRedis(decode_responses=True)
-        with patch("omoi_os.services.event_bus.redis.from_url", return_value=fake_server):
+        with patch(
+            "omoi_os.services.event_bus.redis.from_url", return_value=fake_server
+        ):
             bus = EventBusService("redis://fake:6379")
             yield bus
     except ImportError:
@@ -61,7 +62,9 @@ class TestWebSocketEventManager:
         asyncio.run(ws_manager.connect(mock_ws, {"event_types": ["TASK_ASSIGNED"]}))
 
         assert mock_ws in ws_manager.active_connections
-        assert ws_manager.connection_filters[mock_ws] == {"event_types": ["TASK_ASSIGNED"]}
+        assert ws_manager.connection_filters[mock_ws] == {
+            "event_types": ["TASK_ASSIGNED"]
+        }
         mock_ws.accept.assert_called_once()
 
         # Disconnect
@@ -187,7 +190,9 @@ class TestWebSocketEventManager:
         assert call_args["payload"] == {"agent_id": "agent-1"}
 
     @pytest.mark.asyncio
-    async def test_broadcast_handles_disconnected_client(self, ws_manager: WebSocketEventManager):
+    async def test_broadcast_handles_disconnected_client(
+        self, ws_manager: WebSocketEventManager
+    ):
         """Test that disconnected clients are cleaned up during broadcast."""
         mock_ws1 = MagicMock()
         mock_ws1.send_json = AsyncMock()
@@ -244,9 +249,14 @@ class TestWebSocketEventManager:
 class TestWebSocketEndpoint:
     """Test the WebSocket endpoint via TestClient."""
 
-    def test_websocket_connection(self, client: TestClient, event_bus_service: EventBusService):
+    def test_websocket_connection(
+        self, client: TestClient, event_bus_service: EventBusService
+    ):
         """Test basic WebSocket connection."""
-        with patch("omoi_os.api.dependencies.get_event_bus_service", return_value=event_bus_service):
+        with patch(
+            "omoi_os.api.dependencies.get_event_bus_service",
+            return_value=event_bus_service,
+        ):
             with client.websocket_connect("/api/v1/ws/events") as websocket:
                 # Connection should be established
                 assert websocket is not None
@@ -255,7 +265,10 @@ class TestWebSocketEndpoint:
         self, client: TestClient, event_bus_service: EventBusService
     ):
         """Test that WebSocket receives published events."""
-        with patch("omoi_os.api.dependencies.get_event_bus_service", return_value=event_bus_service):
+        with patch(
+            "omoi_os.api.dependencies.get_event_bus_service",
+            return_value=event_bus_service,
+        ):
             with client.websocket_connect("/api/v1/ws/events") as websocket:
                 # Publish an event
                 event = SystemEvent(
@@ -285,7 +298,10 @@ class TestWebSocketEndpoint:
         self, client: TestClient, event_bus_service: EventBusService
     ):
         """Test WebSocket filtering by event type via query parameter."""
-        with patch("omoi_os.api.dependencies.get_event_bus_service", return_value=event_bus_service):
+        with patch(
+            "omoi_os.api.dependencies.get_event_bus_service",
+            return_value=event_bus_service,
+        ):
             with client.websocket_connect(
                 "/api/v1/ws/events?event_types=TASK_ASSIGNED"
             ) as websocket:
@@ -320,7 +336,10 @@ class TestWebSocketEndpoint:
         self, client: TestClient, event_bus_service: EventBusService
     ):
         """Test dynamic subscription updates via WebSocket messages."""
-        with patch("omoi_os.api.dependencies.get_event_bus_service", return_value=event_bus_service):
+        with patch(
+            "omoi_os.api.dependencies.get_event_bus_service",
+            return_value=event_bus_service,
+        ):
             with client.websocket_connect("/api/v1/ws/events") as websocket:
                 # Send subscription update
                 subscription = {
@@ -331,6 +350,7 @@ class TestWebSocketEndpoint:
 
                 # Should receive confirmation
                 import time
+
                 time.sleep(0.1)  # Give time for processing
                 response = websocket.receive_json()
                 assert response["status"] == "subscribed"
@@ -340,7 +360,10 @@ class TestWebSocketEndpoint:
         self, client: TestClient, event_bus_service: EventBusService
     ):
         """Test that WebSocket sends ping messages to keep connection alive."""
-        with patch("omoi_os.api.dependencies.get_event_bus_service", return_value=event_bus_service):
+        with patch(
+            "omoi_os.api.dependencies.get_event_bus_service",
+            return_value=event_bus_service,
+        ):
             with client.websocket_connect("/api/v1/ws/events") as websocket:
                 # Wait for ping (sent after 30s timeout, but in tests we can check the mechanism)
                 # For now, just verify connection stays open
@@ -353,13 +376,17 @@ class TestWebSocketEndpoint:
         self, client: TestClient, event_bus_service: EventBusService
     ):
         """Test handling of invalid JSON messages from client."""
-        with patch("omoi_os.api.dependencies.get_event_bus_service", return_value=event_bus_service):
+        with patch(
+            "omoi_os.api.dependencies.get_event_bus_service",
+            return_value=event_bus_service,
+        ):
             with client.websocket_connect("/api/v1/ws/events") as websocket:
                 # Send invalid JSON
                 websocket.send_text("not valid json")
 
                 # Should receive error response
                 import time
+
                 time.sleep(0.1)  # Give time for processing
                 response = websocket.receive_json()
                 assert "error" in response
@@ -413,4 +440,3 @@ class TestWebSocketIntegration:
         assert len(received_events) > 0
         assert received_events[0]["event_type"] == "TASK_ASSIGNED"
         assert received_events[0]["payload"] == {"test": "data"}
-

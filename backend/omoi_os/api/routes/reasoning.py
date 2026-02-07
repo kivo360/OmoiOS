@@ -15,7 +15,6 @@ from omoi_os.models.reasoning import ReasoningEvent as ReasoningEventModel
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
-
 router = APIRouter(prefix="/reasoning", tags=["reasoning"])
 
 

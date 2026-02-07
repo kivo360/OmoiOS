@@ -4,7 +4,15 @@ from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import text
@@ -23,15 +31,13 @@ class Session(Base):
     __tablename__ = "sessions"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Token data
@@ -40,7 +46,7 @@ class Session(Base):
         nullable=False,
         unique=True,
         index=True,
-        comment="SHA-256 hash of session token"
+        comment="SHA-256 hash of session token",
     )
 
     # Client info
@@ -49,15 +55,11 @@ class Session(Base):
 
     # Expiration
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        index=True
+        DateTime(timezone=True), nullable=False, index=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
 
     # Relationships
@@ -67,7 +69,7 @@ class Session(Base):
         Index("idx_sessions_user", "user_id"),
         Index("idx_sessions_token_hash", "token_hash"),
         Index("idx_sessions_expires", "expires_at"),
-        {"comment": "User sessions for web/mobile clients"}
+        {"comment": "User sessions for web/mobile clients"},
     )
 
 
@@ -77,9 +79,7 @@ class APIKey(Base):
     __tablename__ = "api_keys"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Owner (user OR agent, enforced by CHECK constraint)
@@ -87,88 +87,80 @@ class APIKey(Base):
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=True,
-        index=True
+        index=True,
     )
     agent_id: Mapped[Optional[str]] = mapped_column(
         String,
         ForeignKey("agents.id", ondelete="CASCADE"),
         nullable=True,
         index=True,
-        comment="VARCHAR to match agents.id type"
+        comment="VARCHAR to match agents.id type",
     )
 
     organization_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=True
+        nullable=True,
     )
 
     # Key data
     name: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        comment="User-defined label for the key"
+        String(255), nullable=False, comment="User-defined label for the key"
     )
     key_prefix: Mapped[str] = mapped_column(
         String(16),
         nullable=False,
         index=True,
-        comment="First 8-16 chars for identification (e.g., 'sk_live_abc')"
+        comment="First 8-16 chars for identification (e.g., 'sk_live_abc')",
     )
     hashed_key: Mapped[str] = mapped_column(
-        String(255),
-        nullable=False,
-        unique=True,
-        comment="SHA-256 hash of full API key"
+        String(255), nullable=False, unique=True, comment="SHA-256 hash of full API key"
     )
     scopes: Mapped[list[str]] = mapped_column(
-        JSONB,
-        nullable=False,
-        default=list,
-        comment="Permission scopes for this key"
+        JSONB, nullable=False, default=list, comment="Permission scopes for this key"
     )
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True
+        DateTime(timezone=True), nullable=True
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True
+        DateTime(timezone=True), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=utc_now
+        DateTime(timezone=True), nullable=False, default=utc_now
     )
 
     # Relationships
     user: Mapped[Optional["User"]] = relationship(
-        back_populates="api_keys",
-        foreign_keys=[user_id]
+        back_populates="api_keys", foreign_keys=[user_id]
     )
     agent: Mapped[Optional["Agent"]] = relationship(
-        back_populates="api_keys",
-        foreign_keys=[agent_id]
+        back_populates="api_keys", foreign_keys=[agent_id]
     )
 
     __table_args__ = (
         CheckConstraint(
-            '(user_id IS NOT NULL AND agent_id IS NULL) OR '
-            '(user_id IS NULL AND agent_id IS NOT NULL)',
-            name='check_key_user_or_agent'
+            "(user_id IS NOT NULL AND agent_id IS NULL) OR "
+            "(user_id IS NULL AND agent_id IS NOT NULL)",
+            name="check_key_user_or_agent",
         ),
-        Index("idx_api_keys_user", "user_id",
-              postgresql_where=text("user_id IS NOT NULL")),
-        Index("idx_api_keys_agent", "agent_id",
-              postgresql_where=text("agent_id IS NOT NULL")),
+        Index(
+            "idx_api_keys_user", "user_id", postgresql_where=text("user_id IS NOT NULL")
+        ),
+        Index(
+            "idx_api_keys_agent",
+            "agent_id",
+            postgresql_where=text("agent_id IS NOT NULL"),
+        ),
         Index("idx_api_keys_prefix", "key_prefix"),
         Index("idx_api_keys_hash", "hashed_key"),
-        Index("idx_api_keys_active", "is_active",
-              postgresql_where=text("is_active = true")),
-        {"comment": "API keys for programmatic access"}
+        Index(
+            "idx_api_keys_active",
+            "is_active",
+            postgresql_where=text("is_active = true"),
+        ),
+        {"comment": "API keys for programmatic access"},
     )
-

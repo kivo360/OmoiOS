@@ -20,13 +20,14 @@ import argparse
 import asyncio
 import sys
 import uuid
-from datetime import datetime, timezone
 
 # Add parent to path for imports
 sys.path.insert(0, ".")
 
 
-async def test_full_phase_flow(base_url: str = "http://localhost:18000", mock_mode: bool = False):
+async def test_full_phase_flow(
+    base_url: str = "http://localhost:18000", mock_mode: bool = False
+):
     """Test the complete flow from spec creation to phase completion."""
 
     if mock_mode:
@@ -43,9 +44,8 @@ async def test_with_mock_services():
     """
     from omoi_os.config import get_app_settings
     from omoi_os.services.database import DatabaseService
-    from omoi_os.services.event_bus import SystemEvent
     from omoi_os.services.task_queue import TaskQueueService
-    from omoi_os.services.phase_manager import PhaseManager, get_phase_manager
+    from omoi_os.services.phase_manager import get_phase_manager
     from omoi_os.services.phase_gate import PhaseGateService
     from omoi_os.models.ticket import Ticket
     from omoi_os.models.task import Task
@@ -171,7 +171,7 @@ async def test_with_mock_services():
         },
     }
     phase_manager._handle_task_completed(task_completed_event)
-    print(f"✓ Task completed")
+    print("✓ Task completed")
     print("  → PhaseManager._handle_task_completed() called directly")
 
     # Step 4: Verify phase transition happened
@@ -189,7 +189,9 @@ async def test_with_mock_services():
             return True
         else:
             print("\n" + "=" * 70)
-            print(f"✗ UNEXPECTED: Expected PHASE_DONE, got {ticket.phase_id}/{ticket.status}")
+            print(
+                f"✗ UNEXPECTED: Expected PHASE_DONE, got {ticket.phase_id}/{ticket.status}"
+            )
             print("=" * 70)
             return False
 
@@ -202,7 +204,7 @@ async def test_with_live_api(base_url: str):
     print(f"E2E Phase Flow Test (Live API: {base_url})")
     print("=" * 70)
 
-    async with httpx.AsyncClient(base_url=base_url, timeout=30.0) as client:
+    async with httpx.AsyncClient(base_url=base_url, timeout=30.0):
         # Step 1: Create a test project (if needed)
         print("\n--- Step 1: Setup test project and spec ---")
 
@@ -299,9 +301,15 @@ SANDBOX_ID:
 
 async def main():
     parser = argparse.ArgumentParser(description="Test E2E phase flow")
-    parser.add_argument("--url", default="http://localhost:18000", help="Backend API URL")
-    parser.add_argument("--mock", action="store_true", help="Use mock services (no API needed)")
-    parser.add_argument("--diagram", action="store_true", help="Print flow diagram and exit")
+    parser.add_argument(
+        "--url", default="http://localhost:18000", help="Backend API URL"
+    )
+    parser.add_argument(
+        "--mock", action="store_true", help="Use mock services (no API needed)"
+    )
+    parser.add_argument(
+        "--diagram", action="store_true", help="Print flow diagram and exit"
+    )
     args = parser.parse_args()
 
     if args.diagram:

@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, or_
+from sqlalchemy import func
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.monitor_anomaly import MonitorAnomaly
@@ -38,7 +38,7 @@ class MonitorService:
         self.db = db
         self.event_bus = event_bus
         self._metric_history: Dict[str, List[float]] = defaultdict(list)
-        
+
         # Initialize baseline learner and composite scorer for agent-level anomaly detection
         self.baseline_learner = BaselineLearner(db)
         self.composite_scorer = CompositeAnomalyScorer(db, self.baseline_learner)
@@ -47,7 +47,9 @@ class MonitorService:
     # Metrics Collection
     # ---------------------------------------------------------------------
 
-    def collect_task_metrics(self, phase_id: Optional[str] = None) -> Dict[str, MetricSample]:
+    def collect_task_metrics(
+        self, phase_id: Optional[str] = None
+    ) -> Dict[str, MetricSample]:
         """
         Collect task-related metrics.
 
@@ -63,16 +65,14 @@ class MonitorService:
         with self.db.get_session() as session:
             # Queue depth by phase
             query = session.query(
-                Task.phase_id,
-                Task.priority,
-                func.count(Task.id).label("count")
+                Task.phase_id, Task.priority, func.count(Task.id).label("count")
             ).filter(Task.status == "pending")
-            
+
             if phase_id:
                 query = query.filter(Task.phase_id == phase_id)
-            
+
             queue_stats = query.group_by(Task.phase_id, Task.priority).all()
-            
+
             for phase, priority, count in queue_stats:
                 metrics[f"tasks_queued_{phase}_{priority}"] = MetricSample(
                     metric_name="tasks_queued_total",
@@ -83,15 +83,14 @@ class MonitorService:
 
             # Completed tasks
             completed_query = session.query(
-                Task.phase_id,
-                func.count(Task.id).label("count")
+                Task.phase_id, func.count(Task.id).label("count")
             ).filter(Task.status == "completed")
-            
+
             if phase_id:
                 completed_query = completed_query.filter(Task.phase_id == phase_id)
-            
+
             completed_stats = completed_query.group_by(Task.phase_id).all()
-            
+
             for phase, count in completed_stats:
                 metrics[f"tasks_completed_{phase}"] = MetricSample(
                     metric_name="tasks_completed_total",
@@ -105,19 +104,19 @@ class MonitorService:
             duration_query = session.query(
                 Task.phase_id,
                 func.avg(
-                    func.extract('epoch', Task.completed_at - Task.started_at)
-                ).label("avg_duration")
+                    func.extract("epoch", Task.completed_at - Task.started_at)
+                ).label("avg_duration"),
             ).filter(
                 Task.status == "completed",
                 Task.completed_at >= one_hour_ago,
                 Task.started_at.isnot(None),
             )
-            
+
             if phase_id:
                 duration_query = duration_query.filter(Task.phase_id == phase_id)
-            
+
             duration_stats = duration_query.group_by(Task.phase_id).all()
-            
+
             for phase, avg_dur in duration_stats:
                 if avg_dur:
                     metrics[f"task_duration_{phase}"] = MetricSample(
@@ -136,21 +135,27 @@ class MonitorService:
 
         with self.db.get_session() as session:
             # Active agents by type
-            agent_stats = session.query(
-                Agent.agent_type,
-                Agent.status,
-                func.count(Agent.id).label("count")
-            ).group_by(Agent.agent_type, Agent.status).all()
+            agent_stats = (
+                session.query(
+                    Agent.agent_type, Agent.status, func.count(Agent.id).label("count")
+                )
+                .group_by(Agent.agent_type, Agent.status)
+                .all()
+            )
 
             # Aggregate active agents by type (sum across IDLE and RUNNING statuses)
             from omoi_os.models.agent_status import AgentStatus
+
             active_agents_by_type = {}
             for agent_type, status, count in agent_stats:
-                if status in [AgentStatus.IDLE.value, AgentStatus.RUNNING.value]:  # Active agents
+                if status in [
+                    AgentStatus.IDLE.value,
+                    AgentStatus.RUNNING.value,
+                ]:  # Active agents
                     if agent_type not in active_agents_by_type:
                         active_agents_by_type[agent_type] = 0
                     active_agents_by_type[agent_type] += count
-            
+
             # Create metrics for each agent type (sum of all active statuses)
             for agent_type, total_count in active_agents_by_type.items():
                 metrics[f"agents_active_{agent_type}"] = MetricSample(
@@ -161,9 +166,7 @@ class MonitorService:
                 )
 
             # Heartbeat age
-            agents = session.query(Agent).filter(
-                Agent.last_heartbeat.isnot(None)
-            ).all()
+            agents = session.query(Agent).filter(Agent.last_heartbeat.isnot(None)).all()
 
             for agent in agents:
                 age_seconds = (now - agent.last_heartbeat).total_seconds()
@@ -183,13 +186,16 @@ class MonitorService:
 
         with self.db.get_session() as session:
             # Active locks by type
-            lock_stats = session.query(
-                ResourceLock.resource_type,
-                ResourceLock.lock_mode,
-                func.count(ResourceLock.id).label("count")
-            ).filter(
-                ResourceLock.released_at.is_(None)
-            ).group_by(ResourceLock.resource_type, ResourceLock.lock_mode).all()
+            lock_stats = (
+                session.query(
+                    ResourceLock.resource_type,
+                    ResourceLock.lock_mode,
+                    func.count(ResourceLock.id).label("count"),
+                )
+                .filter(ResourceLock.released_at.is_(None))
+                .group_by(ResourceLock.resource_type, ResourceLock.lock_mode)
+                .all()
+            )
 
             for res_type, lock_mode, count in lock_stats:
                 metrics[f"locks_active_{res_type}_{lock_mode}"] = MetricSample(
@@ -201,7 +207,9 @@ class MonitorService:
 
         return metrics
 
-    def collect_all_metrics(self, phase_id: Optional[str] = None) -> Dict[str, MetricSample]:
+    def collect_all_metrics(
+        self, phase_id: Optional[str] = None
+    ) -> Dict[str, MetricSample]:
         """
         Collect all system metrics.
 
@@ -243,7 +251,9 @@ class MonitorService:
             self._metric_history[metric_key].append(sample.value)
             # Keep last 100 samples
             if len(self._metric_history[metric_key]) > 100:
-                self._metric_history[metric_key] = self._metric_history[metric_key][-100:]
+                self._metric_history[metric_key] = self._metric_history[metric_key][
+                    -100:
+                ]
 
             # Need at least 10 samples for baseline
             if len(self._metric_history[metric_key]) < 10:
@@ -253,7 +263,7 @@ class MonitorService:
             history = self._metric_history[metric_key]
             mean = sum(history) / len(history)
             variance = sum((x - mean) ** 2 for x in history) / len(history)
-            std_dev = variance ** 0.5
+            std_dev = variance**0.5
 
             # Detect anomalies
             deviation = abs(sample.value - mean)
@@ -374,9 +384,11 @@ class MonitorService:
     def acknowledge_anomaly(self, anomaly_id: str) -> bool:
         """Acknowledge an anomaly."""
         with self.db.get_session() as session:
-            anomaly = session.query(MonitorAnomaly).filter(
-                MonitorAnomaly.id == anomaly_id
-            ).first()
+            anomaly = (
+                session.query(MonitorAnomaly)
+                .filter(MonitorAnomaly.id == anomaly_id)
+                .first()
+            )
             if not anomaly:
                 return False
 
@@ -471,14 +483,16 @@ class MonitorService:
                     agent.consecutive_anomalous_readings >= consecutive_threshold
                 )
 
-                results.append({
-                    "agent_id": agent.id,
-                    "agent_type": agent.agent_type,
-                    "phase_id": agent.phase_id,
-                    "anomaly_score": anomaly_score,
-                    "consecutive_readings": agent.consecutive_anomalous_readings,
-                    "should_quarantine": should_quarantine,
-                })
+                results.append(
+                    {
+                        "agent_id": agent.id,
+                        "agent_type": agent.agent_type,
+                        "phase_id": agent.phase_id,
+                        "anomaly_score": anomaly_score,
+                        "consecutive_readings": agent.consecutive_anomalous_readings,
+                        "should_quarantine": should_quarantine,
+                    }
+                )
 
             session.commit()
 
@@ -493,7 +507,9 @@ class MonitorService:
                                 entity_id=result["agent_id"],
                                 payload={
                                     "anomaly_score": result["anomaly_score"],
-                                    "consecutive_readings": result["consecutive_readings"],
+                                    "consecutive_readings": result[
+                                        "consecutive_readings"
+                                    ],
                                     "should_quarantine": result["should_quarantine"],
                                 },
                             )
@@ -506,11 +522,11 @@ class MonitorService:
         # This is a placeholder - in production, health metrics would come from
         # heartbeat messages stored in database or real-time metrics collection
         # For now, we'll compute basic metrics from task data
-        
+
         from datetime import timedelta
-        
-        one_hour_ago = utc_now() - timedelta(hours=1)
-        
+
+        utc_now() - timedelta(hours=1)
+
         # Get CPU/Memory from health metrics if stored
         # For now, return empty dict (composite scorer will compute from tasks)
         return {}
@@ -591,4 +607,3 @@ class MonitorService:
         metrics["memory_usage_mb"] = 0.0
 
         return metrics if metrics else None
-

@@ -23,10 +23,8 @@ The validation is lenient by design:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
 from fnmatch import fnmatch
-from typing import List, Optional, Set, Dict, Any
-from functools import lru_cache
+from typing import List, Optional, Dict, Any
 
 from omoi_os.logging import get_logger
 from omoi_os.models.task import Task
@@ -44,7 +42,9 @@ class ValidationResult:
     conflicts: List[str]  # List of conflicting patterns/files
     warnings: List[str]
     conflicting_task_ids: List[str]  # IDs of tasks with conflicts
-    conflict_details: List[Dict[str, Any]] = field(default_factory=list)  # Detailed conflict info
+    conflict_details: List[Dict[str, Any]] = field(
+        default_factory=list
+    )  # Detailed conflict info
 
     @property
     def has_warnings(self) -> bool:
@@ -178,13 +178,15 @@ class OwnershipValidationService:
                     conflicts.append(conflict_msg)
 
                     # Capture detailed metrics for MergeAttempt audit trail
-                    conflict_details.append({
-                        "task_id": str(task.id),
-                        "sibling_task_id": sibling_id,
-                        "task_pattern": overlap["task_pattern"],
-                        "sibling_pattern": overlap["sibling_pattern"],
-                        "detected_at": utc_now().isoformat(),
-                    })
+                    conflict_details.append(
+                        {
+                            "task_id": str(task.id),
+                            "sibling_task_id": sibling_id,
+                            "task_pattern": overlap["task_pattern"],
+                            "sibling_pattern": overlap["sibling_pattern"],
+                            "detected_at": utc_now().isoformat(),
+                        }
+                    )
 
                 conflicting_task_ids.append(sibling_id)
 
@@ -264,7 +266,8 @@ class OwnershipValidationService:
                 "total_conflicts": len(conflict_details),
                 "conflicting_sibling_count": len(conflicts_by_sibling),
                 "conflicts_by_sibling": {
-                    sid: len(conflicts) for sid, conflicts in conflicts_by_sibling.items()
+                    sid: len(conflicts)
+                    for sid, conflicts in conflicts_by_sibling.items()
                 },
                 "unique_patterns_involved": len(
                     set(d["task_pattern"] for d in conflict_details)
@@ -397,10 +400,12 @@ class OwnershipValidationService:
         for task_pattern in task_patterns:
             for sibling_pattern in sibling_patterns:
                 if self._patterns_may_overlap(task_pattern, sibling_pattern):
-                    overlaps.append({
-                        "task_pattern": task_pattern,
-                        "sibling_pattern": sibling_pattern,
-                    })
+                    overlaps.append(
+                        {
+                            "task_pattern": task_pattern,
+                            "sibling_pattern": sibling_pattern,
+                        }
+                    )
 
         return overlaps
 
@@ -519,7 +524,7 @@ class OwnershipValidationService:
                 if suffix:
                     # Get the part of the file path after the prefix
                     if prefix:
-                        remaining = file_path[len(prefix):].lstrip("/")
+                        remaining = file_path[len(prefix) :].lstrip("/")
                     else:
                         remaining = file_path
 

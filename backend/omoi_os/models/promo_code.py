@@ -39,9 +39,7 @@ class PromoCode(Base):
     __tablename__ = "promo_codes"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # The actual code users enter (case-insensitive, stored uppercase)
@@ -50,9 +48,7 @@ class PromoCode(Base):
     )
 
     # Human-readable description for admin purposes
-    description: Mapped[Optional[str]] = mapped_column(
-        String(500), nullable=True
-    )
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Discount configuration
     discount_type: Mapped[str] = mapped_column(
@@ -63,17 +59,13 @@ class PromoCode(Base):
     )  # Percentage (0-100) or cents for fixed amount
 
     # For trial extensions - number of days to add
-    trial_days: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True
-    )
+    trial_days: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Usage limits
     max_uses: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True  # null = unlimited
     )
-    current_uses: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    current_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     # Validity period
     valid_from: Mapped[datetime] = mapped_column(
@@ -85,31 +77,21 @@ class PromoCode(Base):
 
     # Plan restrictions (which tiers this code applies to)
     # e.g., ["pro", "team"] or null for all plans
-    applicable_tiers: Mapped[Optional[list]] = mapped_column(
-        JSONB, nullable=True
-    )
+    applicable_tiers: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
     # Tier to grant for full_bypass codes
     # e.g., "pro" to give them pro tier for free
-    grant_tier: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )
+    grant_tier: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
 
     # Duration for full_bypass codes (months, null = lifetime)
-    grant_duration_months: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True
-    )
+    grant_duration_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
 
     # Status
-    is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True
-    )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Creator tracking
     created_by_id: Mapped[Optional[UUID]] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="SET NULL"),
-        nullable=True
+        PGUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
     # Additional configuration
@@ -135,7 +117,7 @@ class PromoCode(Base):
 
     __table_args__ = (
         Index("idx_promo_code_active_valid", "is_active", "valid_until"),
-        {"comment": "Promotional codes for discounts and payment bypass"}
+        {"comment": "Promotional codes for discounts and payment bypass"},
     )
 
     def __repr__(self) -> str:
@@ -219,9 +201,7 @@ class PromoCodeRedemption(Base):
     __tablename__ = "promo_code_redemptions"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Links
@@ -229,37 +209,31 @@ class PromoCodeRedemption(Base):
         PGUUID(as_uuid=True),
         ForeignKey("promo_codes.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     user_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
     organization_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
     subscription_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("subscriptions.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     # Snapshot of what was applied
-    discount_type_applied: Mapped[str] = mapped_column(
-        String(50), nullable=False
-    )
-    discount_value_applied: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )
-    tier_granted: Mapped[Optional[str]] = mapped_column(
-        String(50), nullable=True
-    )
+    discount_type_applied: Mapped[str] = mapped_column(String(50), nullable=False)
+    discount_value_applied: Mapped[int] = mapped_column(Integer, nullable=False)
+    tier_granted: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     duration_months_granted: Mapped[Optional[int]] = mapped_column(
         Integer, nullable=True
     )
@@ -270,14 +244,12 @@ class PromoCodeRedemption(Base):
     )
 
     # Relationships
-    promo_code: Mapped["PromoCode"] = relationship(
-        back_populates="redemptions"
-    )
+    promo_code: Mapped["PromoCode"] = relationship(back_populates="redemptions")
     user: Mapped["User"] = relationship("User", foreign_keys=[user_id])
 
     __table_args__ = (
         Index("idx_redemption_user_code", "user_id", "promo_code_id"),
-        {"comment": "Records of promo code redemptions"}
+        {"comment": "Records of promo code redemptions"},
     )
 
     def __repr__(self) -> str:
@@ -292,8 +264,12 @@ class PromoCodeRedemption(Base):
             "id": str(self.id),
             "promo_code_id": str(self.promo_code_id),
             "user_id": str(self.user_id),
-            "organization_id": str(self.organization_id) if self.organization_id else None,
-            "subscription_id": str(self.subscription_id) if self.subscription_id else None,
+            "organization_id": (
+                str(self.organization_id) if self.organization_id else None
+            ),
+            "subscription_id": (
+                str(self.subscription_id) if self.subscription_id else None
+            ),
             "discount_type_applied": self.discount_type_applied,
             "discount_value_applied": self.discount_value_applied,
             "tier_granted": self.tier_granted,

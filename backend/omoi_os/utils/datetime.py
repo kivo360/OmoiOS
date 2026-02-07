@@ -21,7 +21,15 @@ def utc_now() -> datetime:
     return Instant.now().py_datetime()
 
 
-def utc_datetime(year: int, month: int, day: int, hour: int = 0, minute: int = 0, second: int = 0, microsecond: int = 0) -> datetime:
+def utc_datetime(
+    year: int,
+    month: int,
+    day: int,
+    hour: int = 0,
+    minute: int = 0,
+    second: int = 0,
+    microsecond: int = 0,
+) -> datetime:
     """
     Create a UTC datetime from components.
 
@@ -70,9 +78,8 @@ def sanitize_for_json(obj: Any) -> Any:
         return {k: sanitize_for_json(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
         return [sanitize_for_json(item) for item in obj]
-    if hasattr(obj, '__dict__'):
+    if hasattr(obj, "__dict__"):
         # Handle objects with __dict__ (convert to dict)
         return sanitize_for_json(obj.__dict__)
     # Return as-is for basic types (str, int, float, bool)
     return obj
-

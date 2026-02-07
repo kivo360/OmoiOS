@@ -19,8 +19,6 @@ jobs:
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
-    # Non-blocking until existing lint errors are cleaned up
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

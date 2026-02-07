@@ -28,14 +28,11 @@ from typing import (
     Dict,
     List,
     Optional,
-    Sequence,
     Tuple,
 )
 
 from omoi_os.logging import get_logger
-from omoi_os.models.phase_gate_result import PhaseGateResult
 from omoi_os.models.phase_history import PhaseHistory
-from omoi_os.models.phases import Phase, PHASE_SEQUENCE, PHASE_TRANSITIONS
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.ticket_status import TicketStatus
@@ -280,22 +277,26 @@ PHASE_CONFIGS: Dict[str, PhaseConfig] = {
 }
 
 # Task types that enable continuous mode (run to completion)
-CONTINUOUS_TASK_TYPES = frozenset({
-    "implement_feature",
-    "fix_bug",
-    "write_tests",
-    "refactor",
-    "deploy",
-})
+CONTINUOUS_TASK_TYPES = frozenset(
+    {
+        "implement_feature",
+        "fix_bug",
+        "write_tests",
+        "refactor",
+        "deploy",
+    }
+)
 
 # Task types that run in exploration mode (stop early)
-EXPLORATION_TASK_TYPES = frozenset({
-    "analyze_requirements",
-    "analyze_codebase",
-    "explore_problem",
-    "generate_prd",
-    "create_design",
-})
+EXPLORATION_TASK_TYPES = frozenset(
+    {
+        "analyze_requirements",
+        "analyze_codebase",
+        "explore_problem",
+        "generate_prd",
+        "create_design",
+    }
+)
 
 
 # =============================================================================
@@ -374,6 +375,7 @@ class PhaseManager:
         if self._context_service is None:
             try:
                 from omoi_os.services.context_service import ContextService
+
                 self._context_service = ContextService(self.db)
             except Exception as e:
                 logger.warning("Could not create ContextService", error=str(e))
@@ -429,9 +431,7 @@ class PhaseManager:
     # Transition Validation
     # -------------------------------------------------------------------------
 
-    def can_transition(
-        self, ticket_id: str, to_phase: str
-    ) -> Tuple[bool, List[str]]:
+    def can_transition(self, ticket_id: str, to_phase: str) -> Tuple[bool, List[str]]:
         """
         Check if a ticket can transition to a target phase.
 
@@ -619,7 +619,9 @@ class PhaseManager:
                     if ticket:
                         current_phase = ticket.phase_id
                         # Update ticket context with aggregated phase data
-                        self.context_service.update_ticket_context(ticket_id, current_phase)
+                        self.context_service.update_ticket_context(
+                            ticket_id, current_phase
+                        )
                         # Get context to pass to spawned tasks
                         from_phase_context = self.context_service.get_context_for_phase(
                             ticket_id, to_phase
@@ -629,7 +631,9 @@ class PhaseManager:
                             ticket_id=ticket_id,
                             from_phase=current_phase,
                             to_phase=to_phase,
-                            context_phases=list(from_phase_context.get("phases", {}).keys()),
+                            context_phases=list(
+                                from_phase_context.get("phases", {}).keys()
+                            ),
                         )
             except Exception as e:
                 logger.warning(
@@ -661,12 +665,22 @@ class PhaseManager:
                 ticket.status = to_config.mapped_status
 
             # Clear blocked if unblocking
-            if ticket.is_blocked and to_phase in PHASE_CONFIGS.get(
-                "PHASE_BLOCKED", PhaseConfig(
-                    id="", name="", description="", sequence_order=0,
-                    allowed_transitions=(), mapped_status="", execution_mode=ExecutionMode.EXPLORATION
-                )
-            ).allowed_transitions:
+            if (
+                ticket.is_blocked
+                and to_phase
+                in PHASE_CONFIGS.get(
+                    "PHASE_BLOCKED",
+                    PhaseConfig(
+                        id="",
+                        name="",
+                        description="",
+                        sequence_order=0,
+                        allowed_transitions=(),
+                        mapped_status="",
+                        execution_mode=ExecutionMode.EXPLORATION,
+                    ),
+                ).allowed_transitions
+            ):
                 ticket.is_blocked = False
                 ticket.blocked_reason = None
                 ticket.blocked_at = None
@@ -678,7 +692,8 @@ class PhaseManager:
                 ticket_id=ticket_id,
                 from_phase=from_phase,
                 to_phase=to_phase,
-                transition_reason=reason or f"Phase transition: {from_phase} → {to_phase}",
+                transition_reason=reason
+                or f"Phase transition: {from_phase} → {to_phase}",
                 transitioned_by=initiated_by or "phase-manager",
             )
             session.add(history)
@@ -714,7 +729,8 @@ class PhaseManager:
                         "from_status": from_status,
                         "to_status": to_status,
                         "phase_id": to_phase,
-                        "reason": reason or f"Phase transition: {from_phase} → {to_phase}",
+                        "reason": reason
+                        or f"Phase transition: {from_phase} → {to_phase}",
                     },
                 )
             )
@@ -860,7 +876,12 @@ class PhaseManager:
             current_phase = ticket.phase_id
 
         # Check if already in implementation or beyond
-        if current_phase in ("PHASE_IMPLEMENTATION", "PHASE_TESTING", "PHASE_DEPLOYMENT", "PHASE_DONE"):
+        if current_phase in (
+            "PHASE_IMPLEMENTATION",
+            "PHASE_TESTING",
+            "PHASE_DEPLOYMENT",
+            "PHASE_DONE",
+        ):
             return TransitionResult(
                 success=False,
                 from_phase=current_phase,
@@ -1058,7 +1079,7 @@ class PhaseManager:
             payload = event_data.get("payload", {})
             ticket_id = payload.get("ticket_id")
             task_type = payload.get("task_type")
-            phase_id = payload.get("phase_id")
+            payload.get("phase_id")
 
             if not ticket_id:
                 return
@@ -1071,7 +1092,10 @@ class PhaseManager:
                         return
 
                     # If task is implementation type, ensure we're in implementation phase
-                    if task_type == "implement_feature" and ticket.phase_id != "PHASE_IMPLEMENTATION":
+                    if (
+                        task_type == "implement_feature"
+                        and ticket.phase_id != "PHASE_IMPLEMENTATION"
+                    ):
                         logger.info(
                             "Moving ticket to implementation for implement_feature task",
                             ticket_id=ticket_id,

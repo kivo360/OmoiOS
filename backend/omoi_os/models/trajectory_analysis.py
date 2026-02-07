@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 class LLMTrajectoryAnalysisResponse(BaseModel):
     """Pydantic model for LLM trajectory analysis response.
-    
+
     This model is used with structured_output to get properly typed
     analysis results directly from the LLM, without manual JSON parsing.
     """
@@ -38,9 +38,7 @@ class LLMTrajectoryAnalysisResponse(BaseModel):
     accumulated_goal: Optional[str] = Field(
         default=None, description="Accumulated goal from conversation context"
     )
-    current_focus: str = Field(
-        ..., description="Agent's current focus area or task"
-    )
+    current_focus: str = Field(..., description="Agent's current focus area or task")
     session_duration: Optional[str] = Field(
         default=None, description="Session duration (will be converted to timedelta)"
     )
@@ -196,7 +194,9 @@ class MonitoringAuditLog(BaseModel):
 
     id: UUID
     event_type: str = Field(..., description="Type of monitoring event")
-    actor_type: str = Field(..., description="Type of actor (guardian, conductor, etc.)")
+    actor_type: str = Field(
+        ..., description="Type of actor (guardian, conductor, etc.)"
+    )
     actor_id: Optional[str] = None
     target_agent_ids: List[str] = Field(..., description="List of affected agent IDs")
     reason: str = Field(..., description="Reason for the monitoring action")
@@ -211,7 +211,9 @@ class TrajectoryAnalysisRequest(BaseModel):
     """Request model for trajectory analysis."""
 
     agent_id: str = Field(..., description="Agent ID to analyze")
-    force_analysis: bool = Field(default=False, description="Skip cache and force fresh analysis")
+    force_analysis: bool = Field(
+        default=False, description="Skip cache and force fresh analysis"
+    )
 
 
 class TrajectoryAnalysisResponse(BaseModel):
@@ -259,7 +261,9 @@ class SteeringInterventionRequest(BaseModel):
     steering_type: str = Field(..., description="Type of steering intervention")
     message: str = Field(..., description="Intervention message")
     reason: str = Field(..., description="Reason for intervention")
-    auto_execute: bool = Field(default=False, description="Whether to auto-execute the intervention")
+    auto_execute: bool = Field(
+        default=False, description="Whether to auto-execute the intervention"
+    )
 
 
 class SteeringInterventionResponse(BaseModel):

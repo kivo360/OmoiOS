@@ -5,12 +5,12 @@ Revises: 003_agent_registry
 Create Date: 2025-11-16
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision: str = "003_phase_workflow"

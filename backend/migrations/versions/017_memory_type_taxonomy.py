@@ -5,11 +5,11 @@ Revises: 016_ticket_human_approval
 Create Date: 2025-01-28
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "017_memory_type_taxonomy"
@@ -31,7 +31,10 @@ def upgrade() -> None:
         ),
     )
     op.create_index(
-        op.f("ix_task_memories_memory_type"), "task_memories", ["memory_type"], unique=False
+        op.f("ix_task_memories_memory_type"),
+        "task_memories",
+        ["memory_type"],
+        unique=False,
     )
 
     # Add check constraint to enforce valid memory types (REQ-MEM-TAX-002)
@@ -55,4 +58,3 @@ def downgrade() -> None:
 
     # Remove memory_type column
     op.drop_column("task_memories", "memory_type")
-

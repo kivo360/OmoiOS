@@ -1,4 +1,5 @@
 """Simple test for gateway format."""
+
 import os
 from pydantic_ai import Agent
 
@@ -20,12 +21,18 @@ except Exception as e:
         agent = Agent("anthropic:claude-sonnet-4-5")
         result = agent.run_sync("Hello world!")
         # Check what attribute contains the output
-        output = result.output if hasattr(result, "output") else result.data if hasattr(result, "data") else str(result)
+        output = (
+            result.output
+            if hasattr(result, "output")
+            else result.data if hasattr(result, "data") else str(result)
+        )
         print(f"✅ Direct format works: {output}")
-        print("\nNote: Gateway prefix not supported in this version, but direct format works!")
+        print(
+            "\nNote: Gateway prefix not supported in this version, but direct format works!"
+        )
         print("   We'll strip 'gateway/' prefix in the service to make it work.")
     except Exception as e2:
         print(f"❌ Direct format also failed: {e2}")
         import traceback
-        traceback.print_exc()
 
+        traceback.print_exc()

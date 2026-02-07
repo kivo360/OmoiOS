@@ -108,9 +108,7 @@ class SpecAcceptanceValidator:
 
         async with self.db.get_async_session() as session:
             # Get the task
-            task_result = await session.execute(
-                select(Task).filter(Task.id == task_id)
-            )
+            task_result = await session.execute(select(Task).filter(Task.id == task_id))
             task = task_result.scalar_one_or_none()
 
             if not task:
@@ -204,9 +202,7 @@ class SpecAcceptanceValidator:
             # Commit criterion updates
             await session.commit()
 
-            result.all_criteria_met = (
-                result.criteria_met_count == result.total_criteria
-            )
+            result.all_criteria_met = result.criteria_met_count == result.total_criteria
 
         # Publish validation event
         if self.event_bus:
@@ -254,7 +250,7 @@ class SpecAcceptanceValidator:
             Formatted context string
         """
         context_parts = [
-            f"# Implementation Context\n",
+            "# Implementation Context\n",
             f"## Spec: {spec.title}",
             f"Spec Description: {spec.description or 'N/A'}",
             f"\n## Task: {spec_task.title}",
@@ -436,7 +432,8 @@ If the implementation doesn't address the criterion or there's insufficient evid
                     if total_criteria > 0
                     else 100.0
                 ),
-                "all_complete": completed_criteria == total_criteria and total_criteria > 0,
+                "all_complete": completed_criteria == total_criteria
+                and total_criteria > 0,
                 "by_requirement": criteria_by_requirement,
             }
 
@@ -458,6 +455,7 @@ def get_spec_acceptance_validator(
     """
     if db is None:
         from omoi_os.api.dependencies import get_db_service
+
         db = get_db_service()
 
     return SpecAcceptanceValidator(

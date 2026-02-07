@@ -254,7 +254,9 @@ class DatabaseSettings(OmoiBaseSettings):
     pool_timeout: int = 30  # Seconds to wait for connection from pool
     pool_recycle: int = 1800  # Recycle connections after N seconds
     pool_pre_ping: bool = True  # Verify connection is alive before use
-    pool_use_lifo: bool = True  # Use LIFO for connection reuse (better for idle connections)
+    pool_use_lifo: bool = (
+        True  # Use LIFO for connection reuse (better for idle connections)
+    )
 
     # Statement/command timeouts (in seconds)
     command_timeout: int = 30  # Max time for a single SQL statement

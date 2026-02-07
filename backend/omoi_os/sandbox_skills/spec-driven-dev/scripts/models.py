@@ -15,7 +15,6 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
-
 # ============================================================================
 # Requirement Models
 # ============================================================================
@@ -81,8 +80,12 @@ class ApiEndpoint:
     response: Optional[str] = None  # JSON schema or description
     auth_required: bool = True  # Whether authentication is required
     path_params: list[str] = field(default_factory=list)  # e.g., ["id", "project_id"]
-    query_params: dict[str, str] = field(default_factory=dict)  # param_name -> description
-    error_responses: dict[str, str] = field(default_factory=dict)  # status_code -> description
+    query_params: dict[str, str] = field(
+        default_factory=dict
+    )  # param_name -> description
+    error_responses: dict[str, str] = field(
+        default_factory=dict
+    )  # status_code -> description
 
     def to_api_dict(self) -> dict:
         """Convert to API sync format."""
@@ -123,8 +126,12 @@ class DataModel:
 
     name: str
     description: str = ""
-    fields: dict[str, str] = field(default_factory=dict)  # Legacy: field_name -> type/description
-    typed_fields: list[DataModelField] = field(default_factory=list)  # Enhanced field specs
+    fields: dict[str, str] = field(
+        default_factory=dict
+    )  # Legacy: field_name -> type/description
+    typed_fields: list[DataModelField] = field(
+        default_factory=list
+    )  # Enhanced field specs
     relationships: list[str] = field(default_factory=list)
     table_name: Optional[str] = None  # Database table name if different from model name
 
@@ -141,9 +148,13 @@ class DataModel:
             for f in self.typed_fields:
                 nullable_str = " (nullable)" if f.nullable else ""
                 default_str = f" = {f.default}" if f.default else ""
-                constraints_str = f" [{', '.join(f.constraints)}]" if f.constraints else ""
+                constraints_str = (
+                    f" [{', '.join(f.constraints)}]" if f.constraints else ""
+                )
                 desc_str = f" - {f.description}" if f.description else ""
-                parts.append(f"- `{f.name}`: {f.type}{nullable_str}{default_str}{constraints_str}{desc_str}")
+                parts.append(
+                    f"- `{f.name}`: {f.type}{nullable_str}{default_str}{constraints_str}{desc_str}"
+                )
         elif self.fields:
             parts.append("**Fields:**")
             for field_name, field_type in self.fields.items():
@@ -221,7 +232,7 @@ class ParsedTicket:
     tasks: list[str] = field(default_factory=list)
     dependencies: TicketDependencies = field(default_factory=TicketDependencies)
     description: str = ""  # Short summary/description
-    full_body: str = ""    # Full markdown body with all sections (for AI context)
+    full_body: str = ""  # Full markdown body with all sections (for AI context)
     file_path: str = ""
 
     def is_blocked(self) -> bool:
@@ -244,8 +255,8 @@ class ParsedTask:
     created: date
     assignee: Optional[str] = None
     dependencies: TaskDependencies = field(default_factory=TaskDependencies)
-    objective: str = ""    # Short objective/description
-    full_body: str = ""    # Full markdown body with all sections (for AI context)
+    objective: str = ""  # Short objective/description
+    full_body: str = ""  # Full markdown body with all sections (for AI context)
     file_path: str = ""
 
     def is_blocked(self, completed_tasks: set[str]) -> bool:
@@ -407,11 +418,15 @@ class ParseResult:
             return False, []
 
         completed_tickets = self.get_completed_tickets()
-        incomplete_blockers = [t for t in blocking_tickets if t not in completed_tickets]
+        incomplete_blockers = [
+            t for t in blocking_tickets if t not in completed_tickets
+        ]
 
         return len(incomplete_blockers) > 0, incomplete_blockers
 
-    def is_task_blocked(self, task: ParsedTask, completed_tasks: Optional[set[str]] = None) -> tuple[bool, str]:
+    def is_task_blocked(
+        self, task: ParsedTask, completed_tasks: Optional[set[str]] = None
+    ) -> tuple[bool, str]:
         """Check if a task is blocked, considering both task and ticket dependencies.
 
         Returns:
@@ -540,8 +555,10 @@ class ParseResult:
         # Build design traceability
         for design in self.designs:
             linked_tickets = [
-                t for t in self.tickets
-                if t.design_ref and (
+                t
+                for t in self.tickets
+                if t.design_ref
+                and (
                     t.design_ref.endswith(f"{design.feature}.md")
                     or t.design_ref == design.id
                 )
@@ -600,17 +617,23 @@ class ParseResult:
             "designs": {
                 "total": total_designs,
                 "linked": linked_designs,
-                "coverage": (linked_designs / total_designs * 100) if total_designs > 0 else 100,
+                "coverage": (
+                    (linked_designs / total_designs * 100) if total_designs > 0 else 100
+                ),
             },
             "tickets": {
                 "total": total_tickets,
                 "linked": linked_tickets,
-                "coverage": (linked_tickets / total_tickets * 100) if total_tickets > 0 else 100,
+                "coverage": (
+                    (linked_tickets / total_tickets * 100) if total_tickets > 0 else 100
+                ),
             },
             "tasks": {
                 "total": len(self.tasks),
                 "done": len([t for t in self.tasks if t.status == "done"]),
-                "in_progress": len([t for t in self.tasks if t.status == "in_progress"]),
+                "in_progress": len(
+                    [t for t in self.tasks if t.status == "in_progress"]
+                ),
                 "pending": len([t for t in self.tasks if t.status == "pending"]),
             },
             "orphans": trace["orphans"],

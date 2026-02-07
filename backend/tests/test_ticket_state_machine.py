@@ -85,52 +85,84 @@ class TestTicketStatus:
     def test_valid_transitions(self):
         """Test valid state transitions per REQ-TKT-SM-002."""
         # Normal progression
-        assert is_valid_transition(
-            TicketStatus.BACKLOG.value, TicketStatus.ANALYZING.value
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.ANALYZING.value, TicketStatus.BUILDING.value
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.BUILDING.value, TicketStatus.BUILDING_DONE.value
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.BUILDING_DONE.value, TicketStatus.TESTING.value
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.TESTING.value, TicketStatus.DONE.value
-        ) is True
+        assert (
+            is_valid_transition(
+                TicketStatus.BACKLOG.value, TicketStatus.ANALYZING.value
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                TicketStatus.ANALYZING.value, TicketStatus.BUILDING.value
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                TicketStatus.BUILDING.value, TicketStatus.BUILDING_DONE.value
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                TicketStatus.BUILDING_DONE.value, TicketStatus.TESTING.value
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(TicketStatus.TESTING.value, TicketStatus.DONE.value)
+            is True
+        )
 
         # Regression: testing → building (on fix needed)
-        assert is_valid_transition(
-            TicketStatus.TESTING.value, TicketStatus.BUILDING.value
-        ) is True
+        assert (
+            is_valid_transition(TicketStatus.TESTING.value, TicketStatus.BUILDING.value)
+            is True
+        )
 
         # Invalid transitions
-        assert is_valid_transition(
-            TicketStatus.BACKLOG.value, TicketStatus.DONE.value
-        ) is False
-        assert is_valid_transition(
-            TicketStatus.DONE.value, TicketStatus.BACKLOG.value
-        ) is False
+        assert (
+            is_valid_transition(TicketStatus.BACKLOG.value, TicketStatus.DONE.value)
+            is False
+        )
+        assert (
+            is_valid_transition(TicketStatus.DONE.value, TicketStatus.BACKLOG.value)
+            is False
+        )
 
     def test_blocked_transitions(self):
         """Test transitions from blocked state per REQ-TKT-SM-002."""
         # When blocked, can transition to any of the allowed states
-        assert is_valid_transition(
-            TicketStatus.BUILDING.value, TicketStatus.ANALYZING.value, is_blocked=True
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.ANALYZING.value, TicketStatus.BUILDING.value, is_blocked=True
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.BUILDING.value,
-            TicketStatus.BUILDING_DONE.value,
-            is_blocked=True,
-        ) is True
-        assert is_valid_transition(
-            TicketStatus.BUILDING.value, TicketStatus.TESTING.value, is_blocked=True
-        ) is True
+        assert (
+            is_valid_transition(
+                TicketStatus.BUILDING.value,
+                TicketStatus.ANALYZING.value,
+                is_blocked=True,
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                TicketStatus.ANALYZING.value,
+                TicketStatus.BUILDING.value,
+                is_blocked=True,
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                TicketStatus.BUILDING.value,
+                TicketStatus.BUILDING_DONE.value,
+                is_blocked=True,
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                TicketStatus.BUILDING.value, TicketStatus.TESTING.value, is_blocked=True
+            )
+            is True
+        )
 
 
 class TestTicketWorkflowOrchestrator:
@@ -628,4 +660,3 @@ class TestTicketWorkflowOrchestrator:
         unblocked_events = [e for e in events if e.event_type == "ticket.unblocked"]
         assert len(unblocked_events) == 1
         assert unblocked_events[0].entity_id == ticket.id
-

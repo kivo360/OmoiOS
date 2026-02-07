@@ -31,4 +31,3 @@ class PatternExtraction(BaseModel):
         ..., ge=0.0, le=1.0, description="Confidence in the pattern"
     )
     sample_count: int = Field(..., ge=1, description="Number of samples used")
-

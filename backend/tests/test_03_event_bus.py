@@ -15,11 +15,14 @@ def event_bus_service(redis_url: str):
     # Try to use fakeredis for testing
     try:
         import fakeredis
+
         # Create a fake Redis server
         fake_server = fakeredis.FakeStrictRedis(decode_responses=True)
-        
+
         # Patch redis.from_url to return our fake server
-        patcher = patch('omoi_os.services.event_bus.redis.from_url', return_value=fake_server)
+        patcher = patch(
+            "omoi_os.services.event_bus.redis.from_url", return_value=fake_server
+        )
         patcher.start()
         try:
             bus = EventBusService("redis://fake:6379")
@@ -124,4 +127,3 @@ def test_event_serialization(event_bus_service: EventBusService):
     assert received.payload == complex_payload
     assert received.payload["nested"]["key"] == "value"
     assert received.payload["list"] == [1, 2, 3]
-

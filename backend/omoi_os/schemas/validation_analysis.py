@@ -8,9 +8,7 @@ class BlockingIssue(BaseModel):
     """A blocking issue found during validation."""
 
     issue: str = Field(..., description="Description of the blocking issue")
-    severity: str = Field(
-        ..., description="Severity: critical, high, medium, or low"
-    )
+    severity: str = Field(..., description="Severity: critical, high, medium, or low")
     artifact_path: Optional[str] = Field(
         None, description="Path to the artifact with the issue"
     )
@@ -30,4 +28,3 @@ class ValidationResult(BaseModel):
     missing_artifacts: List[str] = Field(
         default_factory=list, description="List of missing required artifacts"
     )
-

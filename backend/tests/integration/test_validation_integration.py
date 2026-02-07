@@ -8,14 +8,13 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
-from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.project import Project
 from omoi_os.models.user import User
 from omoi_os.models.validation_review import ValidationReview
 from omoi_os.services.database import DatabaseService
-from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.task_validator import TaskValidatorService
 
 
@@ -117,7 +116,9 @@ async def test_complete_validation_flow_pass(
     sandbox_id = implementer_task.sandbox_id
 
     # Mock spawner to avoid external calls
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         validator_agent_id = str(uuid4())
         mock_spawn.return_value = {
             "sandbox_id": "validator-sandbox-123",
@@ -165,9 +166,11 @@ async def test_complete_validation_flow_pass(
             assert task.result.get("validated_at") is not None
 
             # Verify review record
-            reviews = session.query(ValidationReview).filter(
-                ValidationReview.task_id == task_id
-            ).all()
+            reviews = (
+                session.query(ValidationReview)
+                .filter(ValidationReview.task_id == task_id)
+                .all()
+            )
             assert len(reviews) == 1
             assert reviews[0].validation_passed is True
 
@@ -182,7 +185,9 @@ async def test_complete_validation_flow_fail_and_retry(
     task_id = str(implementer_task.id)
     sandbox_id = implementer_task.sandbox_id
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         # First validation attempt
         validator_agent_id_1 = str(uuid4())
         mock_spawn.return_value = {
@@ -209,7 +214,10 @@ async def test_complete_validation_flow_fail_and_retry(
         with integration_db.get_session() as session:
             task = session.get(Task, implementer_task.id)
             assert task.status == "needs_revision"
-            assert task.result.get("revision_feedback") == "Tests failing: 3 unit tests failed"
+            assert (
+                task.result.get("revision_feedback")
+                == "Tests failing: 3 unit tests failed"
+            )
             assert len(task.result.get("revision_recommendations", [])) == 3
 
         # Simulate implementer fixing and re-requesting validation
@@ -228,7 +236,11 @@ async def test_complete_validation_flow_fail_and_retry(
         await task_validator.request_validation(
             task_id=task_id,
             sandbox_id=sandbox_id,
-            implementation_result={"success": True, "branch_name": "feature/auth", "fixed_tests": True},
+            implementation_result={
+                "success": True,
+                "branch_name": "feature/auth",
+                "fixed_tests": True,
+            },
         )
 
         # Verify iteration incremented
@@ -251,9 +263,12 @@ async def test_complete_validation_flow_fail_and_retry(
             assert task.result.get("validation_passed") is True
 
             # Verify both reviews exist
-            reviews = session.query(ValidationReview).filter(
-                ValidationReview.task_id == task_id
-            ).order_by(ValidationReview.iteration_number).all()
+            reviews = (
+                session.query(ValidationReview)
+                .filter(ValidationReview.task_id == task_id)
+                .order_by(ValidationReview.iteration_number)
+                .all()
+            )
             assert len(reviews) == 2
             assert reviews[0].validation_passed is False
             assert reviews[1].validation_passed is True
@@ -274,7 +289,9 @@ async def test_validation_max_iterations_exceeded(
     task_id = str(implementer_task.id)
     sandbox_id = implementer_task.sandbox_id
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         # First validation
         mock_spawn.return_value = {"sandbox_id": "v1", "agent_id": str(uuid4())}
         await task_validator.request_validation(
@@ -346,7 +363,9 @@ async def test_branch_name_propagates_to_validator(
     test_project: Project,
 ):
     """Test that branch_name from task.result is passed to validator."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-xyz")
         mock_get_spawner.return_value = mock_spawner
@@ -372,7 +391,9 @@ async def test_repo_info_propagates_to_validator(
     test_project: Project,
 ):
     """Test that GitHub repo info from project is passed to validator."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-xyz")
         mock_get_spawner.return_value = mock_spawner
@@ -386,7 +407,10 @@ async def test_repo_info_propagates_to_validator(
         call_kwargs = mock_spawner.spawn_for_task.call_args[1]
         extra_env = call_kwargs["extra_env"]
 
-        assert extra_env["GITHUB_REPO"] == f"{test_project.github_owner}/{test_project.github_repo}"
+        assert (
+            extra_env["GITHUB_REPO"]
+            == f"{test_project.github_owner}/{test_project.github_repo}"
+        )
         assert extra_env["GITHUB_REPO_OWNER"] == test_project.github_owner
         assert extra_env["GITHUB_REPO_NAME"] == test_project.github_repo
 
@@ -400,7 +424,9 @@ async def test_github_token_propagates_to_validator(
     test_user: User,
 ):
     """Test that GitHub token from project owner is passed to validator."""
-    with patch('omoi_os.services.task_validator.get_daytona_spawner') as mock_get_spawner:
+    with patch(
+        "omoi_os.services.task_validator.get_daytona_spawner"
+    ) as mock_get_spawner:
         mock_spawner = MagicMock()
         mock_spawner.spawn_for_task = AsyncMock(return_value="validator-sandbox-xyz")
         mock_get_spawner.return_value = mock_spawner
@@ -437,14 +463,16 @@ async def test_validation_events_published_correctly(
     def capture_event(event):
         events_published.append(event.event_type)
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         validator_agent_id = str(uuid4())
         mock_spawn.return_value = {
             "sandbox_id": "v-1",
             "agent_id": validator_agent_id,
         }
 
-        with patch.object(integration_event_bus, 'publish', side_effect=capture_event):
+        with patch.object(integration_event_bus, "publish", side_effect=capture_event):
             # Request validation
             await task_validator.request_validation(
                 task_id=task_id,
@@ -481,7 +509,9 @@ async def test_validation_failed_event_contains_feedback(
         if event.event_type == "TASK_VALIDATION_FAILED":
             captured_event = event
 
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         validator_agent_id = str(uuid4())
         mock_spawn.return_value = {"sandbox_id": "v-1", "agent_id": validator_agent_id}
 
@@ -491,7 +521,7 @@ async def test_validation_failed_event_contains_feedback(
             implementation_result={"success": True},
         )
 
-        with patch.object(integration_event_bus, 'publish', side_effect=capture_event):
+        with patch.object(integration_event_bus, "publish", side_effect=capture_event):
             await task_validator.handle_validation_result(
                 task_id=task_id,
                 validator_agent_id=validator_agent_id,
@@ -502,7 +532,10 @@ async def test_validation_failed_event_contains_feedback(
 
         assert captured_event is not None
         assert captured_event.payload["feedback"] == "Tests failing"
-        assert captured_event.payload["recommendations"] == ["Fix test_foo", "Fix test_bar"]
+        assert captured_event.payload["recommendations"] == [
+            "Fix test_foo",
+            "Fix test_bar",
+        ]
 
 
 # -------------------------------------------------------------------------
@@ -546,7 +579,9 @@ async def test_spawn_validator_failure_continues_gracefully(
     implementer_task: Task,
 ):
     """Test that spawner failure doesn't crash the validation flow."""
-    with patch.object(task_validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        task_validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         mock_spawn.return_value = None  # Simulate failure
 
         validation_id = await task_validator.request_validation(

@@ -9,7 +9,7 @@ Tests the PR webhook event handling including:
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 from datetime import datetime
 
 from omoi_os.services.github_integration import GitHubIntegrationService
@@ -99,9 +99,7 @@ class TestTicketIdExtraction:
     def test_extract_ticket_id_returns_none_when_not_found(self, service):
         """Test that None is returned when no ticket ID found."""
         ticket_id = service._extract_ticket_id_from_pr(
-            "Random PR title",
-            "Some body text without ticket",
-            "feature/random-branch"
+            "Random PR title", "Some body text without ticket", "feature/random-branch"
         )
         assert ticket_id is None
 
@@ -162,7 +160,9 @@ class TestPROpenedHandler:
         """Test that PR opened creates TicketPullRequest record."""
         # Setup mocks
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_ticket = MagicMock()
@@ -214,7 +214,9 @@ class TestPROpenedHandler:
     ):
         """Test PR opened when ticket doesn't exist."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
         mock_session.get.return_value = None  # Ticket not found
 
@@ -230,12 +232,12 @@ class TestPROpenedHandler:
         assert "not found" in result["message"]
 
     @pytest.mark.asyncio
-    async def test_pr_opened_already_linked(
-        self, service, mock_db, pr_opened_payload
-    ):
+    async def test_pr_opened_already_linked(self, service, mock_db, pr_opened_payload):
         """Test PR opened when PR is already linked."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_ticket = MagicMock()
@@ -243,7 +245,9 @@ class TestPROpenedHandler:
 
         existing_pr = MagicMock()
         existing_pr.ticket_id = "abc123"
-        mock_session.query.return_value.filter.return_value.first.return_value = existing_pr
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            existing_pr
+        )
 
         result = await service._handle_pr_opened(
             pr_opened_payload,
@@ -263,7 +267,9 @@ class TestPROpenedHandler:
     ):
         """Test that PR opened publishes PR_OPENED event."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_ticket = MagicMock()
@@ -335,14 +341,18 @@ class TestPRMergedHandler:
     ):
         """Test that PR merged updates TicketPullRequest state."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         # Existing PR record
         mock_pr_record = MagicMock()
         mock_pr_record.ticket_id = "abc123"
         mock_pr_record.id = "pr-123"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_pr_record
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_pr_record
+        )
 
         # Ticket
         mock_ticket = MagicMock()
@@ -371,7 +381,9 @@ class TestPRMergedHandler:
     ):
         """Test that PR merged marks associated tasks as completed."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_pr_record = MagicMock()
@@ -420,7 +432,9 @@ class TestPRMergedHandler:
     ):
         """Test that PR merged marks ticket status as done."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_pr_record = MagicMock()
@@ -457,7 +471,9 @@ class TestPRMergedHandler:
     ):
         """Test PR merged creates record if not tracked on open."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         # No existing PR record
@@ -499,7 +515,9 @@ class TestPRMergedHandler:
     ):
         """Test PR merged when not linked and no ticket ID found."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         # No existing PR record
@@ -527,7 +545,9 @@ class TestPRMergedHandler:
     ):
         """Test that PR merged publishes appropriate events."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_pr_record = MagicMock()
@@ -562,7 +582,9 @@ class TestPRMergedHandler:
 
         # Should publish: TASK_COMPLETED, TICKET_STATUS_CHANGED, PR_MERGED
         assert mock_event_bus.publish.call_count == 3
-        event_types = [call[0][0].event_type for call in mock_event_bus.publish.call_args_list]
+        event_types = [
+            call[0][0].event_type for call in mock_event_bus.publish.call_args_list
+        ]
         assert "TASK_COMPLETED" in event_types
         assert "TICKET_STATUS_CHANGED" in event_types
         assert "PR_MERGED" in event_types
@@ -587,18 +609,20 @@ class TestPRClosedHandler:
         return GitHubIntegrationService(db=mock_db, event_bus=mock_event_bus)
 
     @pytest.mark.asyncio
-    async def test_pr_closed_updates_state(
-        self, service, mock_db, mock_event_bus
-    ):
+    async def test_pr_closed_updates_state(self, service, mock_db, mock_event_bus):
         """Test that PR closed updates state to 'closed'."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_pr_record = MagicMock()
         mock_pr_record.ticket_id = "abc123"
         mock_pr_record.id = "pr-123"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_pr_record
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_pr_record
+        )
 
         payload = {"action": "closed", "pull_request": {"merged": False}}
         result = await service._handle_pr_closed(
@@ -610,12 +634,12 @@ class TestPRClosedHandler:
         mock_session.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_pr_closed_not_tracked(
-        self, service, mock_db
-    ):
+    async def test_pr_closed_not_tracked(self, service, mock_db):
         """Test PR closed when PR is not tracked."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_session.query.return_value.filter.return_value.first.return_value = None
@@ -629,18 +653,20 @@ class TestPRClosedHandler:
         assert "not tracked" in result["message"]
 
     @pytest.mark.asyncio
-    async def test_pr_closed_publishes_event(
-        self, service, mock_db, mock_event_bus
-    ):
+    async def test_pr_closed_publishes_event(self, service, mock_db, mock_event_bus):
         """Test that PR closed publishes PR_CLOSED event."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_pr_record = MagicMock()
         mock_pr_record.ticket_id = "abc123"
         mock_pr_record.id = "pr-123"
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_pr_record
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_pr_record
+        )
 
         payload = {"action": "closed", "pull_request": {"merged": False}}
         await service._handle_pr_closed(
@@ -671,19 +697,21 @@ class TestPRReopenedHandler:
         return GitHubIntegrationService(db=mock_db, event_bus=mock_event_bus)
 
     @pytest.mark.asyncio
-    async def test_pr_reopened_updates_state(
-        self, service, mock_db
-    ):
+    async def test_pr_reopened_updates_state(self, service, mock_db):
         """Test that PR reopened updates state to 'open'."""
         mock_session = MagicMock()
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         mock_pr_record = MagicMock()
         mock_pr_record.ticket_id = "abc123"
         mock_pr_record.state = "closed"
         mock_pr_record.closed_at = datetime.now()
-        mock_session.query.return_value.filter.return_value.first.return_value = mock_pr_record
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            mock_pr_record
+        )
 
         payload = {"action": "reopened", "pull_request": {"number": 42}}
         result = await service._handle_pr_reopened(
@@ -733,9 +761,7 @@ class TestHandleWebhook:
             },
         }
 
-        with patch.object(
-            service, "_handle_pull_request_event"
-        ) as mock_handler:
+        with patch.object(service, "_handle_pull_request_event") as mock_handler:
             mock_handler.return_value = {"success": True}
             result = await service.handle_webhook("pull_request", payload)
 

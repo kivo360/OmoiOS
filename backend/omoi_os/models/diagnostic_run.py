@@ -14,7 +14,7 @@ from omoi_os.utils.datetime import utc_now
 
 class DiagnosticRun(Base):
     """Diagnostic intervention tracking.
-    
+
     Records when the diagnostic agent was triggered to analyze and recover
     a stuck workflow. Tracks what conditions triggered it, what analysis
     was performed, and what recovery tasks were created.
@@ -39,23 +39,13 @@ class DiagnosticRun(Base):
     triggered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
-    total_tasks_at_trigger: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )
-    done_tasks_at_trigger: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )
-    failed_tasks_at_trigger: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )
-    time_since_last_task_seconds: Mapped[int] = mapped_column(
-        Integer, nullable=False
-    )
+    total_tasks_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
+    done_tasks_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
+    failed_tasks_at_trigger: Mapped[int] = mapped_column(Integer, nullable=False)
+    time_since_last_task_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Recovery tracking
-    tasks_created_count: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
+    tasks_created_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     tasks_created_ids: Mapped[Optional[dict]] = mapped_column(
         JSONB, nullable=True
     )  # Array of task IDs created by diagnostic
@@ -85,4 +75,3 @@ class DiagnosticRun(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
-

@@ -145,9 +145,7 @@ class Ticket(Base):
     project: Mapped[Optional["Project"]] = relationship(
         "Project", back_populates="tickets"
     )
-    spec: Mapped[Optional["Spec"]] = relationship(
-        "Spec", back_populates="tickets"
-    )
+    spec: Mapped[Optional["Spec"]] = relationship("Spec", back_populates="tickets")
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="ticket", cascade="all, delete-orphan"
     )

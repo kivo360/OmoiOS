@@ -18,7 +18,7 @@ from omoi_os.utils.datetime import utc_now
 class HeartbeatProtocolService:
     """
     Enhanced heartbeat protocol service per REQ-ALM-002, REQ-FT-HB-001 to REQ-FT-HB-004.
-    
+
     Features:
     - Bidirectional heartbeat protocol with acknowledgments
     - Sequence number tracking and gap detection
@@ -220,7 +220,9 @@ class HeartbeatProtocolService:
                 message=ack_message,
             )
 
-    def _detect_sequence_gaps(self, agent: Agent, received_sequence: int) -> List[Dict[str, int]]:
+    def _detect_sequence_gaps(
+        self, agent: Agent, received_sequence: int
+    ) -> List[Dict[str, int]]:
         """
         Detect sequence number gaps per REQ-FT-HB-003.
 
@@ -257,30 +259,40 @@ class HeartbeatProtocolService:
         agents_with_missed = []
 
         with self.db.get_session() as session:
-            agents = session.query(Agent).filter(
-                Agent.status.in_(
-                    [
-                        AgentStatus.IDLE.value,
-                        AgentStatus.RUNNING.value,
-                        AgentStatus.DEGRADED.value,
-                    ]
+            agents = (
+                session.query(Agent)
+                .filter(
+                    Agent.status.in_(
+                        [
+                            AgentStatus.IDLE.value,
+                            AgentStatus.RUNNING.value,
+                            AgentStatus.DEGRADED.value,
+                        ]
+                    )
                 )
-            ).all()
+                .all()
+            )
 
             for agent in agents:
                 if not agent.last_heartbeat:
                     # Never sent a heartbeat - treat as missed
                     agent.consecutive_missed_heartbeats += 1
-                    agents_with_missed.append((agent, agent.consecutive_missed_heartbeats))
+                    agents_with_missed.append(
+                        (agent, agent.consecutive_missed_heartbeats)
+                    )
                 else:
                     # Get TTL threshold based on status
-                    ttl_threshold = self._get_ttl_threshold(agent.status, agent.agent_type)
+                    ttl_threshold = self._get_ttl_threshold(
+                        agent.status, agent.agent_type
+                    )
                     time_since_heartbeat = (now - agent.last_heartbeat).total_seconds()
 
                     if time_since_heartbeat > ttl_threshold:
                         # Missed heartbeat detected
                         agent.consecutive_missed_heartbeats += 1
-                        agents_with_missed.append((agent, agent.consecutive_missed_heartbeats))
+                        agents_with_missed.append(
+                            (agent, agent.consecutive_missed_heartbeats)
+                        )
 
                 # Apply escalation ladder
                 missed_count = agent.consecutive_missed_heartbeats
@@ -288,7 +300,7 @@ class HeartbeatProtocolService:
                     self._apply_escalation(agent, missed_count)
 
             session.commit()
-            
+
             # Extract agent IDs and critical attributes before expunging (to avoid detached instance errors)
             result = []
             for agent, missed_count in agents_with_missed:
@@ -366,7 +378,7 @@ class HeartbeatProtocolService:
                                 },
                             )
                         )
-                
+
                 # Publish heartbeat missed event (status manager already published status changed)
                 if self.event_bus and not self.status_manager:
                     self.event_bus.publish(
@@ -414,7 +426,7 @@ class HeartbeatProtocolService:
                                 },
                             )
                         )
-                
+
                 # Publish heartbeat missed event (status manager already published status changed)
                 if self.event_bus and not self.status_manager:
                     self.event_bus.publish(
@@ -463,7 +475,9 @@ class HeartbeatProtocolService:
                     "time_since_last_heartbeat": None,
                     "message": "No heartbeat recorded",
                     "health_status": agent.health_status or "unknown",
-                    "ttl_threshold": self._get_ttl_threshold(agent.status, agent.agent_type),
+                    "ttl_threshold": self._get_ttl_threshold(
+                        agent.status, agent.agent_type
+                    ),
                 }
 
             # Get state-based TTL threshold
@@ -594,9 +608,7 @@ class HeartbeatProtocolService:
             Dictionary containing health information
         """
         async with self.db.get_async_session() as session:
-            result = await session.execute(
-                select(Agent).filter(Agent.id == agent_id)
-            )
+            result = await session.execute(select(Agent).filter(Agent.id == agent_id))
             agent = result.scalar_one_or_none()
 
             if not agent:
@@ -620,7 +632,9 @@ class HeartbeatProtocolService:
                     "time_since_last_heartbeat": None,
                     "message": "No heartbeat recorded",
                     "health_status": agent.health_status or "unknown",
-                    "ttl_threshold": self._get_ttl_threshold(agent.status, agent.agent_type),
+                    "ttl_threshold": self._get_ttl_threshold(
+                        agent.status, agent.agent_type
+                    ),
                 }
 
             ttl_threshold = self._get_ttl_threshold(agent.status, agent.agent_type)
@@ -640,4 +654,3 @@ class HeartbeatProtocolService:
                 "sequence_number": agent.sequence_number,
                 "consecutive_missed_heartbeats": agent.consecutive_missed_heartbeats,
             }
-

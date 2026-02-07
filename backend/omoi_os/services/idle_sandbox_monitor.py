@@ -102,7 +102,14 @@ class IdleSandboxMonitor:
     }
 
     # Expected phase order for spec sandboxes
-    EXPECTED_PHASES: list[str] = ["explore", "prd", "requirements", "design", "tasks", "sync"]
+    EXPECTED_PHASES: list[str] = [
+        "explore",
+        "prd",
+        "requirements",
+        "design",
+        "tasks",
+        "sync",
+    ]
 
     # Stuck between phases threshold (5 minutes)
     # If a phase completes but the next phase doesn't start within this time,
@@ -289,7 +296,9 @@ class IdleSandboxMonitor:
                 "phases_started": phases_started,
                 "last_phase_completed": last_phase_completed,
                 "last_phase_completed_at": (
-                    last_phase_completed_at.isoformat() if last_phase_completed_at else None
+                    last_phase_completed_at.isoformat()
+                    if last_phase_completed_at
+                    else None
                 ),
                 "next_expected_phase": next_expected_phase,
                 "is_stuck_between_phases": is_stuck_between_phases,
@@ -443,7 +452,9 @@ class IdleSandboxMonitor:
                     # Never did any work AND agent doesn't report running AND not completed
                     is_idle = True
                     if last_heartbeat:
-                        idle_duration_seconds = (now - last_heartbeat.created_at).total_seconds()
+                        idle_duration_seconds = (
+                            now - last_heartbeat.created_at
+                        ).total_seconds()
                 else:
                     work_age = now - last_work.created_at
                     is_idle = work_age > self.idle_threshold
@@ -452,7 +463,9 @@ class IdleSandboxMonitor:
             return {
                 "sandbox_id": sandbox_id,
                 "last_work_at": last_work.created_at.isoformat() if last_work else None,
-                "last_heartbeat_at": last_heartbeat.created_at.isoformat() if last_heartbeat else None,
+                "last_heartbeat_at": (
+                    last_heartbeat.created_at.isoformat() if last_heartbeat else None
+                ),
                 "heartbeat_status": heartbeat_status,
                 "has_completed": has_completed,
                 "is_alive": is_alive,
@@ -594,7 +607,9 @@ class IdleSandboxMonitor:
                         f"Idle for {int(idle_duration_seconds / 60)} minutes with no work progress."
                     )
                     session.commit()
-                    log.info("task_status_updated", task_id=task_id, new_status="failed")
+                    log.info(
+                        "task_status_updated", task_id=task_id, new_status="failed"
+                    )
                 else:
                     log.info(
                         "task_status_preserved",
@@ -668,8 +683,12 @@ class IdleSandboxMonitor:
                         phases_started=phase_status.get("phases_started", []),
                         last_phase_completed=phase_status.get("last_phase_completed"),
                         next_expected_phase=phase_status.get("next_expected_phase"),
-                        is_stuck_between_phases=phase_status.get("is_stuck_between_phases"),
-                        has_execution_completed=phase_status.get("has_execution_completed"),
+                        is_stuck_between_phases=phase_status.get(
+                            "is_stuck_between_phases"
+                        ),
+                        has_execution_completed=phase_status.get(
+                            "has_execution_completed"
+                        ),
                         has_execution_failed=phase_status.get("has_execution_failed"),
                     )
 
@@ -706,14 +725,18 @@ class IdleSandboxMonitor:
                         sandbox_id=sandbox_id,
                         last_phase=phase_status.get("last_phase_completed"),
                         next_expected=phase_status.get("next_expected_phase"),
-                        stuck_duration_seconds=phase_status.get("stuck_duration_seconds"),
+                        stuck_duration_seconds=phase_status.get(
+                            "stuck_duration_seconds"
+                        ),
                         phases_completed=phase_status.get("phases_completed"),
                     )
 
                     result = await self.terminate_idle_sandbox(
                         sandbox_id=sandbox_id,
                         reason=reason,
-                        idle_duration_seconds=phase_status.get("stuck_duration_seconds", 0),
+                        idle_duration_seconds=phase_status.get(
+                            "stuck_duration_seconds", 0
+                        ),
                     )
                     # Add phase status to result for API visibility
                     result["phase_status"] = phase_status
@@ -806,7 +829,9 @@ class IdleSandboxMonitor:
 
                 # Add phase status for spec sandboxes
                 if sandbox_id.startswith("spec-"):
-                    status["phase_status"] = self.get_phase_completion_status(sandbox_id)
+                    status["phase_status"] = self.get_phase_completion_status(
+                        sandbox_id
+                    )
 
                 results.append(status)
 
@@ -816,11 +841,13 @@ class IdleSandboxMonitor:
                     sandbox_id=sandbox_id,
                     error=str(e),
                 )
-                results.append({
-                    "sandbox_id": sandbox_id,
-                    "activity": None,
-                    "phase_status": None,
-                    "error": str(e),
-                })
+                results.append(
+                    {
+                        "sandbox_id": sandbox_id,
+                        "activity": None,
+                        "phase_status": None,
+                        "error": str(e),
+                    }
+                )
 
         return results

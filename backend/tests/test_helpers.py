@@ -88,4 +88,3 @@ def create_test_agent(
         session.refresh(agent)
         session.expunge(agent)
         return agent
-

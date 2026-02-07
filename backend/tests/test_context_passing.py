@@ -103,7 +103,11 @@ def test_summarize_context():
                 "decisions": ["Use feature flags"],
                 "risks": ["Scope creep"],
                 "tasks": [
-                    {"task_id": "t1", "task_type": "analysis", "summary": "Captured requirements"}
+                    {
+                        "task_id": "t1",
+                        "task_type": "analysis",
+                        "summary": "Captured requirements",
+                    }
                 ],
             }
         }
@@ -171,9 +175,10 @@ def test_update_ticket_context(db_service: DatabaseService):
         assert refreshed.context_summary
         phase_records = (
             session.query(PhaseContext)
-            .filter(PhaseContext.ticket_id == ticket.id, PhaseContext.phase_id == Phase.REQUIREMENTS.value)
+            .filter(
+                PhaseContext.ticket_id == ticket.id,
+                PhaseContext.phase_id == Phase.REQUIREMENTS.value,
+            )
             .all()
         )
         assert phase_records, "Phase context rows should be persisted"
-
-

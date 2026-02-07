@@ -168,9 +168,7 @@ class OrchestratorCoordination:
 
             # Collect all created task IDs
             if "tasks" in pattern_result.get("pattern", {}):
-                task_ids.extend(
-                    [t.id for t in pattern_result["pattern"]["tasks"]]
-                )
+                task_ids.extend([t.id for t in pattern_result["pattern"]["tasks"]])
             elif "task_id" in pattern_result.get("pattern", {}):
                 task_ids.append(pattern_result["pattern"]["task_id"])
 
@@ -178,4 +176,3 @@ class OrchestratorCoordination:
                 task_ids.append(pattern_result["join"].id)
 
         return task_ids
-

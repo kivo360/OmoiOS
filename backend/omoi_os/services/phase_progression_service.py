@@ -15,7 +15,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Optional
 
 from omoi_os.logging import get_logger
-from omoi_os.models.phases import Phase
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
@@ -211,7 +210,10 @@ class PhaseProgressionService:
                     return False
 
                 # Skip if already building, done, or blocked
-                if ticket.status in (TicketStatus.BUILDING.value, TicketStatus.DONE.value):
+                if ticket.status in (
+                    TicketStatus.BUILDING.value,
+                    TicketStatus.DONE.value,
+                ):
                     logger.debug(
                         "Ticket already in building or done status",
                         ticket_id=ticket_id,
@@ -594,7 +596,9 @@ class PhaseProgressionService:
         spec_tasks = self._get_spec_tasks_for_phase(ticket_id, phase_id)
 
         if spec_tasks:
-            return self._spawn_tasks_from_spec(ticket_id, phase_id, spec_tasks, ticket_priority)
+            return self._spawn_tasks_from_spec(
+                ticket_id, phase_id, spec_tasks, ticket_priority
+            )
         else:
             return self._spawn_default_phase_tasks(ticket_id, phase_id, ticket_priority)
 

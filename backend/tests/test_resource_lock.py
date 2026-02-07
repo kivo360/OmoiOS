@@ -257,4 +257,3 @@ class TestLockQueries:
         # Should only see one active lock now
         locks = lock_service.get_active_locks(task_id=task.id)
         assert len(locks) == 1
-

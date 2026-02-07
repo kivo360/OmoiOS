@@ -474,8 +474,12 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     # Valid if: has directory, has at least one file, all files have proper frontmatter
     logger.info("SPEC OUTPUT VALIDATION: Determining final validation result...")
     logger.info(f"SPEC OUTPUT VALIDATION: files_found = {result['files_found']}")
-    logger.info(f"SPEC OUTPUT VALIDATION: files_with_frontmatter = {result['files_with_frontmatter']}")
-    logger.info(f"SPEC OUTPUT VALIDATION: files_missing_frontmatter = {result['files_missing_frontmatter']}")
+    logger.info(
+        f"SPEC OUTPUT VALIDATION: files_with_frontmatter = {result['files_with_frontmatter']}"
+    )
+    logger.info(
+        f"SPEC OUTPUT VALIDATION: files_missing_frontmatter = {result['files_missing_frontmatter']}"
+    )
 
     if not result["files_found"]:
         result["errors"].append(
@@ -484,7 +488,9 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
         logger.info("SPEC OUTPUT VALIDATION: ❌ No spec files found")
     elif result["files_missing_frontmatter"]:
         # Some files are invalid
-        logger.info(f"SPEC OUTPUT VALIDATION: ❌ Some files missing frontmatter: {result['files_missing_frontmatter']}")
+        logger.info(
+            f"SPEC OUTPUT VALIDATION: ❌ Some files missing frontmatter: {result['files_missing_frontmatter']}"
+        )
         pass
     else:
         result["is_valid"] = True
@@ -497,9 +503,15 @@ def check_spec_output(cwd: str) -> dict[str, Any]:
     logger.info(f"SPEC OUTPUT VALIDATION: is_valid = {result['is_valid']}")
     logger.info(f"SPEC OUTPUT VALIDATION: errors = {result['errors']}")
     logger.info(f"SPEC OUTPUT VALIDATION: has_omoi_dir = {result['has_omoi_dir']}")
-    logger.info(f"SPEC OUTPUT VALIDATION: files_found count = {len(result['files_found'])}")
-    logger.info(f"SPEC OUTPUT VALIDATION: files_with_frontmatter count = {len(result['files_with_frontmatter'])}")
-    logger.info(f"SPEC OUTPUT VALIDATION: files_missing_frontmatter count = {len(result['files_missing_frontmatter'])}")
+    logger.info(
+        f"SPEC OUTPUT VALIDATION: files_found count = {len(result['files_found'])}"
+    )
+    logger.info(
+        f"SPEC OUTPUT VALIDATION: files_with_frontmatter count = {len(result['files_with_frontmatter'])}"
+    )
+    logger.info(
+        f"SPEC OUTPUT VALIDATION: files_missing_frontmatter count = {len(result['files_missing_frontmatter'])}"
+    )
     logger.info("=" * 80)
 
     return result
@@ -737,7 +749,9 @@ class _MockDatabaseSession:
 
     async def refresh(self, obj):
         """Log refresh operation."""
-        logger.debug(f"MockDatabaseSession: refresh({type(obj).__name__}) called (no-op)")
+        logger.debug(
+            f"MockDatabaseSession: refresh({type(obj).__name__}) called (no-op)"
+        )
 
     async def close(self):
         """Log close operation."""
@@ -749,7 +763,7 @@ class _MockDatabaseSession:
 
     async def execute(self, stmt):
         """Log execute operation and return empty result."""
-        logger.debug(f"MockDatabaseSession: execute() called (no-op)")
+        logger.debug("MockDatabaseSession: execute() called (no-op)")
         return _MockResult()
 
     async def __aenter__(self):
@@ -801,7 +815,9 @@ class WorkerConfig:
         # - Markdown context for system prompt injection
         self.task_data: dict = {}
         self.task_description = ""  # Full task description from spec files
-        self.spec_context_markdown = ""  # Rich markdown context with requirements/design
+        self.spec_context_markdown = (
+            ""  # Rich markdown context with requirements/design
+        )
         self.has_spec_context = False  # True if this is a spec-driven task
         self.acceptance_criteria = []  # List of acceptance criteria to track
 
@@ -818,23 +834,27 @@ class WorkerConfig:
                 spec_info = self.task_data.get("spec", {})
 
                 # Extract task description (prefer new structure, fallback to old)
-                self.task_description = (
-                    task_info.get("description")
-                    or self.task_data.get("task_description", "")
-                )
+                self.task_description = task_info.get(
+                    "description"
+                ) or self.task_data.get("task_description", "")
 
                 # Populate fields from task_data
                 if not self.task_id:
-                    self.task_id = task_info.get("id") or self.task_data.get("task_id", "")
-                if not self.ticket_id:
-                    self.ticket_id = ticket_info.get("id") or self.task_data.get("ticket_id", "")
-                if not self.ticket_title:
-                    self.ticket_title = ticket_info.get("title") or self.task_data.get("ticket_title", "")
-                if not self.ticket_description:
-                    self.ticket_description = (
-                        ticket_info.get("description")
-                        or self.task_data.get("ticket_description", "")
+                    self.task_id = task_info.get("id") or self.task_data.get(
+                        "task_id", ""
                     )
+                if not self.ticket_id:
+                    self.ticket_id = ticket_info.get("id") or self.task_data.get(
+                        "ticket_id", ""
+                    )
+                if not self.ticket_title:
+                    self.ticket_title = ticket_info.get("title") or self.task_data.get(
+                        "ticket_title", ""
+                    )
+                if not self.ticket_description:
+                    self.ticket_description = ticket_info.get(
+                        "description"
+                    ) or self.task_data.get("ticket_description", "")
 
                 # Extract spec context if available
                 if spec_info:
@@ -846,12 +866,14 @@ class WorkerConfig:
                     requirements = self.task_data.get("requirements", [])
                     for req in requirements:
                         for criterion in req.get("acceptance_criteria", []):
-                            self.acceptance_criteria.append({
-                                "id": criterion.get("id"),
-                                "text": criterion.get("text"),
-                                "completed": criterion.get("completed", False),
-                                "requirement_id": req.get("id"),
-                            })
+                            self.acceptance_criteria.append(
+                                {
+                                    "id": criterion.get("id"),
+                                    "text": criterion.get("text"),
+                                    "completed": criterion.get("completed", False),
+                                    "requirement_id": req.get("id"),
+                                }
+                            )
 
                 # Get pre-rendered markdown context
                 self.spec_context_markdown = self.task_data.get("_markdown_context", "")
@@ -979,13 +1001,21 @@ class WorkerConfig:
         logger.info("=" * 80)
         logger.info("SPEC-DRIVEN DEV: Configuration")
         logger.info("=" * 80)
-        logger.info(f"SPEC-DRIVEN DEV: REQUIRE_SPEC_SKILL env var = '{require_spec_skill_env}'")
+        logger.info(
+            f"SPEC-DRIVEN DEV: REQUIRE_SPEC_SKILL env var = '{require_spec_skill_env}'"
+        )
         logger.info(f"SPEC-DRIVEN DEV: execution_mode = '{self.execution_mode}'")
-        logger.info(f"SPEC-DRIVEN DEV: require_spec_skill (computed) = {self.require_spec_skill}")
+        logger.info(
+            f"SPEC-DRIVEN DEV: require_spec_skill (computed) = {self.require_spec_skill}"
+        )
         if self.require_spec_skill:
             logger.info("SPEC-DRIVEN DEV: ✅ Spec-driven development is ENABLED")
-            logger.info("SPEC-DRIVEN DEV: Will inject spec-driven-dev skill instructions into system prompt")
-            logger.info("SPEC-DRIVEN DEV: Will run spec output validation before task completion")
+            logger.info(
+                "SPEC-DRIVEN DEV: Will inject spec-driven-dev skill instructions into system prompt"
+            )
+            logger.info(
+                "SPEC-DRIVEN DEV: Will run spec output validation before task completion"
+            )
         else:
             logger.info("SPEC-DRIVEN DEV: Spec-driven development is DISABLED")
         logger.info("=" * 80)
@@ -1127,15 +1157,27 @@ fi
                 # COMPREHENSIVE LOGGING: Spec-Driven Dev Prompt Injection
                 # =================================================================
                 logger.info("=" * 80)
-                logger.info("SPEC-DRIVEN DEV PROMPT: Injecting spec-driven-dev instructions")
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT: Injecting spec-driven-dev instructions"
+                )
                 logger.info("=" * 80)
-                logger.info("SPEC-DRIVEN DEV PROMPT: require_spec_skill=True, appending full spec-driven-dev skill instructions")
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT: require_spec_skill=True, appending full spec-driven-dev skill instructions"
+                )
                 logger.info("SPEC-DRIVEN DEV PROMPT: This prompt enforces:")
-                logger.info("SPEC-DRIVEN DEV PROMPT:   1. Loading the /spec-driven-dev skill")
-                logger.info("SPEC-DRIVEN DEV PROMPT:   2. Discovery phase (5-15 questions)")
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT:   1. Loading the /spec-driven-dev skill"
+                )
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT:   2. Discovery phase (5-15 questions)"
+                )
                 logger.info("SPEC-DRIVEN DEV PROMPT:   3. Creating specs in .omoi_os/")
-                logger.info("SPEC-DRIVEN DEV PROMPT:   4. Validating with spec_cli.py validate")
-                logger.info("SPEC-DRIVEN DEV PROMPT:   5. Syncing to API with spec_cli.py sync push")
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT:   4. Validating with spec_cli.py validate"
+                )
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT:   5. Syncing to API with spec_cli.py sync push"
+                )
                 logger.info("SPEC-DRIVEN DEV PROMPT:   6. Git commit and push")
                 logger.info("=" * 80)
 
@@ -1296,17 +1338,26 @@ Your task is ONLY complete when:
                 # Log the full prompt content and append it
                 logger.info("SPEC-DRIVEN DEV PROMPT: Full injected prompt content:")
                 logger.info("-" * 60)
-                for line in spec_driven_dev_prompt.split('\n')[:50]:  # Log first 50 lines
+                for line in spec_driven_dev_prompt.split("\n")[
+                    :50
+                ]:  # Log first 50 lines
                     logger.info(f"SPEC-DRIVEN DEV PROMPT: {line}")
-                logger.info("SPEC-DRIVEN DEV PROMPT: ... (truncated, showing first 50 lines)")
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT: ... (truncated, showing first 50 lines)"
+                )
                 logger.info("-" * 60)
-                logger.info(f"SPEC-DRIVEN DEV PROMPT: Total prompt length: {len(spec_driven_dev_prompt)} chars")
+                logger.info(
+                    f"SPEC-DRIVEN DEV PROMPT: Total prompt length: {len(spec_driven_dev_prompt)} chars"
+                )
 
                 append_parts.append(spec_driven_dev_prompt)
-                logger.info("SPEC-DRIVEN DEV PROMPT: ✅ Spec-driven-dev instructions appended to system prompt")
+                logger.info(
+                    "SPEC-DRIVEN DEV PROMPT: ✅ Spec-driven-dev instructions appended to system prompt"
+                )
             else:
                 # Normal exploration mode - no forced skill, just general guidance
-                append_parts.append("""
+                append_parts.append(
+                    """
 ## Execution Mode: EXPLORATION
 
 You are in **exploration mode**. Your purpose is to explore the codebase, research solutions,
@@ -1324,7 +1375,8 @@ If you create any files, ensure you:
 2. Commit and push your work: `git add -A && git commit -m "..." && git push`
 3. Create a PR if appropriate: `gh pr create --title "..." --body "..."`
 
-**DO NOT write implementation code in this mode.** Focus on exploration, research, and documentation.""")
+**DO NOT write implementation code in this mode.** Focus on exploration, research, and documentation."""
+                )
         elif self.execution_mode == "validation":
             append_parts.append("""
 ## Execution Mode: VALIDATION
@@ -1512,8 +1564,12 @@ You may need to examine the codebase to understand the task requirements.""")
             logger.info("=" * 80)
             logger.info(f"SPEC STATE MACHINE: spec_id = {self.spec_id}")
             logger.info(f"SPEC STATE MACHINE: spec_phase = {self.spec_phase}")
-            logger.info(f"SPEC STATE MACHINE: phase_data keys = {list(self.phase_data.keys())}")
-            logger.info(f"SPEC STATE MACHINE: resume_session_id = {self.resume_session_id or '(none)'}")
+            logger.info(
+                f"SPEC STATE MACHINE: phase_data keys = {list(self.phase_data.keys())}"
+            )
+            logger.info(
+                f"SPEC STATE MACHINE: resume_session_id = {self.resume_session_id or '(none)'}"
+            )
             logger.info("=" * 80)
 
         # =================================================================
@@ -1625,32 +1681,48 @@ Continue from where we left off, acknowledging the previous context."""
         logger.info(f"WORKER CONFIG: Model = {self.model or '(default)'}")
         # Log OAuth token prefix for verification (first 15 chars to confirm format)
         if self.oauth_token:
-            token_prefix = self.oauth_token[:15] + "..." if len(self.oauth_token) > 15 else self.oauth_token
+            token_prefix = (
+                self.oauth_token[:15] + "..."
+                if len(self.oauth_token) > 15
+                else self.oauth_token
+            )
             logger.info(f"WORKER CONFIG: OAuth Token = SET (prefix: {token_prefix})")
         else:
             logger.info("WORKER CONFIG: OAuth Token = NOT SET")
             logger.info("WORKER CONFIG: Expected env var: CLAUDE_CODE_OAUTH_TOKEN")
         # Log API key status with prefix check
         if self.api_key:
-            key_prefix = self.api_key[:10] + "..." if len(self.api_key) > 10 else "(short key)"
+            key_prefix = (
+                self.api_key[:10] + "..." if len(self.api_key) > 10 else "(short key)"
+            )
             logger.info(f"WORKER CONFIG: API Key = SET (prefix: {key_prefix})")
         else:
             logger.info("WORKER CONFIG: API Key = NOT SET")
-        logger.info(f"WORKER CONFIG: API Base URL = {self.api_base_url or '(default Anthropic API)'}")
+        logger.info(
+            f"WORKER CONFIG: API Base URL = {self.api_base_url or '(default Anthropic API)'}"
+        )
         # Log all MODEL-related env vars to debug where glm-4.7 is coming from
         logger.info("-" * 40)
         logger.info("WORKER CONFIG: Model-related env vars (debug):")
         logger.info(f"  - MODEL env: {os.environ.get('MODEL', '(not set)')}")
-        logger.info(f"  - ANTHROPIC_MODEL env: {os.environ.get('ANTHROPIC_MODEL', '(not set)')}")
+        logger.info(
+            f"  - ANTHROPIC_MODEL env: {os.environ.get('ANTHROPIC_MODEL', '(not set)')}"
+        )
         logger.info(f"  - LLM_MODEL env: {os.environ.get('LLM_MODEL', '(not set)')}")
-        logger.info(f"  - ANTHROPIC_BASE_URL env: {os.environ.get('ANTHROPIC_BASE_URL', '(not set)')}")
-        logger.info(f"  - CLAUDE_CODE_OAUTH_TOKEN env: {'SET' if os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') else '(not set)'}")
+        logger.info(
+            f"  - ANTHROPIC_BASE_URL env: {os.environ.get('ANTHROPIC_BASE_URL', '(not set)')}"
+        )
+        logger.info(
+            f"  - CLAUDE_CODE_OAUTH_TOKEN env: {'SET' if os.environ.get('CLAUDE_CODE_OAUTH_TOKEN') else '(not set)'}"
+        )
         logger.info("-" * 80)
         logger.info("WORKER CONFIG: Task Data")
         logger.info(f"  - task_description: {len(self.task_description)} chars")
         logger.info(f"  - initial_prompt: {len(self.initial_prompt)} chars")
         logger.info(f"  - ticket_title: {self.ticket_title or '(none)'}")
-        logger.info(f"  - ticket_description: {len(self.ticket_description or '')} chars")
+        logger.info(
+            f"  - ticket_description: {len(self.ticket_description or '')} chars"
+        )
         logger.info(f"  - ticket_id: {self.ticket_id or '(none)'}")
         logger.info("-" * 80)
         logger.info("WORKER CONFIG: Git/GitHub")
@@ -1683,7 +1755,9 @@ Continue from where we left off, acknowledging the previous context."""
         errors = []
         # Accept either OAuth token or API key for authentication
         if not self.oauth_token and not self.api_key:
-            errors.append("Authentication required: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY")
+            errors.append(
+                "Authentication required: CLAUDE_CODE_OAUTH_TOKEN or ANTHROPIC_API_KEY"
+            )
         if not self.callback_url:
             errors.append("CALLBACK_URL required")
         return errors
@@ -1704,9 +1778,9 @@ Continue from where we left off, acknowledging the previous context."""
             "max_budget_usd": self.max_budget_usd,
             "permission_mode": self.permission_mode,
             "tools_mode": self.tools_mode,
-            "allowed_tools": self.allowed_tools
-            if self.allowed_tools
-            else "SDK_DEFAULTS",
+            "allowed_tools": (
+                self.allowed_tools if self.allowed_tools else "SDK_DEFAULTS"
+            ),
             "disallowed_tools": self.disallowed_tools or [],
             "enable_skills": self.enable_skills,
             "enable_subagents": self.enable_subagents,
@@ -1815,13 +1889,19 @@ Systematically investigate issues:
         if self.oauth_token:
             # OAuth token from `claude setup-token` - recommended auth method
             env["CLAUDE_CODE_OAUTH_TOKEN"] = self.oauth_token
-            logger.info("SDK OPTIONS: Using OAuth token for authentication (CLAUDE_CODE_OAUTH_TOKEN)")
+            logger.info(
+                "SDK OPTIONS: Using OAuth token for authentication (CLAUDE_CODE_OAUTH_TOKEN)"
+            )
         elif self.api_key:
             # Fallback to API key for backwards compatibility
             env["ANTHROPIC_API_KEY"] = self.api_key
-            logger.info("SDK OPTIONS: Using API key for authentication (ANTHROPIC_API_KEY)")
+            logger.info(
+                "SDK OPTIONS: Using API key for authentication (ANTHROPIC_API_KEY)"
+            )
         else:
-            logger.warning("SDK OPTIONS: No authentication configured! Neither OAuth token nor API key found.")
+            logger.warning(
+                "SDK OPTIONS: No authentication configured! Neither OAuth token nor API key found."
+            )
 
         if self.api_base_url:
             env["ANTHROPIC_BASE_URL"] = self.api_base_url
@@ -1906,10 +1986,16 @@ Systematically investigate issues:
         logger.info(f"SDK OPTIONS: Max Budget USD = {self.max_budget_usd}")
         logger.info(f"SDK OPTIONS: CWD = {cwd_path}")
         logger.info(f"SDK OPTIONS: Setting Sources = {self.setting_sources}")
-        logger.info(f"SDK OPTIONS: Resume Session ID = {self.resume_session_id or '(none)'}")
+        logger.info(
+            f"SDK OPTIONS: Resume Session ID = {self.resume_session_id or '(none)'}"
+        )
         logger.info(f"SDK OPTIONS: Fork Session = {self.fork_session}")
-        logger.info(f"SDK OPTIONS: Allowed Tools = {self.allowed_tools or '(SDK defaults)'}")
-        logger.info(f"SDK OPTIONS: Disallowed Tools = {self.disallowed_tools or '(none)'}")
+        logger.info(
+            f"SDK OPTIONS: Allowed Tools = {self.allowed_tools or '(SDK defaults)'}"
+        )
+        logger.info(
+            f"SDK OPTIONS: Disallowed Tools = {self.disallowed_tools or '(none)'}"
+        )
         logger.info(f"SDK OPTIONS: Enable Subagents = {self.enable_subagents}")
         logger.info(f"SDK OPTIONS: Hooks = {list(hooks.keys()) if hooks else '(none)'}")
 
@@ -1918,26 +2004,34 @@ Systematically investigate issues:
         logger.info("SDK OPTIONS: System Prompt Configuration")
         logger.info("-" * 80)
         if isinstance(self.system_prompt, dict):
-            logger.info(f"SDK OPTIONS: System Prompt Type = preset pattern")
-            logger.info(f"SDK OPTIONS: System Prompt Preset = {self.system_prompt.get('preset', '(unknown)')}")
-            append_content = self.system_prompt.get('append', '')
-            logger.info(f"SDK OPTIONS: System Prompt Append Length = {len(append_content)} chars")
+            logger.info("SDK OPTIONS: System Prompt Type = preset pattern")
+            logger.info(
+                f"SDK OPTIONS: System Prompt Preset = {self.system_prompt.get('preset', '(unknown)')}"
+            )
+            append_content = self.system_prompt.get("append", "")
+            logger.info(
+                f"SDK OPTIONS: System Prompt Append Length = {len(append_content)} chars"
+            )
             # Log the full append content for debugging
             logger.info("SDK OPTIONS: System Prompt Append Content:")
             logger.info("=" * 40 + " BEGIN SYSTEM PROMPT APPEND " + "=" * 40)
-            for line in append_content.split('\n'):
+            for line in append_content.split("\n"):
                 logger.info(f"  {line}")
             logger.info("=" * 40 + " END SYSTEM PROMPT APPEND " + "=" * 40)
         elif isinstance(self.system_prompt, str):
-            logger.info(f"SDK OPTIONS: System Prompt Type = custom string")
-            logger.info(f"SDK OPTIONS: System Prompt Length = {len(self.system_prompt)} chars")
+            logger.info("SDK OPTIONS: System Prompt Type = custom string")
+            logger.info(
+                f"SDK OPTIONS: System Prompt Length = {len(self.system_prompt)} chars"
+            )
             logger.info("SDK OPTIONS: System Prompt Content:")
             logger.info("=" * 40 + " BEGIN SYSTEM PROMPT " + "=" * 40)
-            for line in self.system_prompt.split('\n'):
+            for line in self.system_prompt.split("\n"):
                 logger.info(f"  {line}")
             logger.info("=" * 40 + " END SYSTEM PROMPT " + "=" * 40)
         else:
-            logger.info(f"SDK OPTIONS: System Prompt = {self.system_prompt} (using SDK default)")
+            logger.info(
+                f"SDK OPTIONS: System Prompt = {self.system_prompt} (using SDK default)"
+            )
 
         logger.info("=" * 80)
         logger.info("SDK OPTIONS: Configuration complete, creating ClaudeAgentOptions")
@@ -2395,7 +2489,7 @@ def install_project_dependencies(cwd: str) -> dict:
         "node_manager": None,
         "node_dir": None,
         "errors": [],
-        "summary": ""  # Human-readable summary for system prompt
+        "summary": "",  # Human-readable summary for system prompt
     }
 
     logger.info("Detecting and installing project dependencies", extra={"cwd": cwd})
@@ -2416,7 +2510,7 @@ def install_project_dependencies(cwd: str) -> dict:
                 cwd=install_cwd,
                 capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300,  # 5 minute timeout
             )
             if proc.returncode == 0:
                 if lang == "python":
@@ -2427,7 +2521,9 @@ def install_project_dependencies(cwd: str) -> dict:
                     result["node_installed"] = True
                     result["node_manager"] = manager
                     result["node_dir"] = install_cwd
-                logger.info(f"{manager} install completed successfully in {install_cwd}")
+                logger.info(
+                    f"{manager} install completed successfully in {install_cwd}"
+                )
                 return True
             else:
                 error = f"{' '.join(cmd)} failed in {install_cwd}: {proc.stderr}"
@@ -2447,17 +2543,18 @@ def install_project_dependencies(cwd: str) -> dict:
 
     # Python dependency installation
     # Priority: uv.lock > poetry.lock > pyproject.toml > requirements.txt > setup.py
-    python_installed = False
 
     if found["uv_lock"]:
         install_dir = os.path.dirname(found["uv_lock"])
         logger.info(f"Detected UV project (uv.lock found at {found['uv_lock']})")
-        python_installed = run_install(["uv", "sync"], install_dir, "uv", "python")
+        run_install(["uv", "sync"], install_dir, "uv", "python")
 
     elif found["poetry_lock"]:
         install_dir = os.path.dirname(found["poetry_lock"])
-        logger.info(f"Detected Poetry project (poetry.lock found at {found['poetry_lock']})")
-        python_installed = run_install(["poetry", "install"], install_dir, "poetry", "python")
+        logger.info(
+            f"Detected Poetry project (poetry.lock found at {found['poetry_lock']})"
+        )
+        run_install(["poetry", "install"], install_dir, "poetry", "python")
 
     elif found["pyproject"]:
         install_dir = os.path.dirname(found["pyproject"])
@@ -2468,13 +2565,15 @@ def install_project_dependencies(cwd: str) -> dict:
 
             if "[tool.uv]" in content:
                 logger.info(f"Detected UV project ([tool.uv] in {found['pyproject']})")
-                python_installed = run_install(["uv", "sync"], install_dir, "uv", "python")
+                run_install(["uv", "sync"], install_dir, "uv", "python")
             elif "[tool.poetry]" in content:
-                logger.info(f"Detected Poetry project ([tool.poetry] in {found['pyproject']})")
-                python_installed = run_install(["poetry", "install"], install_dir, "poetry", "python")
+                logger.info(
+                    f"Detected Poetry project ([tool.poetry] in {found['pyproject']})"
+                )
+                run_install(["poetry", "install"], install_dir, "poetry", "python")
             else:
                 logger.info(f"Detected generic pyproject.toml at {found['pyproject']}")
-                python_installed = run_install(["pip", "install", "-e", "."], install_dir, "pip", "python")
+                run_install(["pip", "install", "-e", "."], install_dir, "pip", "python")
         except Exception as e:
             error = f"Error reading {found['pyproject']}: {e}"
             result["errors"].append(error)
@@ -2483,66 +2582,83 @@ def install_project_dependencies(cwd: str) -> dict:
     elif found["requirements"]:
         install_dir = os.path.dirname(found["requirements"])
         logger.info(f"Detected requirements.txt at {found['requirements']}")
-        python_installed = run_install(["pip", "install", "-r", "requirements.txt"], install_dir, "pip", "python")
+        run_install(
+            ["pip", "install", "-r", "requirements.txt"], install_dir, "pip", "python"
+        )
 
     elif found["setup_py"]:
         install_dir = os.path.dirname(found["setup_py"])
         logger.info(f"Detected setup.py at {found['setup_py']}")
-        python_installed = run_install(["pip", "install", "-e", "."], install_dir, "pip", "python")
+        run_install(["pip", "install", "-e", "."], install_dir, "pip", "python")
 
     # Node.js dependency installation
     # Priority: pnpm-lock.yaml > yarn.lock > package-lock.json > package.json
-    node_installed = False
 
     if found["package_json"]:
         install_dir = os.path.dirname(found["package_json"])
 
         if found["pnpm_lock"]:
-            logger.info(f"Detected pnpm project (pnpm-lock.yaml found)")
-            node_installed = run_install(["pnpm", "install"], install_dir, "pnpm", "node")
+            logger.info("Detected pnpm project (pnpm-lock.yaml found)")
+            run_install(["pnpm", "install"], install_dir, "pnpm", "node")
         elif found["yarn_lock"]:
-            logger.info(f"Detected Yarn project (yarn.lock found)")
-            node_installed = run_install(["yarn", "install"], install_dir, "yarn", "node")
+            logger.info("Detected Yarn project (yarn.lock found)")
+            run_install(["yarn", "install"], install_dir, "yarn", "node")
         elif found["npm_lock"]:
-            logger.info(f"Detected npm project (package-lock.json found)")
-            node_installed = run_install(["npm", "install"], install_dir, "npm", "node")
+            logger.info("Detected npm project (package-lock.json found)")
+            run_install(["npm", "install"], install_dir, "npm", "node")
 
     # Build human-readable summary for system prompt
     summary_parts = []
 
     if result["python_installed"]:
-        rel_dir = os.path.relpath(result["python_dir"], cwd) if result["python_dir"] != cwd else "root"
+        rel_dir = (
+            os.path.relpath(result["python_dir"], cwd)
+            if result["python_dir"] != cwd
+            else "root"
+        )
         summary_parts.append(
             f"✅ Python dependencies installed via `{result['python_manager']}` in `{rel_dir}/`"
         )
         if result["python_manager"] == "uv":
-            summary_parts.append(f"   → Use `uv run <command>` to run Python tools (e.g., `uv run python script.py`)")
+            summary_parts.append(
+                "   → Use `uv run <command>` to run Python tools (e.g., `uv run python script.py`)"
+            )
         elif result["python_manager"] == "poetry":
-            summary_parts.append(f"   → Use `poetry run <command>` to run Python tools")
+            summary_parts.append("   → Use `poetry run <command>` to run Python tools")
     elif found["pyproject"] or found["requirements"] or found["setup_py"]:
-        summary_parts.append("⚠️ Python dependency files found but installation failed - check errors")
+        summary_parts.append(
+            "⚠️ Python dependency files found but installation failed - check errors"
+        )
 
     if result["node_installed"]:
-        rel_dir = os.path.relpath(result["node_dir"], cwd) if result["node_dir"] != cwd else "root"
+        rel_dir = (
+            os.path.relpath(result["node_dir"], cwd)
+            if result["node_dir"] != cwd
+            else "root"
+        )
         summary_parts.append(
             f"✅ Node.js dependencies installed via `{result['node_manager']}` in `{rel_dir}/`"
         )
         if result["node_manager"] == "pnpm":
-            summary_parts.append(f"   → Use `pnpm run <script>` or `pnpm exec <binary>`")
+            summary_parts.append("   → Use `pnpm run <script>` or `pnpm exec <binary>`")
         elif result["node_manager"] == "yarn":
-            summary_parts.append(f"   → Use `yarn <script>` or `yarn <binary>`")
+            summary_parts.append("   → Use `yarn <script>` or `yarn <binary>`")
         else:
-            summary_parts.append(f"   → Use `npm run <script>` or `npx <binary>`")
+            summary_parts.append("   → Use `npm run <script>` or `npx <binary>`")
     elif found["package_json"]:
-        summary_parts.append("⚠️ package.json found but installation failed - check errors")
+        summary_parts.append(
+            "⚠️ package.json found but installation failed - check errors"
+        )
 
     if result["errors"]:
-        summary_parts.append(f"⚠️ Errors during dependency installation:")
+        summary_parts.append("⚠️ Errors during dependency installation:")
         for err in result["errors"][:3]:  # Limit to first 3 errors
             summary_parts.append(f"   - {err[:200]}")  # Truncate long errors
 
     if not summary_parts:
-        summary_parts.append("ℹ️ No dependency files detected in project root or common subdirectories")
+        summary_parts.append(
+            "ℹ️ No dependency files detected in project root or common subdirectories"
+        )
 
     result["summary"] = "\n".join(summary_parts)
 
@@ -2555,7 +2671,7 @@ def install_project_dependencies(cwd: str) -> dict:
                 "python_dir": result["python_dir"],
                 "node_manager": result["node_manager"],
                 "node_dir": result["node_dir"],
-            }
+            },
         )
     elif not result["errors"]:
         logger.info("No dependency files detected (searched root and common subdirs)")
@@ -2762,19 +2878,27 @@ class SandboxWorker:
             logger.info("=" * 80)
             logger.info("SPEC VALIDATION HOOK: PostToolUse check")
             logger.info("=" * 80)
-            logger.info(f"SPEC VALIDATION HOOK: require_spec_skill = {self.config.require_spec_skill}")
+            logger.info(
+                f"SPEC VALIDATION HOOK: require_spec_skill = {self.config.require_spec_skill}"
+            )
             logger.info(f"SPEC VALIDATION HOOK: tool_name = '{tool_name}'")
 
             if not self.config.require_spec_skill:
-                logger.info("SPEC VALIDATION HOOK: Skipped - require_spec_skill is False")
+                logger.info(
+                    "SPEC VALIDATION HOOK: Skipped - require_spec_skill is False"
+                )
             elif tool_name != "Bash":
-                logger.info(f"SPEC VALIDATION HOOK: Skipped - tool is '{tool_name}', not 'Bash'")
+                logger.info(
+                    f"SPEC VALIDATION HOOK: Skipped - tool is '{tool_name}', not 'Bash'"
+                )
             logger.info("=" * 80)
 
             if self.config.require_spec_skill and tool_name == "Bash":
                 command = tool_input.get("command", "")
                 logger.info(f"SPEC VALIDATION HOOK: Bash command = '{command}'")
-                logger.info(f"SPEC VALIDATION HOOK: Checking if command contains 'spec_cli.py' and 'validate'")
+                logger.info(
+                    "SPEC VALIDATION HOOK: Checking if command contains 'spec_cli.py' and 'validate'"
+                )
 
                 # Detect spec_cli.py validate command
                 if "spec_cli.py" in command and "validate" in command:
@@ -2782,18 +2906,26 @@ class SandboxWorker:
 
                     # Debug logging to diagnose detection issues
                     logger.info("=" * 60)
-                    logger.info("SPEC VALIDATION HOOK: ✅ spec_cli.py validate DETECTED!")
+                    logger.info(
+                        "SPEC VALIDATION HOOK: ✅ spec_cli.py validate DETECTED!"
+                    )
                     logger.info("=" * 60)
                     logger.info(
                         "PostToolUse: spec_cli.py validate detected",
                         extra={
                             "command": command,
                             "response_length": len(response_str),
-                            "response_preview": response_str[:500] if response_str else "(empty)",
+                            "response_preview": (
+                                response_str[:500] if response_str else "(empty)"
+                            ),
                         },
                     )
-                    logger.info(f"SPEC VALIDATION HOOK: Response length = {len(response_str)} chars")
-                    logger.info(f"SPEC VALIDATION HOOK: Response preview (first 500 chars):")
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: Response length = {len(response_str)} chars"
+                    )
+                    logger.info(
+                        "SPEC VALIDATION HOOK: Response preview (first 500 chars):"
+                    )
                     logger.info("-" * 40)
                     logger.info(response_str[:500] if response_str else "(empty)")
                     logger.info("-" * 40)
@@ -2813,51 +2945,59 @@ class SandboxWorker:
                     # SUCCESS indicators - comprehensive list
                     # Checkmarks (multiple unicode representations)
                     has_checkmark = (
-                        "✓" in response_str or           # Direct checkmark
-                        "\u2713" in response_str or      # Unicode CHECK MARK
-                        "\u2714" in response_str or      # Unicode HEAVY CHECK MARK
-                        "[x]" in response_lower or       # Markdown checkbox
-                        "[✓]" in response_str            # Bracketed checkmark
+                        "✓" in response_str  # Direct checkmark
+                        or "\u2713" in response_str  # Unicode CHECK MARK
+                        or "\u2714" in response_str  # Unicode HEAVY CHECK MARK
+                        or "[x]" in response_lower  # Markdown checkbox
+                        or "[✓]" in response_str  # Bracketed checkmark
                     )
 
                     # Specific success messages from spec_cli.py
                     has_no_circular = "no circular dependencies" in response_lower
                     has_task_refs_valid = "all task references valid" in response_lower
-                    has_ticket_refs_valid = "all ticket references valid" in response_lower
+                    has_ticket_refs_valid = (
+                        "all ticket references valid" in response_lower
+                    )
 
                     # Generic success patterns
-                    has_validation_header = "validation" in response_lower and "======" in response_str
+                    has_validation_header = (
+                        "validation" in response_lower and "======" in response_str
+                    )
                     has_success_keyword = (
-                        "success" in response_lower or
-                        "passed" in response_lower or
-                        "valid" in response_lower
+                        "success" in response_lower
+                        or "passed" in response_lower
+                        or "valid" in response_lower
                     )
 
                     # Exit code success (if captured in output)
-                    has_exit_zero = "exit code: 0" in response_lower or "exit code 0" in response_lower
+                    has_exit_zero = (
+                        "exit code: 0" in response_lower
+                        or "exit code 0" in response_lower
+                    )
 
                     # FAILURE indicators (if present, don't inject reminder)
                     has_error = (
-                        "validation error" in response_lower or
-                        "error(" in response_lower or      # "Found X error(s)"
-                        "✗" in response_str or             # X mark
-                        "\u2717" in response_str or        # Unicode BALLOT X
-                        "\u2718" in response_str or        # Unicode HEAVY BALLOT X
-                        "failed" in response_lower or
-                        "invalid" in response_lower or
-                        "circular dependency" in response_lower and "no circular" not in response_lower or
-                        "missing" in response_lower or
-                        "not found" in response_lower
+                        "validation error" in response_lower
+                        or "error(" in response_lower  # "Found X error(s)"
+                        or "✗" in response_str  # X mark
+                        or "\u2717" in response_str  # Unicode BALLOT X
+                        or "\u2718" in response_str  # Unicode HEAVY BALLOT X
+                        or "failed" in response_lower
+                        or "invalid" in response_lower
+                        or "circular dependency" in response_lower
+                        and "no circular" not in response_lower
+                        or "missing" in response_lower
+                        or "not found" in response_lower
                     )
 
                     # Combine success indicators
                     success_signals = (
-                        has_checkmark or
-                        has_no_circular or
-                        has_task_refs_valid or
-                        has_ticket_refs_valid or
-                        has_exit_zero or
-                        (has_validation_header and has_success_keyword)
+                        has_checkmark
+                        or has_no_circular
+                        or has_task_refs_valid
+                        or has_ticket_refs_valid
+                        or has_exit_zero
+                        or (has_validation_header and has_success_keyword)
                     )
 
                     validation_passed = success_signals and not has_error
@@ -2866,16 +3006,34 @@ class SandboxWorker:
                     logger.info("=" * 60)
                     logger.info("SPEC VALIDATION HOOK: Validation Detection Results")
                     logger.info("=" * 60)
-                    logger.info(f"SPEC VALIDATION HOOK: has_checkmark = {has_checkmark}")
-                    logger.info(f"SPEC VALIDATION HOOK: has_no_circular = {has_no_circular}")
-                    logger.info(f"SPEC VALIDATION HOOK: has_task_refs_valid = {has_task_refs_valid}")
-                    logger.info(f"SPEC VALIDATION HOOK: has_ticket_refs_valid = {has_ticket_refs_valid}")
-                    logger.info(f"SPEC VALIDATION HOOK: has_validation_header = {has_validation_header}")
-                    logger.info(f"SPEC VALIDATION HOOK: has_success_keyword = {has_success_keyword}")
-                    logger.info(f"SPEC VALIDATION HOOK: has_exit_zero = {has_exit_zero}")
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_checkmark = {has_checkmark}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_no_circular = {has_no_circular}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_task_refs_valid = {has_task_refs_valid}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_ticket_refs_valid = {has_ticket_refs_valid}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_validation_header = {has_validation_header}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_success_keyword = {has_success_keyword}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: has_exit_zero = {has_exit_zero}"
+                    )
                     logger.info(f"SPEC VALIDATION HOOK: has_error = {has_error}")
-                    logger.info(f"SPEC VALIDATION HOOK: success_signals = {success_signals}")
-                    logger.info(f"SPEC VALIDATION HOOK: *** validation_passed = {validation_passed} ***")
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: success_signals = {success_signals}"
+                    )
+                    logger.info(
+                        f"SPEC VALIDATION HOOK: *** validation_passed = {validation_passed} ***"
+                    )
                     logger.info("=" * 60)
 
                     logger.info(
@@ -2896,8 +3054,12 @@ class SandboxWorker:
 
                     if validation_passed:
                         logger.info("=" * 60)
-                        logger.info("SPEC VALIDATION HOOK: ✅✅✅ VALIDATION PASSED! ✅✅✅")
-                        logger.info("SPEC VALIDATION HOOK: Injecting sync reminder system message")
+                        logger.info(
+                            "SPEC VALIDATION HOOK: ✅✅✅ VALIDATION PASSED! ✅✅✅"
+                        )
+                        logger.info(
+                            "SPEC VALIDATION HOOK: Injecting sync reminder system message"
+                        )
                         logger.info("=" * 60)
                         logger.info(
                             "Spec validation successful - injecting sync reminder",
@@ -2934,7 +3096,9 @@ python spec_cli.py api-trace
                         logger.info("=" * 60)
                         logger.info("SPEC VALIDATION HOOK: ❌ VALIDATION NOT PASSED")
                         logger.info("SPEC VALIDATION HOOK: Not injecting sync reminder")
-                        logger.info(f"SPEC VALIDATION HOOK: success_signals={success_signals}, has_error={has_error}")
+                        logger.info(
+                            f"SPEC VALIDATION HOOK: success_signals={success_signals}, has_error={has_error}"
+                        )
                         logger.info("=" * 60)
 
             return {}
@@ -3102,9 +3266,11 @@ python spec_cli.py api-trace
                                     {
                                         "turn": self.turn_count,
                                         "tool_use_id": block.tool_use_id,
-                                        "result": result_content[:5000]
-                                        if len(result_content) > 5000
-                                        else result_content,
+                                        "result": (
+                                            result_content[:5000]
+                                            if len(result_content) > 5000
+                                            else result_content
+                                        ),
                                         "result_truncated": len(result_content) > 5000,
                                         "result_full_length": len(result_content),
                                         "is_error": getattr(block, "is_error", False),
@@ -3155,9 +3321,11 @@ python spec_cli.py api-trace
                                     {
                                         "turn": self.turn_count,
                                         "tool_use_id": block.tool_use_id,
-                                        "result": result_content[:5000]
-                                        if len(result_content) > 5000
-                                        else result_content,
+                                        "result": (
+                                            result_content[:5000]
+                                            if len(result_content) > 5000
+                                            else result_content
+                                        ),
                                         "result_truncated": len(result_content) > 5000,
                                     },
                                 )
@@ -3265,13 +3433,15 @@ python spec_cli.py api-trace
                             "output_tokens": output_tokens,
                             "cache_read_tokens": cache_read_tokens,
                             "cache_write_tokens": cache_write_tokens,
-                            "final_output": "\n".join(final_output)
-                            if final_output
-                            else None,  # Include final output for task result
+                            "final_output": (
+                                "\n".join(final_output) if final_output else None
+                            ),  # Include final output for task result
                             # Include branch name for validation workflow
-                            "branch_name": self.config.branch_name
-                            if self.config.branch_name
-                            else None,
+                            "branch_name": (
+                                self.config.branch_name
+                                if self.config.branch_name
+                                else None
+                            ),
                             # Include agent type for proper event handling (validator vs implementer)
                             "agent_type": self.config.agent_type,
                         }
@@ -3360,9 +3530,9 @@ python spec_cli.py api-trace
                         "error": error_str,
                         "error_type": error_type,
                         "turn": self.turn_count,
-                        "final_output_length": len("\n".join(final_output))
-                        if final_output
-                        else 0,
+                        "final_output_length": (
+                            len("\n".join(final_output)) if final_output else 0
+                        ),
                     },
                 )
 
@@ -3559,28 +3729,44 @@ python spec_cli.py api-trace
         logger.info("=" * 80)
         logger.info("SPEC OUTPUT VALIDATION CALL: Checking if spec validation needed")
         logger.info("=" * 80)
-        logger.info(f"SPEC OUTPUT VALIDATION CALL: require_spec_skill = {config.require_spec_skill}")
+        logger.info(
+            f"SPEC OUTPUT VALIDATION CALL: require_spec_skill = {config.require_spec_skill}"
+        )
 
         if config.require_spec_skill:
-            logger.info("SPEC OUTPUT VALIDATION CALL: ✅ REQUIRE_SPEC_SKILL=true, running validation...")
+            logger.info(
+                "SPEC OUTPUT VALIDATION CALL: ✅ REQUIRE_SPEC_SKILL=true, running validation..."
+            )
             logger.info(f"SPEC OUTPUT VALIDATION CALL: cwd = '{config.cwd}'")
             logger.info("Running spec output validation (REQUIRE_SPEC_SKILL=true)...")
             spec_status = check_spec_output(config.cwd)
 
             logger.info("=" * 60)
-            logger.info("SPEC OUTPUT VALIDATION CALL: Result received from check_spec_output()")
+            logger.info(
+                "SPEC OUTPUT VALIDATION CALL: Result received from check_spec_output()"
+            )
             logger.info("=" * 60)
-            logger.info(f"SPEC OUTPUT VALIDATION CALL: is_valid = {spec_status['is_valid']}")
-            logger.info(f"SPEC OUTPUT VALIDATION CALL: has_omoi_dir = {spec_status['has_omoi_dir']}")
-            logger.info(f"SPEC OUTPUT VALIDATION CALL: files_found = {spec_status['files_found']}")
-            logger.info(f"SPEC OUTPUT VALIDATION CALL: errors = {spec_status['errors']}")
+            logger.info(
+                f"SPEC OUTPUT VALIDATION CALL: is_valid = {spec_status['is_valid']}"
+            )
+            logger.info(
+                f"SPEC OUTPUT VALIDATION CALL: has_omoi_dir = {spec_status['has_omoi_dir']}"
+            )
+            logger.info(
+                f"SPEC OUTPUT VALIDATION CALL: files_found = {spec_status['files_found']}"
+            )
+            logger.info(
+                f"SPEC OUTPUT VALIDATION CALL: errors = {spec_status['errors']}"
+            )
 
             if not spec_status["is_valid"]:
                 validation_errors.extend(spec_status["errors"])
                 logger.info("=" * 60)
                 logger.info("SPEC OUTPUT VALIDATION CALL: ❌ SPEC VALIDATION FAILED!")
                 logger.info("=" * 60)
-                logger.info(f"SPEC OUTPUT VALIDATION CALL: Adding {len(spec_status['errors'])} errors to validation_errors")
+                logger.info(
+                    f"SPEC OUTPUT VALIDATION CALL: Adding {len(spec_status['errors'])} errors to validation_errors"
+                )
                 logger.info(
                     "Spec validation FAILED",
                     extra={
@@ -3606,7 +3792,9 @@ python spec_cli.py api-trace
                     },
                 )
         else:
-            logger.info("SPEC OUTPUT VALIDATION CALL: ⏭️ Skipped - require_spec_skill is False")
+            logger.info(
+                "SPEC OUTPUT VALIDATION CALL: ⏭️ Skipped - require_spec_skill is False"
+            )
         logger.info("=" * 80)
 
         if not validation_errors:
@@ -3725,13 +3913,15 @@ When you have completed the task, you MUST:
             logger.info("CONTINUOUS MODE: Building First Iteration Prompt")
             logger.info("=" * 80)
             logger.info(f"CONTINUOUS MODE: Iteration Number = {state.iteration_num}")
-            logger.info(f"CONTINUOUS MODE: Completion Signal = '{config.completion_signal}'")
+            logger.info(
+                f"CONTINUOUS MODE: Completion Signal = '{config.completion_signal}'"
+            )
             logger.info(f"CONTINUOUS MODE: Base Task Length = {len(base_task)} chars")
             logger.info(f"CONTINUOUS MODE: Final Prompt Length = {len(prompt)} chars")
             logger.info("-" * 80)
             logger.info("CONTINUOUS MODE: First Iteration Prompt Content:")
             logger.info("=" * 40 + " BEGIN ITERATION PROMPT " + "=" * 40)
-            for line in prompt.split('\n'):
+            for line in prompt.split("\n"):
                 logger.info(f"  {line}")
             logger.info("=" * 40 + " END ITERATION PROMPT " + "=" * 40)
             logger.info("=" * 80)
@@ -3768,9 +3958,13 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info(f"CONTINUOUS MODE: Building Iteration {state.iteration_num} Prompt")
         logger.info("=" * 80)
         logger.info(f"CONTINUOUS MODE: Iteration Number = {state.iteration_num}")
-        logger.info(f"CONTINUOUS MODE: Completion Signal = '{config.completion_signal}'")
+        logger.info(
+            f"CONTINUOUS MODE: Completion Signal = '{config.completion_signal}'"
+        )
         logger.info(f"CONTINUOUS MODE: Notes File = {notes_path}")
-        logger.info(f"CONTINUOUS MODE: Notes Content Length = {len(notes_content)} chars")
+        logger.info(
+            f"CONTINUOUS MODE: Notes Content Length = {len(notes_content)} chars"
+        )
         logger.info("-" * 80)
         logger.info("CONTINUOUS MODE: Iteration State:")
         logger.info(f"  - successful_iterations: {state.successful_iterations}")
@@ -3784,14 +3978,14 @@ This is a continuation of your previous work. Please review the notes below and 
         if notes_content:
             logger.info("CONTINUOUS MODE: Notes File Content:")
             logger.info("=" * 40 + " BEGIN NOTES " + "=" * 40)
-            for line in notes_content.split('\n'):
+            for line in notes_content.split("\n"):
                 logger.info(f"  {line}")
             logger.info("=" * 40 + " END NOTES " + "=" * 40)
         logger.info("-" * 80)
         logger.info(f"CONTINUOUS MODE: Final Prompt Length = {len(prompt)} chars")
         logger.info("CONTINUOUS MODE: Iteration Prompt Content:")
         logger.info("=" * 40 + " BEGIN ITERATION PROMPT " + "=" * 40)
-        for line in prompt.split('\n'):
+        for line in prompt.split("\n"):
             logger.info(f"  {line}")
         logger.info("=" * 40 + " END ITERATION PROMPT " + "=" * 40)
         logger.info("=" * 80)
@@ -3831,7 +4025,13 @@ This is a continuation of your previous work. Please review the notes below and 
                 phase_data[phase_name] = phase_content
                 logger.info(
                     f"Read phase data: {phase_name}",
-                    extra={"keys": list(phase_content.keys()) if isinstance(phase_content, dict) else "non-dict"}
+                    extra={
+                        "keys": (
+                            list(phase_content.keys())
+                            if isinstance(phase_content, dict)
+                            else "non-dict"
+                        )
+                    },
                 )
             except Exception as e:
                 logger.warning(f"Failed to read phase file {phase_file}: {e}")
@@ -3866,8 +4066,12 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info("=" * 60)
         logger.info(f"SPEC-SANDBOX: spec_id = {self.config.spec_id}")
         logger.info(f"SPEC-SANDBOX: starting_phase = {self.config.spec_phase}")
-        logger.info(f"SPEC-SANDBOX: reporter_mode = {os.environ.get('REPORTER_MODE', 'not set')}")
-        logger.info(f"SPEC-SANDBOX: callback_url = {os.environ.get('CALLBACK_URL', 'not set')}")
+        logger.info(
+            f"SPEC-SANDBOX: reporter_mode = {os.environ.get('REPORTER_MODE', 'not set')}"
+        )
+        logger.info(
+            f"SPEC-SANDBOX: callback_url = {os.environ.get('CALLBACK_URL', 'not set')}"
+        )
         logger.info(f"SPEC-SANDBOX: working_directory = {self.config.cwd}")
 
         try:
@@ -3890,8 +4094,12 @@ This is a continuation of your previous work. Please review the notes below and 
 
             # Load settings from environment
             settings = SpecSandboxSettings()
-            logger.info(f"SPEC-SANDBOX: Settings loaded - reporter_mode={settings.reporter_mode}")
-            logger.info(f"SPEC-SANDBOX: Settings loaded - callback_url={settings.callback_url}")
+            logger.info(
+                f"SPEC-SANDBOX: Settings loaded - reporter_mode={settings.reporter_mode}"
+            )
+            logger.info(
+                f"SPEC-SANDBOX: Settings loaded - callback_url={settings.callback_url}"
+            )
 
             # Create the state machine - it handles reporter creation internally
             # When reporter_mode=http, it creates HTTPReporter with callback_url
@@ -3913,7 +4121,9 @@ This is a continuation of your previous work. Please review the notes below and 
 
         except ImportError as e:
             logger.warning(f"SPEC-SANDBOX: spec_sandbox package not available: {e}")
-            logger.info("SPEC-SANDBOX: Falling back to omoi_os.workers.spec_state_machine")
+            logger.info(
+                "SPEC-SANDBOX: Falling back to omoi_os.workers.spec_state_machine"
+            )
             # Return None to signal fallback to the backend's state machine
             return None
         except Exception as e:
@@ -3951,7 +4161,9 @@ This is a continuation of your previous work. Please review the notes below and 
         logger.info("=" * 60)
         logger.info(f"SPEC STATE MACHINE: spec_id = {self.config.spec_id}")
         logger.info(f"SPEC STATE MACHINE: starting_phase = {self.config.spec_phase}")
-        logger.info(f"SPEC STATE MACHINE: phase_data_keys = {list(self.config.phase_data.keys())}")
+        logger.info(
+            f"SPEC STATE MACHINE: phase_data_keys = {list(self.config.phase_data.keys())}"
+        )
         logger.info(f"SPEC STATE MACHINE: working_directory = {self.config.cwd}")
 
         # Check if we should use the spec-sandbox subsystem (standalone package)
@@ -3964,7 +4176,9 @@ This is a continuation of your previous work. Please review the notes below and 
             # If it returned None (package not available), fall back to backend's state machine
             if result is not None:
                 return result
-            logger.info("SPEC STATE MACHINE: Falling back to omoi_os.workers.spec_state_machine")
+            logger.info(
+                "SPEC STATE MACHINE: Falling back to omoi_os.workers.spec_state_machine"
+            )
 
         try:
             # Import the state machine (avoid circular imports at module level)
@@ -3980,10 +4194,16 @@ This is a continuation of your previous work. Please review the notes below and 
             # will terminate the sandbox after 10 minutes as "stuck_running"
             progress_callback = None
             if reporter:
+
                 async def progress_callback(event_type: str, event_data: dict) -> None:
                     """Report state machine progress as work events."""
-                    await reporter.report(event_type, event_data, source="spec_state_machine")
-                logger.info("SPEC STATE MACHINE: Progress callback configured for idle monitoring")
+                    await reporter.report(
+                        event_type, event_data, source="spec_state_machine"
+                    )
+
+                logger.info(
+                    "SPEC STATE MACHINE: Progress callback configured for idle monitoring"
+                )
 
             # Initialize state machine with progress callback
             state_machine = SpecStateMachine(
@@ -3996,7 +4216,7 @@ This is a continuation of your previous work. Please review the notes below and 
 
             # Inject pre-loaded phase data if available (from PHASE_DATA_B64)
             if self.config.phase_data:
-                logger.info(f"SPEC STATE MACHINE: Injecting phase data from environment")
+                logger.info("SPEC STATE MACHINE: Injecting phase data from environment")
                 # The state machine will use this as starting context
 
             # Run the state machine - it will handle all phases
@@ -4016,8 +4236,12 @@ This is a continuation of your previous work. Please review the notes below and 
 
         except ImportError as e:
             logger.warning(f"SPEC STATE MACHINE: SpecStateMachine not available: {e}")
-            logger.info("SPEC STATE MACHINE: Falling back to prompt-driven spec workflow")
-            logger.info("SPEC STATE MACHINE: The spec-driven-dev skill has been injected into the prompt")
+            logger.info(
+                "SPEC STATE MACHINE: Falling back to prompt-driven spec workflow"
+            )
+            logger.info(
+                "SPEC STATE MACHINE: The spec-driven-dev skill has been injected into the prompt"
+            )
             # Return None to signal fallback to regular execution
             # The caller will continue with standard agent execution
             return None
@@ -4175,12 +4399,14 @@ This is a continuation of your previous work. Please review the notes below and 
                         cwd=skill_scripts_dir,
                         capture_output=True,
                         text=True,
-                        timeout=120
+                        timeout=120,
                     )
                     if proc.returncode == 0:
                         logger.info("Skill dependencies installed successfully")
                     else:
-                        logger.warning(f"Skill dependency install failed: {proc.stderr}")
+                        logger.warning(
+                            f"Skill dependency install failed: {proc.stderr}"
+                        )
                 except Exception as e:
                     logger.warning(f"Error installing skill dependencies: {e}")
             else:
@@ -4194,7 +4420,7 @@ This is a continuation of your previous work. Please review the notes below and 
         if dep_result["errors"]:
             logger.warning(
                 "Some dependency installation errors occurred",
-                extra={"errors": dep_result["errors"]}
+                extra={"errors": dep_result["errors"]},
             )
 
         # Add dependency status to system prompt so agent knows what's installed
@@ -4212,10 +4438,14 @@ The following dependencies were automatically installed before you started:
             if isinstance(self.config.system_prompt, dict):
                 # Preset pattern: append to the "append" field
                 current_append = self.config.system_prompt.get("append", "")
-                self.config.system_prompt["append"] = current_append + "\n" + dep_prompt_section
+                self.config.system_prompt["append"] = (
+                    current_append + "\n" + dep_prompt_section
+                )
             elif isinstance(self.config.system_prompt, str):
                 # String prompt: concatenate directly
-                self.config.system_prompt = self.config.system_prompt + "\n" + dep_prompt_section
+                self.config.system_prompt = (
+                    self.config.system_prompt + "\n" + dep_prompt_section
+                )
             else:
                 # None or unexpected: create new preset with just the dep section
                 self.config.system_prompt = {
@@ -4290,7 +4520,9 @@ The following dependencies were automatically installed before you started:
                     )
                     return result
 
-            logger.info("Continuing with prompt-driven spec execution (no state machine)")
+            logger.info(
+                "Continuing with prompt-driven spec execution (no state machine)"
+            )
 
         async with EventReporter(self.config) as reporter:
             self.reporter = reporter
@@ -4375,27 +4607,51 @@ The following dependencies were automatically installed before you started:
                             logger.info("WORKER RUN: Initial Task Configuration")
                             logger.info("=" * 80)
                             logger.info(f"WORKER RUN: Task ID = {self.config.task_id}")
-                            logger.info(f"WORKER RUN: Execution Mode = {self.config.execution_mode}")
-                            logger.info(f"WORKER RUN: Continuous Mode = {self.config.continuous_mode}")
-                            logger.info(f"WORKER RUN: Ticket Title = {self.config.ticket_title or '(none)'}")
-                            logger.info(f"WORKER RUN: Ticket ID = {self.config.ticket_id or '(none)'}")
-                            logger.info(f"WORKER RUN: Branch Name = {self.config.branch_name or '(none)'}")
-                            logger.info(f"WORKER RUN: GitHub Repo = {self.config.github_repo or '(none)'}")
+                            logger.info(
+                                f"WORKER RUN: Execution Mode = {self.config.execution_mode}"
+                            )
+                            logger.info(
+                                f"WORKER RUN: Continuous Mode = {self.config.continuous_mode}"
+                            )
+                            logger.info(
+                                f"WORKER RUN: Ticket Title = {self.config.ticket_title or '(none)'}"
+                            )
+                            logger.info(
+                                f"WORKER RUN: Ticket ID = {self.config.ticket_id or '(none)'}"
+                            )
+                            logger.info(
+                                f"WORKER RUN: Branch Name = {self.config.branch_name or '(none)'}"
+                            )
+                            logger.info(
+                                f"WORKER RUN: GitHub Repo = {self.config.github_repo or '(none)'}"
+                            )
 
                             # Log prompt source priority
                             logger.info("-" * 80)
-                            logger.info("WORKER RUN: Prompt Source Priority (first non-empty wins):")
-                            logger.info(f"  1. task_description (from TASK_DATA_BASE64): {len(self.config.task_description)} chars")
-                            logger.info(f"  2. initial_prompt (from INITIAL_PROMPT env): {len(self.config.initial_prompt)} chars")
-                            logger.info(f"  3. ticket_description: {len(self.config.ticket_description or '')} chars")
-                            logger.info(f"  4. ticket_title fallback: {len(self.config.ticket_title or '')} chars")
+                            logger.info(
+                                "WORKER RUN: Prompt Source Priority (first non-empty wins):"
+                            )
+                            logger.info(
+                                f"  1. task_description (from TASK_DATA_BASE64): {len(self.config.task_description)} chars"
+                            )
+                            logger.info(
+                                f"  2. initial_prompt (from INITIAL_PROMPT env): {len(self.config.initial_prompt)} chars"
+                            )
+                            logger.info(
+                                f"  3. ticket_description: {len(self.config.ticket_description or '')} chars"
+                            )
+                            logger.info(
+                                f"  4. ticket_title fallback: {len(self.config.ticket_title or '')} chars"
+                            )
 
                             # Log the full initial task
                             logger.info("-" * 80)
-                            logger.info(f"WORKER RUN: Initial Task Length = {len(initial_task)} chars")
+                            logger.info(
+                                f"WORKER RUN: Initial Task Length = {len(initial_task)} chars"
+                            )
                             logger.info("WORKER RUN: Initial Task Content:")
                             logger.info("=" * 40 + " BEGIN INITIAL TASK " + "=" * 40)
-                            for line in initial_task.split('\n'):
+                            for line in initial_task.split("\n"):
                                 logger.info(f"  {line}")
                             logger.info("=" * 40 + " END INITIAL TASK " + "=" * 40)
                             logger.info("=" * 80)
@@ -4498,7 +4754,9 @@ The following dependencies were automatically installed before you started:
                                                 self.config.completion_signal
                                                 in output_text
                                             ):
-                                                self.iteration_state.completion_signal_count += 1
+                                                self.iteration_state.completion_signal_count += (
+                                                    1
+                                                )
                                                 logger.info(
                                                     "Completion signal detected (%d/%d)",
                                                     self.iteration_state.completion_signal_count,
@@ -4518,16 +4776,22 @@ The following dependencies were automatically installed before you started:
                                                 await self._run_validation()
 
                                                 # If validation passed, we're done!
-                                                if self.iteration_state.validation_passed:
+                                                if (
+                                                    self.iteration_state.validation_passed
+                                                ):
                                                     logger.info(
                                                         "Validation PASSED - task truly complete!"
                                                     )
                                                     break
                                             else:
                                                 # No completion signal - reset counter
-                                                self.iteration_state.completion_signal_count = 0
+                                                self.iteration_state.completion_signal_count = (
+                                                    0
+                                                )
 
-                                            self.iteration_state.successful_iterations += 1
+                                            self.iteration_state.successful_iterations += (
+                                                1
+                                            )
                                             self.iteration_state.error_count = 0
 
                                             # Report iteration completion
@@ -4536,9 +4800,11 @@ The following dependencies were automatically installed before you started:
                                                 {
                                                     "iteration_num": self.iteration_state.iteration_num,
                                                     "cost_usd": iteration_cost,
-                                                    "output_preview": output_text[:1000]
-                                                    if output_text
-                                                    else None,
+                                                    "output_preview": (
+                                                        output_text[:1000]
+                                                        if output_text
+                                                        else None
+                                                    ),
                                                     **self.iteration_state.to_event_data(),
                                                 },
                                             )
@@ -4819,9 +5085,11 @@ The following dependencies were automatically installed before you started:
                                     ) in sdk_options.hooks.items():
                                         hooks_debug[hook_type] = {
                                             "type": str(type(hook_list)),
-                                            "length": len(hook_list)
-                                            if isinstance(hook_list, list)
-                                            else "N/A",
+                                            "length": (
+                                                len(hook_list)
+                                                if isinstance(hook_list, list)
+                                                else "N/A"
+                                            ),
                                         }
                                         if isinstance(hook_list, list) and hook_list:
                                             hooks_debug[hook_type][

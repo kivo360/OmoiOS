@@ -106,16 +106,12 @@ class RepositoryManager:
             logger.info(f"Converted SSH URL to HTTPS: {clone_url}")
         return clone_url, repo_url
 
-    def clone_repository(
-        self, repo_url: str, repo_dir: Path, ticket_id: str
-    ) -> None:
+    def clone_repository(self, repo_url: str, repo_dir: Path, ticket_id: str) -> None:
         """Clone repository into specified directory."""
         clone_url, original_url = self.normalize_url(repo_url)
 
         logger.info(f"Cloning repository {clone_url} into {repo_dir}...")
-        clone_result = self.executor.sh(
-            f"git clone {clone_url} .", cwd=str(repo_dir)
-        )
+        clone_result = self.executor.sh(f"git clone {clone_url} .", cwd=str(repo_dir))
 
         if clone_result.exit_code != 0:
             if clone_url != original_url:
@@ -205,9 +201,7 @@ class WorkspaceManager(ABC):
         repo_name = self.repo_manager.extract_repo_name(repo_url, self.ticket_id)
         repo_dir = self.get_repo_directory(repo_name)
 
-        self.repo_manager.setup_repository(
-            repo_url, branch, self.ticket_id, repo_dir
-        )
+        self.repo_manager.setup_repository(repo_url, branch, self.ticket_id, repo_dir)
 
         return repo_dir
 

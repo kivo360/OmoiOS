@@ -46,9 +46,15 @@ class DaytonaTerminalExecutor(ToolExecutor):
             workspace: An initialized DaytonaLocalWorkspace (must be in context)
         """
         self.workspace = workspace
-        self._working_dir = workspace._daytona_workspace.working_dir if workspace._daytona_workspace else "/workspace"
+        self._working_dir = (
+            workspace._daytona_workspace.working_dir
+            if workspace._daytona_workspace
+            else "/workspace"
+        )
 
-    def __call__(self, action: ExecuteBashAction, conversation: Any = None) -> ExecuteBashObservation:
+    def __call__(
+        self, action: ExecuteBashAction, conversation: Any = None
+    ) -> ExecuteBashObservation:
         """Execute a bash command in the Daytona sandbox.
 
         Args:
@@ -129,7 +135,10 @@ def _daytona_terminal_factory(conv_state, **params):
 
     global _ACTIVE_DAYTONA_WORKSPACE
 
-    if _ACTIVE_DAYTONA_WORKSPACE is not None and _ACTIVE_DAYTONA_WORKSPACE.is_initialized:
+    if (
+        _ACTIVE_DAYTONA_WORKSPACE is not None
+        and _ACTIVE_DAYTONA_WORKSPACE.is_initialized
+    ):
         # Use Daytona executor
         executor = DaytonaTerminalExecutor(_ACTIVE_DAYTONA_WORKSPACE)
         logger.info("Using Daytona executor for terminal tool")

@@ -46,7 +46,9 @@ def get_sandbox_logs(sandbox_id: str):
             # Try to find by label
             result = daytona.list()
             # PaginatedSandboxes has .items attribute with the actual list
-            sandboxes = getattr(result, "items", None) or getattr(result, "sandboxes", result)
+            sandboxes = getattr(result, "items", None) or getattr(
+                result, "sandboxes", result
+            )
 
             target_sandbox = None
             for sb in sandboxes:

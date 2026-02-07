@@ -49,9 +49,3 @@ PHASE_TRANSITIONS: Final[dict[Phase, tuple[Phase, ...]]] = {
 
 
 __all__ = ["Phase", "PHASE_SEQUENCE", "PHASE_TRANSITIONS"]
-
-
-
-
-
-

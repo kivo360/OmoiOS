@@ -16,7 +16,7 @@ from omoi_os.utils.datetime import utc_now
 
 class CostTrackingService:
     """Service for tracking and analyzing LLM API costs.
-    
+
     Responsibilities:
     - Record LLM API costs per task/agent
     - Calculate costs using provider-specific pricing
@@ -33,34 +33,34 @@ class CostTrackingService:
     ):
         self.db = db
         self.event_bus = event_bus
-        
+
         # Load cost models from YAML
         if cost_models_path is None:
             config_dir = Path(__file__).parent.parent / "config"
             cost_models_path = str(config_dir / "cost_models.yaml")
-        
+
         with open(cost_models_path, "r") as f:
             self.cost_config = yaml.safe_load(f)
-        
+
         self.providers = self.cost_config.get("providers", {})
         self.defaults = self.cost_config.get("defaults", {})
 
     def get_model_pricing(self, provider: str, model: str) -> dict:
         """Get pricing information for a specific provider and model.
-        
+
         Returns:
             dict with 'prompt_token_cost' and 'completion_token_cost' keys
         """
         # Check if provider exists in config
         if provider not in self.providers:
             return self.defaults
-        
+
         provider_models = self.providers[provider]
-        
+
         # Check if model exists for this provider
         if model not in provider_models:
             return self.defaults
-        
+
         return provider_models[model]
 
     def calculate_cost(
@@ -71,16 +71,16 @@ class CostTrackingService:
         completion_tokens: int,
     ) -> dict:
         """Calculate cost breakdown for token usage.
-        
+
         Returns:
             dict with 'prompt_cost', 'completion_cost', and 'total_cost'
         """
         pricing = self.get_model_pricing(provider, model)
-        
+
         prompt_cost = prompt_tokens * pricing["prompt_token_cost"]
         completion_cost = completion_tokens * pricing["completion_token_cost"]
         total_cost = prompt_cost + completion_cost
-        
+
         return {
             "prompt_cost": prompt_cost,
             "completion_cost": completion_cost,
@@ -264,9 +264,12 @@ class CostTrackingService:
         session: Optional[Session] = None,
     ) -> list[CostRecord]:
         """Get all cost records for a billing account."""
+
         def _get(sess: Session) -> list[CostRecord]:
             result = sess.execute(
-                select(CostRecord).where(CostRecord.billing_account_id == billing_account_id)
+                select(CostRecord).where(
+                    CostRecord.billing_account_id == billing_account_id
+                )
             )
             return list(result.scalars().all())
 
@@ -282,6 +285,7 @@ class CostTrackingService:
         session: Optional[Session] = None,
     ) -> list[CostRecord]:
         """Get all cost records for a specific sandbox."""
+
         def _get(sess: Session) -> list[CostRecord]:
             result = sess.execute(
                 select(CostRecord).where(CostRecord.sandbox_id == sandbox_id)
@@ -294,28 +298,34 @@ class CostTrackingService:
             with self.db.get_session() as sess:
                 return _get(sess)
 
-    def get_task_costs(self, task_id: str, session: Optional[Session] = None) -> list[CostRecord]:
+    def get_task_costs(
+        self, task_id: str, session: Optional[Session] = None
+    ) -> list[CostRecord]:
         """Get all cost records for a specific task."""
+
         def _get(sess: Session) -> list[CostRecord]:
             result = sess.execute(
                 select(CostRecord).where(CostRecord.task_id == task_id)
             )
             return list(result.scalars().all())
-        
+
         if session:
             return _get(session)
         else:
             with self.db.get_session() as sess:
                 return _get(sess)
 
-    def get_agent_costs(self, agent_id: str, session: Optional[Session] = None) -> list[CostRecord]:
+    def get_agent_costs(
+        self, agent_id: str, session: Optional[Session] = None
+    ) -> list[CostRecord]:
         """Get all cost records for a specific agent."""
+
         def _get(sess: Session) -> list[CostRecord]:
             result = sess.execute(
                 select(CostRecord).where(CostRecord.agent_id == agent_id)
             )
             return list(result.scalars().all())
-        
+
         if session:
             return _get(session)
         else:
@@ -338,6 +348,7 @@ class CostTrackingService:
         Returns:
             dict with 'total_cost', 'total_tokens', 'record_count', breakdown by provider/model
         """
+
         def _get_summary(sess: Session) -> dict:
             query = select(
                 CostRecord.provider,
@@ -365,30 +376,32 @@ class CostTrackingService:
             elif scope_type == "billing_account":
                 query = query.where(CostRecord.billing_account_id == scope_id)
             # 'global' scope has no filter
-            
+
             query = query.group_by(CostRecord.provider, CostRecord.model)
-            
+
             result = sess.execute(query)
             rows = result.all()
-            
+
             # Calculate totals and breakdown
             total_cost = 0.0
             total_tokens = 0
             record_count = 0
             breakdown = []
-            
+
             for row in rows:
                 total_cost += row.total_cost or 0.0
                 total_tokens += row.total_tokens or 0
                 record_count += row.record_count or 0
-                breakdown.append({
-                    "provider": row.provider,
-                    "model": row.model,
-                    "cost": row.total_cost,
-                    "tokens": row.total_tokens,
-                    "records": row.record_count,
-                })
-            
+                breakdown.append(
+                    {
+                        "provider": row.provider,
+                        "model": row.model,
+                        "cost": row.total_cost,
+                        "tokens": row.total_tokens,
+                        "records": row.record_count,
+                    }
+                )
+
             return {
                 "scope_type": scope_type,
                 "scope_id": scope_id,
@@ -397,7 +410,7 @@ class CostTrackingService:
                 "record_count": record_count,
                 "breakdown": breakdown,
             }
-        
+
         if session:
             return _get_summary(session)
         else:
@@ -412,36 +425,36 @@ class CostTrackingService:
         model: str = "claude-sonnet-4.5",
     ) -> dict:
         """Forecast costs for pending tasks.
-        
+
         Args:
             pending_task_count: Number of pending tasks in queue
             avg_tokens_per_task: Average tokens per task (uses config default if not provided)
             provider: LLM provider to use for cost calculation
             model: Model to use for cost calculation
-        
+
         Returns:
             dict with 'estimated_cost', 'estimated_tokens', 'task_count'
         """
         if avg_tokens_per_task is None:
             forecasting_config = self.cost_config.get("forecasting", {})
             avg_tokens_per_task = forecasting_config.get("avg_tokens_per_task", 5000)
-        
+
         # Assume 50/50 split between prompt and completion tokens
         avg_prompt_tokens = avg_tokens_per_task // 2
         avg_completion_tokens = avg_tokens_per_task // 2
-        
+
         # Calculate cost per task
         cost_per_task = self.calculate_cost(
             provider, model, avg_prompt_tokens, avg_completion_tokens
         )["total_cost"]
-        
+
         # Apply buffer multiplier for safety
         forecasting_config = self.cost_config.get("forecasting", {})
         buffer_multiplier = forecasting_config.get("buffer_multiplier", 1.2)
-        
+
         estimated_cost = cost_per_task * pending_task_count * buffer_multiplier
         estimated_tokens = avg_tokens_per_task * pending_task_count
-        
+
         return {
             "task_count": pending_task_count,
             "estimated_cost": estimated_cost,
@@ -449,5 +462,3 @@ class CostTrackingService:
             "avg_tokens_per_task": avg_tokens_per_task,
             "buffer_multiplier": buffer_multiplier,
         }
-
-

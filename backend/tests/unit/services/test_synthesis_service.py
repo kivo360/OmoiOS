@@ -6,7 +6,6 @@ Uses real database fixtures to properly test SQLAlchemy queries.
 
 import pytest
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
@@ -18,7 +17,6 @@ from omoi_os.services.synthesis_service import (
     get_synthesis_service,
     reset_synthesis_service,
 )
-
 
 # =============================================================================
 # DATACLASS TESTS (No database needed)
@@ -181,7 +179,9 @@ class TestSynthesisServiceRegistration:
         # Make get_session return a context manager that returns a mock session
         mock_session = MagicMock()
         mock_session.query.return_value.filter.return_value.first.return_value = None
-        mock_db.get_session.return_value.__enter__ = MagicMock(return_value=mock_session)
+        mock_db.get_session.return_value.__enter__ = MagicMock(
+            return_value=mock_session
+        )
         mock_db.get_session.return_value.__exit__ = MagicMock(return_value=None)
         mock_event_bus = MagicMock()
         return SynthesisService(db=mock_db, event_bus=mock_event_bus)
@@ -240,9 +240,9 @@ class TestSynthesisServiceRegistration:
         assert len(synthesis_service._pending_joins) == 0
 
         # Missing source_task_ids
-        synthesis_service._handle_join_created({
-            "payload": {"join_id": "j1", "continuation_task_id": "c1"}
-        })
+        synthesis_service._handle_join_created(
+            {"payload": {"join_id": "j1", "continuation_task_id": "c1"}}
+        )
         assert len(synthesis_service._pending_joins) == 0
 
     def test_get_pending_joins_returns_copy(self, synthesis_service):
@@ -372,7 +372,9 @@ class TestSynthesisServiceWithDatabase:
 
         # Verify it was written to database
         with db_service.get_session() as session:
-            updated_task = session.query(Task).filter(Task.id == continuation_task.id).first()
+            updated_task = (
+                session.query(Task).filter(Task.id == continuation_task.id).first()
+            )
             assert updated_task is not None
             assert updated_task.synthesis_context is not None
             assert updated_task.synthesis_context["merged_data"] == "test"
@@ -380,7 +382,12 @@ class TestSynthesisServiceWithDatabase:
             assert updated_task.synthesis_context["_source_task_ids"] == source_ids
 
     def test_full_synthesis_flow(
-        self, synthesis_service, source_tasks, continuation_task, db_service, event_bus_service
+        self,
+        synthesis_service,
+        source_tasks,
+        continuation_task,
+        db_service,
+        event_bus_service,
     ):
         """Test the complete synthesis flow: register → complete tasks → merge → inject."""
         source_ids = [task.id for task in source_tasks]
@@ -403,7 +410,9 @@ class TestSynthesisServiceWithDatabase:
 
         # Verify context was injected into continuation task
         with db_service.get_session() as session:
-            updated_task = session.query(Task).filter(Task.id == continuation_task.id).first()
+            updated_task = (
+                session.query(Task).filter(Task.id == continuation_task.id).first()
+            )
             assert updated_task.synthesis_context is not None
             assert "_source_results" in updated_task.synthesis_context
 
@@ -566,7 +575,9 @@ class TestSynthesisCoordinationIntegration:
         service.subscribe_to_events()
         return service
 
-    def test_handle_join_created_event_format(self, synthesis_service, source_tasks, continuation_task, db_service):
+    def test_handle_join_created_event_format(
+        self, synthesis_service, source_tasks, continuation_task, db_service
+    ):
         """Test that SynthesisService correctly handles join.created events.
 
         When source tasks are already completed (as in this test), synthesis triggers
@@ -599,9 +610,9 @@ class TestSynthesisCoordinationIntegration:
 
         # Verify synthesis_context was injected into continuation task
         with db_service.get_session() as session:
-            updated_task = session.query(Task).filter(
-                Task.id == continuation_task.id
-            ).first()
+            updated_task = (
+                session.query(Task).filter(Task.id == continuation_task.id).first()
+            )
             assert updated_task.synthesis_context is not None
             assert "_source_results" in updated_task.synthesis_context
             assert updated_task.synthesis_context["_merge_strategy"] == "combine"
@@ -636,9 +647,9 @@ class TestSynthesisCoordinationIntegration:
         assert synthesis_service.get_pending_join("event-format-test") is None
 
         with db_service.get_session() as session:
-            updated_task = session.query(Task).filter(
-                Task.id == continuation_task.id
-            ).first()
+            updated_task = (
+                session.query(Task).filter(Task.id == continuation_task.id).first()
+            )
             assert updated_task.synthesis_context is not None
             assert "_source_results" in updated_task.synthesis_context
             assert updated_task.synthesis_context["_merge_strategy"] == "combine"
@@ -680,9 +691,9 @@ class TestSynthesisCoordinationIntegration:
 
         # Step 3: Verify synthesis_context was injected into continuation task
         with db_service.get_session() as session:
-            updated_task = session.query(Task).filter(
-                Task.id == continuation_task.id
-            ).first()
+            updated_task = (
+                session.query(Task).filter(Task.id == continuation_task.id).first()
+            )
             assert updated_task.synthesis_context is not None
             assert "_source_results" in updated_task.synthesis_context
             assert updated_task.synthesis_context["_merge_strategy"] == "union"
@@ -810,9 +821,9 @@ class TestSynthesisCoordinationIntegration:
 
         # Step 5: Verify synthesis_context was injected
         with db_service.get_session() as session:
-            updated_task = session.query(Task).filter(
-                Task.id == continuation_task_id
-            ).first()
+            updated_task = (
+                session.query(Task).filter(Task.id == continuation_task_id).first()
+            )
             assert updated_task.synthesis_context is not None
             assert "_source_results" in updated_task.synthesis_context
             assert updated_task.synthesis_context["_source_count"] == 2

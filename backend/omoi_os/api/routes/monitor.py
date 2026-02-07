@@ -96,7 +96,9 @@ async def get_anomalies(
                 description=a.description,
                 labels=a.labels,
                 detected_at=a.detected_at.isoformat(),
-                acknowledged_at=a.acknowledged_at.isoformat() if a.acknowledged_at else None,
+                acknowledged_at=(
+                    a.acknowledged_at.isoformat() if a.acknowledged_at else None
+                ),
             )
             for a in anomalies
         ]
@@ -129,26 +131,16 @@ async def get_dashboard_summary(
         anomalies = monitor.get_recent_anomalies(hours=1, severity="critical")
 
         # Aggregate for dashboard
-        total_pending = sum(
-            m.value for k, m in metrics.items()
-            if "tasks_queued" in k
-        )
+        total_pending = sum(m.value for k, m in metrics.items() if "tasks_queued" in k)
         total_completed = sum(
-            m.value for k, m in metrics.items()
-            if "tasks_completed" in k
+            m.value for k, m in metrics.items() if "tasks_completed" in k
         )
         # Sum all agents_active_* metrics since they're already filtered for active statuses (IDLE/RUNNING)
         # The status is in labels, but we've already filtered for active statuses when creating metrics
-        active_agents = sum(
-            m.value for k, m in metrics.items()
-            if "agents_active" in k
-        )
-        
+        active_agents = sum(m.value for k, m in metrics.items() if "agents_active" in k)
+
         # Get counts from metrics
-        active_locks = sum(
-            m.value for k, m in metrics.items()
-            if "locks_active" in k
-        )
+        active_locks = sum(m.value for k, m in metrics.items() if "locks_active" in k)
 
         return DashboardSummary(
             total_tasks_pending=int(total_pending),
@@ -167,7 +159,7 @@ async def get_dashboard_summary(
 
 @router.get("/monitor/intelligent/status")
 async def get_intelligent_monitoring_status(
-    monitoring_loop = Depends(get_monitoring_loop),
+    monitoring_loop=Depends(get_monitoring_loop),
 ):
     """Get intelligent monitoring loop status and metrics."""
     try:
@@ -185,7 +177,7 @@ async def get_intelligent_monitoring_status(
 
 @router.get("/monitor/intelligent/health")
 async def get_intelligent_monitoring_health(
-    monitoring_loop = Depends(get_monitoring_loop),
+    monitoring_loop=Depends(get_monitoring_loop),
 ):
     """Get system health from intelligent monitoring."""
     try:
@@ -205,13 +197,18 @@ async def get_intelligent_monitoring_health(
 async def analyze_agent_trajectory(
     agent_id: str,
     force: bool = Query(False, description="Force fresh analysis"),
-    monitoring_loop = Depends(get_monitoring_loop),
+    monitoring_loop=Depends(get_monitoring_loop),
 ):
     """Trigger trajectory analysis for a specific agent."""
     try:
-        analysis = await monitoring_loop.analyze_agent_trajectory(agent_id, force_analysis=force)
+        analysis = await monitoring_loop.analyze_agent_trajectory(
+            agent_id, force_analysis=force
+        )
         if not analysis:
-            raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found or no analysis available")
+            raise HTTPException(
+                status_code=404,
+                detail=f"Agent {agent_id} not found or no analysis available",
+            )
         return analysis.dict()
     except RuntimeError as exc:
         raise HTTPException(
@@ -226,7 +223,7 @@ async def analyze_agent_trajectory(
 @router.post("/monitor/intelligent/emergency")
 async def trigger_emergency_analysis(
     agent_ids: List[str],
-    monitoring_loop = Depends(get_monitoring_loop),
+    monitoring_loop=Depends(get_monitoring_loop),
 ):
     """Trigger emergency analysis for specific agents."""
     try:
@@ -240,4 +237,3 @@ async def trigger_emergency_analysis(
         raise HTTPException(
             status_code=500, detail=f"Failed to trigger emergency analysis: {exc}"
         ) from exc
-

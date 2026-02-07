@@ -31,8 +31,10 @@ def serialize_guardian_action(action: GuardianAction) -> Dict:
 
 # Request/Response Models
 
+
 class CancelTaskRequest(BaseModel):
     """Request to emergency cancel a task."""
+
     task_id: str = Field(..., description="ID of task to cancel")
     reason: str = Field(..., description="Explanation for emergency cancellation")
     initiated_by: str = Field(..., description="Agent/user ID initiating action")
@@ -40,47 +42,47 @@ class CancelTaskRequest(BaseModel):
         default=AuthorityLevel.GUARDIAN,
         ge=1,
         le=5,
-        description="Authority level (4=GUARDIAN, 5=SYSTEM)"
+        description="Authority level (4=GUARDIAN, 5=SYSTEM)",
     )
 
 
 class ReallocateCapacityRequest(BaseModel):
     """Request to reallocate agent capacity."""
+
     from_agent_id: str = Field(..., description="Source agent ID")
     to_agent_id: str = Field(..., description="Target agent ID")
     capacity: int = Field(..., ge=1, description="Amount of capacity to transfer")
     reason: str = Field(..., description="Explanation for reallocation")
     initiated_by: str = Field(..., description="Agent/user ID initiating action")
     authority: int = Field(
-        default=AuthorityLevel.GUARDIAN,
-        ge=1,
-        le=5,
-        description="Authority level"
+        default=AuthorityLevel.GUARDIAN, ge=1, le=5, description="Authority level"
     )
 
 
 class OverridePriorityRequest(BaseModel):
     """Request to override task priority."""
+
     task_id: str = Field(..., description="ID of task to boost")
-    new_priority: str = Field(..., description="New priority (CRITICAL, HIGH, MEDIUM, LOW)")
+    new_priority: str = Field(
+        ..., description="New priority (CRITICAL, HIGH, MEDIUM, LOW)"
+    )
     reason: str = Field(..., description="Explanation for priority override")
     initiated_by: str = Field(..., description="Agent/user ID initiating action")
     authority: int = Field(
-        default=AuthorityLevel.GUARDIAN,
-        ge=1,
-        le=5,
-        description="Authority level"
+        default=AuthorityLevel.GUARDIAN, ge=1, le=5, description="Authority level"
     )
 
 
 class RevertInterventionRequest(BaseModel):
     """Request to revert a guardian intervention."""
+
     reason: str = Field(..., description="Explanation for reversion")
     initiated_by: str = Field(..., description="Agent/user ID initiating reversion")
 
 
 class GuardianActionDTO(BaseModel):
     """Guardian action response model."""
+
     action_id: str
     action_type: str
     target_entity: str
@@ -94,36 +96,41 @@ class GuardianActionDTO(BaseModel):
     audit_log: Optional[Dict]
     created_at: Optional[str]
 
-    model_config = ConfigDict(json_schema_extra={"example": {
-        "action_id": "uuid",
-        "action_type": "cancel_task",
-        "target_entity": "task-uuid",
-        "authority_level": 4,
-        "authority_name": "GUARDIAN",
-        "reason": "Emergency: agent failure during critical task",
-        "initiated_by": "guardian-agent-1",
-        "approved_by": None,
-        "executed_at": "2025-11-17T10:30:00Z",
-        "reverted_at": None,
-        "audit_log": {
-            "before": {"status": "running"},
-            "after": {"status": "failed"}
-        },
-        "created_at": "2025-11-17T10:30:00Z",
-    }})
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "action_id": "uuid",
+                "action_type": "cancel_task",
+                "target_entity": "task-uuid",
+                "authority_level": 4,
+                "authority_name": "GUARDIAN",
+                "reason": "Emergency: agent failure during critical task",
+                "initiated_by": "guardian-agent-1",
+                "approved_by": None,
+                "executed_at": "2025-11-17T10:30:00Z",
+                "reverted_at": None,
+                "audit_log": {
+                    "before": {"status": "running"},
+                    "after": {"status": "failed"},
+                },
+                "created_at": "2025-11-17T10:30:00Z",
+            }
+        }
+    )
 
 
 # Dependency injection helper
 def get_guardian_service() -> GuardianService:
     """Get guardian service instance."""
     from omoi_os.api.dependencies import get_db_service, get_event_bus
-    
+
     db = get_db_service()
     event_bus = get_event_bus()
     return GuardianService(db=db, event_bus=event_bus)
 
 
 # Routes
+
 
 @router.post(
     "/intervention/cancel-task",
@@ -136,13 +143,13 @@ def cancel_task(
     guardian_service: GuardianService = Depends(get_guardian_service),
 ) -> GuardianActionDTO:
     """Emergency task cancellation.
-    
+
     Requires GUARDIAN authority level (4) or higher.
     Used for critical failures where immediate intervention is needed.
-    
+
     **Authority Levels:**
     - 1: WORKER
-    - 2: WATCHDOG  
+    - 2: WATCHDOG
     - 3: MONITOR
     - 4: GUARDIAN (required)
     - 5: SYSTEM
@@ -155,12 +162,14 @@ def cancel_task(
             initiated_by=request.initiated_by,
             authority=authority,
         )
-        
+
         if not action:
-            raise HTTPException(status_code=404, detail=f"Task {request.task_id} not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Task {request.task_id} not found"
+            )
+
         return GuardianActionDTO(**serialize_guardian_action(action))
-    
+
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -178,7 +187,7 @@ def reallocate_capacity(
     guardian_service: GuardianService = Depends(get_guardian_service),
 ) -> GuardianActionDTO:
     """Reallocate capacity from one agent to another.
-    
+
     Requires GUARDIAN authority level (4) or higher.
     Typically used to steal resources from low-priority work for critical tasks.
     """
@@ -192,15 +201,15 @@ def reallocate_capacity(
             initiated_by=request.initiated_by,
             authority=authority,
         )
-        
+
         if not action:
             raise HTTPException(
                 status_code=404,
-                detail=f"Agent(s) not found: {request.from_agent_id} or {request.to_agent_id}"
+                detail=f"Agent(s) not found: {request.from_agent_id} or {request.to_agent_id}",
             )
-        
+
         return GuardianActionDTO(**serialize_guardian_action(action))
-    
+
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -218,7 +227,7 @@ def override_priority(
     guardian_service: GuardianService = Depends(get_guardian_service),
 ) -> GuardianActionDTO:
     """Override task priority for emergency escalation.
-    
+
     Requires GUARDIAN authority level (4) or higher.
     Used to boost critical tasks ahead of normal queue order.
     """
@@ -231,12 +240,14 @@ def override_priority(
             initiated_by=request.initiated_by,
             authority=authority,
         )
-        
+
         if not action:
-            raise HTTPException(status_code=404, detail=f"Task {request.task_id} not found")
-        
+            raise HTTPException(
+                status_code=404, detail=f"Task {request.task_id} not found"
+            )
+
         return GuardianActionDTO(**serialize_guardian_action(action))
-    
+
     except PermissionError as e:
         raise HTTPException(status_code=403, detail=str(e))
     except ValueError as e:
@@ -250,13 +261,19 @@ def override_priority(
     summary="Get guardian action audit trail",
 )
 def get_actions(
-    limit: int = Query(default=100, ge=1, le=1000, description="Maximum actions to return"),
-    action_type: Optional[str] = Query(default=None, description="Filter by action type"),
-    target_entity: Optional[str] = Query(default=None, description="Filter by target entity"),
+    limit: int = Query(
+        default=100, ge=1, le=1000, description="Maximum actions to return"
+    ),
+    action_type: Optional[str] = Query(
+        default=None, description="Filter by action type"
+    ),
+    target_entity: Optional[str] = Query(
+        default=None, description="Filter by target entity"
+    ),
     guardian_service: GuardianService = Depends(get_guardian_service),
 ) -> List[GuardianActionDTO]:
     """Get audit trail of all guardian interventions.
-    
+
     Returns actions sorted by most recent first.
     """
     actions = guardian_service.get_actions(
@@ -264,8 +281,10 @@ def get_actions(
         action_type=action_type,
         target_entity=target_entity,
     )
-    
-    return [GuardianActionDTO(**serialize_guardian_action(action)) for action in actions]
+
+    return [
+        GuardianActionDTO(**serialize_guardian_action(action)) for action in actions
+    ]
 
 
 @router.get(
@@ -280,10 +299,10 @@ def get_action(
 ) -> GuardianActionDTO:
     """Get detailed information about a specific guardian action."""
     action = guardian_service.get_action(action_id)
-    
+
     if not action:
         raise HTTPException(status_code=404, detail=f"Action {action_id} not found")
-    
+
     return GuardianActionDTO(**serialize_guardian_action(action))
 
 
@@ -298,7 +317,7 @@ def revert_intervention(
     guardian_service: GuardianService = Depends(get_guardian_service),
 ) -> Dict:
     """Revert a previous guardian intervention.
-    
+
     Marks the action as reverted and publishes revert event.
     Does not automatically restore previous state - that requires separate actions.
     """
@@ -307,17 +326,15 @@ def revert_intervention(
         reason=request.reason,
         initiated_by=request.initiated_by,
     )
-    
+
     if not success:
         raise HTTPException(
-            status_code=404,
-            detail=f"Action {action_id} not found or already reverted"
+            status_code=404, detail=f"Action {action_id} not found or already reverted"
         )
-    
+
     return {
         "action_id": action_id,
         "reverted": True,
         "reason": request.reason,
         "reverted_by": request.initiated_by,
     }
-

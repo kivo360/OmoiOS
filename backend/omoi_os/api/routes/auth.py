@@ -454,10 +454,16 @@ async def list_waitlist_users(
     from sqlalchemy import func
 
     # Get users with matching waitlist status
-    query = select(User).where(
-        User.waitlist_status == status_filter,
-        User.deleted_at.is_(None),
-    ).order_by(User.created_at.asc()).offset(offset).limit(limit)
+    query = (
+        select(User)
+        .where(
+            User.waitlist_status == status_filter,
+            User.deleted_at.is_(None),
+        )
+        .order_by(User.created_at.asc())
+        .offset(offset)
+        .limit(limit)
+    )
 
     result = await db.execute(query)
     users = result.scalars().all()
@@ -516,7 +522,10 @@ async def approve_waitlist_user(
 
     logger.info(f"User {user_id} approved from waitlist by {current_user.id}")
 
-    return {"message": "User approved", "user": UserResponse.model_validate(updated_user)}
+    return {
+        "message": "User approved",
+        "user": UserResponse.model_validate(updated_user),
+    }
 
 
 @router.post("/waitlist/approve-all")

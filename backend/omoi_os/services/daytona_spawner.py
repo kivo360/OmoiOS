@@ -24,7 +24,10 @@ from omoi_os.sandbox_skills import get_skills_for_upload
 from omoi_os.sandbox_modules import get_spec_state_machine_files, get_spec_sandbox_files
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
-from omoi_os.services.ownership_validation import OwnershipValidationService, OwnershipConflictError
+from omoi_os.services.ownership_validation import (
+    OwnershipValidationService,
+    OwnershipConflictError,
+)
 from omoi_os.utils.datetime import utc_now
 
 # TYPE_CHECKING import for TaskRequirements to avoid circular imports
@@ -231,11 +234,15 @@ class DaytonaSpawnerService:
             try:
                 from omoi_os.models.task import Task
 
-                ownership_service = OwnershipValidationService(db=self.db, strict_mode=False)
+                ownership_service = OwnershipValidationService(
+                    db=self.db, strict_mode=False
+                )
                 with self.db.get_session() as session:
                     task = session.query(Task).filter(Task.id == task_id).first()
                     if task:
-                        validation_result = ownership_service.validate_task_ownership(task)
+                        validation_result = ownership_service.validate_task_ownership(
+                            task
+                        )
                         if validation_result.has_warnings:
                             logger.warning(
                                 "[SPAWNER] Ownership validation warnings",
@@ -452,9 +459,11 @@ class DaytonaSpawnerService:
                 extra={
                     "effective_continuous_mode": effective_continuous_mode,
                     "runtime": runtime,
-                    "reason": "not claude runtime"
-                    if runtime != "claude"
-                    else "continuous_mode=False",
+                    "reason": (
+                        "not claude runtime"
+                        if runtime != "claude"
+                        else "continuous_mode=False"
+                    ),
                 },
             )
 
@@ -975,7 +984,9 @@ class DaytonaSpawnerService:
                 # Get project for GitHub repo info
                 project = session.get(Project, project_id)
                 if project and project.github_owner and project.github_repo:
-                    env_vars["GITHUB_REPO"] = f"{project.github_owner}/{project.github_repo}"
+                    env_vars["GITHUB_REPO"] = (
+                        f"{project.github_owner}/{project.github_repo}"
+                    )
                     env_vars["GITHUB_REPO_OWNER"] = project.github_owner
                     env_vars["GITHUB_REPO_NAME"] = project.github_repo
                     logger.info(
@@ -1003,7 +1014,9 @@ class DaytonaSpawnerService:
                     )
 
                 # Get Anthropic credentials for the user
-                anthropic_creds = cred_service.get_anthropic_credentials(user_id=user_id)
+                anthropic_creds = cred_service.get_anthropic_credentials(
+                    user_id=user_id
+                )
                 if anthropic_creds.oauth_token:
                     env_vars["CLAUDE_CODE_OAUTH_TOKEN"] = anthropic_creds.oauth_token
                     logger.info("[SPAWNER] Using OAuth token for Claude Agent SDK")
@@ -1060,9 +1073,7 @@ class DaytonaSpawnerService:
         # Add session transcript for resumption if provided
         if resume_transcript:
             env_vars["SESSION_TRANSCRIPT_B64"] = resume_transcript
-            logger.info(
-                f"Phase {phase} will resume from previous session transcript"
-            )
+            logger.info(f"Phase {phase} will resume from previous session transcript")
 
         # Add extra env vars (can override defaults)
         if extra_env:
@@ -1093,9 +1104,7 @@ class DaytonaSpawnerService:
         self._task_to_sandbox[f"{spec_id}-{phase}"] = sandbox_id
 
         try:
-            logger.info(
-                f"Creating Daytona sandbox {sandbox_id} for spec phase {phase}"
-            )
+            logger.info(f"Creating Daytona sandbox {sandbox_id} for spec phase {phase}")
 
             await self._create_daytona_sandbox(
                 sandbox_id=sandbox_id,
@@ -1406,16 +1415,22 @@ class DaytonaSpawnerService:
         # This provides the SpecStateMachine with proper spec.* events via HTTPReporter
         # Check if USE_SPEC_SANDBOX is enabled (set by spawn_for_phase)
         if env_vars.get("USE_SPEC_SANDBOX") == "true":
-            logger.info("Uploading spec-sandbox subsystem for spec-driven development...")
+            logger.info(
+                "Uploading spec-sandbox subsystem for spec-driven development..."
+            )
             try:
                 # Create base directory for spec_sandbox package
                 sandbox.process.exec("mkdir -p /tmp/spec_sandbox_pkg/spec_sandbox")
 
                 # Get all files needed for spec-sandbox subsystem
-                spec_sandbox_files = get_spec_sandbox_files(install_path="/tmp/spec_sandbox_pkg")
+                spec_sandbox_files = get_spec_sandbox_files(
+                    install_path="/tmp/spec_sandbox_pkg"
+                )
 
                 if not spec_sandbox_files:
-                    logger.warning("No spec-sandbox files found - spec-sandbox source may not be available")
+                    logger.warning(
+                        "No spec-sandbox files found - spec-sandbox source may not be available"
+                    )
                 else:
                     for sandbox_path, content in spec_sandbox_files.items():
                         # Create parent directory for the file
@@ -1431,7 +1446,9 @@ class DaytonaSpawnerService:
 
                     # Add /tmp/spec_sandbox_pkg to PYTHONPATH so imports work
                     if "PYTHONPATH" in env_vars:
-                        env_vars["PYTHONPATH"] = f"/tmp/spec_sandbox_pkg:{env_vars['PYTHONPATH']}"
+                        env_vars["PYTHONPATH"] = (
+                            f"/tmp/spec_sandbox_pkg:{env_vars['PYTHONPATH']}"
+                        )
                     else:
                         env_vars["PYTHONPATH"] = "/tmp/spec_sandbox_pkg"
 
@@ -1521,8 +1538,8 @@ class DaytonaSpawnerService:
                         )
                     elif resp.status_code == 401:
                         logger.error(
-                            f"GitHub token is invalid or expired (401). "
-                            f"User needs to re-authenticate with GitHub."
+                            "GitHub token is invalid or expired (401). "
+                            "User needs to re-authenticate with GitHub."
                         )
                     elif resp.status_code == 403:
                         logger.error(
@@ -1605,10 +1622,12 @@ class DaytonaSpawnerService:
                         )
                         checkout_output = (
                             checkout_result.result
-                            if hasattr(checkout_result, "result") and checkout_result.result
+                            if hasattr(checkout_result, "result")
+                            and checkout_result.result
                             else (
                                 checkout_result.stdout
-                                if hasattr(checkout_result, "stdout") and checkout_result.stdout
+                                if hasattr(checkout_result, "stdout")
+                                and checkout_result.stdout
                                 else str(checkout_result)
                             )
                         )
@@ -1620,10 +1639,12 @@ class DaytonaSpawnerService:
                         )
                         final_branch = (
                             final_branch_check.result.strip()
-                            if hasattr(final_branch_check, "result") and final_branch_check.result
+                            if hasattr(final_branch_check, "result")
+                            and final_branch_check.result
                             else (
                                 final_branch_check.stdout.strip()
-                                if hasattr(final_branch_check, "stdout") and final_branch_check.stdout
+                                if hasattr(final_branch_check, "stdout")
+                                and final_branch_check.stdout
                                 else str(final_branch_check).strip()
                             )
                         )

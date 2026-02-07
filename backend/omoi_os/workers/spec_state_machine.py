@@ -60,7 +60,6 @@ import logging
 import os
 import re
 from datetime import datetime, timezone
-from enum import Enum
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Optional
 
@@ -79,7 +78,7 @@ from omoi_os.evals import (
 )
 from omoi_os.schemas.spec_generation import SpecPhase
 from omoi_os.services.embedding import EmbeddingService
-from omoi_os.services.spec_sync import SpecSyncService, SyncResult
+from omoi_os.services.spec_sync import SpecSyncService
 
 logger = logging.getLogger(__name__)
 
@@ -145,11 +144,11 @@ class SpecStateMachine:
 
     # Timeouts per phase (seconds)
     PHASE_TIMEOUTS = {
-        SpecPhase.EXPLORE: 180,       # 3 minutes
+        SpecPhase.EXPLORE: 180,  # 3 minutes
         SpecPhase.REQUIREMENTS: 300,  # 5 minutes
-        SpecPhase.DESIGN: 300,        # 5 minutes
-        SpecPhase.TASKS: 180,         # 3 minutes
-        SpecPhase.SYNC: 120,          # 2 minutes
+        SpecPhase.DESIGN: 300,  # 5 minutes
+        SpecPhase.TASKS: 180,  # 3 minutes
+        SpecPhase.SYNC: 120,  # 2 minutes
     }
 
     # Max turns per phase (keeps sessions short)
@@ -275,7 +274,7 @@ class SpecStateMachine:
             try:
                 result = await asyncio.wait_for(
                     self.execute_phase(phase, spec),
-                    timeout=self.PHASE_TIMEOUTS.get(phase, 300)
+                    timeout=self.PHASE_TIMEOUTS.get(phase, 300),
                 )
 
                 result.duration_seconds = (
@@ -332,7 +331,9 @@ class SpecStateMachine:
         prompt = await self.get_phase_prompt(phase, spec)
 
         for attempt in range(self.max_retries):
-            logger.debug(f"Phase {phase.value} attempt {attempt + 1}/{self.max_retries}")
+            logger.debug(
+                f"Phase {phase.value} attempt {attempt + 1}/{self.max_retries}"
+            )
 
             try:
                 # Execute the phase using Claude Agent SDK
@@ -365,18 +366,14 @@ class SpecStateMachine:
                 )
 
                 # Build retry prompt with failure feedback
-                prompt = self.build_retry_prompt(
-                    phase, spec, result, eval_result
-                )
+                prompt = self.build_retry_prompt(phase, spec, result, eval_result)
 
             except Exception as e:
                 logger.error(f"Phase {phase.value} attempt {attempt + 1} error: {e}")
                 if attempt == self.max_retries - 1:
                     raise
 
-        raise Exception(
-            f"Phase {phase.value} failed after {self.max_retries} attempts"
-        )
+        raise Exception(f"Phase {phase.value} failed after {self.max_retries} attempts")
 
     async def _execute_sync_phase(self, spec: Any) -> PhaseResult:
         """Execute the SYNC phase using SpecSyncService.
@@ -398,7 +395,7 @@ class SpecStateMachine:
         logger.info(f"Executing SYNC phase for spec {self.spec_id}")
 
         # Check if we're using a mock spec (sandbox mode without database)
-        if getattr(spec, 'is_mock', False):
+        if getattr(spec, "is_mock", False):
             logger.info("Skipping database sync for mock spec (sandbox mode)")
             return PhaseResult(
                 phase=SpecPhase.SYNC,
@@ -508,7 +505,7 @@ class SpecStateMachine:
             task_service = SpecTaskExecutionService(db=db_service, event_bus=event_bus)
 
             # Check if spec design is approved before executing tasks
-            if not getattr(spec, 'design_approved', False):
+            if not getattr(spec, "design_approved", False):
                 logger.info(
                     f"[SYNC] Skipping task execution - design not approved for spec {self.spec_id}"
                 )
@@ -519,7 +516,9 @@ class SpecStateMachine:
                 }
 
             # Execute the spec tasks
-            execution_result = await task_service.execute_spec_tasks(spec_id=self.spec_id)
+            execution_result = await task_service.execute_spec_tasks(
+                spec_id=self.spec_id
+            )
 
             if execution_result.success:
                 logger.info(
@@ -603,44 +602,66 @@ class SpecStateMachine:
     def _mock_phase_response(self, phase: SpecPhase) -> str:
         """Generate mock response for testing without SDK."""
         if phase == SpecPhase.EXPLORE:
-            return json.dumps({
-                "project_type": "fastapi",
-                "structure": {"models_dir": "backend/omoi_os/models"},
-                "existing_models": [{"name": "Spec", "file": "spec.py", "fields": ["id", "title"]}],
-                "conventions": {"naming": "snake_case"},
-                "explored_files": ["spec.py"],
-                "tech_stack": {"backend": "FastAPI"},
-            })
+            return json.dumps(
+                {
+                    "project_type": "fastapi",
+                    "structure": {"models_dir": "backend/omoi_os/models"},
+                    "existing_models": [
+                        {"name": "Spec", "file": "spec.py", "fields": ["id", "title"]}
+                    ],
+                    "conventions": {"naming": "snake_case"},
+                    "explored_files": ["spec.py"],
+                    "tech_stack": {"backend": "FastAPI"},
+                }
+            )
         elif phase == SpecPhase.REQUIREMENTS:
-            return json.dumps([{
-                "title": "Mock Requirement",
-                "condition": "WHEN user creates spec",
-                "action": "THE SYSTEM SHALL generate requirements",
-                "criteria": [
-                    {"text": "Requirements should be generated", "testable": True},
-                    {"text": "Requirements should be valid", "testable": True},
-                ],
-                "priority": "high",
-            }])
+            return json.dumps(
+                [
+                    {
+                        "title": "Mock Requirement",
+                        "condition": "WHEN user creates spec",
+                        "action": "THE SYSTEM SHALL generate requirements",
+                        "criteria": [
+                            {
+                                "text": "Requirements should be generated",
+                                "testable": True,
+                            },
+                            {"text": "Requirements should be valid", "testable": True},
+                        ],
+                        "priority": "high",
+                    }
+                ]
+            )
         elif phase == SpecPhase.DESIGN:
-            return json.dumps({
-                "architecture": "The system uses a state machine pattern for reliable spec generation. " * 3,
-                "data_model": [{"name": "Spec", "fields": [{"name": "id", "type": "uuid"}]}],
-                "api_endpoints": [{
-                    "method": "POST",
-                    "path": "/api/v1/specs",
-                    "description": "Create new spec",
-                }],
-            })
+            return json.dumps(
+                {
+                    "architecture": "The system uses a state machine pattern for reliable spec generation. "
+                    * 3,
+                    "data_model": [
+                        {"name": "Spec", "fields": [{"name": "id", "type": "uuid"}]}
+                    ],
+                    "api_endpoints": [
+                        {
+                            "method": "POST",
+                            "path": "/api/v1/specs",
+                            "description": "Create new spec",
+                        }
+                    ],
+                }
+            )
         elif phase == SpecPhase.TASKS:
-            return json.dumps([{
-                "title": "Implement spec model",
-                "description": "Add new fields to spec model",
-                "phase": "backend",
-                "priority": "high",
-                "dependencies": [],
-                "acceptance_criteria": ["Model updated"],
-            }])
+            return json.dumps(
+                [
+                    {
+                        "title": "Implement spec model",
+                        "description": "Add new fields to spec model",
+                        "phase": "backend",
+                        "priority": "high",
+                        "dependencies": [],
+                        "acceptance_criteria": ["Model updated"],
+                    }
+                ]
+            )
         else:
             return json.dumps({"status": "complete"})
 
@@ -672,8 +693,8 @@ class SpecStateMachine:
 
     def _get_explore_prompt(self, spec: Any) -> str:
         """Generate exploration phase prompt."""
-        title = getattr(spec, 'title', 'Unknown Feature')
-        description = getattr(spec, 'description', 'No description provided')
+        title = getattr(spec, "title", "Unknown Feature")
+        description = getattr(spec, "description", "No description provided")
 
         return f"""
 # Codebase Exploration
@@ -734,8 +755,8 @@ Begin exploration now.
 
     def _get_requirements_prompt(self, spec: Any, exploration: dict) -> str:
         """Generate requirements phase prompt."""
-        title = getattr(spec, 'title', 'Unknown Feature')
-        description = getattr(spec, 'description', 'No description provided')
+        title = getattr(spec, "title", "Unknown Feature")
+        description = getattr(spec, "description", "No description provided")
 
         return f"""
 # Requirements Generation
@@ -976,7 +997,7 @@ Try again now.
 
         # Try to find JSON in code blocks first
         json_match = re.search(
-            r'```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```',
+            r"```(?:json)?\s*(\{[\s\S]*?\}|\[[\s\S]*?\])\s*```",
             text,
         )
         if json_match:
@@ -986,7 +1007,7 @@ Try again now.
                 pass
 
         # Try to find raw JSON object
-        obj_match = re.search(r'(\{[\s\S]*\})', text)
+        obj_match = re.search(r"(\{[\s\S]*\})", text)
         if obj_match:
             try:
                 return json.loads(obj_match.group(1))
@@ -994,7 +1015,7 @@ Try again now.
                 pass
 
         # Try to find raw JSON array
-        arr_match = re.search(r'(\[[\s\S]*\])', text)
+        arr_match = re.search(r"(\[[\s\S]*\])", text)
         if arr_match:
             try:
                 return json.loads(arr_match.group(1))
@@ -1017,13 +1038,11 @@ Try again now.
             from omoi_os.models.spec import Spec
             from sqlalchemy import select
 
-            result = await self.db.execute(
-                select(Spec).where(Spec.id == self.spec_id)
-            )
+            result = await self.db.execute(select(Spec).where(Spec.id == self.spec_id))
             spec = result.scalar_one_or_none()
 
             # If database query returns None but we're in a sandbox, use mock
-            if spec is None and hasattr(self.db, '_pending_operations'):
+            if spec is None and hasattr(self.db, "_pending_operations"):
                 logger.info(
                     f"No spec found in mock DB for {self.spec_id}, "
                     "creating mock spec for sandbox execution"
@@ -1050,7 +1069,9 @@ Try again now.
 
         Attempts to restore state from file checkpoints if they exist.
         """
-        state_file = Path(self.working_directory) / ".omoi_os" / "checkpoints" / "state.json"
+        state_file = (
+            Path(self.working_directory) / ".omoi_os" / "checkpoints" / "state.json"
+        )
 
         if state_file.exists():
             try:
@@ -1061,14 +1082,20 @@ Try again now.
                     title=state.get("title", "Restored Spec"),
                     description=state.get("description", ""),
                 )
-                mock_spec.current_phase = state.get("current_phase", SpecPhase.EXPLORE.value)
+                mock_spec.current_phase = state.get(
+                    "current_phase", SpecPhase.EXPLORE.value
+                )
                 mock_spec.phase_data = state.get("phase_data", {})
                 mock_spec.phase_attempts = state.get("phase_attempts", {})
                 mock_spec.session_transcripts = state.get("session_transcripts", {})
-                logger.info(f"Restored mock spec from checkpoint: phase={mock_spec.current_phase}")
+                logger.info(
+                    f"Restored mock spec from checkpoint: phase={mock_spec.current_phase}"
+                )
                 return mock_spec
             except Exception as e:
-                logger.warning(f"Failed to load checkpoint: {e}, creating fresh mock spec")
+                logger.warning(
+                    f"Failed to load checkpoint: {e}, creating fresh mock spec"
+                )
 
         return _MockSpec(spec_id=self.spec_id)
 
@@ -1107,12 +1134,16 @@ Try again now.
         try:
             async with self.db.get_async_session() as session:
                 result = await session.execute(
-                    select(SpecRequirement).filter(SpecRequirement.spec_id == self.spec_id)
+                    select(SpecRequirement).filter(
+                        SpecRequirement.spec_id == self.spec_id
+                    )
                 )
                 requirements = result.scalars().all()
 
                 if not requirements:
-                    logger.warning(f"No requirements found in DB for spec {self.spec_id}")
+                    logger.warning(
+                        f"No requirements found in DB for spec {self.spec_id}"
+                    )
                     return {}
 
                 logger.info(
@@ -1156,7 +1187,9 @@ Try again now.
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
             if result.transcript_b64:
-                spec.session_transcripts[phase.value]["transcript_b64"] = result.transcript_b64
+                spec.session_transcripts[phase.value][
+                    "transcript_b64"
+                ] = result.transcript_b64
 
         await self.db.commit()
 
@@ -1170,14 +1203,18 @@ Try again now.
         await self.db.commit()
 
         # Write state checkpoint file
-        checkpoint_path = Path(self.working_directory) / ".omoi_os" / "checkpoints" / "state.json"
+        checkpoint_path = (
+            Path(self.working_directory) / ".omoi_os" / "checkpoints" / "state.json"
+        )
         checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
         checkpoint_data = {
             "spec_id": self.spec_id,
             "current_phase": spec.current_phase,
             "completed_phases": [
-                p.value for p in self.PHASE_ORDER
-                if self.PHASE_ORDER.index(p) < self.PHASE_ORDER.index(SpecPhase(spec.current_phase))
+                p.value
+                for p in self.PHASE_ORDER
+                if self.PHASE_ORDER.index(p)
+                < self.PHASE_ORDER.index(SpecPhase(spec.current_phase))
             ],
             "last_checkpoint_at": datetime.now(timezone.utc).isoformat(),
         }
@@ -1209,19 +1246,19 @@ Try again now.
     def get_session_transcript_path(self, session_id: str) -> Path:
         """Get path to session transcript file."""
         project_key = hashlib.sha256(self.working_directory.encode()).hexdigest()[:16]
-        return Path.home() / ".claude" / "projects" / project_key / f"{session_id}.jsonl"
+        return (
+            Path.home() / ".claude" / "projects" / project_key / f"{session_id}.jsonl"
+        )
 
     def export_session_transcript(self, session_id: str) -> Optional[str]:
         """Export session transcript as base64-encoded string."""
         transcript_path = self.get_session_transcript_path(session_id)
         if transcript_path.exists():
             content = transcript_path.read_bytes()
-            return base64.b64encode(content).decode('utf-8')
+            return base64.b64encode(content).decode("utf-8")
         return None
 
-    def hydrate_session_transcript(
-        self, session_id: str, transcript_b64: str
-    ) -> bool:
+    def hydrate_session_transcript(self, session_id: str, transcript_b64: str) -> bool:
         """Restore session transcript for resumption."""
         try:
             transcript_bytes = base64.b64decode(transcript_b64)

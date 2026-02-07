@@ -6,7 +6,6 @@ a multi-agent workflow with parallel execution, synchronization points,
 and result merging.
 """
 
-import asyncio
 import sys
 from pathlib import Path
 
@@ -66,7 +65,7 @@ def simulate_parallel_implementation():
 
     # Simulate design completion
     queue.update_task_status(design_task.id, "completed", result={"design": "complete"})
-    print(f"✓ Design task completed")
+    print("✓ Design task completed")
 
     # Split into parallel implementation tasks
     print("\n--- Splitting into parallel implementation tasks ---")
@@ -255,7 +254,7 @@ def simulate_review_feedback_loop():
 
     # Merge feedback
     print("\n--- Merging review feedback ---")
-    feedback = coordination.merge_task_results(
+    coordination.merge_task_results(
         merge_id="feedback_merge",
         source_task_ids=[t.id for t in review_tasks],
         merge_strategy="combine",
@@ -280,4 +279,3 @@ if __name__ == "__main__":
 
         traceback.print_exc()
         sys.exit(1)
-

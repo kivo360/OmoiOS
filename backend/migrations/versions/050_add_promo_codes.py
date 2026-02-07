@@ -12,7 +12,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-
 # revision identifiers, used by Alembic.
 revision: str = "050_add_promo_codes"
 down_revision: Union[str, Sequence[str], None] = "049_add_spec_deduplication_vectors"
@@ -29,7 +28,9 @@ def upgrade() -> None:
         sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
         sa.Column("code", sa.String(50), nullable=False, unique=True),
         sa.Column("description", sa.String(500), nullable=True),
-        sa.Column("discount_type", sa.String(50), nullable=False, server_default="percentage"),
+        sa.Column(
+            "discount_type", sa.String(50), nullable=False, server_default="percentage"
+        ),
         sa.Column("discount_value", sa.Integer, nullable=False, server_default="0"),
         sa.Column("trial_days", sa.Integer, nullable=True),
         sa.Column("max_uses", sa.Integer, nullable=True),

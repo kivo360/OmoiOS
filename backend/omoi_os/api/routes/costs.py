@@ -13,14 +13,15 @@ from omoi_os.api.dependencies import (
 from omoi_os.services.cost_tracking import CostTrackingService
 from omoi_os.services.budget_enforcer import BudgetEnforcerService
 
-
 router = APIRouter()
 
 
 # Request/Response Models
 
+
 class CostRecordResponse(BaseModel):
     """Response model for cost record."""
+
     id: str  # UUID string (matches CostRecord ORM model)
     task_id: str
     agent_id: str | None
@@ -39,6 +40,7 @@ class CostRecordResponse(BaseModel):
 
 class CostSummaryResponse(BaseModel):
     """Response model for cost summary."""
+
     scope_type: str
     scope_id: str | None
     total_cost: float
@@ -49,15 +51,25 @@ class CostSummaryResponse(BaseModel):
 
 class BudgetCreate(BaseModel):
     """Request model for creating a budget."""
-    scope_type: str = Field(..., description="Budget scope: global, ticket, agent, or phase")
-    scope_id: str | None = Field(None, description="ID of scoped entity (required unless global)")
+
+    scope_type: str = Field(
+        ..., description="Budget scope: global, ticket, agent, or phase"
+    )
+    scope_id: str | None = Field(
+        None, description="ID of scoped entity (required unless global)"
+    )
     limit_amount: float = Field(..., gt=0, description="Maximum allowed spend (USD)")
-    period_end: datetime | None = Field(None, description="Budget period end (None for indefinite)")
-    alert_threshold: float = Field(0.8, ge=0, le=1, description="Alert at this percentage (0.0-1.0)")
+    period_end: datetime | None = Field(
+        None, description="Budget period end (None for indefinite)"
+    )
+    alert_threshold: float = Field(
+        0.8, ge=0, le=1, description="Alert at this percentage (0.0-1.0)"
+    )
 
 
 class BudgetResponse(BaseModel):
     """Response model for budget."""
+
     id: int
     scope_type: str
     scope_id: str | None
@@ -77,6 +89,7 @@ class BudgetResponse(BaseModel):
 
 class BudgetCheckResponse(BaseModel):
     """Response model for budget check."""
+
     exists: bool
     limit: float | None
     spent: float
@@ -89,14 +102,18 @@ class BudgetCheckResponse(BaseModel):
 
 class ForecastRequest(BaseModel):
     """Request model for cost forecasting."""
+
     pending_task_count: int = Field(..., gt=0, description="Number of pending tasks")
-    avg_tokens_per_task: int | None = Field(None, description="Average tokens per task (uses default if not provided)")
+    avg_tokens_per_task: int | None = Field(
+        None, description="Average tokens per task (uses default if not provided)"
+    )
     provider: str = Field("anthropic", description="LLM provider for cost calculation")
     model: str = Field("claude-sonnet-4.5", description="Model for cost calculation")
 
 
 class ForecastResponse(BaseModel):
     """Response model for cost forecast."""
+
     task_count: int
     estimated_cost: float
     estimated_tokens: int
@@ -106,16 +123,19 @@ class ForecastResponse(BaseModel):
 
 # API Endpoints
 
+
 @router.get("/records", response_model=list[CostRecordResponse])
 async def list_cost_records(
     task_id: Optional[str] = Query(None, description="Filter by task ID"),
     agent_id: Optional[str] = Query(None, description="Filter by agent ID"),
-    limit: int = Query(100, ge=1, le=1000, description="Maximum number of records to return"),
+    limit: int = Query(
+        100, ge=1, le=1000, description="Maximum number of records to return"
+    ),
     cost_service: CostTrackingService = Depends(get_cost_tracking_service),
 ):
     """
     List cost records, optionally filtered by task or agent.
-    
+
     Returns up to `limit` most recent cost records.
     """
     with cost_service.db.get_session() as session:
@@ -127,34 +147,38 @@ async def list_cost_records(
             # Get all records (limited)
             from sqlalchemy import select
             from omoi_os.models.cost_record import CostRecord
-            
+
             result = session.execute(
-                select(CostRecord)
-                .order_by(CostRecord.recorded_at.desc())
-                .limit(limit)
+                select(CostRecord).order_by(CostRecord.recorded_at.desc()).limit(limit)
             )
             records = list(result.scalars().all())
-        
+
         return [CostRecordResponse.model_validate(r) for r in records[:limit]]
 
 
 @router.get("/summary", response_model=CostSummaryResponse)
 async def get_cost_summary(
-    scope_type: str = Query(..., description="Scope type: global, ticket, agent, phase, or task"),
-    scope_id: Optional[str] = Query(None, description="Scope ID (required unless scope_type=global)"),
+    scope_type: str = Query(
+        ..., description="Scope type: global, ticket, agent, phase, or task"
+    ),
+    scope_id: Optional[str] = Query(
+        None, description="Scope ID (required unless scope_type=global)"
+    ),
     cost_service: CostTrackingService = Depends(get_cost_tracking_service),
 ):
     """
     Get cost summary for a specific scope.
-    
+
     Aggregates costs by provider and model, showing total spend and token usage.
     """
     if scope_type not in ["global", "ticket", "agent", "phase", "task"]:
         raise HTTPException(status_code=400, detail=f"Invalid scope_type: {scope_type}")
-    
+
     if scope_type != "global" and not scope_id:
-        raise HTTPException(status_code=400, detail=f"scope_id required for scope_type={scope_type}")
-    
+        raise HTTPException(
+            status_code=400, detail=f"scope_id required for scope_type={scope_type}"
+        )
+
     summary = cost_service.get_cost_summary(scope_type, scope_id)
     return CostSummaryResponse(**summary)
 
@@ -178,7 +202,7 @@ async def create_budget(
 ):
     """
     Create a new budget limit.
-    
+
     Budget limits can be scoped to:
     - global: System-wide budget
     - ticket: Per-ticket budget
@@ -206,7 +230,7 @@ async def check_budget(
 ):
     """
     Check budget status for a scope.
-    
+
     Returns current budget utilization and whether the limit has been exceeded.
     """
     status = budget_service.check_budget(scope_type, scope_id)
@@ -220,7 +244,7 @@ async def forecast_costs(
 ):
     """
     Forecast costs for pending tasks.
-    
+
     Estimates total cost based on:
     - Number of pending tasks
     - Average tokens per task (configurable or uses default)
@@ -234,5 +258,3 @@ async def forecast_costs(
         model=forecast_data.model,
     )
     return ForecastResponse(**forecast)
-
-

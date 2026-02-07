@@ -24,6 +24,7 @@ def main():
 
     # Load database URL from config
     from omoi_os.config import get_app_settings
+
     settings = get_app_settings()
     db = DatabaseService(settings.database.url)
 
@@ -53,12 +54,14 @@ def main():
                 print(f"    ID: {user.id}")
                 print(f"    GitHub Username: {github_username or 'Not set'}")
                 print(f"    GitHub Token: {token_preview}")
-                print(f"    All attributes keys: {list(attrs.keys()) if attrs else '[]'}")
+                print(
+                    f"    All attributes keys: {list(attrs.keys()) if attrs else '[]'}"
+                )
 
                 if github_token:
-                    print(f"    ✅ Has GitHub token")
+                    print("    ✅ Has GitHub token")
                 else:
-                    print(f"    ❌ Missing GitHub token - OAuth connection needed!")
+                    print("    ❌ Missing GitHub token - OAuth connection needed!")
 
         # Check 2: Projects with GitHub config
         print("\n\n📁 PROJECTS:")
@@ -76,9 +79,11 @@ def main():
                 print(f"    Created By: {project.created_by or 'NOT SET'}")
 
                 if project.github_owner and project.github_repo:
-                    print(f"    ✅ GitHub config: {project.github_owner}/{project.github_repo}")
+                    print(
+                        f"    ✅ GitHub config: {project.github_owner}/{project.github_repo}"
+                    )
                 else:
-                    print(f"    ❌ Missing GitHub owner/repo!")
+                    print("    ❌ Missing GitHub owner/repo!")
 
                 # Check if owner has token
                 if project.created_by:
@@ -87,14 +92,20 @@ def main():
                         attrs = owner.attributes or {}
                         has_token = bool(attrs.get("github_access_token"))
                         if has_token:
-                            print(f"    ✅ Project owner ({owner.email}) has GitHub token")
+                            print(
+                                f"    ✅ Project owner ({owner.email}) has GitHub token"
+                            )
                         else:
-                            print(f"    ❌ Project owner ({owner.email}) missing GitHub token!")
+                            print(
+                                f"    ❌ Project owner ({owner.email}) missing GitHub token!"
+                            )
 
         # Check 3: Tickets and their projects
         print("\n\n🎫 RECENT TICKETS (last 5):")
         print("-" * 40)
-        tickets = session.query(Ticket).order_by(Ticket.created_at.desc()).limit(5).all()
+        tickets = (
+            session.query(Ticket).order_by(Ticket.created_at.desc()).limit(5).all()
+        )
 
         if not tickets:
             print("❌ No tickets found!")
@@ -112,18 +123,21 @@ def main():
                         if ticket.project.github_owner and ticket.project.github_repo:
                             print(f"    ✅ Linked to: {gh}")
                         else:
-                            print(f"    ⚠️ Project exists but no GitHub config")
+                            print("    ⚠️ Project exists but no GitHub config")
                     else:
-                        print(f"    ⚠️ Project ID set but project not found")
+                        print("    ⚠️ Project ID set but project not found")
                 else:
-                    print(f"    ❌ Not linked to any project - clone impossible!")
+                    print("    ❌ Not linked to any project - clone impossible!")
 
         # Check 4: Pending/Running tasks
         print("\n\n⏳ PENDING/RUNNING TASKS:")
         print("-" * 40)
-        active_tasks = session.query(Task).filter(
-            Task.status.in_(["pending", "assigned", "running", "claiming"])
-        ).limit(10).all()
+        active_tasks = (
+            session.query(Task)
+            .filter(Task.status.in_(["pending", "assigned", "running", "claiming"]))
+            .limit(10)
+            .all()
+        )
 
         if not active_tasks:
             print("No active tasks found.")
@@ -132,77 +146,95 @@ def main():
             clone_not_ready = 0
 
             for task in active_tasks:
-                print(f"\n  Task: {task.description[:50] if task.description else 'No description'}...")
+                print(
+                    f"\n  Task: {task.description[:50] if task.description else 'No description'}..."
+                )
                 print(f"    ID: {task.id}")
                 print(f"    Status: {task.status}")
                 print(f"    Ticket ID: {task.ticket_id}")
 
                 ticket = session.get(Ticket, task.ticket_id) if task.ticket_id else None
                 if not ticket:
-                    print(f"    ❌ Ticket not found!")
+                    print("    ❌ Ticket not found!")
                     clone_not_ready += 1
                     continue
 
                 if not ticket.project_id:
-                    print(f"    ❌ Ticket not linked to project!")
+                    print("    ❌ Ticket not linked to project!")
                     clone_not_ready += 1
                     continue
 
                 project = ticket.project
                 if not project:
-                    print(f"    ❌ Project not found!")
+                    print("    ❌ Project not found!")
                     clone_not_ready += 1
                     continue
 
                 if not project.github_owner or not project.github_repo:
-                    print(f"    ❌ Project missing GitHub config!")
+                    print("    ❌ Project missing GitHub config!")
                     clone_not_ready += 1
                     continue
 
                 if not project.created_by:
-                    print(f"    ❌ Project has no owner!")
+                    print("    ❌ Project has no owner!")
                     clone_not_ready += 1
                     continue
 
                 owner = session.get(User, project.created_by)
                 if not owner:
-                    print(f"    ❌ Project owner not found!")
+                    print("    ❌ Project owner not found!")
                     clone_not_ready += 1
                     continue
 
                 attrs = owner.attributes or {}
                 if not attrs.get("github_access_token"):
-                    print(f"    ❌ Owner missing GitHub token!")
+                    print("    ❌ Owner missing GitHub token!")
                     clone_not_ready += 1
                     continue
 
-                print(f"    ✅ Clone ready: {project.github_owner}/{project.github_repo}")
+                print(
+                    f"    ✅ Clone ready: {project.github_owner}/{project.github_repo}"
+                )
                 clone_ready += 1
 
-            print(f"\n  Summary: {clone_ready} tasks clone-ready, {clone_not_ready} NOT ready")
+            print(
+                f"\n  Summary: {clone_ready} tasks clone-ready, {clone_not_ready} NOT ready"
+            )
 
         # Final summary
         print("\n\n" + "=" * 60)
         print("SUMMARY")
         print("=" * 60)
 
-        users_with_token = sum(
-            1 for u in users
-            if u.attributes and u.attributes.get("github_access_token")
-        ) if users else 0
+        users_with_token = (
+            sum(
+                1
+                for u in users
+                if u.attributes and u.attributes.get("github_access_token")
+            )
+            if users
+            else 0
+        )
 
-        projects_with_gh = sum(
-            1 for p in projects
-            if p.github_owner and p.github_repo
-        ) if projects else 0
+        projects_with_gh = (
+            sum(1 for p in projects if p.github_owner and p.github_repo)
+            if projects
+            else 0
+        )
 
-        print(f"  Users with GitHub token: {users_with_token}/{len(users) if users else 0}")
-        print(f"  Projects with GitHub config: {projects_with_gh}/{len(projects) if projects else 0}")
+        print(
+            f"  Users with GitHub token: {users_with_token}/{len(users) if users else 0}"
+        )
+        print(
+            f"  Projects with GitHub config: {projects_with_gh}/{len(projects) if projects else 0}"
+        )
 
         if users_with_token == 0:
             print("\n  🔴 CRITICAL: No users have GitHub tokens!")
             print("     → User needs to connect GitHub via OAuth")
-            print("     → Token should be stored in user.attributes.github_access_token")
+            print(
+                "     → Token should be stored in user.attributes.github_access_token"
+            )
 
         if projects_with_gh == 0:
             print("\n  🔴 CRITICAL: No projects have GitHub config!")

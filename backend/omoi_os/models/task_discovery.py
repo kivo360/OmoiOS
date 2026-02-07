@@ -98,7 +98,9 @@ class TaskDiscovery(Base):
         if not self.spawned_task_ids:
             self.spawned_task_ids = []
         if task_id not in self.spawned_task_ids:
-            self.spawned_task_ids = self.spawned_task_ids + [task_id]  # Create new list for JSONB mutation tracking
+            self.spawned_task_ids = self.spawned_task_ids + [
+                task_id
+            ]  # Create new list for JSONB mutation tracking
 
     def mark_resolved(self) -> None:
         """Mark discovery as resolved."""
@@ -117,9 +119,9 @@ class TaskDiscovery(Base):
             "description": self.description,
             "spawned_task_ids": self.spawned_task_ids,
             "spawned_count": len(self.spawned_task_ids),
-            "discovered_at": self.discovered_at.isoformat()
-            if self.discovered_at
-            else None,
+            "discovered_at": (
+                self.discovered_at.isoformat() if self.discovered_at else None
+            ),
             "priority_boost": self.priority_boost,
             "resolution_status": self.resolution_status,
             "metadata": self.discovery_metadata or {},
@@ -139,7 +141,7 @@ class DiscoveryType:
     MISSING_REQUIREMENT = "missing_requirement"
     INTEGRATION_ISSUE = "integration_issue"
     TECHNICAL_DEBT = "technical_debt"
-    
+
     # Diagnostic types
     DIAGNOSTIC_STUCK = "diagnostic_stuck"
     DIAGNOSTIC_NO_RESULT = "diagnostic_no_result"

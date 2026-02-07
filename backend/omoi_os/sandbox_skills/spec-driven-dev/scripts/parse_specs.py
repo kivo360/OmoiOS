@@ -384,7 +384,9 @@ class SpecParser:
                 elif isinstance(raw_errors, list):
                     for err in raw_errors:
                         if isinstance(err, dict) and "status" in err:
-                            error_responses[str(err["status"])] = err.get("description", "")
+                            error_responses[str(err["status"])] = err.get(
+                                "description", ""
+                            )
 
                 api_endpoints.append(
                     ApiEndpoint(
@@ -415,7 +417,9 @@ class SpecParser:
         | POST | /api/v1/resource | Create resource | Required |
         """
         endpoints = []
-        api_section = self._extract_section(body, "API Specification") or self._extract_section(body, "Endpoints")
+        api_section = self._extract_section(
+            body, "API Specification"
+        ) or self._extract_section(body, "Endpoints")
 
         if not api_section:
             return endpoints
@@ -423,7 +427,6 @@ class SpecParser:
         # Find table rows (skip header and separator)
         lines = api_section.strip().split("\n")
         in_table = False
-        header_cols = []
 
         for line in lines:
             line = line.strip()
@@ -433,7 +436,7 @@ class SpecParser:
             # Detect table start
             if line.startswith("|") and "Method" in line:
                 in_table = True
-                header_cols = [col.strip().lower() for col in line.split("|") if col.strip()]
+                [col.strip().lower() for col in line.split("|") if col.strip()]
                 continue
 
             # Skip separator row
@@ -475,7 +478,9 @@ class SpecParser:
             if isinstance(model, dict):
                 # Parse typed fields if available
                 typed_fields = []
-                raw_fields = model.get("typed_fields", []) or model.get("fields_detailed", [])
+                raw_fields = model.get("typed_fields", []) or model.get(
+                    "fields_detailed", []
+                )
                 if isinstance(raw_fields, list):
                     for f in raw_fields:
                         if isinstance(f, dict) and "name" in f:
@@ -533,7 +538,9 @@ class SpecParser:
         ```
         """
         models = []
-        data_section = self._extract_section(body, "Data Model") or self._extract_section(body, "Database Schema")
+        data_section = self._extract_section(
+            body, "Data Model"
+        ) or self._extract_section(body, "Database Schema")
 
         if not data_section:
             return models
@@ -555,7 +562,9 @@ class SpecParser:
                 fields = {}
                 for line in columns_str.split(","):
                     line = line.strip()
-                    if not line or line.upper().startswith(("PRIMARY", "FOREIGN", "CONSTRAINT", "INDEX")):
+                    if not line or line.upper().startswith(
+                        ("PRIMARY", "FOREIGN", "CONSTRAINT", "INDEX")
+                    ):
                         continue
                     parts = line.split()
                     if len(parts) >= 2:
@@ -821,7 +830,7 @@ if __name__ == "__main__":
     parser = SpecParser()
     result = parser.parse_all()
 
-    print(f"Found:")
+    print("Found:")
     print(f"  {len(result.requirements)} requirements")
     print(f"  {len(result.designs)} designs")
     print(f"  {len(result.tickets)} tickets")
@@ -835,7 +844,7 @@ if __name__ == "__main__":
     # Show traceability stats
     if result.requirements or result.designs or result.tickets:
         stats = result.get_traceability_stats()
-        print(f"\nTraceability Coverage:")
+        print("\nTraceability Coverage:")
         if result.requirements:
             print(
                 f"  Requirements: {stats['requirements']['linked']}/{stats['requirements']['total']} linked ({stats['requirements']['coverage']:.1f}%)"

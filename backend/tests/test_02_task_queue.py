@@ -1,6 +1,5 @@
 """Test task queue service: enqueue, get_next_task, assign, update status."""
 
-
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.task_queue import TaskQueueService
@@ -31,7 +30,9 @@ def test_get_next_task_empty(task_queue_service: TaskQueueService):
     assert task is None
 
 
-def test_get_next_task_priority_order(task_queue_service: TaskQueueService, sample_ticket: Ticket):
+def test_get_next_task_priority_order(
+    task_queue_service: TaskQueueService, sample_ticket: Ticket
+):
     """Test get_next_task returns highest priority task first."""
     # Create tasks with different priorities
     task_queue_service.enqueue_task(
@@ -74,7 +75,9 @@ def test_get_next_task_priority_order(task_queue_service: TaskQueueService, samp
     assert next_task.priority == "MEDIUM"
 
 
-def test_get_next_task_phase_filtering(task_queue_service: TaskQueueService, sample_ticket: Ticket):
+def test_get_next_task_phase_filtering(
+    task_queue_service: TaskQueueService, sample_ticket: Ticket
+):
     """Test get_next_task only returns tasks for specified phase."""
     # Create tasks in different phases
     task1 = task_queue_service.enqueue_task(
@@ -119,7 +122,9 @@ def test_assign_task(task_queue_service: TaskQueueService, sample_task: Task):
         assert task.status == "assigned"
 
 
-def test_update_task_status_running(task_queue_service: TaskQueueService, sample_task: Task):
+def test_update_task_status_running(
+    task_queue_service: TaskQueueService, sample_task: Task
+):
     """Test updating task status to running."""
     task_queue_service.update_task_status(sample_task.id, "running")
 
@@ -129,7 +134,9 @@ def test_update_task_status_running(task_queue_service: TaskQueueService, sample
         assert task.started_at is not None
 
 
-def test_update_task_status_completed(task_queue_service: TaskQueueService, sample_task: Task):
+def test_update_task_status_completed(
+    task_queue_service: TaskQueueService, sample_task: Task
+):
     """Test updating task status to completed with result."""
     result = {"status": "success", "output": "Task completed"}
 
@@ -148,7 +155,9 @@ def test_update_task_status_completed(task_queue_service: TaskQueueService, samp
         assert task.completed_at is not None
 
 
-def test_update_task_status_failed(task_queue_service: TaskQueueService, sample_task: Task):
+def test_update_task_status_failed(
+    task_queue_service: TaskQueueService, sample_task: Task
+):
     """Test updating task status to failed with error message."""
     error_message = "Task execution failed"
 
@@ -165,7 +174,9 @@ def test_update_task_status_failed(task_queue_service: TaskQueueService, sample_
         assert task.completed_at is not None
 
 
-def test_get_assigned_tasks(task_queue_service: TaskQueueService, sample_ticket: Ticket):
+def test_get_assigned_tasks(
+    task_queue_service: TaskQueueService, sample_ticket: Ticket
+):
     """Test getting tasks assigned to a specific agent."""
     agent_id = "test-agent-456"
 
@@ -205,4 +216,3 @@ def test_get_assigned_tasks(task_queue_service: TaskQueueService, sample_ticket:
     assert task1.id in assigned_ids
     assert task2.id in assigned_ids
     assert task3.id not in assigned_ids
-

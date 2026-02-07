@@ -6,9 +6,7 @@ import tempfile
 import pytest
 
 from omoi_os.models.agent import Agent
-from omoi_os.models.agent_result import AgentResult
 from omoi_os.models.task import Task
-from omoi_os.models.workflow_result import WorkflowResult
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.phase_loader import PhaseLoader
@@ -19,20 +17,22 @@ from omoi_os.services.result_submission import ResultSubmissionService
 def result_service(db_service: DatabaseService, event_bus_service: EventBusService):
     """Create a result submission service for testing."""
     phase_loader = PhaseLoader()
-    return ResultSubmissionService(db=db_service, event_bus=event_bus_service, phase_loader=phase_loader)
+    return ResultSubmissionService(
+        db=db_service, event_bus=event_bus_service, phase_loader=phase_loader
+    )
 
 
 @pytest.fixture
 def temp_markdown_file():
     """Create a temporary markdown file for testing."""
     content = "# Test Results\n\nThis is a test result file."
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write(content)
         temp_path = f.name
-    
+
     yield temp_path
-    
+
     # Cleanup
     if os.path.exists(temp_path):
         os.unlink(temp_path)
@@ -42,13 +42,13 @@ def temp_markdown_file():
 def large_markdown_file():
     """Create a markdown file larger than 100KB."""
     content = "# Large File\n\n" + ("A" * 110 * 1024)  # 110KB
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write(content)
         temp_path = f.name
-    
+
     yield temp_path
-    
+
     # Cleanup
     if os.path.exists(temp_path):
         os.unlink(temp_path)
@@ -145,7 +145,7 @@ def test_report_task_result_not_markdown(
 ):
     """Test result submission with non-markdown file."""
     # Create a .txt file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         f.write("Test content")
         txt_path = f.name
 
@@ -244,11 +244,11 @@ def test_multiple_results_per_task(
         session.commit()
 
     # Create two temp files
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("# Result 1")
         file1 = f.name
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("# Result 2")
         file2 = f.name
 
@@ -412,11 +412,11 @@ def test_list_workflow_results(
 ):
     """Test listing all results for a workflow."""
     # Create two temp files
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("# Result 1")
         file1 = f.name
 
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("# Result 2")
         file2 = f.name
 
@@ -459,9 +459,9 @@ def test_workflow_result_immutability(
 
     # Verify we can't update (would need a new submission)
     # Results are append-only - new submissions create new records
-    
+
     # Submit another result (version 2)
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write("# Updated Result")
         updated_file = f.name
 
@@ -481,4 +481,3 @@ def test_workflow_result_immutability(
 
     finally:
         os.unlink(updated_file)
-

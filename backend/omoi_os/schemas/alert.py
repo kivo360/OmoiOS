@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 class AlertResponse(BaseModel):
     """Alert response schema."""
+
     id: str
     rule_id: str
     metric_name: str
@@ -25,17 +26,22 @@ class AlertResponse(BaseModel):
 
 class AlertAcknowledgeRequest(BaseModel):
     """Request to acknowledge an alert."""
-    acknowledged_by: str = Field(..., description="User or agent ID acknowledging the alert")
+
+    acknowledged_by: str = Field(
+        ..., description="User or agent ID acknowledging the alert"
+    )
 
 
 class AlertResolveRequest(BaseModel):
     """Request to resolve an alert."""
+
     resolved_by: str = Field(..., description="User or agent ID resolving the alert")
     note: Optional[str] = Field(None, description="Optional resolution note")
 
 
 class AlertRuleResponse(BaseModel):
     """Alert rule response schema."""
+
     rule_id: str
     name: str
     metric_name: str
@@ -43,4 +49,3 @@ class AlertRuleResponse(BaseModel):
     severity: str
     routing: List[str]
     enabled: bool
-

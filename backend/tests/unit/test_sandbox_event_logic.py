@@ -113,9 +113,9 @@ class TestEventTransformation:
                 source="agent",
             )
             # VERIFY: Prefix is applied consistently
-            assert event.event_type.startswith("SANDBOX_"), (
-                f"Missing prefix for {event_type}"
-            )
+            assert event.event_type.startswith(
+                "SANDBOX_"
+            ), f"Missing prefix for {event_type}"
 
 
 @pytest.mark.unit

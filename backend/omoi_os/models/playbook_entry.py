@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 class PlaybookEntry(Base):
     """
     Playbook entry storing knowledge bullets for tickets (REQ-MEM-ACE-003).
-    
+
     Playbook entries are automatically created and updated by the Curator phase
     of the ACE workflow. They store patterns, gotchas, best practices, and
     other learnings from task executions.
@@ -39,42 +39,52 @@ class PlaybookEntry(Base):
         String, primary_key=True, default=lambda: str(uuid.uuid4())
     )
     ticket_id: Mapped[str] = mapped_column(
-        String, ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False, index=True,
-        comment="Ticket (project) this playbook entry belongs to"
+        String,
+        ForeignKey("tickets.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Ticket (project) this playbook entry belongs to",
     )
-    
+
     # Content
     content: Mapped[str] = mapped_column(
         Text, nullable=False, comment="Playbook entry content (REQ-MEM-ACE-003)"
     )
     category: Mapped[Optional[str]] = mapped_column(
-        String(100), nullable=True, index=True,
-        comment="Category: dependencies, architecture, gotchas, patterns, etc."
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Category: dependencies, architecture, gotchas, patterns, etc.",
     )
-    
+
     # Embedding for semantic search (REQ-MEM-ACE-002)
     embedding: Mapped[Optional[List[float]]] = mapped_column(
         ARRAY(Float, dimensions=1),
         nullable=True,
         comment="1536-dimensional embedding vector for similarity search",
     )
-    
+
     # Metadata
     tags: Mapped[Optional[List[str]]] = mapped_column(
-        ARRAY(String(100)), nullable=True,
-        comment="Tags for filtering and categorization"
+        ARRAY(String(100)),
+        nullable=True,
+        comment="Tags for filtering and categorization",
     )
     priority: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0, index=True,
-        comment="Priority level (higher = more important)"
+        Integer,
+        nullable=False,
+        default=0,
+        index=True,
+        comment="Priority level (higher = more important)",
     )
-    
+
     # Links to memories that support this entry (REQ-MEM-ACE-002)
     supporting_memory_ids: Mapped[Optional[List[str]]] = mapped_column(
-        ARRAY(String), nullable=True,
-        comment="Memory IDs that support this playbook entry"
+        ARRAY(String),
+        nullable=True,
+        comment="Memory IDs that support this playbook entry",
     )
-    
+
     # Lifecycle
     created_at: Mapped[Instant] = mapped_column(
         DateTime(timezone=True),
@@ -84,8 +94,7 @@ class PlaybookEntry(Base):
         comment="When this entry was created",
     )
     created_by: Mapped[Optional[str]] = mapped_column(
-        String, nullable=True,
-        comment="Agent ID that created this entry"
+        String, nullable=True, comment="Agent ID that created this entry"
     )
     updated_at: Mapped[Instant] = mapped_column(
         DateTime(timezone=True),
@@ -95,8 +104,11 @@ class PlaybookEntry(Base):
         comment="When this entry was last updated",
     )
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, index=True,
-        comment="Whether this entry is active (soft delete)"
+        Boolean,
+        nullable=False,
+        default=True,
+        index=True,
+        comment="Whether this entry is active (soft delete)",
     )
 
     # Relationships
@@ -122,12 +134,9 @@ class PlaybookEntry(Base):
             "priority": self.priority,
             "supporting_memory_ids": self.supporting_memory_ids,
             "has_embedding": self.embedding is not None,
-            "embedding_dimensions": (
-                len(self.embedding) if self.embedding else 0
-            ),
+            "embedding_dimensions": (len(self.embedding) if self.embedding else 0),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "created_by": self.created_by,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "is_active": self.is_active,
         }
-

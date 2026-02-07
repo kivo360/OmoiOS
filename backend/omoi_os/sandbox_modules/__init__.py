@@ -208,14 +208,14 @@ def get_module_init_script(install_path: str = "/tmp/omoi_os") -> str:
     Returns:
         Shell script content.
     """
-    return f'''#!/bin/bash
+    return f"""#!/bin/bash
 # Set up Python path for sandbox omoi_os modules
 
 export PYTHONPATH="{install_path}:$PYTHONPATH"
 
 # Verify the modules are importable
 python3 -c "from omoi_os.workers.spec_state_machine import SpecStateMachine; print('✅ SpecStateMachine imported successfully')" 2>/dev/null || echo "⚠️ SpecStateMachine import failed"
-'''
+"""
 
 
 def get_spec_sandbox_files(
@@ -267,15 +267,27 @@ def get_spec_sandbox_files(
     # Path 1: Docker layout (/app/subsystems/...)
     # In Docker, /app contains both the backend code AND subsystems
     app_root = Path(__file__).parent.parent.parent  # /app or backend/
-    potential_paths.append(app_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+    potential_paths.append(
+        app_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox"
+    )
 
     # Path 2: Monorepo layout (backend/../subsystems/...)
     monorepo_root = app_root.parent
-    potential_paths.append(monorepo_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+    potential_paths.append(
+        monorepo_root / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox"
+    )
 
     # Path 3: cwd-relative paths
-    potential_paths.append(Path(os.getcwd()) / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
-    potential_paths.append(Path(os.getcwd()).parent / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox")
+    potential_paths.append(
+        Path(os.getcwd()) / "subsystems" / "spec-sandbox" / "src" / "spec_sandbox"
+    )
+    potential_paths.append(
+        Path(os.getcwd()).parent
+        / "subsystems"
+        / "spec-sandbox"
+        / "src"
+        / "spec_sandbox"
+    )
 
     # Find the first path that exists
     spec_sandbox_src = None
@@ -311,7 +323,7 @@ def get_spec_sandbox_dependencies_install_script() -> str:
     Returns:
         Shell script content that installs dependencies.
     """
-    return '''#!/bin/bash
+    return """#!/bin/bash
 # Install spec-sandbox dependencies
 
 # Try uv first (faster), fall back to pip
@@ -320,4 +332,4 @@ if command -v uv &> /dev/null; then
 else
     pip install httpx pydantic pydantic-settings pyyaml
 fi
-'''
+"""

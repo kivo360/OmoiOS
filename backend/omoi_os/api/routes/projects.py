@@ -52,7 +52,9 @@ async def _create_project_async(
         )
         existing = result.scalar_one_or_none()
         if existing:
-            raise ValueError("Project with this name already exists in this organization")
+            raise ValueError(
+                "Project with this name already exists in this organization"
+            )
 
         project = Project(
             organization_id=organization_id,
@@ -97,7 +99,9 @@ async def _list_projects_async(
         # Get total count with same filters
         count_query = select(func.count(Project.id))
         if organization_ids:
-            count_query = count_query.filter(Project.organization_id.in_(organization_ids))
+            count_query = count_query.filter(
+                Project.organization_id.in_(organization_ids)
+            )
         if status:
             count_query = count_query.filter(Project.status == status)
 
@@ -111,14 +115,10 @@ async def _list_projects_async(
         return projects, total
 
 
-async def _get_project_async(
-    db: DatabaseService, project_id: str
-) -> Optional[Project]:
+async def _get_project_async(db: DatabaseService, project_id: str) -> Optional[Project]:
     """Get a project by ID (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
-        result = await session.execute(
-            select(Project).filter(Project.id == project_id)
-        )
+        result = await session.execute(select(Project).filter(Project.id == project_id))
         project = result.scalar_one_or_none()
         return project
 
@@ -138,9 +138,7 @@ async def _update_project_async(
 ) -> Optional[Project]:
     """Update a project (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
-        result = await session.execute(
-            select(Project).filter(Project.id == project_id)
-        )
+        result = await session.execute(select(Project).filter(Project.id == project_id))
         project = result.scalar_one_or_none()
         if not project:
             return None
@@ -175,9 +173,7 @@ async def _delete_project_async(
 ) -> Optional[Project]:
     """Soft delete a project (ASYNC - non-blocking)."""
     async with db.get_async_session() as session:
-        result = await session.execute(
-            select(Project).filter(Project.id == project_id)
-        )
+        result = await session.execute(select(Project).filter(Project.id == project_id))
         project = result.scalar_one_or_none()
         if not project:
             return None
@@ -194,14 +190,11 @@ async def _get_project_stats_async(
 ) -> Optional[Dict[str, Any]]:
     """Get project stats (ASYNC - non-blocking)."""
     from omoi_os.models.ticket_commit import TicketCommit
-    from omoi_os.models.agent import Agent
     from omoi_os.models.task import Task
 
     async with db.get_async_session() as session:
         # Verify project exists
-        result = await session.execute(
-            select(Project).filter(Project.id == project_id)
-        )
+        result = await session.execute(select(Project).filter(Project.id == project_id))
         project = result.scalar_one_or_none()
         if not project:
             return None

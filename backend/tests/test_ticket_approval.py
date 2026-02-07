@@ -1,6 +1,6 @@
 """Tests for ticket human approval workflow (REQ-THA-*)."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -122,7 +122,10 @@ class TestApprovalService:
             assert ticket.requested_by_agent_id == "agent-123"
 
     def test_approve_ticket_success(
-        self, approval_service: ApprovalService, sample_ticket_for_approval: Ticket, db_service: DatabaseService
+        self,
+        approval_service: ApprovalService,
+        sample_ticket_for_approval: Ticket,
+        db_service: DatabaseService,
     ):
         """Test approving a pending ticket (REQ-THA-004)."""
         ticket = approval_service.approve_ticket(
@@ -417,9 +420,7 @@ class TestApprovalService:
         assert status["approval_status"] == ApprovalStatus.PENDING_REVIEW.value
         assert status["requested_by_agent_id"] == "agent-123"
 
-    def test_get_approval_status_not_found(
-        self, approval_service: ApprovalService
-    ):
+    def test_get_approval_status_not_found(self, approval_service: ApprovalService):
         """Test getting approval status for non-existent ticket."""
         status = approval_service.get_approval_status("non-existent-id")
 
@@ -443,7 +444,7 @@ class TestApprovalService:
         event_bus_service.publish = Mock(side_effect=capture_event)
 
         try:
-            ticket = approval_service.approve_ticket(
+            approval_service.approve_ticket(
                 sample_ticket_for_approval.id, approver_id="human-123"
             )
 
@@ -474,7 +475,7 @@ class TestApprovalService:
         event_bus_service.publish = Mock(side_effect=capture_event)
 
         try:
-            ticket = approval_service.reject_ticket(
+            approval_service.reject_ticket(
                 sample_ticket_for_approval.id,
                 rejection_reason="Not relevant",
                 rejector_id="human-123",
@@ -540,7 +541,7 @@ class TestApprovalService:
                 assert event.event_type == "TICKET_APPROVAL_PENDING"
                 assert event.entity_id == str(ticket.id)
                 assert "deadline_at" in event.payload
-                
+
                 # Verify ticket state
                 assert ticket.approval_status == ApprovalStatus.PENDING_REVIEW.value
                 assert ticket.id is not None
@@ -569,4 +570,3 @@ class TestApprovalStatus:
         assert ApprovalStatus.can_proceed(ApprovalStatus.PENDING_REVIEW.value) is False
         assert ApprovalStatus.can_proceed(ApprovalStatus.REJECTED.value) is False
         assert ApprovalStatus.can_proceed(ApprovalStatus.TIMED_OUT.value) is False
-

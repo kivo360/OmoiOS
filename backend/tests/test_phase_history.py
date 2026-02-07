@@ -30,7 +30,9 @@ def test_create_phase_history(db_service: DatabaseService, sample_ticket: Ticket
     assert history.transitioned_by == "agent-123"
 
 
-def test_phase_history_relationships(db_service: DatabaseService, sample_ticket: Ticket):
+def test_phase_history_relationships(
+    db_service: DatabaseService, sample_ticket: Ticket
+):
     """Test phase history relationship to ticket."""
     with db_service.get_session() as session:
         history = PhaseHistory(
@@ -64,11 +66,7 @@ def test_phase_history_timestamps(db_service: DatabaseService, sample_ticket: Ti
         session.refresh(history)
 
         from omoi_os.utils.datetime import utc_now
+
         now = utc_now() + timedelta(seconds=5)
         assert history.created_at <= now
         assert history.created_at >= utc_now() - timedelta(minutes=5)
-
-
-
-
-

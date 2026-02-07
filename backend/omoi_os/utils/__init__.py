@@ -22,4 +22,3 @@ __all__ = [
     "validate_mermaid_with_cli",
     "validate_mermaid_sync",
 ]
-

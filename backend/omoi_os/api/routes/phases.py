@@ -11,21 +11,15 @@ from pydantic import BaseModel, ConfigDict
 from omoi_os.api.dependencies import (
     get_current_user,
     get_db_service,
-    get_event_bus_service,
-    get_phase_gate_service,
     get_phase_manager_service,
-    get_task_queue,
     verify_ticket_access,
 )
 from omoi_os.models.phase_gate_artifact import PhaseGateArtifact
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
-from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.phase_manager import PhaseManager
-from omoi_os.services.task_queue import TaskQueueService
-
 
 router = APIRouter()
 

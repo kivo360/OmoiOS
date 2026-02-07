@@ -18,7 +18,6 @@ import os
 import sys
 import requests
 from uuid import uuid4
-from typing import Optional
 
 # Configuration
 API_BASE = os.environ.get("API_BASE", "http://localhost:8000")
@@ -26,7 +25,9 @@ AUTH_TOKEN = os.environ.get("AUTH_TOKEN", "")
 SKIP_AUTH = os.environ.get("SKIP_AUTH", "0") == "1"
 
 # Test configuration
-TEST_PROJECT_ID = os.environ.get("TEST_PROJECT_ID", "")  # Set if you have an existing project
+TEST_PROJECT_ID = os.environ.get(
+    "TEST_PROJECT_ID", ""
+)  # Set if you have an existing project
 
 
 def print_header(title: str):
@@ -71,7 +72,9 @@ class APITester:
         print_header("Cleanup")
         # Note: In a real test, we'd delete the created tickets/tasks
         # For now, just report what was created
-        print(f"  Created {len(self.created_tickets)} tickets (cleanup manually if needed)")
+        print(
+            f"  Created {len(self.created_tickets)} tickets (cleanup manually if needed)"
+        )
         print(f"  Created {len(self.created_tasks)} tasks (cleanup manually if needed)")
 
     def run_tests(self) -> int:
@@ -136,15 +139,19 @@ class APITester:
             return False
 
         data = response.json()
-        all_healthy = all([
-            data.get("database", False),
-            data.get("task_queue", False),
-        ])
+        all_healthy = all(
+            [
+                data.get("database", False),
+                data.get("task_queue", False),
+            ]
+        )
 
         print_result("Database connected", data.get("database", False))
         print_result("Event bus connected", data.get("event_bus", False))
         print_result("Task queue active", data.get("task_queue", False))
-        print_result("Phase progression active", data.get("phase_progression_active", False))
+        print_result(
+            "Phase progression active", data.get("phase_progression_active", False)
+        )
 
         return all_healthy
 
@@ -157,7 +164,9 @@ class APITester:
             return False
 
         if response.status_code != 200:
-            print_result("Phase progression status", False, f"Status: {response.status_code}")
+            print_result(
+                "Phase progression status", False, f"Status: {response.status_code}"
+            )
             return False
 
         data = response.json()
@@ -168,7 +177,7 @@ class APITester:
             print_result(
                 "Phases configured",
                 True,
-                f"phases={data.get('phases_with_initial_tasks', [])}"
+                f"phases={data.get('phases_with_initial_tasks', [])}",
             )
 
         return active
@@ -208,7 +217,7 @@ class APITester:
             print_result(
                 "Current stats",
                 True,
-                f"pending={data['pending_count']}, running={data['running_count']}, completed={data['completed_count']}"
+                f"pending={data['pending_count']}, running={data['running_count']}, completed={data['completed_count']}",
             )
 
         return all_present
@@ -218,7 +227,9 @@ class APITester:
         response = self._request("GET", "/api/v1/debug/phase-progression/initial-tasks")
 
         if response.status_code != 200:
-            print_result("Phase initial tasks", False, f"Status: {response.status_code}")
+            print_result(
+                "Phase initial tasks", False, f"Status: {response.status_code}"
+            )
             return False
 
         data = response.json()
@@ -228,7 +239,9 @@ class APITester:
         has_phases = len(phase_tasks) > 0
         has_prd = prd_task.get("task_type") == "generate_prd"
 
-        print_result("Phase tasks configured", has_phases, f"phases={list(phase_tasks.keys())}")
+        print_result(
+            "Phase tasks configured", has_phases, f"phases={list(phase_tasks.keys())}"
+        )
         print_result("PRD generation configured", has_prd)
 
         return has_phases and has_prd
@@ -239,14 +252,18 @@ class APITester:
 
         # Step 1: Create a ticket
         print("\n  Creating test ticket...")
-        response = self._request("POST", "/api/v1/tickets", json={
-            "title": f"Test Ticket {uuid4().hex[:8]}",
-            "description": "Integration test for phase progression hooks",
-            "project_id": TEST_PROJECT_ID,
-            "phase_id": "PHASE_REQUIREMENTS",
-            "priority": "MEDIUM",
-            "force_create": True,
-        })
+        response = self._request(
+            "POST",
+            "/api/v1/tickets",
+            json={
+                "title": f"Test Ticket {uuid4().hex[:8]}",
+                "description": "Integration test for phase progression hooks",
+                "project_id": TEST_PROJECT_ID,
+                "phase_id": "PHASE_REQUIREMENTS",
+                "priority": "MEDIUM",
+                "force_create": True,
+            },
+        )
 
         if response.status_code not in [200, 201]:
             print_result("Create ticket", False, f"Status: {response.status_code}")
@@ -258,20 +275,24 @@ class APITester:
         print_result("Ticket created", True, f"id={ticket_id}")
 
         # Step 2: Check phase gate status
-        response = self._request("GET", f"/api/v1/debug/tickets/{ticket_id}/phase-gate-status")
+        response = self._request(
+            "GET", f"/api/v1/debug/tickets/{ticket_id}/phase-gate-status"
+        )
         if response.status_code == 200:
             gate_data = response.json()
             print_result(
                 "Phase gate status",
                 True,
-                f"phase={gate_data.get('current_phase')}, can_advance={gate_data.get('can_advance')}"
+                f"phase={gate_data.get('current_phase')}, can_advance={gate_data.get('can_advance')}",
             )
         else:
             print_result("Phase gate status", False, f"Status: {response.status_code}")
             all_passed = False
 
         # Step 3: Test Hook 2 - Spawn phase tasks
-        response = self._request("POST", f"/api/v1/tickets/{ticket_id}/spawn-phase-tasks")
+        response = self._request(
+            "POST", f"/api/v1/tickets/{ticket_id}/spawn-phase-tasks"
+        )
         if response.status_code == 200:
             spawn_data = response.json()
             tasks_spawned = spawn_data.get("tasks_spawned", 0)
@@ -281,31 +302,45 @@ class APITester:
             if tasks_spawned > 0:
                 print("      └─ Likely spawned generate_prd task (no PRD in ticket)")
         else:
-            print_result("Spawn phase tasks (Hook 2)", False, f"Status: {response.status_code}")
+            print_result(
+                "Spawn phase tasks (Hook 2)", False, f"Status: {response.status_code}"
+            )
             all_passed = False
 
         # Step 4: Get tasks for the ticket
-        response = self._request("GET", f"/api/v1/debug/tickets/{ticket_id}/tasks-by-phase")
+        response = self._request(
+            "GET", f"/api/v1/debug/tickets/{ticket_id}/tasks-by-phase"
+        )
         if response.status_code == 200:
             tasks_data = response.json()
             total_tasks = tasks_data.get("total_tasks", 0)
             phases = tasks_data.get("phases", {})
-            print_result("Tasks by phase", True, f"total={total_tasks}, phases={list(phases.keys())}")
+            print_result(
+                "Tasks by phase",
+                True,
+                f"total={total_tasks}, phases={list(phases.keys())}",
+            )
         else:
             print_result("Tasks by phase", False, f"Status: {response.status_code}")
             all_passed = False
 
         # Step 5: Test Hook 1 - Check phase completion
-        response = self._request("POST", f"/api/v1/tickets/{ticket_id}/check-phase-completion")
+        response = self._request(
+            "POST", f"/api/v1/tickets/{ticket_id}/check-phase-completion"
+        )
         if response.status_code == 200:
             check_data = response.json()
             print_result(
                 "Check phase completion (Hook 1)",
                 True,
-                f"complete={check_data.get('all_phase_tasks_complete')}, advanced={check_data.get('advanced')}"
+                f"complete={check_data.get('all_phase_tasks_complete')}, advanced={check_data.get('advanced')}",
             )
         else:
-            print_result("Check phase completion (Hook 1)", False, f"Status: {response.status_code}")
+            print_result(
+                "Check phase completion (Hook 1)",
+                False,
+                f"Status: {response.status_code}",
+            )
             all_passed = False
 
         return all_passed

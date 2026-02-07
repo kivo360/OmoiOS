@@ -27,4 +27,3 @@ __all__ = [
     "DIAGNOSTICIAN_TEMPLATE",
     "COORDINATOR_TEMPLATE",
 ]
-

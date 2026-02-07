@@ -62,13 +62,15 @@ class PolicyGrant:
 class MCPAuthorizationService:
     """
     Enforces agent-scoped permissions for tool invocations.
-    
+
     REQ-MCP-AUTH-001: Agent-Scoped Permissions
     REQ-MCP-AUTH-002: Capability Binding
     REQ-MCP-AUTH-003: Least Privilege
     """
 
-    def __init__(self, db: DatabaseService, cache_ttl: timedelta = timedelta(minutes=5)):
+    def __init__(
+        self, db: DatabaseService, cache_ttl: timedelta = timedelta(minutes=5)
+    ):
         """
         Initialize authorization service.
 
@@ -78,7 +80,9 @@ class MCPAuthorizationService:
         """
         self.db = db
         self.cache_ttl = cache_ttl
-        self.decision_cache: Dict[str, tuple[PolicyDecision, datetime]] = {}  # cache_key -> (decision, timestamp)
+        self.decision_cache: Dict[str, tuple[PolicyDecision, datetime]] = (
+            {}
+        )  # cache_key -> (decision, timestamp)
 
     def authorize(
         self,
@@ -89,7 +93,7 @@ class MCPAuthorizationService:
     ) -> AuthorizationResult:
         """
         Authorize tool invocation for agent.
-        
+
         Default-deny: Only explicit grants allow access.
 
         Args:
@@ -138,7 +142,9 @@ class MCPAuthorizationService:
                 else:
                     # Check if token required for high-risk tools
                     if require_token:
-                        token_valid = self._validate_token(agent_id, server_id, tool_name)
+                        token_valid = self._validate_token(
+                            agent_id, server_id, tool_name
+                        )
                         if not token_valid:
                             decision = PolicyDecision.DENY
                             reason = "Token validation failed"
@@ -171,7 +177,7 @@ class MCPAuthorizationService:
     ) -> PolicyGrant:
         """
         Grant tool permission to agent with optional time-bounded token.
-        
+
         REQ-MCP-AUTH-003: Least Privilege - time-bounded tokens for high-risk tools
 
         Args:
@@ -326,9 +332,7 @@ class MCPAuthorizationService:
                 if not p.expires_at or p.expires_at > utc_now()
             ]
 
-    def revoke_permission(
-        self, agent_id: str, server_id: str, tool_name: str
-    ) -> None:
+    def revoke_permission(self, agent_id: str, server_id: str, tool_name: str) -> None:
         """
         Revoke tool permission for agent.
 
@@ -351,7 +355,10 @@ class MCPAuthorizationService:
             tokens = (
                 session.query(MCPToken)
                 .filter_by(
-                    agent_id=agent_id, server_id=server_id, tool_name=tool_name, revoked=False
+                    agent_id=agent_id,
+                    server_id=server_id,
+                    tool_name=tool_name,
+                    revoked=False,
                 )
                 .all()
             )
@@ -363,4 +370,3 @@ class MCPAuthorizationService:
         tool_key = f"{server_id}:{tool_name}"
         cache_key = f"{agent_id}:{tool_key}"
         self.decision_cache.pop(cache_key, None)
-

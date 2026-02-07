@@ -18,7 +18,9 @@ def _serialize_agent(agent: Agent) -> Dict:
         "capacity": agent.capacity,
         "health_status": agent.health_status,
         "tags": agent.tags or [],
-        "last_heartbeat": agent.last_heartbeat.isoformat() if agent.last_heartbeat else None,
+        "last_heartbeat": (
+            agent.last_heartbeat.isoformat() if agent.last_heartbeat else None
+        ),
         "created_at": agent.created_at.isoformat() if agent.created_at else None,
     }
 

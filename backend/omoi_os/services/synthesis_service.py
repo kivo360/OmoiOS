@@ -18,7 +18,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
-from functools import lru_cache
 
 from omoi_os.logging import get_logger
 from omoi_os.models.task import Task
@@ -87,9 +86,7 @@ class SynthesisService:
     def subscribe_to_events(self) -> None:
         """Subscribe to relevant events for synthesis orchestration."""
         # Listen for join creation events from CoordinationService
-        self.event_bus.subscribe(
-            "coordination.join.created", self._handle_join_created
-        )
+        self.event_bus.subscribe("coordination.join.created", self._handle_join_created)
 
         # Listen for task completion to check if joins are ready
         self.event_bus.subscribe("TASK_COMPLETED", self._handle_task_completed)
@@ -290,9 +287,11 @@ class SynthesisService:
                         "continuation_task_id": pending.continuation_task_id,
                         "source_task_ids": pending.source_task_ids,
                         "merge_strategy": pending.merge_strategy,
-                        "result_keys": list(merged_result.keys())
-                        if isinstance(merged_result, dict)
-                        else [],
+                        "result_keys": (
+                            list(merged_result.keys())
+                            if isinstance(merged_result, dict)
+                            else []
+                        ),
                     },
                 )
             )
@@ -301,7 +300,9 @@ class SynthesisService:
                 "synthesis_completed",
                 join_id=join_id,
                 continuation_task_id=pending.continuation_task_id,
-                merged_key_count=len(merged_result) if isinstance(merged_result, dict) else 0,
+                merged_key_count=(
+                    len(merged_result) if isinstance(merged_result, dict) else 0
+                ),
             )
 
         except Exception as e:

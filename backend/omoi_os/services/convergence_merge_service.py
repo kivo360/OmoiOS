@@ -23,7 +23,7 @@ Architecture:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from uuid import uuid4
 
@@ -31,11 +31,9 @@ from omoi_os.logging import get_logger
 from omoi_os.models.merge_attempt import MergeAttempt, MergeStatus
 from omoi_os.services.conflict_scorer import ConflictScorer, ScoredMergeOrder
 from omoi_os.services.database import DatabaseService
-from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.sandbox_git_operations import (
     SandboxGitOperations,
-    MergeResult,
-    MergeResultStatus,
     ConflictInfo,
 )
 from omoi_os.utils.datetime import utc_now
@@ -50,16 +48,18 @@ logger = get_logger(__name__)
 @dataclass
 class ConvergenceMergeConfig:
     """Configuration for convergence merge."""
-    max_conflicts_auto_resolve: int = 10     # Max conflicts before requiring manual review
-    max_llm_invocations: int = 20            # Max LLM calls per merge attempt
-    conflict_timeout_seconds: int = 300       # Timeout for conflict resolution
-    enable_auto_push: bool = False            # Push after successful merge
-    require_clean_merge: bool = False         # Fail if any conflicts (no LLM resolution)
+
+    max_conflicts_auto_resolve: int = 10  # Max conflicts before requiring manual review
+    max_llm_invocations: int = 20  # Max LLM calls per merge attempt
+    conflict_timeout_seconds: int = 300  # Timeout for conflict resolution
+    enable_auto_push: bool = False  # Push after successful merge
+    require_clean_merge: bool = False  # Fail if any conflicts (no LLM resolution)
 
 
 @dataclass
 class ConvergenceMergeResult:
     """Result of a convergence merge operation."""
+
     success: bool
     merge_attempt_id: str
     merged_tasks: List[str]
@@ -246,7 +246,9 @@ class ConvergenceMergeService:
                     )
                 else:
                     # Flag for manual review
-                    self._update_merge_attempt_status(merge_attempt_id, MergeStatus.MANUAL)
+                    self._update_merge_attempt_status(
+                        merge_attempt_id, MergeStatus.MANUAL
+                    )
                     logger.warning(
                         "convergence_merge_needs_manual_review",
                         extra={
@@ -382,7 +384,10 @@ class ConvergenceMergeService:
 
             elif result.has_conflicts:
                 # Try to resolve conflicts
-                if self.conflict_resolver and llm_invocations < self.config.max_llm_invocations:
+                if (
+                    self.conflict_resolver
+                    and llm_invocations < self.config.max_llm_invocations
+                ):
                     resolved, invocations = await self._resolve_conflicts(
                         git_ops=git_ops,
                         conflicts=result.conflicts,
@@ -565,9 +570,11 @@ class ConvergenceMergeService:
     ) -> None:
         """Update merge attempt status."""
         with self.db.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt_id)
+                .first()
+            )
             if attempt:
                 attempt.status = status.value
                 if status == MergeStatus.IN_PROGRESS:
@@ -581,9 +588,11 @@ class ConvergenceMergeService:
     ) -> None:
         """Update merge attempt with conflict scoring results."""
         with self.db.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt_id)
+                .first()
+            )
             if attempt:
                 attempt.merge_order = scored_order.merge_order
                 attempt.conflict_scores = {
@@ -606,14 +615,15 @@ class ConvergenceMergeService:
     ) -> None:
         """Finalize merge attempt with results."""
         with self.db.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt_id)
+                .first()
+            )
             if attempt:
                 attempt.success = success
                 attempt.status = (
-                    MergeStatus.COMPLETED.value if success
-                    else MergeStatus.FAILED.value
+                    MergeStatus.COMPLETED.value if success else MergeStatus.FAILED.value
                 )
                 attempt.llm_invocations = llm_invocations
                 attempt.total_conflicts = total_conflicts
@@ -628,9 +638,11 @@ class ConvergenceMergeService:
     ) -> None:
         """Log LLM resolution for audit trail."""
         with self.db.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt_id)
+                .first()
+            )
             if attempt:
                 if not attempt.llm_resolution_log:
                     attempt.llm_resolution_log = {}
@@ -648,9 +660,11 @@ class ConvergenceMergeService:
     ) -> ConvergenceMergeResult:
         """Record merge failure."""
         with self.db.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt_id)
+                .first()
+            )
             if attempt:
                 attempt.success = False
                 attempt.status = MergeStatus.FAILED.value
@@ -694,7 +708,9 @@ def get_convergence_merge_service(
 
     if _convergence_merge_service is None:
         if db is None:
-            raise ValueError("db is required on first call to get_convergence_merge_service")
+            raise ValueError(
+                "db is required on first call to get_convergence_merge_service"
+            )
         _convergence_merge_service = ConvergenceMergeService(
             db=db,
             event_bus=event_bus,

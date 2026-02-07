@@ -21,7 +21,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-
 # =============================================================================
 # Enums
 # =============================================================================
@@ -112,9 +111,13 @@ class Estimate(str, Enum):
 class CodebasePattern(BaseModel):
     """A pattern discovered during codebase exploration."""
 
-    name: str = Field(..., description="Name of the pattern (e.g., 'Repository Pattern')")
+    name: str = Field(
+        ..., description="Name of the pattern (e.g., 'Repository Pattern')"
+    )
     location: str = Field(..., description="File or directory where pattern is found")
-    description: str = Field(..., description="How this pattern is used in the codebase")
+    description: str = Field(
+        ..., description="How this pattern is used in the codebase"
+    )
     relevance: str = Field(
         ..., description="How this pattern relates to the new feature"
     )
@@ -213,15 +216,11 @@ class Requirement(BaseModel):
         description="Requirement category",
     )
     priority: Priority = Field(default=Priority.MEDIUM, description="Priority level")
-    condition: str = Field(
-        ..., description="The WHEN clause (trigger condition)"
-    )
+    condition: str = Field(..., description="The WHEN clause (trigger condition)")
     action: str = Field(
         ..., description="The THE SYSTEM SHALL clause (expected behavior)"
     )
-    rationale: str = Field(
-        default="", description="Why this requirement exists"
-    )
+    rationale: str = Field(default="", description="Why this requirement exists")
     acceptance_criteria: list[AcceptanceCriterion] = Field(
         default_factory=list,
         description="Testable acceptance criteria",
@@ -255,9 +254,7 @@ class RequirementsOutput(BaseModel):
     status: SpecStatus = Field(default=SpecStatus.DRAFT)
     category: RequirementCategory = Field(default=RequirementCategory.FUNCTIONAL)
     priority: Priority = Field(default=Priority.HIGH)
-    prd_ref: Optional[str] = Field(
-        default=None, description="Reference to PRD file"
-    )
+    prd_ref: Optional[str] = Field(default=None, description="Reference to PRD file")
     design_ref: Optional[str] = Field(
         default=None, description="Reference to design file"
     )
@@ -321,12 +318,16 @@ class DataModelField(BaseModel):
     """
 
     name: str = Field(..., description="Field name")
-    type: str = Field(..., description="Field type (e.g., 'uuid', 'string', 'int', 'timestamp', 'jsonb')")
+    type: str = Field(
+        ...,
+        description="Field type (e.g., 'uuid', 'string', 'int', 'timestamp', 'jsonb')",
+    )
     description: str = Field(default="", description="Field description")
     nullable: bool = Field(default=False)
     default: Optional[str] = Field(default=None, description="Default value if any")
     constraints: list[str] = Field(
-        default_factory=list, description="Constraints (e.g., ['primary_key', 'unique', 'indexed'])"
+        default_factory=list,
+        description="Constraints (e.g., ['primary_key', 'unique', 'indexed'])",
     )
 
 
@@ -377,9 +378,7 @@ class DesignOutput(BaseModel):
     architecture_diagram: Optional[str] = Field(
         default=None, description="Mermaid diagram of architecture"
     )
-    components: list[str] = Field(
-        default_factory=list, description="Key components"
-    )
+    components: list[str] = Field(default_factory=list, description="Key components")
 
     # Data Model
     data_models: list[DataModel] = Field(
@@ -395,18 +394,14 @@ class DesignOutput(BaseModel):
     )
 
     # Implementation Details
-    error_handling: str = Field(
-        default="", description="Error handling strategy"
-    )
+    error_handling: str = Field(default="", description="Error handling strategy")
     security_considerations: str = Field(
         default="", description="Security considerations"
     )
     performance_considerations: str = Field(
         default="", description="Performance considerations"
     )
-    testing_strategy: str = Field(
-        default="", description="Testing approach"
-    )
+    testing_strategy: str = Field(default="", description="Testing approach")
 
     # Context from previous phases
     exploration_context: Optional[ExplorationContext] = Field(default=None)
@@ -514,23 +509,17 @@ class Ticket(BaseModel):
 
     # Content
     description: str = Field(..., description="Ticket description")
-    scope_in: list[str] = Field(
-        default_factory=list, description="What's in scope"
-    )
+    scope_in: list[str] = Field(default_factory=list, description="What's in scope")
     scope_out: list[str] = Field(
         default_factory=list, description="What's out of scope"
     )
     acceptance_criteria: list[str] = Field(
         default_factory=list, description="Ticket acceptance criteria"
     )
-    technical_notes: str = Field(
-        default="", description="Technical context"
-    )
+    technical_notes: str = Field(default="", description="Technical context")
 
     # Tasks belonging to this ticket
-    tasks: list[Task] = Field(
-        default_factory=list, description="Tasks for this ticket"
-    )
+    tasks: list[Task] = Field(default_factory=list, description="Tasks for this ticket")
 
 
 class TasksOutput(BaseModel):
@@ -541,9 +530,7 @@ class TasksOutput(BaseModel):
     """
 
     feature: str = Field(..., description="Feature name (kebab-case)")
-    tickets: list[Ticket] = Field(
-        default_factory=list, description="All tickets"
-    )
+    tickets: list[Ticket] = Field(default_factory=list, description="All tickets")
 
     # Context from previous phases
     exploration_context: Optional[ExplorationContext] = Field(default=None)
@@ -665,12 +652,8 @@ class EvaluationResult(BaseModel):
     """Result of evaluating phase output."""
 
     valid: bool = Field(..., description="Whether output passed validation")
-    score: float = Field(
-        default=1.0, ge=0.0, le=1.0, description="Quality score 0-1"
-    )
-    errors: list[str] = Field(
-        default_factory=list, description="Validation errors"
-    )
+    score: float = Field(default=1.0, ge=0.0, le=1.0, description="Quality score 0-1")
+    errors: list[str] = Field(default_factory=list, description="Validation errors")
     warnings: list[str] = Field(
         default_factory=list, description="Non-blocking warnings"
     )

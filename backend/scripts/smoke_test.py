@@ -28,7 +28,7 @@ def main():
     database_url = app_settings.database.url
     redis_url = app_settings.redis.url
 
-    print(f"\n1. Initializing services...")
+    print("\n1. Initializing services...")
     print(f"   Database: {database_url}")
     print(f"   Redis: {redis_url}")
 
@@ -87,7 +87,7 @@ def main():
     # Assign task
     print("\n6. Assigning task to agent...")
     task_queue.assign_task(task_id, agent_id)
-    print(f"   ✓ Task assigned")
+    print("   ✓ Task assigned")
 
     # Publish event
     print("\n7. Publishing TASK_ASSIGNED event...")
@@ -98,7 +98,7 @@ def main():
         payload={"agent_id": agent_id},
     )
     event_bus.publish(event)
-    print(f"   ✓ Event published")
+    print("   ✓ Event published")
 
     # Update task status
     print("\n8. Updating task status to completed...")
@@ -107,7 +107,7 @@ def main():
         "completed",
         result={"status": "success", "message": "Smoke test passed"},
     )
-    print(f"   ✓ Task completed")
+    print("   ✓ Task completed")
 
     # Verify final state
     print("\n9. Verifying final state...")
@@ -137,4 +137,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

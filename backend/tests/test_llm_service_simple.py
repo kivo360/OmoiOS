@@ -16,15 +16,14 @@ async def test_simple_completion():
 async def test_structured_output():
     """Test structured output."""
     from pydantic import BaseModel, Field
-    
+
     class SimpleOutput(BaseModel):
         message: str = Field(..., description="A greeting message")
         number: int = Field(..., description="A number between 1 and 10")
-    
+
     llm = get_llm_service()
     result = await llm.structured_output(
-        "Say hello and pick a number between 1 and 10",
-        output_type=SimpleOutput
+        "Say hello and pick a number between 1 and 10", output_type=SimpleOutput
     )
     print(f"✅ Structured output: message={result.message}, number={result.number}")
     assert isinstance(result, SimpleOutput)
@@ -41,4 +40,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-

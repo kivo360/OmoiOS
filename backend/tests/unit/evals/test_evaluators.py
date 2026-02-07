@@ -6,7 +6,6 @@ Tests the evaluator classes that validate phase outputs in the state machine.
 import pytest
 
 from omoi_os.evals import (
-    BaseEvaluator,
     EvalResult,
     ExplorationEvaluator,
     RequirementEvaluator,
@@ -60,7 +59,11 @@ class TestExplorationEvaluator:
             "project_type": "web_application",
             "structure": {"directories": ["src", "tests"], "files": ["main.py"]},
             "existing_models": [
-                {"name": "User", "file": "models/user.py", "fields": ["id", "email", "name"]},
+                {
+                    "name": "User",
+                    "file": "models/user.py",
+                    "fields": ["id", "email", "name"],
+                },
             ],
             "conventions": {
                 "naming": "snake_case",
@@ -83,7 +86,10 @@ class TestExplorationEvaluator:
             "explored_files": ["main.py"],
         }
         result = evaluator.evaluate(context)
-        assert "has_project_type" not in result.details or result.details["has_project_type"] is False
+        assert (
+            "has_project_type" not in result.details
+            or result.details["has_project_type"] is False
+        )
 
     def test_incomplete_models_generate_warning(self, evaluator):
         """Models without fields should generate a warning."""
@@ -251,7 +257,9 @@ class TestDesignEvaluator:
         }
         result = evaluator.evaluate(design)
         assert result.details.get("architecture_substantive") is False
-        assert "Architecture description is too brief" in (result.feedback_for_retry or "")
+        assert "Architecture description is too brief" in (
+            result.feedback_for_retry or ""
+        )
 
     def test_incomplete_endpoints_fails(self, evaluator):
         """Endpoints missing required fields should fail."""
@@ -271,7 +279,11 @@ class TestDesignEvaluator:
             "architecture": "A" * 150,
             "data_models": [{"name": "User", "fields": [{"name": "id"}]}],
             "api_endpoints": [
-                {"method": "FETCH", "path": "/api/test", "description": "Test"},  # Invalid
+                {
+                    "method": "FETCH",
+                    "path": "/api/test",
+                    "description": "Test",
+                },  # Invalid
             ],
         }
         result = evaluator.evaluate(design)
@@ -396,7 +408,9 @@ class TestTaskEvaluator:
         ]
         result = evaluator.evaluate(tasks)
         assert result.details.get("valid_dependencies") is False
-        assert "dependencies reference non-existent" in (result.feedback_for_retry or "")
+        assert "dependencies reference non-existent" in (
+            result.feedback_for_retry or ""
+        )
 
     def test_circular_dependency_fails(self, evaluator):
         """Circular dependencies should fail."""
@@ -527,7 +541,9 @@ class TestBaseEvaluator:
         assert result.passed is False
         assert abs(result.score - (2 / 3)) < 0.01
         # Failure message includes the check name in a human-readable format
-        assert any("check_2" in f.lower() or "check 2" in f.lower() for f in result.failures)
+        assert any(
+            "check_2" in f.lower() or "check 2" in f.lower() for f in result.failures
+        )
 
     def test_custom_min_score(self):
         """Custom min_score threshold should be respected."""

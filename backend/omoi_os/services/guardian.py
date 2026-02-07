@@ -17,13 +17,13 @@ from omoi_os.utils.datetime import utc_now
 
 class GuardianService:
     """Emergency intervention system for critical failures and resource management.
-    
+
     Provides authority-based intervention capabilities:
     - Emergency task cancellation
-    - Agent capacity reallocation  
+    - Agent capacity reallocation
     - Priority queue override
     - Automatic rollback after crisis resolution
-    
+
     Authority hierarchy: GUARDIAN (4) > MONITOR (3) > WATCHDOG (2) > WORKER (1)
     """
 
@@ -33,7 +33,7 @@ class GuardianService:
         event_bus: Optional[EventBusService] = None,
     ):
         """Initialize guardian service.
-        
+
         Args:
             db: DatabaseService instance for database operations
             event_bus: Optional EventBusService for publishing intervention events
@@ -53,16 +53,16 @@ class GuardianService:
         authority: AuthorityLevel = AuthorityLevel.GUARDIAN,
     ) -> Optional[GuardianAction]:
         """Cancel a running task in emergency situations.
-        
+
         Args:
             task_id: ID of task to cancel
             reason: Explanation for emergency cancellation
             initiated_by: Agent/user ID initiating the action
             authority: Authority level (must be GUARDIAN or higher)
-            
+
         Returns:
             GuardianAction audit record if successful, None if task not found
-            
+
         Raises:
             PermissionError: If authority level insufficient
         """
@@ -88,7 +88,7 @@ class GuardianService:
             old_status = task.status
             task.status = "failed"
             task.error_message = f"EMERGENCY CANCELLATION: {reason}"
-            
+
             # Create audit record
             action = GuardianAction(
                 action_type="cancel_task",
@@ -134,10 +134,10 @@ class GuardianService:
         authority: AuthorityLevel = AuthorityLevel.GUARDIAN,
     ) -> Optional[GuardianAction]:
         """Reallocate capacity from one agent to another.
-        
+
         Typically used to steal resources from low-priority work
         to handle critical failures.
-        
+
         Args:
             from_agent_id: Source agent to take capacity from
             to_agent_id: Target agent to give capacity to
@@ -145,10 +145,10 @@ class GuardianService:
             reason: Explanation for reallocation
             initiated_by: Agent/user ID initiating the action
             authority: Authority level (must be GUARDIAN or higher)
-            
+
         Returns:
             GuardianAction audit record if successful, None if agents not found
-            
+
         Raises:
             PermissionError: If authority level insufficient
             ValueError: If capacity invalid or insufficient
@@ -244,19 +244,19 @@ class GuardianService:
         authority: AuthorityLevel = AuthorityLevel.GUARDIAN,
     ) -> Optional[GuardianAction]:
         """Override task priority in the queue.
-        
+
         Used to boost critical tasks ahead of normal queue order.
-        
+
         Args:
             task_id: ID of task to boost
             new_priority: New priority level (CRITICAL, HIGH, MEDIUM, LOW)
             reason: Explanation for priority override
             initiated_by: Agent/user ID initiating the action
             authority: Authority level (must be GUARDIAN or higher)
-            
+
         Returns:
             GuardianAction audit record if successful, None if task not found
-            
+
         Raises:
             PermissionError: If authority level insufficient
             ValueError: If priority value invalid
@@ -334,12 +334,12 @@ class GuardianService:
         initiated_by: str,
     ) -> bool:
         """Revert a previous guardian intervention.
-        
+
         Args:
             action_id: ID of the GuardianAction to revert
             reason: Explanation for reversion
             initiated_by: Agent/user ID initiating the reversion
-            
+
         Returns:
             True if reverted successfully, False if action not found or already reverted
         """
@@ -358,7 +358,7 @@ class GuardianService:
                     "revert_reason": reason,
                     "reverted_by": initiated_by,
                 }
-            
+
             # Flag the JSONB field as modified so SQLAlchemy detects the change
             attributes.flag_modified(action, "audit_log")
 
@@ -385,12 +385,12 @@ class GuardianService:
         target_entity: Optional[str] = None,
     ) -> List[GuardianAction]:
         """Get guardian action audit trail.
-        
+
         Args:
             limit: Maximum number of actions to return
             action_type: Optional filter by action type
             target_entity: Optional filter by target entity
-            
+
         Returns:
             List of GuardianAction records, most recent first
         """
@@ -402,11 +402,7 @@ class GuardianService:
             if target_entity:
                 query = query.filter(GuardianAction.target_entity == target_entity)
 
-            actions = (
-                query.order_by(desc(GuardianAction.created_at))
-                .limit(limit)
-                .all()
-            )
+            actions = query.order_by(desc(GuardianAction.created_at)).limit(limit).all()
 
             # Expunge for use outside session
             for action in actions:
@@ -416,10 +412,10 @@ class GuardianService:
 
     def get_action(self, action_id: str) -> Optional[GuardianAction]:
         """Get a specific guardian action by ID.
-        
+
         Args:
             action_id: ID of the guardian action
-            
+
         Returns:
             GuardianAction if found, None otherwise
         """
@@ -450,4 +446,3 @@ class GuardianService:
             payload=payload,
         )
         self.event_bus.publish(event)
-

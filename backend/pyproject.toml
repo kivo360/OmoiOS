@@ -89,3 +89,18 @@ test = [
     "greenlet>=3.0.0",
 ]
 
+[tool.ruff]
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+    "E402",  # module-import-not-at-top-of-file (117 intentional: load_dotenv/init before imports)
+    "E501",  # line-too-long (handled by black)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/*" = ["F401"]           # scripts use try/except imports to test availability
+"migrations/*" = ["E722"]        # migrations use bare except in cleanup code
+"omoi_os/workers/*" = ["F821"]   # forward references in type hints
+

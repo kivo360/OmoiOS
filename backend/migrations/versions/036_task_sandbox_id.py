@@ -12,7 +12,6 @@ Create Date: 2025-12-13
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision = "036_task_sandbox_id"
 down_revision = "035_sandbox_events_table"

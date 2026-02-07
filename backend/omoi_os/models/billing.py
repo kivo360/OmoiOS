@@ -8,7 +8,16 @@ from enum import Enum
 from typing import Optional, TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -60,9 +69,7 @@ class BillingAccount(Base):
     __tablename__ = "billing_accounts"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Organization link (one-to-one)
@@ -71,7 +78,7 @@ class BillingAccount(Base):
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
         unique=True,
-        index=True
+        index=True,
     )
 
     # Stripe integration
@@ -96,9 +103,7 @@ class BillingAccount(Base):
     )
 
     # Prepaid credits (in USD)
-    credit_balance: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
+    credit_balance: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     # Billing preferences
     auto_billing_enabled: Mapped[bool] = mapped_column(
@@ -112,9 +117,7 @@ class BillingAccount(Base):
     tax_id: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True
     )  # VAT/GST number
-    tax_exempt: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    tax_exempt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Address for tax calculation
     billing_address: Mapped[Optional[dict]] = mapped_column(
@@ -142,22 +145,18 @@ class BillingAccount(Base):
         back_populates="billing_account"
     )
     invoices: Mapped[list["Invoice"]] = relationship(
-        back_populates="billing_account",
-        cascade="all, delete-orphan"
+        back_populates="billing_account", cascade="all, delete-orphan"
     )
     payments: Mapped[list["Payment"]] = relationship(
-        back_populates="billing_account",
-        cascade="all, delete-orphan"
+        back_populates="billing_account", cascade="all, delete-orphan"
     )
     subscription: Mapped[Optional["Subscription"]] = relationship(
-        back_populates="billing_account",
-        uselist=False,
-        cascade="all, delete-orphan"
+        back_populates="billing_account", uselist=False, cascade="all, delete-orphan"
     )
 
-    __table_args__ = (
-        {"comment": "Billing accounts for organizations with Stripe integration"}
-    )
+    __table_args__ = {
+        "comment": "Billing accounts for organizations with Stripe integration"
+    }
 
     def __repr__(self) -> str:
         return (
@@ -174,7 +173,11 @@ class BillingAccount(Base):
             "has_payment_method": self.stripe_payment_method_id is not None,
             "status": self.status,
             "free_workflows_remaining": self.free_workflows_remaining,
-            "free_workflows_reset_at": self.free_workflows_reset_at.isoformat() if self.free_workflows_reset_at else None,
+            "free_workflows_reset_at": (
+                self.free_workflows_reset_at.isoformat()
+                if self.free_workflows_reset_at
+                else None
+            ),
             "credit_balance": self.credit_balance,
             "auto_billing_enabled": self.auto_billing_enabled,
             "billing_email": self.billing_email,
@@ -220,9 +223,7 @@ class Invoice(Base):
     __tablename__ = "invoices"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Invoice number (human-readable)
@@ -235,7 +236,7 @@ class Invoice(Base):
         PGUUID(as_uuid=True),
         ForeignKey("billing_accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Optional ticket association (for per-workflow invoices)
@@ -243,7 +244,7 @@ class Invoice(Base):
         PGUUID(as_uuid=True),
         ForeignKey("tickets.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     # Stripe integration
@@ -268,34 +269,20 @@ class Invoice(Base):
     )
 
     # Amounts (in USD)
-    subtotal: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
-    tax_amount: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
-    discount_amount: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
-    total: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0, index=True
-    )
+    subtotal: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    tax_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    discount_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    total: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, index=True)
 
     # Credits applied
-    credits_applied: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
+    credits_applied: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     amount_due: Mapped[float] = mapped_column(
         Float, nullable=False, default=0.0
     )  # total - credits_applied
-    amount_paid: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
+    amount_paid: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     # Currency
-    currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, default="usd"
-    )
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="usd")
 
     # Line items (JSONB for flexibility)
     line_items: Mapped[list[dict]] = mapped_column(
@@ -303,12 +290,8 @@ class Invoice(Base):
     )  # [{description, quantity, unit_price, total, ticket_id?, task_id?}]
 
     # Invoice details
-    description: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
-    notes: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Tax details
     tax_details: Mapped[Optional[dict]] = mapped_column(
@@ -338,21 +321,15 @@ class Invoice(Base):
     )
 
     # Relationships
-    billing_account: Mapped["BillingAccount"] = relationship(
-        back_populates="invoices"
-    )
-    ticket = relationship(
-        "Ticket",
-        foreign_keys=[ticket_id]
-    )
+    billing_account: Mapped["BillingAccount"] = relationship(back_populates="invoices")
+    ticket = relationship("Ticket", foreign_keys=[ticket_id])
     payments: Mapped[list["Payment"]] = relationship(
-        back_populates="invoice",
-        cascade="all, delete-orphan"
+        back_populates="invoice", cascade="all, delete-orphan"
     )
 
     __table_args__ = (
         Index("idx_invoice_status_due", "status", "due_date"),
-        {"comment": "Invoices for workflow usage billing"}
+        {"comment": "Invoices for workflow usage billing"},
     )
 
     def __repr__(self) -> str:
@@ -370,7 +347,9 @@ class Invoice(Base):
             "ticket_id": str(self.ticket_id) if self.ticket_id else None,
             "stripe_invoice_id": self.stripe_invoice_id,
             "status": self.status,
-            "period_start": self.period_start.isoformat() if self.period_start else None,
+            "period_start": (
+                self.period_start.isoformat() if self.period_start else None
+            ),
             "period_end": self.period_end.isoformat() if self.period_end else None,
             "subtotal": self.subtotal,
             "tax_amount": self.tax_amount,
@@ -383,7 +362,9 @@ class Invoice(Base):
             "line_items": self.line_items,
             "description": self.description,
             "due_date": self.due_date.isoformat() if self.due_date else None,
-            "finalized_at": self.finalized_at.isoformat() if self.finalized_at else None,
+            "finalized_at": (
+                self.finalized_at.isoformat() if self.finalized_at else None
+            ),
             "paid_at": self.paid_at.isoformat() if self.paid_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -394,7 +375,7 @@ class Invoice(Base):
         unit_price: float,
         quantity: int = 1,
         ticket_id: str | None = None,
-        task_id: str | None = None
+        task_id: str | None = None,
     ) -> None:
         """Add a line item to the invoice."""
         line_item = {
@@ -446,9 +427,7 @@ class Payment(Base):
     __tablename__ = "payments"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Billing account link
@@ -456,7 +435,7 @@ class Payment(Base):
         PGUUID(as_uuid=True),
         ForeignKey("billing_accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Invoice link (optional - credits purchase may not have invoice)
@@ -464,24 +443,18 @@ class Payment(Base):
         PGUUID(as_uuid=True),
         ForeignKey("invoices.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     # Stripe integration
     stripe_payment_intent_id: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
-    stripe_charge_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
-    )
+    stripe_charge_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Payment details
-    amount: Mapped[float] = mapped_column(
-        Float, nullable=False
-    )
-    currency: Mapped[str] = mapped_column(
-        String(3), nullable=False, default="usd"
-    )
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="usd")
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=PaymentStatus.PENDING.value, index=True
     )
@@ -498,25 +471,15 @@ class Payment(Base):
     )  # visa, mastercard, etc.
 
     # Error tracking for failed payments
-    failure_code: Mapped[Optional[str]] = mapped_column(
-        String(100), nullable=True
-    )
-    failure_message: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
+    failure_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    failure_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Refund tracking
-    refunded_amount: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
-    refund_reason: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
+    refunded_amount: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    refund_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Description
-    description: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Extra payment data
     payment_data: Mapped[Optional[dict]] = mapped_column(
@@ -535,16 +498,12 @@ class Payment(Base):
     )
 
     # Relationships
-    billing_account: Mapped["BillingAccount"] = relationship(
-        back_populates="payments"
-    )
-    invoice: Mapped[Optional["Invoice"]] = relationship(
-        back_populates="payments"
-    )
+    billing_account: Mapped["BillingAccount"] = relationship(back_populates="payments")
+    invoice: Mapped[Optional["Invoice"]] = relationship(back_populates="payments")
 
     __table_args__ = (
         Index("idx_payment_status_created", "status", "created_at"),
-        {"comment": "Payment records for invoice charges"}
+        {"comment": "Payment records for invoice charges"},
     )
 
     def __repr__(self) -> str:
@@ -571,7 +530,9 @@ class Payment(Base):
             "refunded_amount": self.refunded_amount,
             "description": self.description,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "succeeded_at": self.succeeded_at.isoformat() if self.succeeded_at else None,
+            "succeeded_at": (
+                self.succeeded_at.isoformat() if self.succeeded_at else None
+            ),
         }
 
     def mark_succeeded(self) -> None:
@@ -606,9 +567,7 @@ class UsageRecord(Base):
     __tablename__ = "usage_records"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Billing account link
@@ -616,7 +575,7 @@ class UsageRecord(Base):
         PGUUID(as_uuid=True),
         ForeignKey("billing_accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # What was used
@@ -624,7 +583,7 @@ class UsageRecord(Base):
         PGUUID(as_uuid=True),
         ForeignKey("tickets.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
 
     # Usage type
@@ -633,27 +592,19 @@ class UsageRecord(Base):
     )  # workflow_completion, llm_tokens, etc.
 
     # Quantity and pricing
-    quantity: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
-    unit_price: Mapped[float] = mapped_column(
-        Float, nullable=False
-    )
-    total_price: Mapped[float] = mapped_column(
-        Float, nullable=False
-    )
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    unit_price: Mapped[float] = mapped_column(Float, nullable=False)
+    total_price: Mapped[float] = mapped_column(Float, nullable=False)
 
     # Was free tier used?
-    free_tier_used: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    free_tier_used: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # Invoice association (once billed)
     invoice_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("invoices.id", ondelete="SET NULL"),
         nullable=True,
-        index=True
+        index=True,
     )
     billed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, index=True
@@ -675,7 +626,7 @@ class UsageRecord(Base):
     __table_args__ = (
         Index("idx_usage_unbilled", "billing_account_id", "billed"),
         Index("idx_usage_recorded", "billing_account_id", "recorded_at"),
-        {"comment": "Usage records for workflow billing"}
+        {"comment": "Usage records for workflow billing"},
     )
 
     def __repr__(self) -> str:

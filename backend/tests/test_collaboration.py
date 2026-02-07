@@ -238,4 +238,3 @@ class TestHandoffProtocol:
         assert response.message_type == "handoff_declined"
         assert response.from_agent_id == agent2.id
         assert "capacity" in response.content
-

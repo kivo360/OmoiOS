@@ -15,13 +15,13 @@ without actually performing the merge.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
 from omoi_os.logging import get_logger
-from omoi_os.services.sandbox_git_operations import SandboxGitOperations, DryRunResult
+from omoi_os.services.sandbox_git_operations import SandboxGitOperations
 
 if TYPE_CHECKING:
-    from daytona_sdk import Sandbox
+    pass
 
 logger = get_logger(__name__)
 
@@ -29,6 +29,7 @@ logger = get_logger(__name__)
 @dataclass
 class BranchScore:
     """Score for a single branch's merge potential."""
+
     branch: str
     task_id: Optional[str] = None
     conflict_count: int = 0
@@ -47,11 +48,12 @@ class BranchScore:
 @dataclass
 class ScoredMergeOrder:
     """Result of scoring and ordering branches for merge."""
+
     scores: Dict[str, BranchScore]  # branch/task_id -> score
-    merge_order: List[str]          # Ordered list (least conflicts first)
+    merge_order: List[str]  # Ordered list (least conflicts first)
     total_conflicts: int
-    clean_count: int                # Number of branches with no conflicts
-    failed_count: int               # Number that couldn't be scored
+    clean_count: int  # Number of branches with no conflicts
+    failed_count: int  # Number that couldn't be scored
 
     @property
     def all_clean(self) -> bool:
@@ -196,7 +198,9 @@ class ConflictScorer:
         )
 
         # Calculate summary stats
-        total_conflicts = sum(s.conflict_count for s in scores.values() if not s.score_error)
+        total_conflicts = sum(
+            s.conflict_count for s in scores.values() if not s.score_error
+        )
         clean_count = sum(1 for s in scores.values() if s.is_clean)
         failed_count = sum(1 for s in scores.values() if s.score_error)
 
@@ -282,7 +286,9 @@ class ConflictScorer:
             ),
         )
 
-        total_conflicts = sum(s.conflict_count for s in scores.values() if not s.score_error)
+        total_conflicts = sum(
+            s.conflict_count for s in scores.values() if not s.score_error
+        )
         clean_count = sum(1 for s in scores.values() if s.is_clean)
         failed_count = sum(1 for s in scores.values() if s.score_error)
 

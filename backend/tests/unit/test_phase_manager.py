@@ -1,16 +1,14 @@
 """Unit tests for PhaseManager service."""
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.ticket_status import TicketStatus
 from omoi_os.services.phase_manager import (
     PhaseManager,
-    PhaseConfig,
     ExecutionMode,
-    TransitionResult,
     PHASE_CONFIGS,
     PHASE_STATUS_MAP,
     STATUS_PHASE_MAP,
@@ -76,9 +74,15 @@ class TestPhaseConfigs:
 
     def test_execution_modes(self):
         """Phases should have correct execution modes."""
-        assert PHASE_CONFIGS["PHASE_REQUIREMENTS"].execution_mode == ExecutionMode.EXPLORATION
+        assert (
+            PHASE_CONFIGS["PHASE_REQUIREMENTS"].execution_mode
+            == ExecutionMode.EXPLORATION
+        )
         assert PHASE_CONFIGS["PHASE_DESIGN"].execution_mode == ExecutionMode.EXPLORATION
-        assert PHASE_CONFIGS["PHASE_IMPLEMENTATION"].execution_mode == ExecutionMode.IMPLEMENTATION
+        assert (
+            PHASE_CONFIGS["PHASE_IMPLEMENTATION"].execution_mode
+            == ExecutionMode.IMPLEMENTATION
+        )
         assert PHASE_CONFIGS["PHASE_TESTING"].execution_mode == ExecutionMode.VALIDATION
 
 
@@ -90,7 +94,9 @@ class TestPhaseMappings:
         for phase, status in PHASE_STATUS_MAP.items():
             # Verify status is a valid TicketStatus value
             valid_statuses = [s.value for s in TicketStatus]
-            assert status in valid_statuses, f"Invalid status {status} for phase {phase}"
+            assert (
+                status in valid_statuses
+            ), f"Invalid status {status} for phase {phase}"
 
     def test_status_to_phase_mapping(self):
         """Each status should map to a valid phase."""
@@ -199,9 +205,18 @@ class TestPhaseConfigAccess:
 
     def test_get_execution_mode(self):
         """Should return correct execution mode."""
-        assert self.manager.get_execution_mode("PHASE_IMPLEMENTATION") == ExecutionMode.IMPLEMENTATION
-        assert self.manager.get_execution_mode("PHASE_REQUIREMENTS") == ExecutionMode.EXPLORATION
-        assert self.manager.get_execution_mode("PHASE_INVALID") == ExecutionMode.EXPLORATION
+        assert (
+            self.manager.get_execution_mode("PHASE_IMPLEMENTATION")
+            == ExecutionMode.IMPLEMENTATION
+        )
+        assert (
+            self.manager.get_execution_mode("PHASE_REQUIREMENTS")
+            == ExecutionMode.EXPLORATION
+        )
+        assert (
+            self.manager.get_execution_mode("PHASE_INVALID")
+            == ExecutionMode.EXPLORATION
+        )
 
     def test_is_continuous_mode_enabled(self):
         """Should correctly identify continuous mode phases."""
@@ -264,10 +279,14 @@ class TestTransitionValidation:
         """Should fail when ticket not found."""
         session_mock = MagicMock()
         session_mock.get.return_value = None
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
-        can, reasons = self.manager.can_transition("nonexistent", "PHASE_IMPLEMENTATION")
+        can, reasons = self.manager.can_transition(
+            "nonexistent", "PHASE_IMPLEMENTATION"
+        )
         assert can is False
         assert "not found" in reasons[0]
 
@@ -279,7 +298,9 @@ class TestTransitionValidation:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         # Cannot transition to DONE when blocked
@@ -332,7 +353,9 @@ class TestPhaseTransitions:
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
         session_mock.query.return_value.filter.return_value.count.return_value = 0
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         return ticket
@@ -455,7 +478,9 @@ class TestAutoAdvancement:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         result = self.manager.check_and_advance("ticket-123")
@@ -471,7 +496,9 @@ class TestAutoAdvancement:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         result = self.manager.check_and_advance("ticket-123")
@@ -489,22 +516,28 @@ class TestCallbacks:
 
     def test_register_pre_transition_callback(self):
         """Should register pre-transition callback."""
+
         def my_callback(manager, ticket_id, from_phase, to_phase):
             pass
+
         self.manager.register_pre_transition_callback(my_callback)
         assert my_callback in self.manager._pre_transition_callbacks
 
     def test_register_post_transition_callback(self):
         """Should register post-transition callback."""
+
         def my_callback(manager, ticket_id, from_phase, to_phase):
             pass
+
         self.manager.register_post_transition_callback(my_callback)
         assert my_callback in self.manager._post_transition_callbacks
 
     def test_register_gate_failure_callback(self):
         """Should register gate failure callback."""
+
         def my_callback(manager, ticket_id, from_phase, to_phase):
             pass
+
         self.manager.register_gate_failure_callback(my_callback)
         assert my_callback in self.manager._on_gate_failure_callbacks
 
@@ -577,7 +610,9 @@ class TestEventSubscriptions:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         event_data = {
@@ -609,7 +644,9 @@ class TestStatusSync:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         result = self.manager.sync_status_with_phase("ticket-123")
@@ -625,7 +662,9 @@ class TestStatusSync:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         result = self.manager.sync_status_with_phase("ticket-123")
@@ -640,7 +679,9 @@ class TestStatusSync:
 
         session_mock = MagicMock()
         session_mock.get.return_value = ticket
-        self.db.get_session.return_value.__enter__ = MagicMock(return_value=session_mock)
+        self.db.get_session.return_value.__enter__ = MagicMock(
+            return_value=session_mock
+        )
         self.db.get_session.return_value.__exit__ = MagicMock(return_value=False)
 
         result = self.manager.sync_phase_with_status("ticket-123")

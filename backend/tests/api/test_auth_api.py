@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from omoi_os.models.user import User
 
-
 # =============================================================================
 # UNIT TESTS (Fast, no database required, uses mocked dependencies)
 # =============================================================================
