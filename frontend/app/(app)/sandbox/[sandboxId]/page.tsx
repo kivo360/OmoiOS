@@ -25,7 +25,9 @@ import {
   RefreshCw,
 } from "lucide-react"
 import { useSandboxMonitor, useSandboxTask } from "@/hooks/useSandbox"
+import { usePreview } from "@/hooks/usePreview"
 import { EventRenderer } from "@/components/sandbox"
+import { PreviewPanel } from "@/components/preview/PreviewPanel"
 import { Markdown } from "@/components/ui/markdown"
 import { useInfiniteScrollTop } from "@/hooks/useInfiniteScrollTop"
 
@@ -57,19 +59,19 @@ function normalizeContent(content: string): string {
 // Helper to generate a content-based key for file operations
 function getFileContentKey(event: { event_type: string; event_data: unknown }): string | null {
   const data = event.event_data as Record<string, unknown>
-  
+
   // For tool_completed events with Write/Edit
   if (event.event_type === "agent.tool_completed") {
     const tool = data?.tool as string
     const toolInput = data?.tool_input as Record<string, unknown> | undefined
-    
+
     if (tool === "Write") {
       const filePath = toolInput?.filePath || toolInput?.file_path || ""
       const content = (toolInput?.content as string) || ""
       // Include normalized content in key to differentiate different writes to same file
       return `file:${filePath}:${normalizeContent(content).slice(0, 100)}`
     }
-    
+
     if (tool === "Edit") {
       const filePath = toolInput?.filePath || toolInput?.file_path || ""
       const oldString = (toolInput?.oldString as string) || ""
@@ -78,14 +80,14 @@ function getFileContentKey(event: { event_type: string; event_data: unknown }): 
       return `file:${filePath}:${normalizeContent(oldString).slice(0, 50)}:${normalizeContent(newString).slice(0, 50)}`
     }
   }
-  
+
   // For file_edited events
   if (event.event_type === "agent.file_edited") {
     const filePath = data?.file_path as string || ""
     const diff = (data?.diff_preview as string) || (data?.full_diff as string) || ""
     return `file:${filePath}:${normalizeContent(diff).slice(0, 100)}`
   }
-  
+
   return null
 }
 
@@ -94,9 +96,9 @@ function getToolUseKey(event: { event_type: string; event_data: unknown }): stri
   const data = event.event_data as Record<string, unknown>
   const tool = data?.tool as string
   const toolInput = data?.tool_input || data?.input
-  
+
   if (!tool) return null
-  
+
   // Create a key from tool name and input
   // For Write/Edit, use the file path
   if (tool === "Write" || tool === "Edit" || tool === "Read") {
@@ -104,14 +106,14 @@ function getToolUseKey(event: { event_type: string; event_data: unknown }): stri
     const filePath = input?.filePath || input?.file_path || ""
     return `${tool}:${filePath}`
   }
-  
+
   // For Bash, use the command
   if (tool === "Bash") {
     const input = toolInput as Record<string, unknown> | undefined
     const command = input?.command || ""
     return `${tool}:${command}`
   }
-  
+
   // For other tools, use tool name and stringified input
   return `${tool}:${JSON.stringify(toolInput || {})}`
 }
@@ -119,6 +121,7 @@ function getToolUseKey(event: { event_type: string; event_data: unknown }): stri
 export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
   const { sandboxId } = use(params)
   const [messageInput, setMessageInput] = useState("")
+  const [activeTab, setActiveTab] = useState("events")
   const scrollRef = useRef<HTMLDivElement>(null)
   // Track the previous event count to detect new realtime events vs loaded historical events
   const prevEventCountRef = useRef<number>(0)
@@ -140,6 +143,23 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
     isLoadingMore,
     loadMoreEvents,
   } = useSandboxMonitor(sandboxId)
+
+  // Preview session
+  const {
+    preview,
+    hasPreview,
+    stop: stopPreview,
+    isStopping: isStoppingPreview,
+    refresh: refreshPreview,
+    justBecameReady: previewJustBecameReady,
+  } = usePreview(sandboxId)
+
+  // Auto-switch to Preview tab when it becomes ready
+  useEffect(() => {
+    if (previewJustBecameReady) {
+      setActiveTab("preview")
+    }
+  }, [previewJustBecameReady])
 
   // Track loading state for scroll position preservation
   useEffect(() => {
@@ -178,7 +198,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
 
     // Track which content keys we've already rendered
     const renderedContentKeys = new Set<string>()
-    
+
     // Filter out events
     return events
       .filter((e) => {
@@ -214,7 +234,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
             }
           }
         }
-        
+
         // For tool_completed with Write/Edit, dedupe exact same content
         if (e.event_type === "agent.tool_completed") {
           const data = e.event_data as Record<string, unknown>
@@ -227,7 +247,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
             }
           }
         }
-        
+
         return true
       })
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
@@ -290,7 +310,7 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
   // Handle sending a message
   const handleSendMessage = async () => {
     if (!messageInput.trim() || isSendingMessage) return
-    
+
     await sendMessage(messageInput.trim())
     setMessageInput("")
   }
@@ -397,10 +417,20 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
       <div className="flex flex-1 overflow-hidden">
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Tabs defaultValue="events" className="flex-1 flex flex-col overflow-hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
             <div className="border-b border-border px-4">
               <TabsList className="h-10">
                 <TabsTrigger value="events">Events</TabsTrigger>
+                {hasPreview && (
+                  <TabsTrigger value="preview" className="gap-1.5">
+                    {preview?.status === "ready" ? (
+                      <span className="h-2 w-2 rounded-full bg-green-500" />
+                    ) : (preview?.status === "pending" || preview?.status === "starting") ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : null}
+                    Preview
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="details">Details</TabsTrigger>
               </TabsList>
             </div>
@@ -456,8 +486,8 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                     onKeyDown={handleKeyDown}
                     disabled={isSendingMessage}
                   />
-                  <Button 
-                    size="icon" 
+                  <Button
+                    size="icon"
                     className="shrink-0 h-[60px] w-[60px]"
                     onClick={handleSendMessage}
                     disabled={!messageInput.trim() || isSendingMessage}
@@ -471,6 +501,17 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                 </div>
               </div>
             </TabsContent>
+
+            {hasPreview && preview && (
+              <TabsContent value="preview" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-hidden">
+                <PreviewPanel
+                  preview={preview}
+                  onStop={stopPreview}
+                  isStopping={isStoppingPreview}
+                  onRefreshData={refreshPreview}
+                />
+              </TabsContent>
+            )}
 
             <TabsContent value="details" className="m-0 p-0 data-[state=inactive]:hidden data-[state=active]:flex data-[state=active]:flex-1 data-[state=active]:flex-col data-[state=active]:overflow-auto">
               <div className="p-4 space-y-4">
@@ -510,16 +551,16 @@ export default function SandboxDetailPage({ params }: SandboxDetailPageProps) {
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">Created</p>
                         <p className="text-sm">
-                          {task?.created_at 
-                            ? new Date(task.created_at).toLocaleString() 
+                          {task?.created_at
+                            ? new Date(task.created_at).toLocaleString()
                             : "N/A"}
                         </p>
                       </div>
                       <div>
                         <p className="text-sm font-medium text-muted-foreground">Started</p>
                         <p className="text-sm">
-                          {task?.started_at 
-                            ? new Date(task.started_at).toLocaleString() 
+                          {task?.started_at
+                            ? new Date(task.started_at).toLocaleString()
                             : "Not started"}
                         </p>
                       </div>
