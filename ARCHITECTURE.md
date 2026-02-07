@@ -272,9 +272,9 @@ OmoiOS has **two separate service initialization points** that don't share state
 | ValidationOrchestrator | **yes** | no | API-only |
 | BillingService | **yes** | no | API-only |
 | LLMService | **yes** | no | API-only |
-| CoordinationService | no | **MISSING** | Not initialized anywhere |
-| ConvergenceMergeService | no | **MISSING** | Not initialized anywhere |
-| OwnershipValidationService | no | **MISSING** | Not initialized anywhere |
+| CoordinationService | no | **yes** | Worker-only (SYNC/SPLIT/JOIN/MERGE patterns) |
+| ConvergenceMergeService | no | **yes** | Worker-only (git branch merging at convergence) |
+| OwnershipValidationService | no | **yes** | Worker-only (file conflict prevention) |
 
 See [Integration Gaps →](docs/architecture/14-integration-gaps.md) for the full gap analysis and fix instructions.
 

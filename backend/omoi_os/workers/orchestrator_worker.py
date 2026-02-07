@@ -1432,6 +1432,68 @@ async def init_services():
         capabilities=["JoinTracking", "ResultMerging", "ContextInjection"],
     )
 
+    # CoordinationService (coordination patterns: SYNC, SPLIT, JOIN, MERGE)
+    # Publishes coordination.join.created events that SynthesisService listens for.
+    # Previously only initialized per-request in spec routes — now available for
+    # general task orchestration as well.
+    from omoi_os.services.coordination import CoordinationService
+
+    CoordinationService(
+        db=db,
+        queue=queue,
+        event_bus=event_bus,
+    )
+    logger.info(
+        "service_initialized",
+        service="coordination_service",
+        capabilities=["sync", "split", "join", "merge"],
+    )
+
+    # ConvergenceMergeService (git branch merging at DAG convergence points)
+    # Subscribes to coordination.synthesis.completed events from SynthesisService.
+    # When parallel tasks complete and results are synthesized, this service
+    # merges their git branches using least-conflicts-first ordering.
+    from omoi_os.services.convergence_merge_service import (
+        get_convergence_merge_service,
+        ConvergenceMergeConfig,
+    )
+    from omoi_os.services.agent_conflict_resolver import AgentConflictResolver
+
+    conflict_resolver = AgentConflictResolver()
+
+    convergence_merge_service = get_convergence_merge_service(
+        db=db,
+        event_bus=event_bus,
+        config=ConvergenceMergeConfig(
+            max_conflicts_auto_resolve=10,
+            enable_auto_push=False,
+        ),
+        conflict_resolver=conflict_resolver,
+    )
+    convergence_merge_service.subscribe_to_events()
+    logger.info(
+        "service_initialized",
+        service="convergence_merge_service",
+        capabilities=["branch_merge", "conflict_scoring", "llm_resolution"],
+    )
+
+    # OwnershipValidationService (file ownership conflict prevention)
+    # Validates that parallel tasks don't modify overlapping files before
+    # sandbox spawning, preventing merge conflicts upstream.
+    from omoi_os.services.ownership_validation import (
+        get_ownership_validation_service,
+    )
+
+    get_ownership_validation_service(
+        db=db,
+        strict_mode=False,
+    )
+    logger.info(
+        "service_initialized",
+        service="ownership_validation",
+        capabilities=["file_ownership", "conflict_detection"],
+    )
+
     logger.info("all_services_initialized")
 
 
