@@ -489,3 +489,248 @@ def sample_task_with_sandbox(
         session.refresh(task)
         session.expunge(task)
         return task
+
+
+# =============================================================================
+# MEMORY SERVICE FIXTURES
+# =============================================================================
+
+
+@pytest.fixture
+def mock_embedding_service():
+    """Create a mock EmbeddingService for testing without real embedding API calls.
+
+    Returns a Mock with spec=EmbeddingService that returns realistic dummy embeddings.
+    """
+    from unittest.mock import Mock
+
+    from omoi_os.services.embedding import EmbeddingService
+
+    service = Mock(spec=EmbeddingService)
+    # Return a 1536-dimensional embedding (standard dimension)
+    service.generate_embedding.return_value = [0.1] * 1536
+    service.batch_generate_embeddings.return_value = [[0.1] * 1536]
+    service.cosine_similarity.return_value = 0.85
+    service.dimensions = 1536
+    return service
+
+
+@pytest.fixture
+def mock_memory_service(mock_embedding_service):
+    """Create a mock MemoryService for isolated unit testing.
+
+    Returns a Mock with spec=MemoryService configured with common return values.
+    Use this to test MCP tools that depend on MemoryService without requiring
+    a real database or embedding service.
+
+    Example:
+        def test_save_memory(mock_memory_service):
+            mock_memory_service.store_execution.return_value = TaskMemory(...)
+            # Test your code that uses memory_service
+    """
+    from unittest.mock import Mock
+
+    from omoi_os.models.task_memory import TaskMemory
+    from omoi_os.services.memory import MemoryService, SimilarTask
+
+    service = Mock(spec=MemoryService)
+
+    # Configure store_execution to return a TaskMemory instance
+    service.store_execution.return_value = TaskMemory(
+        id=str(uuid4()),
+        task_id=str(uuid4()),
+        execution_summary="Test execution completed successfully",
+        memory_type="discovery",
+        success=True,
+        reused_count=0,
+    )
+
+    # Configure search_similar to return empty list by default
+    service.search_similar.return_value = []
+
+    # Configure get_task_context to return empty context
+    service.get_task_context.return_value = {
+        "similar_tasks": [],
+        "matching_patterns": [],
+        "recommendations": [],
+    }
+
+    # Configure classify_memory_type_sync to return 'discovery' by default
+    service.classify_memory_type_sync.return_value = "discovery"
+
+    # Attach the mock embedding service
+    service.embedding_service = mock_embedding_service
+
+    return service
+
+
+@pytest.fixture
+def mock_context():
+    """Create a mock FastMCP Context for testing MCP tools.
+
+    Returns a Mock with spec-like behavior for fastmcp.Context, including
+    common methods like info(), warning(), error(), and debug().
+
+    Example:
+        async def test_mcp_tool(mock_context):
+            result = await save_memory(mock_context, task_id="...", ...)
+            mock_context.info.assert_called_once()
+    """
+    from unittest.mock import AsyncMock, Mock
+
+    # Create a mock that mimics fastmcp.Context behavior
+    ctx = Mock()
+    ctx.info = Mock()
+    ctx.warning = Mock()
+    ctx.error = Mock()
+    ctx.debug = Mock()
+
+    # Add async report_progress if needed
+    ctx.report_progress = AsyncMock()
+
+    return ctx
+
+
+@pytest.fixture
+def test_task_memory_factory():
+    """Factory fixture for creating TaskMemory instances with customizable fields.
+
+    Returns a factory function that creates TaskMemory objects for testing.
+    Useful for creating multiple task memories with different configurations.
+
+    Example:
+        def test_multiple_memories(test_task_memory_factory):
+            mem1 = test_task_memory_factory(success=True, memory_type="discovery")
+            mem2 = test_task_memory_factory(success=False, memory_type="error_fix")
+    """
+    from omoi_os.models.task_memory import TaskMemory
+    from omoi_os.utils.datetime import utc_now
+
+    def _factory(
+        task_id: str = None,
+        execution_summary: str = "Test task completed",
+        memory_type: str = "discovery",
+        success: bool = True,
+        reused_count: int = 0,
+        error_patterns: dict = None,
+        goal: str = None,
+        result: str = None,
+        feedback: str = None,
+        tool_usage: dict = None,
+        context_embedding: list = None,
+    ) -> TaskMemory:
+        """Create a TaskMemory instance with the given parameters.
+
+        Args:
+            task_id: Task ID (defaults to random UUID)
+            execution_summary: Summary of the execution
+            memory_type: Type of memory (discovery, error_fix, etc.)
+            success: Whether the task was successful
+            reused_count: Number of times memory was reused
+            error_patterns: Optional error patterns dict
+            goal: Optional goal (ACE workflow)
+            result: Optional result (ACE workflow)
+            feedback: Optional feedback (ACE workflow)
+            tool_usage: Optional tool usage dict
+            context_embedding: Optional embedding vector
+
+        Returns:
+            TaskMemory instance
+        """
+        return TaskMemory(
+            id=str(uuid4()),
+            task_id=task_id or str(uuid4()),
+            execution_summary=execution_summary,
+            memory_type=memory_type,
+            success=success,
+            reused_count=reused_count,
+            error_patterns=error_patterns,
+            goal=goal,
+            result=result,
+            feedback=feedback,
+            tool_usage=tool_usage,
+            context_embedding=context_embedding or [0.1] * 1536,
+            learned_at=utc_now(),
+        )
+
+    return _factory
+
+
+@pytest.fixture
+def sample_similar_task():
+    """Create a sample SimilarTask instance for testing search results.
+
+    Returns a SimilarTask with realistic values for use in mock search results.
+
+    Example:
+        def test_search(mock_memory_service, sample_similar_task):
+            mock_memory_service.search_similar.return_value = [sample_similar_task]
+            # Test code that uses search results
+    """
+    from omoi_os.services.memory import SimilarTask
+
+    return SimilarTask(
+        task_id=str(uuid4()),
+        memory_id=str(uuid4()),
+        summary="Implemented authentication flow using JWT tokens",
+        success=True,
+        similarity_score=0.87,
+        reused_count=3,
+        semantic_score=0.85,
+        keyword_score=0.72,
+    )
+
+
+@pytest.fixture
+def sample_similar_task_factory():
+    """Factory fixture for creating SimilarTask instances with customizable fields.
+
+    Returns a factory function that creates SimilarTask objects for testing.
+
+    Example:
+        def test_ranked_search(sample_similar_task_factory):
+            results = [
+                sample_similar_task_factory(similarity_score=0.95),
+                sample_similar_task_factory(similarity_score=0.82),
+                sample_similar_task_factory(similarity_score=0.71),
+            ]
+    """
+    from omoi_os.services.memory import SimilarTask
+
+    def _factory(
+        task_id: str = None,
+        memory_id: str = None,
+        summary: str = "Test task execution summary",
+        success: bool = True,
+        similarity_score: float = 0.85,
+        reused_count: int = 0,
+        semantic_score: float = None,
+        keyword_score: float = None,
+    ) -> SimilarTask:
+        """Create a SimilarTask instance with the given parameters.
+
+        Args:
+            task_id: Task ID (defaults to random UUID)
+            memory_id: Memory ID (defaults to random UUID)
+            summary: Execution summary
+            success: Whether the original task succeeded
+            similarity_score: Combined similarity score (0-1)
+            reused_count: Number of times the memory was reused
+            semantic_score: Optional semantic similarity score
+            keyword_score: Optional keyword match score
+
+        Returns:
+            SimilarTask instance
+        """
+        return SimilarTask(
+            task_id=task_id or str(uuid4()),
+            memory_id=memory_id or str(uuid4()),
+            summary=summary,
+            success=success,
+            similarity_score=similarity_score,
+            reused_count=reused_count,
+            semantic_score=semantic_score,
+            keyword_score=keyword_score,
+        )
+
+    return _factory
