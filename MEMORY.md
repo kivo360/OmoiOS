@@ -72,11 +72,11 @@ Frontend (Next.js 15) → Backend (FastAPI) → Daytona Sandboxes (Claude Agent 
 ### What's NOT Built Yet (Known Gaps)
 
 **Critical gaps (from `docs/architecture/14-integration-gaps.md`):**
-- `CoordinationService` — not initialized anywhere
-- `ConvergenceMergeService` — not initialized anywhere
-- `OwnershipValidationService` — not initialized anywhere
-- DAG merge system — designed but not wired end-to-end
-- Git workflow — branch creation → commit → push → PR needs E2E testing
+- ~~`CoordinationService` — not initialized anywhere~~ **FIXED 2026-02-07**
+- ~~`ConvergenceMergeService` — not initialized anywhere~~ **FIXED 2026-02-07**
+- ~~`OwnershipValidationService` — not initialized anywhere~~ **FIXED 2026-02-07**
+- ~~DAG merge system — designed but not wired end-to-end~~ **FIXED 2026-02-07 (87 tests)**
+- Git workflow — branch creation → commit → push → PR needs E2E testing with real Daytona sandboxes
 
 **New features (designed, not built):**
 - Live preview rendering (Daytona preview URLs in iframe)
@@ -89,21 +89,20 @@ Frontend (Next.js 15) → Backend (FastAPI) → Daytona Sandboxes (Claude Agent 
 
 ## Active Workstreams
 
-### 1. DAG + Git Integration (BLOCKING — do this first)
+### 1. DAG + Git Integration — COMPLETE
 
-**Status:** Designed, not fully wired
-**Why it blocks:** Everything else (preview, prototype, interactive sessions) depends on reliable sandbox execution with git operations.
+**Status:** Done (2026-02-07)
+**What was done:**
+- Wired CoordinationService, ConvergenceMergeService, OwnershipValidationService into orchestrator_worker.py
+- Updated ARCHITECTURE.md Service Availability Matrix
+- Created test_dag_event_chain.py (7 tests: full 3-service event chain verification)
+- Created test_dag_merge_e2e.py (12 tests: real git repos, real DB records, LocalGitSandbox adapter)
+- All 87 DAG-related tests passing
+- Commits: `402d3133`, `99e60e50`
 
-**What needs to happen:**
-- Wire `CoordinationService` into orchestrator worker initialization
-- Wire `ConvergenceMergeService` into orchestrator worker
-- E2E test: agent creates branch → commits → pushes → creates PR
-- E2E test: parallel tasks merge via DAG system
-- Reference: `docs/architecture/14-integration-gaps.md`
+### 2. Live Preview System (ACTIVE — DAG gaps closed, starting now)
 
-### 2. Live Preview System (NEXT — after DAG gaps closed)
-
-**Status:** Design doc complete, prototype plan written
+**Status:** Design doc complete, prototype plan written, starting Phase 0
 **Design docs:**
 - `docs/design/live-preview/prototype-plan.md` — phased implementation plan
 - Root-level design docs (live-preview-design-doc.md, background-agent-design-doc.md)
