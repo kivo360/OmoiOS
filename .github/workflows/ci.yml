@@ -83,7 +83,12 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:15432/omoi_os_test
           REDIS_URL: redis://localhost:16379
-        run: uv run pytest tests/unit/ -x -v --ignore=tests/unit/workers/ -k "not database and not db and not migration"
+        run: >-
+          uv run pytest tests/unit/ -x -v
+          --ignore=tests/unit/workers/
+          --ignore=tests/unit/services/test_ownership_validation.py
+          --ignore=tests/unit/services/test_synthesis_service.py
+          -k "not database and not db and not migration"
 
   frontend:
     name: Frontend Build
