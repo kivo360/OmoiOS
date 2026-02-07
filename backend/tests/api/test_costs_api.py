@@ -11,9 +11,7 @@ class TestCostsEndpointsUnit:
 
     def test_get_cost_summary(self, client: TestClient):
         """Test GET /costs/summary returns summary."""
-        response = client.get(
-            "/api/v1/costs/summary?scope_type=task&scope_id=test"
-        )
+        response = client.get("/api/v1/costs/summary?scope_type=task&scope_id=test")
 
         assert response.status_code == 200
         data = response.json()

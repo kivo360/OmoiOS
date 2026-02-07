@@ -41,7 +41,9 @@ async def generate_task_title(
         Generated title string, or None if generation failed
     """
     try:
-        from omoi_os.services.title_generation_service import get_title_generation_service
+        from omoi_os.services.title_generation_service import (
+            get_title_generation_service,
+        )
 
         title_service = get_title_generation_service()
         result = await title_service.generate_title_and_description(
@@ -218,7 +220,9 @@ class TaskQueueService:
                 return task
 
     def get_next_task(
-        self, phase_id: Optional[str] = None, agent_capabilities: Optional[List[str]] = None
+        self,
+        phase_id: Optional[str] = None,
+        agent_capabilities: Optional[List[str]] = None,
     ) -> Task | None:
         """
         Get highest-scored pending task for a phase that has all dependencies completed.
@@ -289,16 +293,14 @@ class TaskQueueService:
                     AND sandbox_id IS NULL
                     RETURNING id
                 """),
-                {"task_id": str(task.id), "score": task.score}
+                {"task_id": str(task.id), "score": task.score},
             )
             claimed_row = result.fetchone()
             session.commit()
 
             if not claimed_row:
                 # Another process claimed this task, try again with next available
-                logger.debug(
-                    f"Task {task.id} was claimed by another process, skipping"
-                )
+                logger.debug(f"Task {task.id} was claimed by another process, skipping")
                 return None
 
             # Refresh to get latest state after our update
@@ -457,8 +459,12 @@ class TaskQueueService:
                 if status == "completed":
                     duration_ms = 0.0
                     if task.started_at and task.completed_at:
-                        duration_ms = (task.completed_at - task.started_at).total_seconds() * 1000
-                    track_task_completed(str(task.id), task.phase_id or "unknown", duration_ms)
+                        duration_ms = (
+                            task.completed_at - task.started_at
+                        ).total_seconds() * 1000
+                    track_task_completed(
+                        str(task.id), task.phase_id or "unknown", duration_ms
+                    )
                 elif status == "failed":
                     # Classify error type from message
                     error_type = "unknown"
@@ -472,7 +478,9 @@ class TaskQueueService:
                             error_type = "network"
                         else:
                             error_type = "error"
-                    track_task_failed(str(task.id), task.phase_id or "unknown", error_type)
+                    track_task_failed(
+                        str(task.id), task.phase_id or "unknown", error_type
+                    )
 
                 # Publish status change event
                 event_type = {
@@ -752,7 +760,9 @@ class TaskQueueService:
             session.commit()
 
             # Track retry metric
-            track_task_retried(str(task.id), task.phase_id or "unknown", task.retry_count)
+            track_task_retried(
+                str(task.id), task.phase_id or "unknown", task.retry_count
+            )
 
             return True
 
@@ -1119,9 +1129,7 @@ class TaskQueueService:
 
         return cleaned_tasks
 
-    def get_stale_assigned_tasks(
-        self, stale_threshold_minutes: int = 3
-    ) -> list[Task]:
+    def get_stale_assigned_tasks(self, stale_threshold_minutes: int = 3) -> list[Task]:
         """
         Get tasks stuck in 'assigned' or 'claiming' status for too long.
 
@@ -1249,9 +1257,7 @@ class TaskQueueService:
             return True
 
         # Check if all dependency tasks are completed
-        result = await session.execute(
-            select(Task).filter(Task.id.in_(depends_on))
-        )
+        result = await session.execute(select(Task).filter(Task.id.in_(depends_on)))
         dependency_tasks = result.scalars().all()
 
         # If we can't find all dependencies, consider them incomplete
@@ -1361,7 +1367,7 @@ class TaskQueueService:
                         Task.status == "pending",
                         Task.sandbox_id.is_(None),
                         Project.id == project_id,
-                        Project.autonomous_execution_enabled == True,
+                        Project.autonomous_execution_enabled is True,
                     )
                 )
             else:
@@ -1373,7 +1379,7 @@ class TaskQueueService:
                     .filter(
                         Task.status == "pending",
                         Task.sandbox_id.is_(None),
-                        Project.autonomous_execution_enabled == True,
+                        Project.autonomous_execution_enabled is True,
                     )
                 )
 
@@ -1418,7 +1424,9 @@ class TaskQueueService:
             return batch
 
     async def get_next_task_async(
-        self, phase_id: Optional[str] = None, agent_capabilities: Optional[List[str]] = None
+        self,
+        phase_id: Optional[str] = None,
+        agent_capabilities: Optional[List[str]] = None,
     ) -> Task | None:
         """
         Async version: Get highest-scored pending task with atomic claim.
@@ -1478,7 +1486,7 @@ class TaskQueueService:
                     AND sandbox_id IS NULL
                     RETURNING id
                 """),
-                {"task_id": str(task.id), "score": task.score}
+                {"task_id": str(task.id), "score": task.score},
             )
             claimed_row = claim_result.fetchone()
             await session.commit()
@@ -1499,9 +1507,7 @@ class TaskQueueService:
             agent_id: UUID of the agent
         """
         async with self.db.get_async_session() as session:
-            result = await session.execute(
-                select(Task).filter(Task.id == task_id)
-            )
+            result = await session.execute(select(Task).filter(Task.id == task_id))
             task = result.scalar_one_or_none()
 
             if task:
@@ -1626,9 +1632,7 @@ class TaskQueueService:
         from omoi_os.utils.datetime import utc_now
 
         async with self.db.get_async_session() as session:
-            result = await session.execute(
-                select(Task).filter(Task.id == task_id)
-            )
+            result = await session.execute(select(Task).filter(Task.id == task_id))
             task = result.scalar_one_or_none()
 
             if not task:
@@ -1762,7 +1766,9 @@ class TaskQueueService:
 
             return ticket.project_id
 
-    def get_running_count_by_organization(self, organization_id: str, session=None) -> int:
+    def get_running_count_by_organization(
+        self, organization_id: str, session=None
+    ) -> int:
         """
         Get the count of currently running tasks for an organization.
 
@@ -1799,7 +1805,9 @@ class TaskQueueService:
             with self.db.get_session() as sess:
                 return _count(sess)
 
-    def get_agent_limit_for_organization(self, organization_id: str, session=None) -> int:
+    def get_agent_limit_for_organization(
+        self, organization_id: str, session=None
+    ) -> int:
         """
         Get the agent limit for an organization from their subscription.
 
@@ -1820,13 +1828,18 @@ class TaskQueueService:
         def _get_limit(sess):
             # Get active subscription for organization
             result = sess.execute(
-                select(Subscription).where(
+                select(Subscription)
+                .where(
                     Subscription.organization_id == organization_id,
-                    Subscription.status.in_([
-                        SubscriptionStatus.ACTIVE.value,
-                        SubscriptionStatus.TRIALING.value,
-                    ]),
-                ).order_by(Subscription.created_at.desc()).limit(1)
+                    Subscription.status.in_(
+                        [
+                            SubscriptionStatus.ACTIVE.value,
+                            SubscriptionStatus.TRIALING.value,
+                        ]
+                    ),
+                )
+                .order_by(Subscription.created_at.desc())
+                .limit(1)
             )
             subscription = result.scalar_one_or_none()
 
@@ -1842,7 +1855,9 @@ class TaskQueueService:
             with self.db.get_session() as sess:
                 return _get_limit(sess)
 
-    def can_spawn_agent_for_organization(self, organization_id: str, session=None) -> tuple[bool, str]:
+    def can_spawn_agent_for_organization(
+        self, organization_id: str, session=None
+    ) -> tuple[bool, str]:
         """
         Check if an organization can spawn another agent based on their subscription limits.
 
@@ -1853,6 +1868,7 @@ class TaskQueueService:
         Returns:
             Tuple of (can_spawn, reason)
         """
+
         def _check(sess):
             agent_limit = self.get_agent_limit_for_organization(organization_id, sess)
 
@@ -1860,10 +1876,15 @@ class TaskQueueService:
             if agent_limit == -1:
                 return True, "unlimited"
 
-            running_count = self.get_running_count_by_organization(organization_id, sess)
+            running_count = self.get_running_count_by_organization(
+                organization_id, sess
+            )
 
             if running_count >= agent_limit:
-                return False, f"Organization at agent capacity ({running_count}/{agent_limit})"
+                return (
+                    False,
+                    f"Organization at agent capacity ({running_count}/{agent_limit})",
+                )
 
             return True, "allowed"
 
@@ -1927,7 +1948,9 @@ class TaskQueueService:
                     continue
 
                 # Get project and organization for this task
-                ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                ticket = (
+                    session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                )
                 if not ticket or not ticket.project_id:
                     # Tasks without a project are allowed (no limit)
                     task.score = self.scorer.compute_score(task)
@@ -1937,6 +1960,7 @@ class TaskQueueService:
                 # Skip tasks from archived specs
                 if ticket.spec_id:
                     from omoi_os.models.spec import Spec
+
                     spec = session.query(Spec).filter(Spec.id == ticket.spec_id).first()
                     if spec and spec.archived:
                         logger.debug(
@@ -1948,14 +1972,28 @@ class TaskQueueService:
                 project_id = ticket.project_id
 
                 # Get project to find organization
-                project = session.query(Project).filter(Project.id == project_id).first()
-                organization_id = str(project.organization_id) if project and project.organization_id else None
+                project = (
+                    session.query(Project).filter(Project.id == project_id).first()
+                )
+                organization_id = (
+                    str(project.organization_id)
+                    if project and project.organization_id
+                    else None
+                )
 
                 # Check if autonomous execution is enabled for this project
                 # Tasks from projects without autonomous_execution_enabled are skipped
                 # UNLESS force_execute is set (quick mode from command page or spec workflow)
-                force_execute = task.execution_config.get("force_execute", False) if task.execution_config else False
-                if project and not project.autonomous_execution_enabled and not force_execute:
+                force_execute = (
+                    task.execution_config.get("force_execute", False)
+                    if task.execution_config
+                    else False
+                )
+                if (
+                    project
+                    and not project.autonomous_execution_enabled
+                    and not force_execute
+                ):
                     logger.debug(
                         f"Project {project_id} has autonomous_execution_enabled=False, "
                         f"skipping task {task.id}"
@@ -1966,19 +2004,26 @@ class TaskQueueService:
                 if organization_id:
                     # Cache org agent limit
                     if organization_id not in org_agent_limits:
-                        org_agent_limits[organization_id] = self.get_agent_limit_for_organization(
-                            organization_id, session
+                        org_agent_limits[organization_id] = (
+                            self.get_agent_limit_for_organization(
+                                organization_id, session
+                            )
                         )
 
                     # Cache org running count
                     if organization_id not in org_running_counts:
-                        org_running_counts[organization_id] = self.get_running_count_by_organization(
-                            organization_id, session
+                        org_running_counts[organization_id] = (
+                            self.get_running_count_by_organization(
+                                organization_id, session
+                            )
                         )
 
                     # Check org limit (-1 means unlimited)
                     org_limit = org_agent_limits[organization_id]
-                    if org_limit != -1 and org_running_counts[organization_id] >= org_limit:
+                    if (
+                        org_limit != -1
+                        and org_running_counts[organization_id] >= org_limit
+                    ):
                         logger.debug(
                             f"Organization {organization_id} at agent capacity "
                             f"({org_running_counts[organization_id]}/{org_limit}), "
@@ -2027,7 +2072,7 @@ class TaskQueueService:
                     AND sandbox_id IS NULL
                     RETURNING id
                 """),
-                {"task_id": str(task.id), "score": task.score}
+                {"task_id": str(task.id), "score": task.score},
             )
             claimed_row = result.fetchone()
             session.commit()
@@ -2079,7 +2124,9 @@ class TaskQueueService:
 
             for task in tasks:
                 # Get project ID for this task
-                ticket = session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                ticket = (
+                    session.query(Ticket).filter(Ticket.id == task.ticket_id).first()
+                )
                 if not ticket or not ticket.project_id:
                     # Tasks without a project are allowed (no limit)
                     available_tasks.append(task)
@@ -2088,8 +2135,14 @@ class TaskQueueService:
                 project_id = ticket.project_id
 
                 # Get project to find organization
-                project = session.query(Project).filter(Project.id == project_id).first()
-                organization_id = str(project.organization_id) if project and project.organization_id else None
+                project = (
+                    session.query(Project).filter(Project.id == project_id).first()
+                )
+                organization_id = (
+                    str(project.organization_id)
+                    if project and project.organization_id
+                    else None
+                )
 
                 # Check if autonomous execution is enabled for this project
                 # Tasks from projects without autonomous_execution_enabled are skipped
@@ -2104,19 +2157,26 @@ class TaskQueueService:
                 if organization_id:
                     # Cache org agent limit
                     if organization_id not in org_agent_limits:
-                        org_agent_limits[organization_id] = self.get_agent_limit_for_organization(
-                            organization_id, session
+                        org_agent_limits[organization_id] = (
+                            self.get_agent_limit_for_organization(
+                                organization_id, session
+                            )
                         )
 
                     # Cache org running count
                     if organization_id not in org_running_counts:
-                        org_running_counts[organization_id] = self.get_running_count_by_organization(
-                            organization_id, session
+                        org_running_counts[organization_id] = (
+                            self.get_running_count_by_organization(
+                                organization_id, session
+                            )
                         )
 
                     # Check org limit (-1 means unlimited)
                     org_limit = org_agent_limits[organization_id]
-                    if org_limit != -1 and org_running_counts[organization_id] >= org_limit:
+                    if (
+                        org_limit != -1
+                        and org_running_counts[organization_id] >= org_limit
+                    ):
                         logger.debug(
                             f"Organization {organization_id} at agent capacity "
                             f"({org_running_counts[organization_id]}/{org_limit}), "
@@ -2131,7 +2191,9 @@ class TaskQueueService:
                         .join(Ticket, Task.ticket_id == Ticket.id)
                         .filter(
                             Ticket.project_id == project_id,
-                            Task.status.in_(["claiming", "assigned", "running", "validating"]),
+                            Task.status.in_(
+                                ["claiming", "assigned", "running", "validating"]
+                            ),
                         )
                         .count()
                     )
@@ -2162,13 +2224,15 @@ class TaskQueueService:
                     AND status = 'pending_validation'
                     RETURNING id
                 """),
-                {"task_id": str(task.id)}
+                {"task_id": str(task.id)},
             )
             claimed_row = result.fetchone()
             session.commit()
 
             if not claimed_row:
-                logger.debug(f"Validation task {task.id} was claimed by another process, skipping")
+                logger.debug(
+                    f"Validation task {task.id} was claimed by another process, skipping"
+                )
                 return None
 
             session.refresh(task)

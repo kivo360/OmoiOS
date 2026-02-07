@@ -10,7 +10,6 @@ from omoi_os.models.task import Task
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.phase_gate import PhaseGateService
 
-
 PHASE_REQUIREMENTS = "PHASE_REQUIREMENTS"
 
 
@@ -29,7 +28,9 @@ def _create_ticket(session, title: str = "Gate Test Ticket") -> Ticket:
     return ticket
 
 
-def _add_completed_task(session, ticket_id: str, result: dict[str, Any] | None = None) -> Task:
+def _add_completed_task(
+    session, ticket_id: str, result: dict[str, Any] | None = None
+) -> Task:
     task = Task(
         ticket_id=ticket_id,
         phase_id=PHASE_REQUIREMENTS,

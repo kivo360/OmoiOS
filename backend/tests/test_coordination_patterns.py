@@ -48,7 +48,9 @@ class TestSyncPoint:
         assert sync_point.required_count == 2  # Should default to len(waiting_task_ids)
         assert sync_point.timeout_seconds is None
 
-    def test_check_sync_point_ready(self, coordination_service, db_service, test_ticket):
+    def test_check_sync_point_ready(
+        self, coordination_service, db_service, test_ticket
+    ):
         """Test checking if sync point is ready."""
         # Create tasks
         task1 = coordination_service.queue.enqueue_task(
@@ -459,4 +461,3 @@ class TestPatternExecution:
 
         with pytest.raises(ValueError, match="Unknown pattern type"):
             coordination_service.execute_pattern(pattern_config)
-

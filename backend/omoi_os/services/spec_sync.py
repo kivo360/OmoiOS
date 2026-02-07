@@ -14,7 +14,7 @@ Flow:
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,7 +32,6 @@ from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.embedding import EmbeddingService
 from omoi_os.services.spec_dedup import (
-    SpecDeduplicationService,
     compute_content_hash,
     get_spec_dedup_service,
 )
@@ -160,9 +159,7 @@ class SpecSyncService:
             # Sync requirements from requirements phase
             requirements_data = spec.phase_data.get("requirements", {})
             if requirements_data:
-                await self._sync_requirements(
-                    sess, spec, requirements_data, stats
-                )
+                await self._sync_requirements(sess, spec, requirements_data, stats)
 
             # Sync tasks from tasks phase
             tasks_data = spec.phase_data.get("tasks", {})
@@ -221,9 +218,7 @@ class SpecSyncService:
         if not requirements:
             return
 
-        logger.info(
-            f"Syncing {len(requirements)} requirements for spec {spec.id}"
-        )
+        logger.info(f"Syncing {len(requirements)} requirements for spec {spec.id}")
 
         # Bulk deduplication
         dedup_result = await self.dedup_service.deduplicate_requirements_bulk(
@@ -252,9 +247,7 @@ class SpecSyncService:
                 # Sync acceptance criteria for this requirement
                 criteria = req_data.get("acceptance_criteria", [])
                 if criteria:
-                    await self._sync_criteria(
-                        session, new_req.id, criteria, stats
-                    )
+                    await self._sync_criteria(session, new_req.id, criteria, stats)
 
             except Exception as e:
                 logger.error(f"Failed to create requirement: {e}")
@@ -294,7 +287,11 @@ class SpecSyncService:
                     requirement_id=requirement_id,
                     text=text,
                     completed=False,
-                    content_hash=crit_data.get("content_hash") if isinstance(crit_data, dict) else compute_content_hash(text),
+                    content_hash=(
+                        crit_data.get("content_hash")
+                        if isinstance(crit_data, dict)
+                        else compute_content_hash(text)
+                    ),
                 )
                 session.add(new_criterion)
                 stats.criteria_created += 1
@@ -376,14 +373,20 @@ class SpecSyncService:
                         description=description,
                         phase_id="PHASE_BACKLOG",
                         status="backlog",
-                        priority=priority if priority in priority_map.values() else "MEDIUM",
+                        priority=(
+                            priority if priority in priority_map.values() else "MEDIUM"
+                        ),
                         project_id=spec.project_id,
                         user_id=spec.user_id,  # Inherit user from spec
-                        dependencies={
-                            "blocked_by": dependencies,
-                            "requirements": requirements_refs,
-                            "task_refs": task_refs,
-                        } if dependencies or requirements_refs else None,
+                        dependencies=(
+                            {
+                                "blocked_by": dependencies,
+                                "requirements": requirements_refs,
+                                "task_refs": task_refs,
+                            }
+                            if dependencies or requirements_refs
+                            else None
+                        ),
                         context={
                             "spec_id": spec.id,
                             "local_ticket_id": local_id,
@@ -439,7 +442,11 @@ class SpecSyncService:
                         phase=task_data.get("phase", "Implementation"),
                         priority=priority,
                         status="pending",
-                        dependencies=dependencies.get("depends_on", []) if isinstance(dependencies, dict) else [],
+                        dependencies=(
+                            dependencies.get("depends_on", [])
+                            if isinstance(dependencies, dict)
+                            else []
+                        ),
                         estimated_hours=estimated_hours,
                         content_hash=task_data.get("content_hash"),
                         embedding_vector=task_data.get("embedding_vector"),
@@ -602,9 +609,7 @@ class SpecSyncService:
 
         async def _sync(sess: AsyncSession) -> SyncStats:
             # Verify spec exists
-            result = await sess.execute(
-                select(Spec).filter(Spec.id == spec_id)
-            )
+            result = await sess.execute(select(Spec).filter(Spec.id == spec_id))
             spec = result.scalar_one_or_none()
             if not spec:
                 stats.errors.append("Spec not found")
@@ -637,9 +642,7 @@ class SpecSyncService:
                     # Sync criteria
                     criteria = req_data.get("acceptance_criteria", [])
                     if criteria:
-                        await self._sync_criteria(
-                            sess, new_req.id, criteria, stats
-                        )
+                        await self._sync_criteria(sess, new_req.id, criteria, stats)
 
                 except Exception as e:
                     stats.errors.append(f"Requirement creation failed: {e}")
@@ -674,9 +677,7 @@ class SpecSyncService:
 
         async def _sync(sess: AsyncSession) -> SyncStats:
             # Verify spec exists
-            result = await sess.execute(
-                select(Spec).filter(Spec.id == spec_id)
-            )
+            result = await sess.execute(select(Spec).filter(Spec.id == spec_id))
             spec = result.scalar_one_or_none()
             if not spec:
                 stats.errors.append("Spec not found")

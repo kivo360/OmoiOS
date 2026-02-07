@@ -37,10 +37,12 @@ class TestAgentHealthService:
             status="idle",
             capabilities=["bash"],
             last_heartbeat=None,
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
-        mock_session.query.return_value.filter.return_value.first.return_value = sample_agent
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            sample_agent
+        )
 
         result = health_service.emit_heartbeat("test-agent-123")
 
@@ -79,10 +81,12 @@ class TestAgentHealthService:
             status="idle",
             capabilities=["bash"],
             last_heartbeat=utc_now() - timedelta(seconds=30),
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
-        mock_session.query.return_value.filter.return_value.first.return_value = healthy_agent
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            healthy_agent
+        )
 
         result = health_service.check_agent_health("test-agent-123", timeout_seconds=90)
 
@@ -108,10 +112,12 @@ class TestAgentHealthService:
             status="idle",
             capabilities=["bash"],
             last_heartbeat=utc_now() - timedelta(minutes=5),
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
-        mock_session.query.return_value.filter.return_value.first.return_value = stale_agent
+        mock_session.query.return_value.filter.return_value.first.return_value = (
+            stale_agent
+        )
 
         result = health_service.check_agent_health("test-agent-123", timeout_seconds=90)
 
@@ -133,10 +139,26 @@ class TestAgentHealthService:
 
         now = utc_now()
         agents = [
-            Agent(id="worker-1", agent_type="worker", phase_id="PHASE_1", status="idle",
-                  capabilities=[], last_heartbeat=now - timedelta(seconds=30), created_at=now, health_status="healthy"),
-            Agent(id="worker-2", agent_type="worker", phase_id="PHASE_1", status="running",
-                  capabilities=[], last_heartbeat=now - timedelta(minutes=2), created_at=now, health_status="stale"),
+            Agent(
+                id="worker-1",
+                agent_type="worker",
+                phase_id="PHASE_1",
+                status="idle",
+                capabilities=[],
+                last_heartbeat=now - timedelta(seconds=30),
+                created_at=now,
+                health_status="healthy",
+            ),
+            Agent(
+                id="worker-2",
+                agent_type="worker",
+                phase_id="PHASE_1",
+                status="running",
+                capabilities=[],
+                last_heartbeat=now - timedelta(minutes=2),
+                created_at=now,
+                health_status="stale",
+            ),
         ]
 
         mock_session.query.return_value.all.return_value = agents
@@ -165,10 +187,12 @@ class TestAgentHealthService:
             status="idle",
             capabilities=[],
             last_heartbeat=utc_now() - timedelta(minutes=5),
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
-        mock_session.query.return_value.filter.return_value.all.return_value = [stale_agent]
+        mock_session.query.return_value.filter.return_value.all.return_value = [
+            stale_agent
+        ]
 
         result = health_service.detect_stale_agents(timeout_seconds=90)
 
@@ -191,12 +215,16 @@ class TestAgentHealthService:
             status="stale",
             capabilities=[],
             last_heartbeat=utc_now() - timedelta(minutes=5),
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
-        mock_session.query.return_value.filter.return_value.all.return_value = [stale_agent]
+        mock_session.query.return_value.filter.return_value.all.return_value = [
+            stale_agent
+        ]
 
-        result = health_service.cleanup_stale_agents(timeout_seconds=90, mark_as="timeout")
+        result = health_service.cleanup_stale_agents(
+            timeout_seconds=90, mark_as="timeout"
+        )
 
         assert result == 1
         assert stale_agent.status == "timeout"
@@ -218,7 +246,7 @@ class TestAgentHealthService:
             status="idle",
             capabilities=["bash"],
             last_heartbeat=utc_now() - timedelta(seconds=30),
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
         stale_agent = Agent(
@@ -228,7 +256,7 @@ class TestAgentHealthService:
             status="idle",
             capabilities=["monitoring"],
             last_heartbeat=utc_now() - timedelta(minutes=5),
-            created_at=utc_now()
+            created_at=utc_now(),
         )
 
         mock_session.query.return_value.all.return_value = [healthy_agent, stale_agent]
@@ -256,7 +284,9 @@ class TestHeartbeatManager:
     def test_heartbeat_manager_initialization(self):
         """Test HeartbeatManager initialization."""
         mock_health_service = Mock(spec=AgentHealthService)
-        heartbeat_manager = HeartbeatManager("test-agent-123", mock_health_service, interval_seconds=1)
+        heartbeat_manager = HeartbeatManager(
+            "test-agent-123", mock_health_service, interval_seconds=1
+        )
 
         assert heartbeat_manager.agent_id == "test-agent-123"
         assert heartbeat_manager.health_service == mock_health_service
@@ -264,11 +294,13 @@ class TestHeartbeatManager:
         assert heartbeat_manager._running is False
         assert heartbeat_manager._thread is None
 
-    @patch('threading.Thread')
+    @patch("threading.Thread")
     def test_start_heartbeat_manager(self, mock_thread):
         """Test starting the heartbeat manager."""
         mock_health_service = Mock(spec=AgentHealthService)
-        heartbeat_manager = HeartbeatManager("test-agent-123", mock_health_service, interval_seconds=1)
+        heartbeat_manager = HeartbeatManager(
+            "test-agent-123", mock_health_service, interval_seconds=1
+        )
 
         mock_thread_instance = Mock()
         mock_thread.return_value = mock_thread_instance
@@ -276,13 +308,17 @@ class TestHeartbeatManager:
         heartbeat_manager.start()
 
         assert heartbeat_manager._running is True
-        mock_thread.assert_called_once_with(target=heartbeat_manager._heartbeat_loop, daemon=True)
+        mock_thread.assert_called_once_with(
+            target=heartbeat_manager._heartbeat_loop, daemon=True
+        )
         mock_thread_instance.start.assert_called_once()
 
     def test_stop_heartbeat_manager(self):
         """Test stopping the heartbeat manager."""
         mock_health_service = Mock(spec=AgentHealthService)
-        heartbeat_manager = HeartbeatManager("test-agent-123", mock_health_service, interval_seconds=1)
+        heartbeat_manager = HeartbeatManager(
+            "test-agent-123", mock_health_service, interval_seconds=1
+        )
 
         heartbeat_manager._running = True
         mock_thread = Mock()
@@ -294,16 +330,19 @@ class TestHeartbeatManager:
         assert heartbeat_manager._running is False
         mock_thread.join.assert_called_once_with(timeout=6)  # interval_seconds + 5
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_loop_success(self, mock_sleep):
         """Test successful heartbeat loop."""
         mock_health_service = Mock(spec=AgentHealthService)
-        heartbeat_manager = HeartbeatManager("test-agent-123", mock_health_service, interval_seconds=1)
+        heartbeat_manager = HeartbeatManager(
+            "test-agent-123", mock_health_service, interval_seconds=1
+        )
 
         mock_health_service.emit_heartbeat.return_value = True
         heartbeat_manager._running = True
 
         call_count = 0
+
         def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -318,11 +357,13 @@ class TestHeartbeatManager:
         assert mock_health_service.emit_heartbeat.call_count == 2
         assert mock_sleep.call_count == 2
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_loop_agent_not_found(self, mock_sleep):
         """Test heartbeat loop when agent not found."""
         mock_health_service = Mock(spec=AgentHealthService)
-        heartbeat_manager = HeartbeatManager("test-agent-123", mock_health_service, interval_seconds=1)
+        heartbeat_manager = HeartbeatManager(
+            "test-agent-123", mock_health_service, interval_seconds=1
+        )
 
         mock_health_service.emit_heartbeat.return_value = False
         heartbeat_manager._running = True
@@ -338,11 +379,13 @@ class TestHeartbeatManager:
         mock_health_service.emit_heartbeat.assert_called_once_with("test-agent-123")
         mock_sleep.assert_called_once_with(1)
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_loop_exception_handling(self, mock_sleep):
         """Test heartbeat loop exception handling."""
         mock_health_service = Mock(spec=AgentHealthService)
-        heartbeat_manager = HeartbeatManager("test-agent-123", mock_health_service, interval_seconds=1)
+        heartbeat_manager = HeartbeatManager(
+            "test-agent-123", mock_health_service, interval_seconds=1
+        )
 
         mock_health_service.emit_heartbeat.side_effect = Exception("Database error")
         heartbeat_manager._running = True

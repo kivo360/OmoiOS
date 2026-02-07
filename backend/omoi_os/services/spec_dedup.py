@@ -24,7 +24,7 @@ Thresholds (tuned per entity type):
 import hashlib
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, List, Optional, Union
+from typing import Any, List, Optional
 
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -354,9 +354,11 @@ class SpecDeduplicationService:
                     "Skipping duplicate requirement",
                     extra={
                         "title": title[:50],
-                        "duplicate_of": dedup_result.candidates[0].entity_id
-                        if dedup_result.candidates
-                        else None,
+                        "duplicate_of": (
+                            dedup_result.candidates[0].entity_id
+                            if dedup_result.candidates
+                            else None
+                        ),
                         "similarity": dedup_result.highest_similarity,
                     },
                 )
@@ -419,9 +421,11 @@ class SpecDeduplicationService:
                     "Skipping duplicate task",
                     extra={
                         "title": title[:50],
-                        "duplicate_of": dedup_result.candidates[0].entity_id
-                        if dedup_result.candidates
-                        else None,
+                        "duplicate_of": (
+                            dedup_result.candidates[0].entity_id
+                            if dedup_result.candidates
+                            else None
+                        ),
                         "similarity": dedup_result.highest_similarity,
                     },
                 )
@@ -729,8 +733,14 @@ class SpecDeduplicationService:
             logger.warning(f"pgvector similarity query failed: {e}")
             # Fallback to in-memory comparison
             return await self._fallback_similarity_check(
-                sess, model_class, scope_field, scope_value,
-                embedding, entity_type, threshold, top_k
+                sess,
+                model_class,
+                scope_field,
+                scope_value,
+                embedding,
+                entity_type,
+                threshold,
+                top_k,
             )
 
         candidates = []

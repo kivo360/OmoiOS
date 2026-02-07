@@ -80,8 +80,7 @@ def upgrade() -> None:
     )
 
     # Populate phases table with default workflow phases
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO phases (id, name, description, sequence_order, allowed_transitions, is_terminal, configuration) VALUES
         ('PHASE_BACKLOG', 'Backlog', 'Initial ticket triage and prioritization', 0, 
          '["PHASE_REQUIREMENTS", "PHASE_BLOCKED"]'::jsonb, false, '{}'::jsonb),
@@ -100,8 +99,7 @@ def upgrade() -> None:
         ('PHASE_BLOCKED', 'Blocked', 'Ticket blocked by external dependencies', 7,
          '["PHASE_BACKLOG", "PHASE_REQUIREMENTS", "PHASE_DESIGN", "PHASE_IMPLEMENTATION", "PHASE_TESTING"]'::jsonb, 
          true, '{}'::jsonb)
-        """
-    )
+        """)
 
     # Create board_columns table (Kanban visualization)
     op.create_table(
@@ -153,8 +151,7 @@ def upgrade() -> None:
     )
 
     # Populate board_columns with default Kanban layout
-    op.execute(
-        """
+    op.execute("""
         INSERT INTO board_columns (id, name, description, sequence_order, phase_mapping, wip_limit, is_terminal, auto_transition_to, color_theme) VALUES
         ('backlog', '📋 Backlog', 'Tickets awaiting analysis', 0,
          '["PHASE_BACKLOG"]'::jsonb, null, false, null, 'gray'),
@@ -170,8 +167,7 @@ def upgrade() -> None:
          '["PHASE_DONE"]'::jsonb, null, true, null, 'green'),
         ('blocked', '🚫 Blocked', 'Blocked by dependencies', 6,
          '["PHASE_BLOCKED"]'::jsonb, null, true, null, 'red')
-        """
-    )
+        """)
 
     # Create task_discoveries table (Hephaestus-inspired discovery tracking)
     op.create_table(

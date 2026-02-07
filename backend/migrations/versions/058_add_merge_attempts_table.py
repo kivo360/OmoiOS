@@ -7,10 +7,10 @@ Create Date: 2026-01-30
 Phase A: Foundation for DAG Merge Executor integration.
 Tracks merge attempts at convergence points for audit trail and debugging.
 """
+
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision = "058_add_merge_attempts"
@@ -25,7 +25,6 @@ def upgrade() -> None:
         "merge_attempts",
         # Primary key
         sa.Column("id", sa.String(), primary_key=True),
-
         # Related entities
         sa.Column(
             "task_id",
@@ -51,7 +50,6 @@ def upgrade() -> None:
             index=True,
             comment="Spec containing the parallel tasks",
         ),
-
         # Merge sources
         sa.Column(
             "source_task_ids",
@@ -71,7 +69,6 @@ def upgrade() -> None:
             nullable=False,
             comment="Target branch for merge (usually ticket branch)",
         ),
-
         # Conflict scoring and ordering
         sa.Column(
             "merge_order",
@@ -92,7 +89,6 @@ def upgrade() -> None:
             default=0,
             comment="Total number of conflicts detected",
         ),
-
         # Status and outcome
         sa.Column(
             "status",
@@ -113,7 +109,6 @@ def upgrade() -> None:
             nullable=True,
             comment="Error message if merge failed",
         ),
-
         # LLM conflict resolution tracking
         sa.Column(
             "llm_invocations",
@@ -142,7 +137,6 @@ def upgrade() -> None:
             default=0,
             comment="Estimated cost of LLM resolution in cents",
         ),
-
         # Timestamps
         sa.Column(
             "created_at",

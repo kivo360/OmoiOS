@@ -3,9 +3,8 @@
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from omoi_os.api.dependencies import get_db_session, get_current_user
 from omoi_os.logging import get_logger
@@ -18,7 +17,6 @@ from omoi_os.schemas.onboarding import (
     OnboardingStatusResponse,
     OnboardingStepUpdate,
     OnboardingCompleteRequest,
-    OnboardingResetRequest,
     OnboardingDetectResponse,
     OnboardingSyncRequest,
     DetectedStepState,
@@ -30,9 +28,7 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-async def get_or_create_onboarding(
-    db: AsyncSession, user_id: UUID
-) -> UserOnboarding:
+async def get_or_create_onboarding(db: AsyncSession, user_id: UUID) -> UserOnboarding:
     """Get existing onboarding record or create a new one."""
     result = await db.execute(
         select(UserOnboarding).where(UserOnboarding.user_id == user_id)
@@ -240,8 +236,7 @@ async def detect_onboarding_state(
     """
     # Check GitHub connection from user attributes
     github_connected = bool(
-        current_user.attributes
-        and current_user.attributes.get("github_access_token")
+        current_user.attributes and current_user.attributes.get("github_access_token")
     )
     github_username = (
         current_user.attributes.get("github_username")
@@ -289,35 +284,41 @@ async def detect_onboarding_state(
 
     organization_state = DetectedStepState(
         completed=len(orgs) > 0,
-        current={
-            "id": str(orgs[0].id),
-            "name": orgs[0].name,
-        }
-        if orgs
-        else None,
+        current=(
+            {
+                "id": str(orgs[0].id),
+                "name": orgs[0].name,
+            }
+            if orgs
+            else None
+        ),
         can_change=True,
     )
 
     repo_state = DetectedStepState(
         completed=len(projects) > 0,
-        current={
-            "owner": projects[0].github_owner,
-            "name": projects[0].github_repo,
-            "project_id": str(projects[0].id),
-        }
-        if projects
-        else None,
+        current=(
+            {
+                "owner": projects[0].github_owner,
+                "name": projects[0].github_repo,
+                "project_id": str(projects[0].id),
+            }
+            if projects
+            else None
+        ),
         can_change=True,
     )
 
     plan_state = DetectedStepState(
         completed=subscription is not None,
-        current={
-            "plan": subscription.tier if subscription else None,
-            "status": subscription.status if subscription else None,
-        }
-        if subscription
-        else None,
+        current=(
+            {
+                "plan": subscription.tier if subscription else None,
+                "status": subscription.status if subscription else None,
+            }
+            if subscription
+            else None
+        ),
         can_change=True,
     )
 
@@ -473,9 +474,7 @@ async def admin_reset_onboarding(
     await db.commit()
     await db.refresh(onboarding)
 
-    logger.info(
-        f"Admin {current_user.id} reset onboarding for user {user_id}"
-    )
+    logger.info(f"Admin {current_user.id} reset onboarding for user {user_id}")
 
     return OnboardingStatusResponse(
         is_completed=onboarding.is_completed,

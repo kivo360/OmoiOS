@@ -14,7 +14,7 @@ These tests verify the "wiring" between:
 """
 
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from uuid import uuid4
 
 from omoi_os.models.spec import Spec, SpecTask
@@ -25,14 +25,12 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.spec_task_execution import (
     SpecTaskExecutionService,
-    ParallelGroup,
 )
 from omoi_os.services.synthesis_service import (
     SynthesisService,
     reset_synthesis_service,
 )
 from omoi_os.services.task_queue import TaskQueueService
-
 
 # =============================================================================
 # FIXTURES
@@ -45,6 +43,7 @@ def spec_with_parallel_opportunities(db_service: DatabaseService) -> Spec:
     with db_service.get_session() as session:
         # Create project first
         from omoi_os.models.project import Project
+
         project = Project(
             id=f"proj-{uuid4().hex[:8]}",
             name="Test Project",
@@ -152,9 +151,7 @@ def spec_task_execution_service(
 class TestOwnedFilesExtraction:
     """Tests for extracting owned_files from spec.phase_data."""
 
-    def test_extract_owned_files_from_phase_data(
-        self, db_service: DatabaseService
-    ):
+    def test_extract_owned_files_from_phase_data(self, db_service: DatabaseService):
         """Test extracting files_to_create and files_to_modify from phase_data."""
         service = SpecTaskExecutionService(db=db_service)
 
@@ -166,7 +163,10 @@ class TestOwnedFilesExtraction:
                     {
                         "id": "TSK-001",
                         "title": "Implement user service",
-                        "files_to_create": ["src/services/user.py", "src/models/user.py"],
+                        "files_to_create": [
+                            "src/services/user.py",
+                            "src/models/user.py",
+                        ],
                         "files_to_modify": ["src/api/routes.py"],
                     },
                     {
@@ -193,26 +193,18 @@ class TestOwnedFilesExtraction:
         assert len(owned_files_2) == 1
         assert "tests/test_user.py" in owned_files_2
 
-    def test_extract_owned_files_missing_task(
-        self, db_service: DatabaseService
-    ):
+    def test_extract_owned_files_missing_task(self, db_service: DatabaseService):
         """Test that missing task returns None."""
         service = SpecTaskExecutionService(db=db_service)
 
         spec = MagicMock()
         spec.id = "test-spec"
-        spec.phase_data = {
-            "tasks": {
-                "tasks": [{"id": "TSK-001", "title": "Task 1"}]
-            }
-        }
+        spec.phase_data = {"tasks": {"tasks": [{"id": "TSK-001", "title": "Task 1"}]}}
 
         result = service._extract_owned_files(spec, "TSK-999")
         assert result is None
 
-    def test_extract_owned_files_empty_phase_data(
-        self, db_service: DatabaseService
-    ):
+    def test_extract_owned_files_empty_phase_data(self, db_service: DatabaseService):
         """Test that empty phase_data returns None."""
         service = SpecTaskExecutionService(db=db_service)
 
@@ -249,9 +241,7 @@ class TestOwnedFilesExtraction:
         assert "src/services/**" in owned_files
         assert "src/api/routes/**" in owned_files
 
-    def test_extract_owned_files_deduplication(
-        self, db_service: DatabaseService
-    ):
+    def test_extract_owned_files_deduplication(self, db_service: DatabaseService):
         """Test that duplicate file paths are deduplicated."""
         service = SpecTaskExecutionService(db=db_service)
 
@@ -279,9 +269,7 @@ class TestOwnedFilesExtraction:
 class TestParallelOpportunityParsing:
     """Tests for parsing parallel opportunities from spec.phase_data."""
 
-    def test_parse_simple_parallel_opportunity(
-        self, db_service: DatabaseService
-    ):
+    def test_parse_simple_parallel_opportunity(self, db_service: DatabaseService):
         """Test parsing a simple parallel opportunity string."""
         service = SpecTaskExecutionService(db=db_service)
 
@@ -315,9 +303,7 @@ class TestParallelOpportunityParsing:
         assert len(groups) == 1
         assert set(groups[0].source_task_ids) == {"task-uuid-001", "task-uuid-002"}
 
-    def test_parse_multiple_parallel_opportunities(
-        self, db_service: DatabaseService
-    ):
+    def test_parse_multiple_parallel_opportunities(self, db_service: DatabaseService):
         """Test parsing multiple parallel opportunities."""
         service = SpecTaskExecutionService(db=db_service)
 
@@ -341,17 +327,13 @@ class TestParallelOpportunityParsing:
             }
         }
 
-        task_mapping = {
-            f"TSK-00{i}": f"task-uuid-00{i}" for i in range(1, 6)
-        }
+        task_mapping = {f"TSK-00{i}": f"task-uuid-00{i}" for i in range(1, 6)}
 
         groups = service._parse_parallel_opportunities(spec, task_mapping)
 
         assert len(groups) == 2
 
-    def test_parse_finds_continuation_task(
-        self, db_service: DatabaseService
-    ):
+    def test_parse_finds_continuation_task(self, db_service: DatabaseService):
         """Test that continuation task is found from dependency graph."""
         service = SpecTaskExecutionService(db=db_service)
 
@@ -493,7 +475,11 @@ class TestCoordinationRegistration:
             )
 
             # Verify event was published
-            coord_events = [e for e in published_events if e.event_type == "coordination.join.created"]
+            coord_events = [
+                e
+                for e in published_events
+                if e.event_type == "coordination.join.created"
+            ]
             assert len(coord_events) == 1
             event = coord_events[0]
             assert event.payload["join_id"] == "test-join"
@@ -557,7 +543,9 @@ class TestCoordinationRegistration:
 
         # Verify continuation task dependencies were updated
         with db_service.get_session() as session:
-            updated_cont = session.query(Task).filter(Task.id == continuation.id).first()
+            updated_cont = (
+                session.query(Task).filter(Task.id == continuation.id).first()
+            )
             assert updated_cont.dependencies is not None
             depends_on = updated_cont.dependencies.get("depends_on", [])
             assert task1.id in depends_on
@@ -642,7 +630,9 @@ class TestEndToEndSynthesis:
         event_bus_service.publish = mock_publish
 
         try:
-            coordination = CoordinationService(db_service, task_queue, event_bus_service)
+            coordination = CoordinationService(
+                db_service, task_queue, event_bus_service
+            )
 
             # Register join - since tasks are already completed, synthesis should trigger immediately
             coordination.register_join(
@@ -656,7 +646,9 @@ class TestEndToEndSynthesis:
 
         # Verify synthesis_context was injected into continuation task
         with db_service.get_session() as session:
-            updated_cont = session.query(Task).filter(Task.id == continuation_id).first()
+            updated_cont = (
+                session.query(Task).filter(Task.id == continuation_id).first()
+            )
             assert updated_cont.synthesis_context is not None
             assert "_source_results" in updated_cont.synthesis_context
             assert updated_cont.synthesis_context["_source_count"] == 2
@@ -726,7 +718,9 @@ class TestEndToEndSynthesis:
         event_bus_service.publish = mock_publish
 
         try:
-            coordination = CoordinationService(db_service, task_queue, event_bus_service)
+            coordination = CoordinationService(
+                db_service, task_queue, event_bus_service
+            )
 
             # Register join - tasks are pending, so synthesis should NOT trigger yet
             coordination.register_join(

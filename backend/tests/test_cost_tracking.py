@@ -45,7 +45,7 @@ def sample_task(db):
         )
         session.add(ticket)
         session.flush()
-        
+
         # Create task
         task = Task(
             ticket_id=ticket.id,
@@ -57,10 +57,10 @@ def sample_task(db):
         )
         session.add(task)
         session.flush()
-        
+
         task_id = task.id
         session.commit()
-    
+
     return task_id
 
 
@@ -78,7 +78,7 @@ def sample_agent(db):
         session.flush()
         agent_id = agent.id
         session.commit()
-    
+
     return agent_id
 
 
@@ -88,18 +88,21 @@ def test_get_model_pricing(cost_service):
     pricing = cost_service.get_model_pricing("openai", "gpt-4-turbo")
     assert pricing["prompt_token_cost"] == 0.00001
     assert pricing["completion_token_cost"] == 0.00003
-    
+
     # Test unknown model (should return defaults)
     pricing = cost_service.get_model_pricing("unknown", "unknown-model")
     assert pricing["prompt_token_cost"] == cost_service.defaults["prompt_token_cost"]
-    assert pricing["completion_token_cost"] == cost_service.defaults["completion_token_cost"]
+    assert (
+        pricing["completion_token_cost"]
+        == cost_service.defaults["completion_token_cost"]
+    )
 
 
 def test_calculate_cost(cost_service):
     """Test cost calculation."""
     # Test with known pricing
     costs = cost_service.calculate_cost("openai", "gpt-4-turbo", 1000, 2000)
-    
+
     # Expected: 1000 * 0.00001 + 2000 * 0.00003 = 0.01 + 0.06 = 0.07
     assert costs["prompt_cost"] == 0.01
     assert costs["completion_cost"] == 0.06
@@ -117,7 +120,7 @@ def test_record_llm_cost(cost_service, db, sample_task, sample_agent):
         completion_tokens=2000,
         agent_id=sample_agent,
     )
-    
+
     # Verify record created
     assert record.id is not None
     assert record.task_id == sample_task
@@ -128,13 +131,12 @@ def test_record_llm_cost(cost_service, db, sample_task, sample_agent):
     assert record.completion_tokens == 2000
     assert record.total_tokens == 3000
     assert record.total_cost == 0.07
-    
+
     # Verify persisted
     with db.get_session() as session:
         from sqlalchemy import select
-        result = session.execute(
-            select(CostRecord).where(CostRecord.id == record.id)
-        )
+
+        result = session.execute(select(CostRecord).where(CostRecord.id == record.id))
         persisted = result.scalars().first()
         assert persisted is not None
         assert persisted.total_cost == 0.07
@@ -150,7 +152,7 @@ def test_record_llm_cost_without_agent(cost_service, sample_task):
         completion_tokens=3000,
         agent_id=None,
     )
-    
+
     assert record.agent_id is None
     assert record.task_id == sample_task
     # Expected cost: 5000 * 0.000003 + 3000 * 0.000015 = 0.015 + 0.045 = 0.06
@@ -176,7 +178,7 @@ def test_get_task_costs(cost_service, sample_task, sample_agent):
         completion_tokens=1000,
         agent_id=sample_agent,
     )
-    
+
     # Retrieve costs
     costs = cost_service.get_task_costs(sample_task)
     assert len(costs) == 2
@@ -194,7 +196,7 @@ def test_get_agent_costs(cost_service, sample_task, sample_agent):
         completion_tokens=2000,
         agent_id=sample_agent,
     )
-    
+
     # Retrieve costs
     costs = cost_service.get_agent_costs(sample_agent)
     assert len(costs) == 1
@@ -220,10 +222,10 @@ def test_get_cost_summary_task_scope(cost_service, sample_task, sample_agent):
         completion_tokens=1000,
         agent_id=sample_agent,
     )
-    
+
     # Get summary
     summary = cost_service.get_cost_summary("task", sample_task)
-    
+
     assert summary["scope_type"] == "task"
     assert summary["scope_id"] == sample_task
     assert summary["record_count"] == 2
@@ -242,10 +244,10 @@ def test_get_cost_summary_agent_scope(cost_service, sample_task, sample_agent):
         completion_tokens=3000,
         agent_id=sample_agent,
     )
-    
+
     # Get summary
     summary = cost_service.get_cost_summary("agent", sample_agent)
-    
+
     assert summary["scope_type"] == "agent"
     assert summary["scope_id"] == sample_agent
     assert summary["record_count"] == 1
@@ -261,7 +263,7 @@ def test_forecast_costs(cost_service):
         provider="anthropic",
         model="claude-sonnet-4.5",
     )
-    
+
     assert forecast["task_count"] == 10
     assert forecast["avg_tokens_per_task"] == 5000
     assert forecast["estimated_tokens"] == 50000
@@ -280,12 +282,10 @@ def test_forecast_costs_with_defaults(cost_service):
         provider="openai",
         model="gpt-4-turbo",
     )
-    
+
     assert forecast["task_count"] == 5
     assert forecast["avg_tokens_per_task"] == 5000  # Config default
     assert forecast["estimated_tokens"] == 25000
     # Cost per task: (2500 * 0.00001) + (2500 * 0.00003) = 0.025 + 0.075 = 0.1
     # Total: 0.1 * 5 * 1.2 = 0.6
     assert forecast["estimated_cost"] == pytest.approx(0.6)
-
-

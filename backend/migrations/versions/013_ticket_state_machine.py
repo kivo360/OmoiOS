@@ -5,11 +5,11 @@ Revises: 012_anomaly_detection
 Create Date: 2025-01-27
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "013_ticket_state_machine"
@@ -58,8 +58,7 @@ def upgrade() -> None:
     # in_progress -> building
     # completed -> done
     # failed -> blocked (if appropriate) or leave as-is
-    op.execute(
-        """
+    op.execute("""
         UPDATE tickets
         SET status = CASE
             WHEN status = 'pending' THEN 'backlog'
@@ -68,8 +67,7 @@ def upgrade() -> None:
             WHEN status = 'failed' THEN 'building'
             ELSE status
         END
-        """
-    )
+        """)
 
 
 def downgrade() -> None:
@@ -80,8 +78,7 @@ def downgrade() -> None:
     op.drop_column("tickets", "is_blocked")
 
     # Revert status values to old format
-    op.execute(
-        """
+    op.execute("""
         UPDATE tickets
         SET status = CASE
             WHEN status = 'backlog' THEN 'pending'
@@ -92,6 +89,4 @@ def downgrade() -> None:
             WHEN status = 'done' THEN 'completed'
             ELSE status
         END
-        """
-    )
-
+        """)

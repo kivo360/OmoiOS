@@ -16,7 +16,6 @@ Run options:
 import pytest
 from fastapi.testclient import TestClient
 
-
 # =============================================================================
 # CRITICAL REGRESSION TESTS (Verify bug fixes)
 # =============================================================================

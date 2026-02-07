@@ -29,7 +29,7 @@ import asyncio
 import os
 import subprocess
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -43,7 +43,6 @@ from omoi_os.workers.claude_sandbox_worker import (
     SDK_AVAILABLE,
     logger,
 )
-
 
 # =============================================================================
 # Continuous Worker Configuration
@@ -67,30 +66,45 @@ class ContinuousWorkerConfig(WorkerConfig):
         super().__init__()
 
         # Enable continuous mode flag
-        self.continuous_mode = os.environ.get("CONTINUOUS_MODE", "false").lower() == "true"
+        self.continuous_mode = (
+            os.environ.get("CONTINUOUS_MODE", "false").lower() == "true"
+        )
 
         # Iteration limits (at least one should be set for safety)
         self.max_runs: Optional[int] = self._get_int_env("CONTINUOUS_MAX_RUNS", 10)
-        self.max_cost_usd: Optional[float] = self._get_float_env("CONTINUOUS_MAX_COST_USD", 20.0)
-        self.max_duration_seconds: Optional[int] = self._get_int_env("CONTINUOUS_MAX_DURATION", 3600)
+        self.max_cost_usd: Optional[float] = self._get_float_env(
+            "CONTINUOUS_MAX_COST_USD", 20.0
+        )
+        self.max_duration_seconds: Optional[int] = self._get_int_env(
+            "CONTINUOUS_MAX_DURATION", 3600
+        )
 
         # Completion detection
         self.completion_signal = os.environ.get(
-            "CONTINUOUS_COMPLETION_SIGNAL",
-            "TASK_COMPLETE"
+            "CONTINUOUS_COMPLETION_SIGNAL", "TASK_COMPLETE"
         )
-        self.completion_threshold = int(os.environ.get("CONTINUOUS_COMPLETION_THRESHOLD", "2"))
+        self.completion_threshold = int(
+            os.environ.get("CONTINUOUS_COMPLETION_THRESHOLD", "2")
+        )
 
         # Notes file for cross-iteration context
         self.notes_file = os.environ.get("CONTINUOUS_NOTES_FILE", "ITERATION_NOTES.md")
 
         # Auto-validate git status after completion signal
-        self.auto_validate = os.environ.get("CONTINUOUS_AUTO_VALIDATE", "true").lower() == "true"
+        self.auto_validate = (
+            os.environ.get("CONTINUOUS_AUTO_VALIDATE", "true").lower() == "true"
+        )
 
         # Git validation requirements
-        self.require_clean_git = os.environ.get("CONTINUOUS_REQUIRE_CLEAN_GIT", "true").lower() == "true"
-        self.require_pushed = os.environ.get("CONTINUOUS_REQUIRE_PUSHED", "true").lower() == "true"
-        self.require_pr = os.environ.get("CONTINUOUS_REQUIRE_PR", "true").lower() == "true"
+        self.require_clean_git = (
+            os.environ.get("CONTINUOUS_REQUIRE_CLEAN_GIT", "true").lower() == "true"
+        )
+        self.require_pushed = (
+            os.environ.get("CONTINUOUS_REQUIRE_PUSHED", "true").lower() == "true"
+        )
+        self.require_pr = (
+            os.environ.get("CONTINUOUS_REQUIRE_PR", "true").lower() == "true"
+        )
 
     def _get_int_env(self, key: str, default: Optional[int] = None) -> Optional[int]:
         val = os.environ.get(key)
@@ -98,7 +112,9 @@ class ContinuousWorkerConfig(WorkerConfig):
             return int(val)
         return default
 
-    def _get_float_env(self, key: str, default: Optional[float] = None) -> Optional[float]:
+    def _get_float_env(
+        self, key: str, default: Optional[float] = None
+    ) -> Optional[float]:
         val = os.environ.get(key)
         if val:
             return float(val)
@@ -120,19 +136,21 @@ class ContinuousWorkerConfig(WorkerConfig):
     def to_dict(self) -> dict:
         """Return config as dict including continuous settings."""
         base = super().to_dict()
-        base.update({
-            "continuous_mode": self.continuous_mode,
-            "max_runs": self.max_runs,
-            "max_cost_usd": self.max_cost_usd,
-            "max_duration_seconds": self.max_duration_seconds,
-            "completion_signal": self.completion_signal,
-            "completion_threshold": self.completion_threshold,
-            "notes_file": self.notes_file,
-            "auto_validate": self.auto_validate,
-            "require_clean_git": self.require_clean_git,
-            "require_pushed": self.require_pushed,
-            "require_pr": self.require_pr,
-        })
+        base.update(
+            {
+                "continuous_mode": self.continuous_mode,
+                "max_runs": self.max_runs,
+                "max_cost_usd": self.max_cost_usd,
+                "max_duration_seconds": self.max_duration_seconds,
+                "completion_signal": self.completion_signal,
+                "completion_threshold": self.completion_threshold,
+                "notes_file": self.notes_file,
+                "auto_validate": self.auto_validate,
+                "require_clean_git": self.require_clean_git,
+                "require_pushed": self.require_pushed,
+                "require_pr": self.require_pr,
+            }
+        )
         return base
 
 
@@ -145,17 +163,17 @@ class ContinuousWorkerConfig(WorkerConfig):
 class IterationState:
     """Tracks state across iterations."""
 
-    iteration_num: int = 0                    # Current iteration
-    successful_iterations: int = 0            # Completed successfully
-    error_count: int = 0                      # Consecutive errors
-    extra_iterations: int = 0                 # Added due to errors
-    total_cost: float = 0.0                   # Accumulated cost
-    completion_signal_count: int = 0          # Consecutive completion signals
-    start_time: Optional[float] = None        # For duration tracking
-    last_session_id: Optional[str] = None     # For potential resume
+    iteration_num: int = 0  # Current iteration
+    successful_iterations: int = 0  # Completed successfully
+    error_count: int = 0  # Consecutive errors
+    extra_iterations: int = 0  # Added due to errors
+    total_cost: float = 0.0  # Accumulated cost
+    completion_signal_count: int = 0  # Consecutive completion signals
+    start_time: Optional[float] = None  # For duration tracking
+    last_session_id: Optional[str] = None  # For potential resume
     last_transcript_b64: Optional[str] = None  # For cross-sandbox resumption
-    validation_passed: bool = False           # Whether git validation passed
-    validation_feedback: str = ""             # Feedback from validation
+    validation_passed: bool = False  # Whether git validation passed
+    validation_feedback: str = ""  # Feedback from validation
 
     # Track what's been accomplished
     tests_passed: bool = False
@@ -249,7 +267,9 @@ def check_git_status(cwd: str) -> dict[str, Any]:
             timeout=10,
         )
         result["status_output"] = status_result.stdout
-        result["is_clean"] = status_result.returncode == 0 and not status_result.stdout.strip()
+        result["is_clean"] = (
+            status_result.returncode == 0 and not status_result.stdout.strip()
+        )
 
         if not result["is_clean"]:
             result["errors"].append("Uncommitted changes detected")
@@ -268,7 +288,10 @@ def check_git_status(cwd: str) -> dict[str, Any]:
         if "Your branch is ahead" in status_text:
             result["is_pushed"] = False
             result["errors"].append("Code not pushed to remote")
-        elif "Your branch is up to date" in status_text or "nothing to commit" in status_text:
+        elif (
+            "Your branch is up to date" in status_text
+            or "nothing to commit" in status_text
+        ):
             result["is_pushed"] = True
         else:
             # If we can't determine, assume it's pushed
@@ -288,6 +311,7 @@ def check_git_status(cwd: str) -> dict[str, Any]:
                 # Parse PR info
                 try:
                     import json
+
                     pr_data = json.loads(pr_result.stdout)
                     result["pr_number"] = pr_data.get("number")
                     result["pr_url"] = pr_data.get("url")
@@ -403,7 +427,9 @@ class ContinuousSandboxWorker(SandboxWorker):
             return 1
 
         if not SDK_AVAILABLE:
-            logger.error("claude_agent_sdk package not installed - Run: pip install claude-agent-sdk")
+            logger.error(
+                "claude_agent_sdk package not installed - Run: pip install claude-agent-sdk"
+            )
             return 1
 
         # Setup workspace
@@ -417,8 +443,8 @@ class ContinuousSandboxWorker(SandboxWorker):
                 "continuous.started",
                 {
                     "goal": self.continuous_config.task_description
-                            or self.continuous_config.initial_prompt
-                            or self.continuous_config.ticket_description,
+                    or self.continuous_config.initial_prompt
+                    or self.continuous_config.ticket_description,
                     "limits": {
                         "max_runs": self.continuous_config.max_runs,
                         "max_cost_usd": self.continuous_config.max_cost_usd,
@@ -498,7 +524,7 @@ class ContinuousSandboxWorker(SandboxWorker):
                         "iterations": self.iteration_state.iteration_num,
                         "successful": self.iteration_state.successful_iterations,
                         "total_cost": self.iteration_state.total_cost,
-                    }
+                    },
                 )
 
         return 0
@@ -517,7 +543,9 @@ class ContinuousSandboxWorker(SandboxWorker):
             # If auto-validate is enabled, only stop if validation passed
             if config.auto_validate and not state.validation_passed:
                 # Continue to allow agent to fix issues
-                logger.info("Completion signal reached but validation not passed - continuing")
+                logger.info(
+                    "Completion signal reached but validation not passed - continuing"
+                )
                 state.completion_signal_count = 0  # Reset to allow more iterations
             else:
                 return False
@@ -566,7 +594,9 @@ class ContinuousSandboxWorker(SandboxWorker):
     def _inject_user_context(self, content: str):
         """Store user message to include in next iteration prompt."""
         # Append to notes file for next iteration
-        notes_path = Path(self.continuous_config.cwd) / self.continuous_config.notes_file
+        notes_path = (
+            Path(self.continuous_config.cwd) / self.continuous_config.notes_file
+        )
         try:
             existing = notes_path.read_text() if notes_path.exists() else ""
             timestamp = datetime.now(timezone.utc).isoformat()
@@ -631,7 +661,7 @@ class ContinuousSandboxWorker(SandboxWorker):
                             extra={
                                 "count": state.completion_signal_count,
                                 "threshold": config.completion_threshold,
-                            }
+                            },
                         )
 
                         await self.reporter.report(
@@ -656,7 +686,9 @@ class ContinuousSandboxWorker(SandboxWorker):
                             "iteration_num": state.iteration_num,
                             "cost_usd": iteration_cost,
                             "session_id": state.last_session_id,
-                            "output_preview": output_text[:1000] if output_text else None,
+                            "output_preview": (
+                                output_text[:1000] if output_text else None
+                            ),
                             **state.to_event_data(),
                         },
                     )
@@ -730,9 +762,11 @@ class ContinuousSandboxWorker(SandboxWorker):
         # This applies to ALL modes - if no files were created, no git workflow needed
         is_research_task = (
             # Clean working directory (no uncommitted changes)
-            git_status["is_clean"] and
+            git_status["is_clean"]
+            and
             # Not ahead of remote (nothing to push)
-            git_status["is_pushed"] and
+            git_status["is_pushed"]
+            and
             # On main/master branch (no feature branch was created)
             git_status.get("branch_name") in ("main", "master", None)
         )
@@ -748,10 +782,12 @@ class ContinuousSandboxWorker(SandboxWorker):
                     "branch": git_status.get("branch_name"),
                     "is_clean": git_status["is_clean"],
                     "is_pushed": git_status["is_pushed"],
-                }
+                },
             )
             state.validation_passed = True
-            state.validation_feedback = "Research/analysis task completed - no code changes required"
+            state.validation_feedback = (
+                "Research/analysis task completed - no code changes required"
+            )
 
             # Report validation result for research task
             await self.reporter.report(
@@ -791,10 +827,7 @@ class ContinuousSandboxWorker(SandboxWorker):
         else:
             state.validation_passed = False
             state.validation_feedback = "; ".join(validation_errors)
-            logger.info(
-                "Git validation FAILED",
-                extra={"errors": validation_errors}
-            )
+            logger.info("Git validation FAILED", extra={"errors": validation_errors})
 
             # Update notes file with validation feedback for next iteration
             self._update_notes_with_validation(validation_errors, git_status)
@@ -846,11 +879,11 @@ The completion signal was detected, but validation checks failed.
 ### Required Actions:
 """
             if not git_status["is_clean"]:
-                feedback_section += "1. Stage and commit all changes: `git add -A && git commit -m \"...\"`\n"
+                feedback_section += '1. Stage and commit all changes: `git add -A && git commit -m "..."`\n'
             if not git_status["is_pushed"]:
                 feedback_section += "2. Push code to remote: `git push`\n"
             if not git_status["has_pr"]:
-                feedback_section += "3. Create a pull request: `gh pr create --title \"...\" --body \"...\"`\n"
+                feedback_section += '3. Create a pull request: `gh pr create --title "..." --body "..."`\n'
 
             feedback_section += f"""
 **After fixing these issues, include `{config.completion_signal}` in your response again.**
@@ -859,7 +892,10 @@ The completion signal was detected, but validation checks failed.
             notes_path.write_text(existing + feedback_section)
 
         except Exception as e:
-            logger.warning("Failed to update notes with validation feedback", extra={"error": str(e)})
+            logger.warning(
+                "Failed to update notes with validation feedback",
+                extra={"error": str(e)},
+            )
 
     def _build_iteration_prompt(self) -> str:
         """Build enhanced prompt with iteration context."""
@@ -902,63 +938,73 @@ The completion signal was detected, but validation checks failed.
         ]
 
         # Add progress info
-        prompt_parts.extend([
-            "### Current Progress:",
-            f"- Successful iterations: {state.successful_iterations}",
-            f"- Cost spent: ${state.total_cost:.2f}",
-        ])
+        prompt_parts.extend(
+            [
+                "### Current Progress:",
+                f"- Successful iterations: {state.successful_iterations}",
+                f"- Cost spent: ${state.total_cost:.2f}",
+            ]
+        )
 
         if remaining_cost is not None:
             prompt_parts.append(f"- Remaining budget: ${remaining_cost:.2f}")
         if remaining_runs is not None:
             prompt_parts.append(f"- Remaining runs: {remaining_runs}")
 
-        prompt_parts.extend([
-            "",
-            "### Completion Requirements:",
-            "For your work to be considered complete, you MUST:",
-            "1. ✅ Implement the requested changes",
-            "2. ✅ Run tests and ensure they pass",
-            "3. ✅ Commit all changes (no uncommitted files)",
-            "4. ✅ Push code to remote (`git push`)",
-            "5. ✅ Create a Pull Request (`gh pr create ...`)",
-            "",
-            f"**Completion Signal**: When ALL requirements are met, include the exact phrase:",
-            f"**`{config.completion_signal}`**",
-            "",
-            "The system will validate your work. If validation fails, you'll continue",
-            "with specific feedback about what needs to be fixed.",
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "### Completion Requirements:",
+                "For your work to be considered complete, you MUST:",
+                "1. ✅ Implement the requested changes",
+                "2. ✅ Run tests and ensure they pass",
+                "3. ✅ Commit all changes (no uncommitted files)",
+                "4. ✅ Push code to remote (`git push`)",
+                "5. ✅ Create a Pull Request (`gh pr create ...`)",
+                "",
+                "**Completion Signal**: When ALL requirements are met, include the exact phrase:",
+                f"**`{config.completion_signal}`**",
+                "",
+                "The system will validate your work. If validation fails, you'll continue",
+                "with specific feedback about what needs to be fixed.",
+                "",
+            ]
+        )
 
         # Add primary goal
-        prompt_parts.extend([
-            "## PRIMARY GOAL",
-            "",
-            primary_goal,
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "## PRIMARY GOAL",
+                "",
+                primary_goal,
+                "",
+            ]
+        )
 
         # Add previous iteration notes if they exist
         if notes_content:
-            prompt_parts.extend([
-                "## PREVIOUS ITERATION NOTES",
-                "",
-                notes_content,
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    "## PREVIOUS ITERATION NOTES",
+                    "",
+                    notes_content,
+                    "",
+                ]
+            )
 
         # Add notes update instructions
-        prompt_parts.extend([
-            "## NOTES UPDATE INSTRUCTIONS",
-            "",
-            f"Update `{config.notes_file}` with:",
-            "- What you accomplished this iteration",
-            "- What remains to be done",
-            "- Any blockers or issues",
-            "- Important context for the next iteration",
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "## NOTES UPDATE INSTRUCTIONS",
+                "",
+                f"Update `{config.notes_file}` with:",
+                "- What you accomplished this iteration",
+                "- What remains to be done",
+                "- Any blockers or issues",
+                "- Important context for the next iteration",
+                "",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
@@ -977,5 +1023,6 @@ async def main():
 
 if __name__ == "__main__":
     import sys
+
     exit_code = asyncio.run(main())
     sys.exit(exit_code)

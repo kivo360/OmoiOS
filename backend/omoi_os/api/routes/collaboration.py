@@ -189,7 +189,9 @@ async def send_message(
         ) from exc
 
 
-@router.get("/collaboration/threads/{thread_id}/messages", response_model=List[MessageDTO])
+@router.get(
+    "/collaboration/threads/{thread_id}/messages", response_model=List[MessageDTO]
+)
 async def get_thread_messages(
     thread_id: str,
     limit: int = 50,
@@ -323,4 +325,3 @@ async def decline_handoff(
         raise HTTPException(
             status_code=500, detail=f"Failed to decline handoff: {exc}"
         ) from exc
-

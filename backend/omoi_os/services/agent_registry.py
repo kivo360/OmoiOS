@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 try:
     from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.hazmat.primitives import serialization
+
     CRYPTOGRAPHY_AVAILABLE = True
 except ImportError:
     CRYPTOGRAPHY_AVAILABLE = False
@@ -40,6 +41,7 @@ class AgentMatch:
 @dataclass
 class ValidationResult:
     """Result of pre-registration validation per REQ-ALM-001 Step 1."""
+
     success: bool
     reason: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
@@ -48,6 +50,7 @@ class ValidationResult:
 @dataclass
 class RegistrationRejectedError(Exception):
     """Raised when agent registration is rejected."""
+
     reason: str
     details: Optional[Dict[str, Any]] = None
 
@@ -85,7 +88,7 @@ class AgentRegistryService:
     ) -> Agent:
         """
         Register a new agent using multi-step protocol per REQ-ALM-001.
-        
+
         Steps:
         1. Pre-registration validation
         2. Identity assignment (UUID, name, crypto)
@@ -105,21 +108,21 @@ class AgentRegistryService:
         if not validation.success:
             raise RegistrationRejectedError(
                 reason=validation.reason or "Pre-validation failed",
-                details=validation.details
+                details=validation.details,
             )
-        
+
         # Step 2: Identity Assignment
         agent_id = str(uuid.uuid4())
         agent_name = self._generate_agent_name(agent_type, phase_id)
         crypto_identity = self._generate_crypto_identity(agent_id)
-        
+
         # Step 3: Registry Entry Creation
         normalized_caps = self._normalize_tokens(capabilities)
         normalized_tags = self._normalize_tokens(tags or [])
-        
+
         # Get orchestrator identifier
         registered_by = self._get_orchestrator_identifier()
-        
+
         # Build metadata
         metadata = {}
         if version:
@@ -130,7 +133,7 @@ class AgentRegistryService:
             metadata["config"] = config
         if resource_requirements:
             metadata["resource_requirements"] = resource_requirements
-        
+
         with self.db.get_session() as session:
             agent = Agent(
                 id=agent_id,
@@ -151,11 +154,11 @@ class AgentRegistryService:
             session.commit()
             session.refresh(agent)
             session.expunge(agent)
-        
+
         # Step 4: Event Bus Subscription
         if self.event_bus:
             self._subscribe_to_event_bus(agent_id, agent_type, phase_id)
-        
+
         # Step 5: Set initial heartbeat timestamp
         # NOTE: We no longer block waiting for heartbeat - this caused a deadlock where
         # the HTTP response couldn't be returned until heartbeat arrived, but the client
@@ -169,9 +172,9 @@ class AgentRegistryService:
                 session.commit()
                 session.refresh(agent)
                 session.expunge(agent)
-        
+
         logger.info(f"Agent {agent_id} registered with initial heartbeat timestamp")
-        
+
         # Transition to requested status (default IDLE) using status manager
         if self.status_manager:
             try:
@@ -188,7 +191,7 @@ class AgentRegistryService:
             except Exception as e:
                 logger.warning(f"Status transition failed for agent {agent_id}: {e}")
                 # Agent remains in SPAWNING, will be handled by monitoring/cleanup
-        
+
         # Publish registration event
         if self.event_bus:
             self.event_bus.publish(
@@ -205,7 +208,7 @@ class AgentRegistryService:
                     },
                 )
             )
-        
+
         self._publish_capability_event(agent_id, normalized_caps)
         return agent
 
@@ -258,10 +261,14 @@ class AgentRegistryService:
 
             session.commit()
             session.refresh(agent)
-            
+
             # If status update was requested and status manager is available,
             # update status outside session context
-            if status is not None and self.status_manager and 'agent_id_for_status_update' in locals():
+            if (
+                status is not None
+                and self.status_manager
+                and "agent_id_for_status_update" in locals()
+            ):
                 # Expunge agent before closing session
                 session.expunge(agent)
                 # Now update status using status manager
@@ -277,7 +284,7 @@ class AgentRegistryService:
                     # If transition fails, return agent with original status
                     # This allows backward compatibility
                     pass
-            
+
             session.expunge(agent)
 
             if capabilities_changed:
@@ -385,9 +392,7 @@ class AgentRegistryService:
         overlap = sorted(set(required) & set(agent_caps))
         coverage = len(overlap) / len(required) if required else 0.0
 
-        availability_bonus = (
-            0.2 if agent.status == AgentStatus.IDLE.value else 0.0
-        )
+        availability_bonus = 0.2 if agent.status == AgentStatus.IDLE.value else 0.0
         health_bonus = 0.2 if agent.health_status == "healthy" else 0.0
         capacity_bonus = min(agent.capacity, 5) * 0.05
 
@@ -411,11 +416,11 @@ class AgentRegistryService:
             },
         )
         self.event_bus.publish(event)
-    
+
     # ---------------------------------------------------------------------
     # Registration Protocol Helpers (REQ-ALM-001)
     # ---------------------------------------------------------------------
-    
+
     def _pre_validate(
         self,
         agent_type: str,
@@ -427,7 +432,7 @@ class AgentRegistryService:
     ) -> ValidationResult:
         """
         Pre-registration validation per REQ-ALM-001 Step 1.
-        
+
         Validates:
         1. Binary integrity (if binary_path provided)
         2. Version compatibility
@@ -435,14 +440,14 @@ class AgentRegistryService:
         4. Resource availability
         """
         details = {}
-        
+
         # 1. Binary integrity verification (if binary_path provided)
         if binary_path:
             if not os.path.exists(binary_path):
                 return ValidationResult(
                     success=False,
                     reason="Binary path does not exist",
-                    details={"binary_path": binary_path}
+                    details={"binary_path": binary_path},
                 )
             # Calculate checksum (simplified - in production, compare against expected hash)
             try:
@@ -451,14 +456,14 @@ class AgentRegistryService:
                 details["binary_checksum"] = file_hash
             except Exception as e:
                 logger.warning(f"Could not calculate binary checksum: {e}")
-        
+
         # 2. Version compatibility check
         if version:
             # Simplified version check - in production, compare against orchestrator version
             # For now, just log it
             details["agent_version"] = version
             # TODO: Implement actual version compatibility matrix
-        
+
         # 3. Configuration schema validation
         if config:
             # Simplified schema validation - in production, use JSON Schema or Pydantic
@@ -466,10 +471,10 @@ class AgentRegistryService:
                 return ValidationResult(
                     success=False,
                     reason="Configuration must be a dictionary",
-                    details={"config": config}
+                    details={"config": config},
                 )
             details["config_validated"] = True
-        
+
         # 4. Resource availability check
         if resource_requirements:
             # Simplified resource check - in production, check actual system resources
@@ -478,13 +483,13 @@ class AgentRegistryService:
                 return ValidationResult(
                     success=False,
                     reason="Resource requirements must be a dictionary",
-                    details={"resource_requirements": resource_requirements}
+                    details={"resource_requirements": resource_requirements},
                 )
             details["resource_requirements"] = resource_requirements
             # TODO: Implement actual resource availability check
-        
+
         return ValidationResult(success=True, details=details)
-    
+
     def _generate_agent_name(self, agent_type: str, phase_id: Optional[str]) -> str:
         """
         Generate human-readable agent name per REQ-ALM-001 Step 2.
@@ -497,22 +502,24 @@ class AgentRegistryService:
                 query = query.filter(Agent.phase_id == phase_id)
             count = query.count()
             sequence = count + 1
-        
+
         phase_part = f"-{phase_id.lower().replace('phase_', '')}" if phase_id else ""
         return f"{agent_type.lower()}{phase_part}-{sequence:03d}"
-    
+
     def _generate_crypto_identity(self, agent_id: str) -> Dict[str, Any]:
         """
         Generate cryptographic identity per REQ-ALM-001 Step 2.
         Returns public key and metadata.
         """
         if not CRYPTOGRAPHY_AVAILABLE:
-            logger.warning("cryptography library not available, skipping crypto identity generation")
+            logger.warning(
+                "cryptography library not available, skipping crypto identity generation"
+            )
             return {
                 "public_key": None,
                 "metadata": {"error": "cryptography library not installed"},
             }
-        
+
         try:
             # Generate RSA key pair
             private_key = rsa.generate_private_key(
@@ -520,20 +527,20 @@ class AgentRegistryService:
                 key_size=2048,
             )
             public_key = private_key.public_key()
-            
+
             # Serialize public key
             public_key_pem = public_key.public_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode('utf-8')
-            
+            ).decode("utf-8")
+
             # Create metadata
             metadata = {
                 "key_id": f"{agent_id}-key",
                 "algorithm": "RSA-2048",
                 "created_at": utc_now().isoformat(),
             }
-            
+
             # In production, private key would be securely transmitted to agent
             # For now, we only store the public key
             return {
@@ -547,7 +554,7 @@ class AgentRegistryService:
                 "public_key": None,
                 "metadata": {"error": str(e)},
             }
-    
+
     def _get_orchestrator_identifier(self) -> str:
         """Get orchestrator instance identifier."""
         try:
@@ -555,7 +562,7 @@ class AgentRegistryService:
             return f"orchestrator-{hostname}"
         except Exception:
             return "orchestrator-unknown"
-    
+
     def _subscribe_to_event_bus(
         self, agent_id: str, agent_type: str, phase_id: Optional[str]
     ) -> None:
@@ -564,34 +571,34 @@ class AgentRegistryService:
         """
         if not self.event_bus:
             return
-        
+
         # Subscribe to task assignment events for agent's phase
         if phase_id:
             channel = f"task.assignment.{phase_id}"
             # Event bus subscription would happen here
             # For now, we just log it
             logger.info(f"Agent {agent_id} subscribed to {channel}")
-        
+
         # Subscribe to system-wide broadcasts
         logger.info(f"Agent {agent_id} subscribed to system broadcasts")
-        
+
         # Subscribe to shutdown signals
         logger.info(f"Agent {agent_id} subscribed to shutdown signals")
-        
+
         # In production, this would use actual event bus subscription API
         # For now, the event bus will route events based on agent_id matching
-    
+
     def _wait_for_initial_heartbeat(self, agent_id: str, timeout: int = 60) -> None:
         """
         Wait for initial heartbeat with timeout per REQ-ALM-001 Step 5.
-        
+
         Raises TimeoutError if heartbeat not received within timeout.
         """
         import time
-        
+
         start_time = time.time()
         check_interval = 2  # Check every 2 seconds
-        
+
         while time.time() - start_time < timeout:
             with self.db.get_session() as session:
                 agent = session.get(Agent, agent_id)
@@ -600,8 +607,10 @@ class AgentRegistryService:
                     logger.info(f"Initial heartbeat received for agent {agent_id}")
                     return
                 session.expunge(agent) if agent else None
-            
+
             time.sleep(check_interval)
-        
+
         # Timeout exceeded
-        raise TimeoutError(f"Initial heartbeat not received for agent {agent_id} within {timeout}s")
+        raise TimeoutError(
+            f"Initial heartbeat not received for agent {agent_id} within {timeout}s"
+        )

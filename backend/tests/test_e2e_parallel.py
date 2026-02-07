@@ -19,7 +19,7 @@ class TestE2EParallelWorkflow:
         """Test complete parallel implementation workflow."""
         # Create test ticket
         ticket = create_test_ticket(db_service, ticket_id="test_ticket_parallel")
-        
+
         # Create initial ticket task
         source_task = coordination_service.queue.enqueue_task(
             ticket_id=ticket.id,
@@ -110,7 +110,7 @@ class TestE2EParallelWorkflow:
         """Test review-feedback loop workflow."""
         # Create test ticket
         ticket = create_test_ticket(db_service, ticket_id="test_ticket_review")
-        
+
         # Create initial implementation task
         impl_task = coordination_service.queue.enqueue_task(
             ticket_id=ticket.id,
@@ -183,7 +183,7 @@ class TestE2EParallelWorkflow:
         """Test majority vote decision workflow."""
         # Create test ticket
         ticket = create_test_ticket(db_service, ticket_id="test_ticket_vote")
-        
+
         # Create decision task
         decision_task = coordination_service.queue.enqueue_task(
             ticket_id=ticket.id,
@@ -265,7 +265,7 @@ class TestE2EParallelWorkflow:
         """Test that coordination patterns avoid deadlocks."""
         # Create test ticket
         ticket = create_test_ticket(db_service, ticket_id="test_ticket_deadlock")
-        
+
         # Create tasks that would form a cycle without proper dependency management
         task1 = coordination_service.queue.enqueue_task(
             ticket_id=ticket.id,
@@ -302,7 +302,9 @@ class TestE2EParallelWorkflow:
 
         # Verify no circular dependency
         # task1 -> task2 -> continuation (valid DAG)
-        assert coordination_service.queue.detect_circular_dependencies(
-            continuation.id, continuation.dependencies.get("depends_on", [])
-        ) is None
-
+        assert (
+            coordination_service.queue.detect_circular_dependencies(
+                continuation.id, continuation.dependencies.get("depends_on", [])
+            )
+            is None
+        )

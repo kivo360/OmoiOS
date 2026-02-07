@@ -26,10 +26,18 @@ class TaskEvaluator(BaseEvaluator):
     VALID_PRIORITIES = frozenset(["low", "medium", "high", "critical"])
 
     # Valid phase values
-    VALID_PHASES = frozenset([
-        "backend", "frontend", "integration", "testing",
-        "devops", "documentation", "research", "design"
-    ])
+    VALID_PHASES = frozenset(
+        [
+            "backend",
+            "frontend",
+            "integration",
+            "testing",
+            "devops",
+            "documentation",
+            "research",
+            "design",
+        ]
+    )
 
     def evaluate(self, tasks: Any) -> EvalResult:
         """
@@ -67,31 +75,21 @@ class TaskEvaluator(BaseEvaluator):
         checks.append(("has_tasks", has_tasks))
 
         # Check 2: Tasks have titles
-        has_titles = all(
-            bool(t.get("title"))
-            for t in task_list
-        )
+        has_titles = all(bool(t.get("title")) for t in task_list)
         checks.append(("has_titles", has_titles))
 
         # Check 3: Tasks have descriptions
         has_descriptions = all(
-            bool(t.get("description") or t.get("objective"))
-            for t in task_list
+            bool(t.get("description") or t.get("objective")) for t in task_list
         )
         checks.append(("has_descriptions", has_descriptions))
 
         # Check 4: Tasks have valid priorities
-        has_priorities = all(
-            self._has_valid_priority(t)
-            for t in task_list
-        )
+        has_priorities = all(self._has_valid_priority(t) for t in task_list)
         checks.append(("valid_priorities", has_priorities))
 
         # Check 5: Tasks have valid phases
-        has_phases = all(
-            self._has_valid_phase(t)
-            for t in task_list
-        )
+        has_phases = all(self._has_valid_phase(t) for t in task_list)
         checks.append(("valid_phases", has_phases))
 
         # Check 6: No duplicate titles
@@ -108,10 +106,7 @@ class TaskEvaluator(BaseEvaluator):
         checks.append(("no_circular_deps", no_circular))
 
         # Check 9: No self dependencies
-        no_self_deps = all(
-            self._has_no_self_dep(t)
-            for t in task_list
-        )
+        no_self_deps = all(self._has_no_self_dep(t) for t in task_list)
         checks.append(("no_self_dependencies", no_self_deps))
 
         # Check 10: Tasks have acceptance criteria or deliverables

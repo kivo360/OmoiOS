@@ -1,2 +1,1 @@
 """Coordination pattern configurations."""
-

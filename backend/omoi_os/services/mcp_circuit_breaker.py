@@ -44,7 +44,7 @@ class CircuitBreakerMetrics:
 class MCPCircuitBreaker:
     """
     Circuit breaker per server+tool combination.
-    
+
     REQ-MCP-CALL-005: Circuit Breaker
     """
 
@@ -150,7 +150,8 @@ class MCPCircuitBreaker:
         # Reject if open
         if self.state == CircuitState.OPEN:
             raise CircuitOpenError(
-                f"Circuit is OPEN for {self.cooldown_seconds}s", opened_at=self.opened_at
+                f"Circuit is OPEN for {self.cooldown_seconds}s",
+                opened_at=self.opened_at,
             )
 
         # Execute function
@@ -224,4 +225,3 @@ class MCPCircuitBreaker:
             last_failure_time=self.last_failure_time,
             opened_at=self.opened_at,
         )
-

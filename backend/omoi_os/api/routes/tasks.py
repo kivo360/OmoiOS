@@ -386,9 +386,7 @@ async def get_task(
         "created_at": task.created_at.isoformat(),
         "updated_at": task.updated_at.isoformat() if task.updated_at else None,
         "started_at": task.started_at.isoformat() if task.started_at else None,
-        "completed_at": task.completed_at.isoformat()
-        if task.completed_at
-        else None,
+        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
     }
 
 
@@ -426,9 +424,7 @@ async def update_task(
     await verify_task_access(task_id, current_user, db)
 
     async with db.get_async_session() as session:
-        result = await session.execute(
-            select(Task).filter(Task.id == task_id)
-        )
+        result = await session.execute(select(Task).filter(Task.id == task_id))
         task = result.scalar_one_or_none()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
@@ -1041,7 +1037,11 @@ async def fail_task(
         event_type="error",
         title="Task Marked Failed",
         description=f"Task manually marked as failed: {request.reason}",
-        details={"reason": request.reason, "old_status": old_status, "failed_by": "user"},
+        details={
+            "reason": request.reason,
+            "old_status": old_status,
+            "failed_by": "user",
+        },
         decision={
             "type": "fail",
             "action": "Mark task as failed",

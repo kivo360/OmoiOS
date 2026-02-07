@@ -5,6 +5,7 @@ Revises: 004_collab_locks
 Create Date: 2025-11-17
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -42,9 +43,13 @@ def upgrade() -> None:
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_monitor_anomalies_metric_name", "monitor_anomalies", ["metric_name"])
+    op.create_index(
+        "ix_monitor_anomalies_metric_name", "monitor_anomalies", ["metric_name"]
+    )
     op.create_index("ix_monitor_anomalies_severity", "monitor_anomalies", ["severity"])
-    op.create_index("ix_monitor_anomalies_detected_at", "monitor_anomalies", ["detected_at"])
+    op.create_index(
+        "ix_monitor_anomalies_detected_at", "monitor_anomalies", ["detected_at"]
+    )
 
     # Alerts table
     op.create_table(
@@ -87,4 +92,3 @@ def downgrade() -> None:
     op.drop_index("ix_monitor_anomalies_severity", table_name="monitor_anomalies")
     op.drop_index("ix_monitor_anomalies_metric_name", table_name="monitor_anomalies")
     op.drop_table("monitor_anomalies")
-

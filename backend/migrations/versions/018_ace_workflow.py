@@ -5,12 +5,12 @@ Revises: 017_memory_type_taxonomy
 Create Date: 2025-01-29
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision: str = "018_ace_workflow"
@@ -140,19 +140,34 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_playbook_entries_ticket_id"), "playbook_entries", ["ticket_id"], unique=False
+        op.f("ix_playbook_entries_ticket_id"),
+        "playbook_entries",
+        ["ticket_id"],
+        unique=False,
     )
     op.create_index(
-        op.f("ix_playbook_entries_category"), "playbook_entries", ["category"], unique=False
+        op.f("ix_playbook_entries_category"),
+        "playbook_entries",
+        ["category"],
+        unique=False,
     )
     op.create_index(
-        op.f("ix_playbook_entries_priority"), "playbook_entries", ["priority"], unique=False
+        op.f("ix_playbook_entries_priority"),
+        "playbook_entries",
+        ["priority"],
+        unique=False,
     )
     op.create_index(
-        op.f("ix_playbook_entries_created_at"), "playbook_entries", ["created_at"], unique=False
+        op.f("ix_playbook_entries_created_at"),
+        "playbook_entries",
+        ["created_at"],
+        unique=False,
     )
     op.create_index(
-        op.f("ix_playbook_entries_is_active"), "playbook_entries", ["is_active"], unique=False
+        op.f("ix_playbook_entries_is_active"),
+        "playbook_entries",
+        ["is_active"],
+        unique=False,
     )
 
     # Create playbook_changes table (REQ-MEM-DM-007)
@@ -233,7 +248,10 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        op.f("ix_playbook_changes_ticket_id"), "playbook_changes", ["ticket_id"], unique=False
+        op.f("ix_playbook_changes_ticket_id"),
+        "playbook_changes",
+        ["ticket_id"],
+        unique=False,
     )
     op.create_index(
         op.f("ix_playbook_changes_playbook_entry_id"),
@@ -242,7 +260,10 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(
-        op.f("ix_playbook_changes_operation"), "playbook_changes", ["operation"], unique=False
+        op.f("ix_playbook_changes_operation"),
+        "playbook_changes",
+        ["operation"],
+        unique=False,
     )
     op.create_index(
         op.f("ix_playbook_changes_related_memory_id"),
@@ -251,7 +272,10 @@ def upgrade() -> None:
         unique=False,
     )
     op.create_index(
-        op.f("ix_playbook_changes_changed_at"), "playbook_changes", ["changed_at"], unique=False
+        op.f("ix_playbook_changes_changed_at"),
+        "playbook_changes",
+        ["changed_at"],
+        unique=False,
     )
 
     # Add check constraint for valid operation values (REQ-MEM-DM-007)
@@ -293,4 +317,3 @@ def downgrade() -> None:
     op.drop_column("task_memories", "feedback")
     op.drop_column("task_memories", "result")
     op.drop_column("task_memories", "goal")
-

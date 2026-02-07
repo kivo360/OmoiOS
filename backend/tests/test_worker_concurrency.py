@@ -20,6 +20,7 @@ class TestAgentRegistration:
         # Verify agent was created with correct capacity
         with db_service.get_session() as session:
             from omoi_os.models.agent import Agent
+
             agent = session.query(Agent).filter(Agent.id == agent_id).first()
             assert agent is not None
             assert agent.capacity == 3
@@ -34,6 +35,7 @@ class TestAgentRegistration:
 
         with db_service.get_session() as session:
             from omoi_os.models.agent import Agent
+
             agent = session.query(Agent).filter(Agent.id == agent_id).first()
             assert agent is not None
             assert agent.capacity == 1  # Default
@@ -114,4 +116,3 @@ class TestCapacityRespect:
 
         # Max concurrent should never exceed thread pool size
         assert max_concurrent <= 3
-

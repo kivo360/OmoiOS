@@ -201,7 +201,9 @@ class TicketPullRequest(Base):
     repo_name: Mapped[str] = mapped_column(String(200), nullable=False, index=True)
 
     # PR state (open, merged, closed)
-    state: Mapped[str] = mapped_column(String(20), nullable=False, default="open", index=True)
+    state: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="open", index=True
+    )
     html_url: Mapped[str] = mapped_column(String(500), nullable=False)
 
     # Timestamps

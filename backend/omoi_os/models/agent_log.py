@@ -40,4 +40,3 @@ class AgentLog(Base):
 
     def __repr__(self) -> str:
         return f"<AgentLog(agent_id={self.agent_id}, type={self.log_type}, created_at={self.created_at})>"
-

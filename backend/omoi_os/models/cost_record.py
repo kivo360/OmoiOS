@@ -45,9 +45,12 @@ class CostRecord(Base):
 
     # Billing association (for cost aggregation per organization)
     billing_account_id: Mapped[Optional[UUID]] = mapped_column(
-        PGUUID(as_uuid=True), ForeignKey("billing_accounts.id"), nullable=True, index=True
+        PGUUID(as_uuid=True),
+        ForeignKey("billing_accounts.id"),
+        nullable=True,
+        index=True,
     )
-    
+
     # LLM provider information
     provider: Mapped[str] = mapped_column(
         String(50), nullable=False, index=True
@@ -55,33 +58,35 @@ class CostRecord(Base):
     model: Mapped[str] = mapped_column(
         String(100), nullable=False, index=True
     )  # 'gpt-4', 'claude-sonnet', etc.
-    
+
     # Token usage
     prompt_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     completion_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    
+
     # Cost calculation (in USD)
     prompt_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     completion_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
-    total_cost: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, index=True)
-    
+    total_cost: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, index=True
+    )
+
     # Metadata
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
-    
+
     # Relationships
     task = relationship("Task", back_populates="cost_records")
     agent = relationship("Agent", back_populates="cost_records")
-    
+
     def __repr__(self) -> str:
         return (
             f"<CostRecord(id={self.id}, task_id={self.task_id}, "
             f"provider={self.provider}, model={self.model}, "
             f"total_cost=${self.total_cost:.4f})>"
         )
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary for API responses."""
         return {
@@ -89,7 +94,9 @@ class CostRecord(Base):
             "task_id": self.task_id,
             "agent_id": self.agent_id,
             "sandbox_id": self.sandbox_id,
-            "billing_account_id": str(self.billing_account_id) if self.billing_account_id else None,
+            "billing_account_id": (
+                str(self.billing_account_id) if self.billing_account_id else None
+            ),
             "provider": self.provider,
             "model": self.model,
             "prompt_tokens": self.prompt_tokens,
@@ -100,4 +107,3 @@ class CostRecord(Base):
             "total_cost": self.total_cost,
             "recorded_at": self.recorded_at.isoformat() if self.recorded_at else None,
         }
-

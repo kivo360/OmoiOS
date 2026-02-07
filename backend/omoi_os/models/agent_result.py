@@ -14,7 +14,7 @@ from omoi_os.utils.datetime import utc_now
 
 class AgentResult(Base):
     """Task-level result submission.
-    
+
     Agents submit results for individual tasks with comprehensive evidence
     and documentation. Multiple results can be submitted per task.
     Results are immutable and tracked through verification states.
@@ -60,4 +60,3 @@ class AgentResult(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
-

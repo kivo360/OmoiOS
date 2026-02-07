@@ -59,9 +59,3 @@ def test_phase_transitions_valid(from_phase, to_phase):
 def test_phase_transitions_invalid(from_phase, to_phase):
     """Test that invalid transitions are not in transition map."""
     assert to_phase not in phases.PHASE_TRANSITIONS[from_phase]
-
-
-
-
-
-

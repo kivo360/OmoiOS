@@ -36,7 +36,7 @@ def create_test_dependency_graph():
     redis_url = app_settings.redis.url
 
     db = DatabaseService(connection_string=database_url)
-    event_bus = EventBusService(redis_url=redis_url)
+    EventBusService(redis_url=redis_url)
     queue = TaskQueueService(db)
 
     print("Creating test dependency graph data...")

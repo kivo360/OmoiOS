@@ -87,12 +87,14 @@ class MemoryService:
             task_description=task_description,
         )
 
-        system_prompt = template_service.render_system_prompt("system/memory_classification.md.j2")
+        system_prompt = template_service.render_system_prompt(
+            "system/memory_classification.md.j2"
+        )
 
         # Run classification using LLM service
         try:
             from omoi_os.services.llm_service import get_llm_service
-            
+
             llm = get_llm_service()
             classification = await llm.structured_output(
                 prompt,
@@ -134,13 +136,32 @@ class MemoryService:
 
         if any(word in text for word in ["fix", "error", "bug", "issue", "bugfix"]):
             return MemoryType.ERROR_FIX.value
-        elif any(word in text for word in ["chose", "decided", "selected", "choice", "decision"]):
+        elif any(
+            word in text
+            for word in ["chose", "decided", "selected", "choice", "decision"]
+        ):
             return MemoryType.DECISION.value
-        elif any(word in text for word in ["learned", "found", "realized", "discovered", "learn"]):
+        elif any(
+            word in text
+            for word in ["learned", "found", "realized", "discovered", "learn"]
+        ):
             return MemoryType.LEARNING.value
-        elif any(word in text for word in ["warning", "gotcha", "careful", "watch", "caution"]):
+        elif any(
+            word in text
+            for word in ["warning", "gotcha", "careful", "watch", "caution"]
+        ):
             return MemoryType.WARNING.value
-        elif any(word in text for word in ["architecture", "structure", "pattern", "design", "codebase", "system"]):
+        elif any(
+            word in text
+            for word in [
+                "architecture",
+                "structure",
+                "pattern",
+                "design",
+                "codebase",
+                "system",
+            ]
+        ):
             return MemoryType.CODEBASE_KNOWLEDGE.value
         else:
             return MemoryType.DISCOVERY.value
@@ -262,7 +283,12 @@ class MemoryService:
         """
         if search_mode == "semantic":
             return self._semantic_search(
-                session, task_description, top_k, similarity_threshold, success_only, memory_types
+                session,
+                task_description,
+                top_k,
+                similarity_threshold,
+                success_only,
+                memory_types,
             )
         elif search_mode == "keyword":
             return self._keyword_search(
@@ -280,7 +306,9 @@ class MemoryService:
                 keyword_weight,
             )
         else:
-            raise ValueError(f"Invalid search_mode: {search_mode}. Must be 'semantic', 'keyword', or 'hybrid'")
+            raise ValueError(
+                f"Invalid search_mode: {search_mode}. Must be 'semantic', 'keyword', or 'hybrid'"
+            )
 
     def _semantic_search(
         self,
@@ -293,7 +321,9 @@ class MemoryService:
     ) -> List[SimilarTask]:
         """Semantic search using embedding similarity."""
         # Generate embedding for query (use is_query=True for multilingual-e5-large)
-        query_embedding = self.embedding_service.generate_embedding(task_description, is_query=True)
+        query_embedding = self.embedding_service.generate_embedding(
+            task_description, is_query=True
+        )
 
         # Query memories with embeddings
         query = select(TaskMemory).where(TaskMemory.context_embedding.isnot(None))
@@ -361,7 +391,7 @@ class MemoryService:
         # Build base query with tsvector search using parameterized query
         # Use func.plainto_tsquery for safe parameterization
         tsquery = func.plainto_tsquery("english", task_description)
-        
+
         query = session.query(
             TaskMemory,
             func.ts_rank(
@@ -369,7 +399,9 @@ class MemoryService:
                 tsquery,
             ).label("rank"),
         ).filter(
-            text("content_tsv @@ plainto_tsquery('english', :query)").bindparams(query=task_description)
+            text("content_tsv @@ plainto_tsquery('english', :query)").bindparams(
+                query=task_description
+            )
         )
 
         if success_only:
@@ -428,7 +460,12 @@ class MemoryService:
         """Hybrid search combining semantic and keyword search using RRF (REQ-MEM-SEARCH-001)."""
         # Run both searches with expanded limit for better RRF results
         semantic_results = self._semantic_search(
-            session, task_description, top_k * 2, similarity_threshold, success_only, memory_types
+            session,
+            task_description,
+            top_k * 2,
+            similarity_threshold,
+            success_only,
+            memory_types,
         )
         keyword_results = self._keyword_search(
             session, task_description, top_k * 2, success_only, memory_types
@@ -469,7 +506,9 @@ class MemoryService:
         k = 60  # RRF constant
 
         # Create rank maps (1-indexed for RRF)
-        semantic_ranks = {r.memory_id: idx + 1 for idx, r in enumerate(semantic_results)}
+        semantic_ranks = {
+            r.memory_id: idx + 1 for idx, r in enumerate(semantic_results)
+        }
         keyword_ranks = {r.memory_id: idx + 1 for idx, r in enumerate(keyword_results)}
 
         # Get all unique memory IDs
@@ -486,8 +525,8 @@ class MemoryService:
             kw_rank = keyword_ranks.get(memory_id, len(keyword_results) + 10)
 
             # RRF score calculation
-            rrf_score = (
-                semantic_weight * (1.0 / (k + sem_rank)) + keyword_weight * (1.0 / (k + kw_rank))
+            rrf_score = semantic_weight * (1.0 / (k + sem_rank)) + keyword_weight * (
+                1.0 / (k + kw_rank)
             )
 
             # Get the memory object (prefer semantic as it has more info)
@@ -784,7 +823,9 @@ class MemoryService:
             return []
 
         # Combine summaries for analysis
-        combined_text = "\n\n".join([f"Summary {i+1}: {s}" for i, s in enumerate(summaries)])
+        combined_text = "\n\n".join(
+            [f"Summary {i+1}: {s}" for i, s in enumerate(summaries)]
+        )
 
         # Build prompt using template
         from omoi_os.services.template_service import get_template_service
@@ -795,11 +836,13 @@ class MemoryService:
             combined_summaries=combined_text,
         )
 
-        system_prompt = template_service.render_system_prompt("system/pattern_extraction.md.j2")
+        system_prompt = template_service.render_system_prompt(
+            "system/pattern_extraction.md.j2"
+        )
 
         try:
             from omoi_os.services.llm_service import get_llm_service
-            
+
             llm = get_llm_service()
             pattern = await llm.structured_output(
                 prompt,

@@ -184,9 +184,9 @@ class WorkspaceManagerService:
             repo_url=repo_url,
             base_branch=branch,
             workspace_type="docker" if use_docker else "local",
-            workspace_config={"host_port": host_port}
-            if use_docker and host_port
-            else None,
+            workspace_config=(
+                {"host_port": host_port} if use_docker and host_port else None
+            ),
         )
 
         log.info(

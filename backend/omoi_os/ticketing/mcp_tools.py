@@ -12,8 +12,8 @@ from omoi_os.ticketing.db import get_session
 from omoi_os.ticketing.services.ticket_search_service import TicketSearchService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
-
 # ---------- Actions ----------
+
 
 class CreateTicketAction(Action):
     workflow_id: str
@@ -74,7 +74,9 @@ class GetTicketsAction(Action):
     include_completed: bool = True
     limit: int = 50
     offset: int = 0
-    sort_by: str = Field(default="created_at", pattern="^(created_at|updated_at|priority|status)$")
+    sort_by: str = Field(
+        default="created_at", pattern="^(created_at|updated_at|priority|status)$"
+    )
     sort_order: str = Field(default="desc", pattern="^(asc|desc)$")
 
 
@@ -98,6 +100,7 @@ class LinkCommitAction(Action):
 
 # ---------- Observation ----------
 
+
 class GenericObservation(Observation):
     payload: dict[str, Any] = Field(default_factory=dict)
 
@@ -108,6 +111,7 @@ class GenericObservation(Observation):
 
 # ---------- Executors ----------
 
+
 def _obs(data: dict[str, Any]) -> GenericObservation:
     return GenericObservation(payload=data)
 
@@ -116,6 +120,7 @@ def _with_service(func):
     def wrapper(action, conversation=None):  # noqa: ARG001
         with get_session() as session:
             return func(session, action)
+
     return wrapper
 
 
@@ -182,13 +187,28 @@ def exec_add_comment(session, action: AddCommentAction) -> GenericObservation:
 def exec_search_tickets(session, action: SearchTicketsAction) -> GenericObservation:
     svc = TicketSearchService(session)
     if action.search_type == "semantic":
-        data = svc.semantic_search(query_text=action.query, workflow_id=action.workflow_id, limit=action.limit, filters=action.filters)
+        data = svc.semantic_search(
+            query_text=action.query,
+            workflow_id=action.workflow_id,
+            limit=action.limit,
+            filters=action.filters,
+        )
         result = {"success": True, "mode": "semantic", **data}
     elif action.search_type == "keyword":
-        data = svc.search_by_keywords(keywords=action.query, workflow_id=action.workflow_id, filters=action.filters)
+        data = svc.search_by_keywords(
+            keywords=action.query,
+            workflow_id=action.workflow_id,
+            filters=action.filters,
+        )
         result = {"success": True, "mode": "keyword", **data}
     else:
-        data = svc.hybrid_search(query_text=action.query, workflow_id=action.workflow_id, limit=action.limit, filters=action.filters, include_comments=action.include_comments)
+        data = svc.hybrid_search(
+            query_text=action.query,
+            workflow_id=action.workflow_id,
+            limit=action.limit,
+            filters=action.filters,
+            include_comments=action.include_comments,
+        )
         result = {"success": True, "mode": "hybrid", **data}
     return _obs(result)
 
@@ -250,6 +270,7 @@ def exec_link_commit(session, action: LinkCommitAction) -> GenericObservation:
 
 
 # ---------- Toolset Registration ----------
+
 
 def register_hephaestus_mcp_tools() -> None:
     tools: list[ToolDefinition] = [
@@ -322,5 +343,3 @@ def register_hephaestus_mcp_tools() -> None:
         return tools
 
     register_tool("HephaestusTicketTools", _factory)
-
-

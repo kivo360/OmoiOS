@@ -5,11 +5,11 @@ Revises: 013_ticket_state_machine
 Create Date: 2025-01-28
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision: str = "014_dynamic_task_scoring"
@@ -42,7 +42,9 @@ def upgrade() -> None:
             comment="Optional SLA deadline for this task (REQ-TQM-PRI-003)",
         ),
     )
-    op.create_index(op.f("ix_tasks_deadline_at"), "tasks", ["deadline_at"], unique=False)
+    op.create_index(
+        op.f("ix_tasks_deadline_at"), "tasks", ["deadline_at"], unique=False
+    )
 
     # Add parent_task_id field to tasks table (REQ-TQM-DM-001)
     op.add_column(
@@ -69,7 +71,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Remove foreign key constraint
-    op.drop_constraint(op.f("fk_tasks_parent_task_id_tasks"), "tasks", type_="foreignkey")
+    op.drop_constraint(
+        op.f("fk_tasks_parent_task_id_tasks"), "tasks", type_="foreignkey"
+    )
 
     # Remove indexes
     op.drop_index(op.f("ix_tasks_parent_task_id"), table_name="tasks")
@@ -80,4 +84,3 @@ def downgrade() -> None:
     op.drop_column("tasks", "parent_task_id")
     op.drop_column("tasks", "deadline_at")
     op.drop_column("tasks", "score")
-

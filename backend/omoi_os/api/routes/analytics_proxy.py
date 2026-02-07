@@ -39,7 +39,9 @@ async def proxy_to_posthog(
         The response from PostHog
     """
     settings = get_app_settings()
-    posthog_host = settings.posthog.host if hasattr(settings, 'posthog') else POSTHOG_HOST
+    posthog_host = (
+        settings.posthog.host if hasattr(settings, "posthog") else POSTHOG_HOST
+    )
 
     # Build the target URL
     target_url = f"{posthog_host}{path}"
@@ -78,7 +80,9 @@ async def proxy_to_posthog(
             content=response.content,
             status_code=response.status_code,
             headers={
-                "Content-Type": response.headers.get("Content-Type", "application/json"),
+                "Content-Type": response.headers.get(
+                    "Content-Type", "application/json"
+                ),
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
                 "Access-Control-Allow-Headers": "Content-Type",
@@ -103,6 +107,7 @@ async def proxy_to_posthog(
 # PostHog Ingest Proxy Endpoints
 # These are the main endpoints the PostHog SDK calls
 # ============================================================================
+
 
 @router.post("/e")
 @router.post("/e/")

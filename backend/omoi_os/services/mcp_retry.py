@@ -31,7 +31,7 @@ class RetryExhaustedError(Exception):
 class MCPRetryManager:
     """
     Manages retry logic with exponential backoff and jitter.
-    
+
     REQ-MCP-CALL-002: Retry with Backoff
     REQ-MCP-CALL-003: Idempotency
     """
@@ -62,7 +62,9 @@ class MCPRetryManager:
         self.max_delay_ms = max_delay_ms
         self.jitter = jitter
         self.idempotency_ttl = idempotency_ttl
-        self.idempotency_keys: Dict[str, tuple[Any, datetime]] = {}  # key -> (result, timestamp)
+        self.idempotency_keys: Dict[str, tuple[Any, datetime]] = (
+            {}
+        )  # key -> (result, timestamp)
 
     async def execute_with_retry(
         self,
@@ -73,7 +75,7 @@ class MCPRetryManager:
     ) -> Any:
         """
         Execute function with retry logic.
-        
+
         Formula: delay = min(base * (factor ^ attempt) + jitter, max_delay)
 
         Args:
@@ -140,7 +142,7 @@ class MCPRetryManager:
             Delay in milliseconds
         """
         # Exponential: base * (factor ^ attempt)
-        delay = self.base_delay_ms * (self.factor ** attempt)
+        delay = self.base_delay_ms * (self.factor**attempt)
 
         # Cap at max delay
         delay = min(delay, self.max_delay_ms)
@@ -170,4 +172,3 @@ class MCPRetryManager:
         ]
         for key in expired_keys:
             del self.idempotency_keys[key]
-

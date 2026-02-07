@@ -5,6 +5,7 @@ Revises: 010_validation_system
 Create Date: 2025-01-27
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -56,4 +57,3 @@ def downgrade() -> None:
     op.drop_column("agents", "consecutive_missed_heartbeats")
     op.drop_column("agents", "last_expected_sequence")
     op.drop_column("agents", "sequence_number")
-

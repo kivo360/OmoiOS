@@ -40,7 +40,9 @@ class TicketHistoryService:
             )
         )
 
-    def record_status_transition(self, *, ticket_id: str, agent_id: str, from_status: str, to_status: str) -> None:
+    def record_status_transition(
+        self, *, ticket_id: str, agent_id: str, from_status: str, to_status: str
+    ) -> None:
         self.record_change(
             ticket_id=ticket_id,
             agent_id=agent_id,
@@ -52,7 +54,9 @@ class TicketHistoryService:
             change_description="Status transition",
         )
 
-    def link_commit(self, *, ticket_id: str, agent_id: str, commit_sha: str, message: str) -> None:
+    def link_commit(
+        self, *, ticket_id: str, agent_id: str, commit_sha: str, message: str
+    ) -> None:
         self.record_change(
             ticket_id=ticket_id,
             agent_id=agent_id,
@@ -65,7 +69,11 @@ class TicketHistoryService:
         )
 
     def get_ticket_history(self, *, ticket_id: str) -> list[dict]:
-        stmt = select(TicketHistory).where(TicketHistory.ticket_id == ticket_id).order_by(TicketHistory.changed_at.asc())
+        stmt = (
+            select(TicketHistory)
+            .where(TicketHistory.ticket_id == ticket_id)
+            .order_by(TicketHistory.changed_at.asc())
+        )
         rows = list(self.session.scalars(stmt))
         return [
             {
@@ -79,5 +87,3 @@ class TicketHistoryService:
             }
             for r in rows
         ]
-
-

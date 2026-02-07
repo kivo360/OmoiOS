@@ -7,7 +7,6 @@ from .github import GitHubProvider
 from .google import GoogleProvider
 from .gitlab import GitLabProvider
 
-
 # Provider registry
 PROVIDERS: dict[str, Type[OAuthProvider]] = {
     "github": GitHubProvider,

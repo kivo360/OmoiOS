@@ -5,6 +5,7 @@ Revises: 006_memory_learning
 Create Date: 2025-11-17
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -27,7 +28,9 @@ def upgrade() -> None:
         sa.Column("provider", sa.String(length=50), nullable=False),
         sa.Column("model", sa.String(length=100), nullable=False),
         sa.Column("prompt_tokens", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("completion_tokens", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "completion_tokens", sa.Integer(), nullable=False, server_default="0"
+        ),
         sa.Column("total_tokens", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("prompt_cost", sa.Float(), nullable=False, server_default="0.0"),
         sa.Column("completion_cost", sa.Float(), nullable=False, server_default="0.0"),
@@ -93,7 +96,7 @@ def downgrade() -> None:
     op.drop_index("ix_budgets_scope_id", table_name="budgets")
     op.drop_index("ix_budgets_scope_type", table_name="budgets")
     op.drop_table("budgets")
-    
+
     op.drop_index("ix_cost_records_recorded_at", table_name="cost_records")
     op.drop_index("ix_cost_records_total_cost", table_name="cost_records")
     op.drop_index("ix_cost_records_model", table_name="cost_records")
@@ -101,5 +104,3 @@ def downgrade() -> None:
     op.drop_index("ix_cost_records_agent_id", table_name="cost_records")
     op.drop_index("ix_cost_records_task_id", table_name="cost_records")
     op.drop_table("cost_records")
-
-

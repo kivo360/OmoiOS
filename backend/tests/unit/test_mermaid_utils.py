@@ -7,8 +7,6 @@ Tests for omoi_os.utils.mermaid module covering:
 - Full validation with mermaid-cli (when available)
 """
 
-import pytest
-
 from omoi_os.utils.mermaid import (
     MermaidValidationResult,
     extract_mermaid_blocks,
@@ -81,7 +79,7 @@ class TestSanitizeMermaidDiagram:
 """
         result = sanitize_mermaid_diagram(input_diagram)
         # The content should be quoted and internal quotes escaped
-        assert '#quot;' in result or 'Value' in result
+        assert "#quot;" in result or "Value" in result
 
     def test_quotes_subgraph_with_spaces(self):
         """Subgraph names with spaces should be quoted."""
@@ -133,7 +131,7 @@ class TestSanitizeMermaidDiagram:
         assert 'subgraph "API Layer"' in result
         assert 'subgraph "Service Layer"' in result
         # Edge labels with pipes should be quoted
-        assert '"|settings JSONB|"' in result or '|settings JSONB|' in result
+        assert '"|settings JSONB|"' in result or "|settings JSONB|" in result
 
     def test_multiple_nodes_with_special_chars(self):
         """Multiple nodes with special characters should all be quoted."""
@@ -147,9 +145,9 @@ class TestSanitizeMermaidDiagram:
         assert '"/path/to/file"' in result  # / is special
         assert '"{object}"' in result  # {} are special
         # Parentheses inside square brackets are fine - not shape syntax
-        assert 'B[function()]' in result  # () inside [] don't need quoting
+        assert "B[function()]" in result  # () inside [] don't need quoting
         # Nested brackets inside content would be problematic but handled differently
-        assert 'C[array[0]]' in result or 'C["array[0]"]' in result
+        assert "C[array[0]]" in result or 'C["array[0]"]' in result
 
     def test_preserves_node_shapes(self):
         """Node shapes should be preserved."""
@@ -277,7 +275,7 @@ class TestMermaidValidationResult:
         result = MermaidValidationResult(
             is_valid=True,
             sanitized_code="flowchart LR\n    A --> B",
-            original_code="flowchart LR\n    A --> B"
+            original_code="flowchart LR\n    A --> B",
         )
         assert result.is_valid is True
         assert result.error_message is None
@@ -286,8 +284,7 @@ class TestMermaidValidationResult:
     def test_invalid_result(self):
         """Invalid result has error message."""
         result = MermaidValidationResult(
-            is_valid=False,
-            error_message="Syntax error at line 2"
+            is_valid=False, error_message="Syntax error at line 2"
         )
         assert result.is_valid is False
         assert "Syntax error" in result.error_message
@@ -297,7 +294,7 @@ class TestMermaidValidationResult:
         result = MermaidValidationResult(
             is_valid=True,
             sanitized_code='flowchart LR\n    API["/path"]',
-            original_code='flowchart LR\n    API[/path]'
+            original_code="flowchart LR\n    API[/path]",
         )
         assert result.needs_sanitization is True
 
@@ -305,9 +302,7 @@ class TestMermaidValidationResult:
         """needs_sanitization is False when code unchanged."""
         code = "flowchart LR\n    A --> B"
         result = MermaidValidationResult(
-            is_valid=True,
-            sanitized_code=code,
-            original_code=code
+            is_valid=True, sanitized_code=code, original_code=code
         )
         assert result.needs_sanitization is False
 
@@ -344,8 +339,7 @@ flowchart LR
 
         # Should have warning about sanitization
         sanitization_warnings = [
-            w for w in result.warnings
-            if "Mermaid" in w and "auto-corrected" in w
+            w for w in result.warnings if "Mermaid" in w and "auto-corrected" in w
         ]
         assert len(sanitization_warnings) == 1
 
@@ -375,7 +369,6 @@ flowchart LR
 
         # Should NOT have Mermaid sanitization warning
         sanitization_warnings = [
-            w for w in result.warnings
-            if "Mermaid" in w and "auto-corrected" in w
+            w for w in result.warnings if "Mermaid" in w and "auto-corrected" in w
         ]
         assert len(sanitization_warnings) == 0

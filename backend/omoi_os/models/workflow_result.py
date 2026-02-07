@@ -14,7 +14,7 @@ from omoi_os.utils.datetime import utc_now
 
 class WorkflowResult(Base):
     """Workflow-level result submission.
-    
+
     Marks workflow completion with definitive solution or final deliverable.
     Triggers automatic validation when has_result=true in workflow config.
     Can trigger workflow termination based on on_result_found configuration.
@@ -57,4 +57,3 @@ class WorkflowResult(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
-

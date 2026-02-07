@@ -15,6 +15,7 @@ def test_database_service_create_tables(db_service: DatabaseService):
     # Tables should already be created by fixture
     # Verify by querying metadata
     from sqlalchemy import inspect
+
     inspector = inspect(db_service.engine)
     tables = inspector.get_table_names()
     assert "tickets" in tables
@@ -211,7 +212,13 @@ def test_ticket_task_relationship(db_service: DatabaseService):
     # Verify relationship
     with db_service.get_session() as session:
         from sqlalchemy.orm import joinedload
-        ticket = session.query(Ticket).options(joinedload(Ticket.tasks)).filter(Ticket.id == ticket_id).first()
+
+        ticket = (
+            session.query(Ticket)
+            .options(joinedload(Ticket.tasks))
+            .filter(Ticket.id == ticket_id)
+            .first()
+        )
         assert ticket is not None
         assert len(ticket.tasks) == 2
 
@@ -240,6 +247,7 @@ def test_alembic_migration_check(db_service: DatabaseService):
 
         # Get Alembic configuration
         import os
+
         alembic_ini_path = os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
         if os.path.exists(alembic_ini_path):
             alembic_cfg = Config(alembic_ini_path)
@@ -267,4 +275,3 @@ def test_alembic_migration_check(db_service: DatabaseService):
             pytest.skip("alembic.ini not found, skipping migration check")
     except ImportError:
         pytest.skip("Alembic not available, skipping migration check")
-

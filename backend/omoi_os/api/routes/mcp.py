@@ -30,12 +30,17 @@ class RegisterServerRequest(BaseModel):
 
     server_id: str = Field(..., description="Unique server identifier")
     version: str = Field(..., description="Server version")
-    capabilities: List[str] = Field(default_factory=list, description="Server capabilities")
+    capabilities: List[str] = Field(
+        default_factory=list, description="Server capabilities"
+    )
     tools: List[Dict[str, Any]] = Field(..., description="List of tool definitions")
     connection_url: Optional[str] = Field(
-        default=None, description="MCP server connection URL or path (HTTP URL or local file path)"
+        default=None,
+        description="MCP server connection URL or path (HTTP URL or local file path)",
     )
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Optional server metadata")
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Optional server metadata"
+    )
 
 
 class RegisterServerResponse(BaseModel):
@@ -82,8 +87,12 @@ class GrantPermissionRequest(BaseModel):
     server_id: str = Field(..., description="Server identifier")
     tool_name: str = Field(..., description="Tool name")
     actions: List[str] = Field(default_factory=list, description="Allowed actions")
-    granted_by: Optional[str] = Field(default=None, description="Who granted the permission")
-    expires_at: Optional[str] = Field(default=None, description="Policy expiration (ISO format)")
+    granted_by: Optional[str] = Field(
+        default=None, description="Who granted the permission"
+    )
+    expires_at: Optional[str] = Field(
+        default=None, description="Policy expiration (ISO format)"
+    )
 
 
 class GrantPermissionResponse(BaseModel):
@@ -97,12 +106,16 @@ class GrantPermissionResponse(BaseModel):
 
 
 # Dependency injection helpers
-def get_mcp_registry(db: DatabaseService = Depends(get_db_service)) -> MCPRegistryService:
+def get_mcp_registry(
+    db: DatabaseService = Depends(get_db_service),
+) -> MCPRegistryService:
     """Get MCP registry service."""
     return MCPRegistryService(db)
 
 
-def get_mcp_authorization(db: DatabaseService = Depends(get_db_service)) -> MCPAuthorizationService:
+def get_mcp_authorization(
+    db: DatabaseService = Depends(get_db_service),
+) -> MCPAuthorizationService:
     """Get MCP authorization service."""
     return MCPAuthorizationService(db)
 
@@ -137,7 +150,7 @@ async def register_server(
 ) -> RegisterServerResponse:
     """
     Register MCP server and tools.
-    
+
     REQ-MCP-REG-001: Server Discovery
     REQ-MCP-REG-002: Schema Validation
     """
@@ -176,7 +189,7 @@ async def list_tools(
 ) -> List[Dict[str, Any]]:
     """
     List registered tools.
-    
+
     Args:
         server_id: Optional server filter
         enabled_only: Only return enabled tools
@@ -208,7 +221,7 @@ async def get_tool(
 ) -> Dict[str, Any]:
     """
     Get specific tool by server and name.
-    
+
     Args:
         server_id: Server identifier
         tool_name: Tool name
@@ -222,7 +235,9 @@ async def get_tool(
     """
     tool = registry.get_tool(server_id, tool_name)
     if not tool:
-        raise HTTPException(status_code=404, detail=f"Tool not found: {server_id}:{tool_name}")
+        raise HTTPException(
+            status_code=404, detail=f"Tool not found: {server_id}:{tool_name}"
+        )
 
     return {
         "id": str(tool.id),
@@ -242,7 +257,7 @@ async def invoke_tool(
 ) -> InvokeToolResponse:
     """
     Invoke MCP tool with full orchestration.
-    
+
     REQ-MCP-CALL-001: Structured Request
     REQ-MCP-CALL-002: Retry with Backoff
     REQ-MCP-CALL-003: Idempotency
@@ -280,7 +295,7 @@ async def grant_permission(
 ) -> GrantPermissionResponse:
     """
     Grant tool permission to agent.
-    
+
     REQ-MCP-AUTH-001: Agent-Scoped Permissions
     REQ-MCP-AUTH-003: Least Privilege
     """
@@ -313,7 +328,7 @@ async def list_agent_permissions(
 ) -> List[Dict[str, Any]]:
     """
     List all permissions for an agent.
-    
+
     Args:
         agent_id: Agent identifier
         authorization: MCP authorization service
@@ -343,7 +358,7 @@ async def revoke_permission(
 ) -> Dict[str, str]:
     """
     Revoke tool permission for agent.
-    
+
     Args:
         agent_id: Agent identifier
         server_id: Server identifier
@@ -365,9 +380,9 @@ async def get_circuit_breakers(
 ) -> List[Dict[str, Any]]:
     """
     Get circuit breaker states.
-    
+
     REQ-MCP-CALL-005: Circuit Breaker
-    
+
     Args:
         server_id: Optional server filter
         tool_name: Optional tool filter
@@ -376,7 +391,9 @@ async def get_circuit_breakers(
     Returns:
         List of circuit breaker metrics
     """
-    return integration.get_circuit_breaker_metrics(server_id=server_id, tool_name=tool_name)
+    return integration.get_circuit_breaker_metrics(
+        server_id=server_id, tool_name=tool_name
+    )
 
 
 @router.get("/servers", response_model=List[Dict[str, Any]])
@@ -386,7 +403,7 @@ async def list_servers(
 ) -> List[Dict[str, Any]]:
     """
     List registered MCP servers.
-    
+
     Args:
         status: Optional status filter
         registry: MCP registry service
@@ -401,11 +418,12 @@ async def list_servers(
             "version": s.version,
             "capabilities": s.capabilities,
             "connected_at": s.connected_at.isoformat(),
-            "last_heartbeat": s.last_heartbeat.isoformat() if s.last_heartbeat else None,
+            "last_heartbeat": (
+                s.last_heartbeat.isoformat() if s.last_heartbeat else None
+            ),
             "status": s.status,
             "connection_url": s.connection_url,
             "metadata": s.server_metadata,
         }
         for s in servers
     ]
-

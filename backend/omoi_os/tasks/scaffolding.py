@@ -19,9 +19,7 @@ Usage:
     )
 """
 
-import asyncio
 from typing import Optional
-from uuid import UUID
 
 from omoi_os.logging import get_logger
 
@@ -52,9 +50,6 @@ async def trigger_scaffolding(
     """
     from omoi_os.api.dependencies import get_database_service
     from omoi_os.services.event_bus import get_event_bus, SystemEvent
-    from omoi_os.models.spec import Spec
-    from omoi_os.models.project import Project
-    from sqlalchemy import select
 
     logger.info(
         "Starting scaffolding workflow",
@@ -96,7 +91,9 @@ async def trigger_scaffolding(
                     payload={
                         "project_id": project_id,
                         "spec_id": spec_id,
-                        "feature_description": feature_description[:200],  # Truncate for event
+                        "feature_description": feature_description[
+                            :200
+                        ],  # Truncate for event
                         "user_id": user_id,
                     },
                 )
@@ -113,7 +110,9 @@ async def trigger_scaffolding(
         if event_bus:
             event_bus.publish(
                 SystemEvent(
-                    event_type="SCAFFOLDING_COMPLETED" if success else "SCAFFOLDING_FAILED",
+                    event_type=(
+                        "SCAFFOLDING_COMPLETED" if success else "SCAFFOLDING_FAILED"
+                    ),
                     entity_type="project",
                     entity_id=project_id,
                     payload={
@@ -255,14 +254,14 @@ def _generate_title_from_description(description: str) -> str:
         A concise title (max 100 chars)
     """
     # Take the first sentence or first 100 chars
-    first_sentence = description.split('.')[0].strip()
+    first_sentence = description.split(".")[0].strip()
 
     if len(first_sentence) <= 100:
         return first_sentence
 
     # Truncate at word boundary
     truncated = first_sentence[:97]
-    last_space = truncated.rfind(' ')
+    last_space = truncated.rfind(" ")
     if last_space > 50:
         truncated = truncated[:last_space]
 
@@ -363,9 +362,7 @@ async def trigger_scaffolding_for_ticket(
 
     # Get the ticket's description as feature description
     async with db.get_async_session() as session:
-        result = await session.execute(
-            select(Ticket).filter(Ticket.id == ticket_id)
-        )
+        result = await session.execute(select(Ticket).filter(Ticket.id == ticket_id))
         ticket = result.scalar_one_or_none()
 
         if not ticket:

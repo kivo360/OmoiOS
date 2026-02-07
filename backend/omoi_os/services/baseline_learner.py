@@ -10,7 +10,7 @@ from omoi_os.utils.datetime import utc_now
 class BaselineLearner:
     """
     Baseline learning service per REQ-FT-AN-002.
-    
+
     Learns per-agent-type and phase baselines using exponential moving average (EMA).
     Decays baselines after agent resurrection to allow re-learning.
     """
@@ -73,10 +73,18 @@ class BaselineLearner:
                     error_rate=metrics.get("error_rate", 0.0),
                     cpu_usage_percent=metrics.get("cpu_usage_percent", 0.0),
                     memory_usage_mb=metrics.get("memory_usage_mb", 0.0),
-                    additional_metrics={k: v for k, v in metrics.items() if k not in [
-                        "latency_ms", "latency_std", "error_rate",
-                        "cpu_usage_percent", "memory_usage_mb"
-                    ]},
+                    additional_metrics={
+                        k: v
+                        for k, v in metrics.items()
+                        if k
+                        not in [
+                            "latency_ms",
+                            "latency_std",
+                            "error_rate",
+                            "cpu_usage_percent",
+                            "memory_usage_mb",
+                        ]
+                    },
                     sample_count=1,
                     last_updated=utc_now(),
                 )
@@ -208,5 +216,3 @@ class BaselineLearner:
 
                 baseline.last_updated = utc_now()
                 session.commit()
-
-

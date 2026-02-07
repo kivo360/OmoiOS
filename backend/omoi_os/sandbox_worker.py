@@ -345,9 +345,11 @@ async def run_sandbox_worker():
                     "status": str(conversation.state.execution_status),
                     "event_count": len(conversation.state.events),
                     "conversation_id": str(conversation.state.id),
-                    "cost": conversation.conversation_stats.get_combined_metrics().accumulated_cost
-                    if hasattr(conversation, "conversation_stats")
-                    else 0,
+                    "cost": (
+                        conversation.conversation_stats.get_combined_metrics().accumulated_cost
+                        if hasattr(conversation, "conversation_stats")
+                        else 0
+                    ),
                 }
 
                 logger.info(f"Execution complete: {result['status']}")

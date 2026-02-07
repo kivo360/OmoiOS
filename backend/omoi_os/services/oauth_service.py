@@ -206,14 +206,18 @@ class OAuthService:
         state_value = f"connect:{provider_name}:{user_id}"
         try:
             self._redis.setex(state_key, OAUTH_STATE_TTL, state_value)
-            logger.debug(f"Stored OAuth connect state for provider {provider_name}, user {user_id}")
+            logger.debug(
+                f"Stored OAuth connect state for provider {provider_name}, user {user_id}"
+            )
         except redis.RedisError as e:
             logger.error(f"Failed to store OAuth state in Redis: {e}")
             raise ValueError("Failed to initialize OAuth flow. Please try again.")
 
         return auth_url, state
 
-    def verify_state_and_get_mode(self, state: str, provider_name: str) -> tuple[bool, Optional[UUID]]:
+    def verify_state_and_get_mode(
+        self, state: str, provider_name: str
+    ) -> tuple[bool, Optional[UUID]]:
         """
         Verify OAuth state and determine if this is a login or connect flow.
 
@@ -243,7 +247,9 @@ class OAuthService:
             if stored_value.startswith("connect:"):
                 parts = stored_value.split(":", 2)
                 if len(parts) != 3:
-                    logger.warning(f"OAuth connect state has invalid format: {stored_value}")
+                    logger.warning(
+                        f"OAuth connect state has invalid format: {stored_value}"
+                    )
                     return (False, None)
 
                 _, stored_provider, user_id_str = parts
@@ -274,7 +280,9 @@ class OAuthService:
             logger.error(f"Failed to verify OAuth state in Redis: {e}")
             return (False, None)
 
-    def connect_provider_to_user(self, user_id: UUID, oauth_info: OAuthUserInfo) -> bool:
+    def connect_provider_to_user(
+        self, user_id: UUID, oauth_info: OAuthUserInfo
+    ) -> bool:
         """
         Connect an OAuth provider to a specific user.
 

@@ -18,10 +18,10 @@ class TestHealthEndpoint:
     def test_health_endpoint_returns_status_and_version(self, client: TestClient):
         """Test that /health endpoint returns both status and version."""
         response = client.get("/health")
-        
+
         # Should return 200 OK
         assert response.status_code == 200
-        
+
         # Should return JSON with status and version
         data = response.json()
         assert "status" in data
@@ -32,6 +32,6 @@ class TestHealthEndpoint:
     def test_health_endpoint_content_type(self, client: TestClient):
         """Test that /health endpoint returns correct content type."""
         response = client.get("/health")
-        
+
         # Should return application/json
         assert response.headers["content-type"] == "application/json"

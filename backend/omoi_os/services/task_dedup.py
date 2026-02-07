@@ -170,7 +170,13 @@ class TaskDeduplicationService:
                 logger.error(f"pgvector query failed: {e}")
                 # Fallback to in-memory comparison if pgvector query fails
                 return self._fallback_check(
-                    sess, embedding, task_type, ticket_id, threshold, top_k, exclude_statuses
+                    sess,
+                    embedding,
+                    task_type,
+                    ticket_id,
+                    threshold,
+                    top_k,
+                    exclude_statuses,
                 )
 
             candidates = [

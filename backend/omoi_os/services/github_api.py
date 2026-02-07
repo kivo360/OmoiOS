@@ -737,15 +737,21 @@ class GitHubAPIService:
                 GitHubCommit(
                     sha=c["sha"],
                     message=c["commit"]["message"],
-                    author_name=c["commit"]["author"]["name"]
-                    if c["commit"].get("author")
-                    else None,
-                    author_email=c["commit"]["author"]["email"]
-                    if c["commit"].get("author")
-                    else None,
-                    date=c["commit"]["author"]["date"]
-                    if c["commit"].get("author")
-                    else None,
+                    author_name=(
+                        c["commit"]["author"]["name"]
+                        if c["commit"].get("author")
+                        else None
+                    ),
+                    author_email=(
+                        c["commit"]["author"]["email"]
+                        if c["commit"].get("author")
+                        else None
+                    ),
+                    date=(
+                        c["commit"]["author"]["date"]
+                        if c["commit"].get("author")
+                        else None
+                    ),
                     html_url=c.get("html_url"),
                 )
                 for c in commits
@@ -805,15 +811,15 @@ class GitHubAPIService:
     ) -> Optional[GitHubPullRequest]:
         """
         Get pull request details including mergeable status.
-        
+
         Phase 5: Required for merge workflow to check if PR can be merged.
-        
+
         Args:
             user_id: User ID for authentication
             owner: Repository owner
             repo: Repository name
             pr_number: Pull request number
-            
+
         Returns:
             GitHubPullRequest with mergeable status, or None if not found
         """
@@ -856,9 +862,9 @@ class GitHubAPIService:
     ) -> MergeResult:
         """
         Merge a pull request.
-        
+
         Phase 5: Required for completing work on a ticket.
-        
+
         Args:
             user_id: User ID for authentication
             owner: Repository owner
@@ -867,13 +873,15 @@ class GitHubAPIService:
             merge_method: How to merge - "merge", "squash", or "rebase"
             commit_title: Optional custom commit title (for squash/merge)
             commit_message: Optional custom commit message
-            
+
         Returns:
             MergeResult with success status and merge SHA
         """
         token = self._get_user_token_by_id(user_id)
         if not token:
-            return MergeResult(success=False, message="No token", error="No GitHub token")
+            return MergeResult(
+                success=False, message="No token", error="No GitHub token"
+            )
 
         data: dict[str, Any] = {"merge_method": merge_method}
         if commit_title:
@@ -924,15 +932,15 @@ class GitHubAPIService:
     ) -> bool:
         """
         Delete a branch.
-        
+
         Phase 5: Required for cleanup after PR merge.
-        
+
         Args:
             user_id: User ID for authentication
             owner: Repository owner
             repo: Repository name
             branch_name: Branch to delete (without refs/heads/ prefix)
-            
+
         Returns:
             True if deleted successfully, False otherwise
         """
@@ -958,16 +966,16 @@ class GitHubAPIService:
     ) -> Optional[BranchComparison]:
         """
         Compare two branches.
-        
+
         Phase 5: Useful for detecting conflicts before merge.
-        
+
         Args:
             user_id: User ID for authentication
             owner: Repository owner
             repo: Repository name
             base: Base branch name
             head: Head branch name
-            
+
         Returns:
             BranchComparison with diff information, or None on error
         """

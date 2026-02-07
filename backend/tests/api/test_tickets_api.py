@@ -12,7 +12,6 @@ from uuid import uuid4
 
 from omoi_os.models.ticket import Ticket
 
-
 # =============================================================================
 # UNIT TESTS (Fast, mocked dependencies)
 # =============================================================================
@@ -100,7 +99,9 @@ class TestTicketsCRUDIntegration:
         assert data["id"] == str(sample_ticket.id)
         assert data["title"] == sample_ticket.title
 
-    def test_list_tickets_returns_created(self, client: TestClient, sample_ticket: Ticket):
+    def test_list_tickets_returns_created(
+        self, client: TestClient, sample_ticket: Ticket
+    ):
         """Test list includes created ticket."""
         response = client.get("/api/v1/tickets")
 
@@ -140,8 +141,10 @@ class TestTicketTransitionsIntegration:
         # CRITICAL: Should return 400 (bad request), NOT 500 (server error)
         # This was the bug we fixed
         if response.status_code == 400:
-            assert "invalid" in response.json()["detail"].lower() or \
-                   "transition" in response.json()["detail"].lower()
+            assert (
+                "invalid" in response.json()["detail"].lower()
+                or "transition" in response.json()["detail"].lower()
+            )
         else:
             # If 200, the transition was actually valid
             assert response.status_code == 200

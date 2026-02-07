@@ -2,8 +2,7 @@
 
 import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
+from unittest.mock import AsyncMock, MagicMock
 
 from omoi_os.services.spec_driven_settings import (
     SpecDrivenOptionsSchema,
@@ -380,7 +379,12 @@ class TestSpecDrivenSettingsServiceGetChangeLog:
         mock_project = MagicMock()
         mock_project.settings = {
             "spec_driven_options_change_log": [
-                {"timestamp": f"2025-01-0{i}T00:00:00", "user_id": f"user-{i}", "old_values": {}, "new_values": {}}
+                {
+                    "timestamp": f"2025-01-0{i}T00:00:00",
+                    "user_id": f"user-{i}",
+                    "old_values": {},
+                    "new_values": {},
+                }
                 for i in range(1, 6)  # 5 entries
             ]
         }

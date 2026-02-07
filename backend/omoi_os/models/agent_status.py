@@ -89,5 +89,3 @@ def is_valid_transition(from_status: str, to_status: str) -> bool:
     # Check if from_status exists in valid transitions
     allowed = VALID_TRANSITIONS.get(from_status, [])
     return to_status in allowed
-
-

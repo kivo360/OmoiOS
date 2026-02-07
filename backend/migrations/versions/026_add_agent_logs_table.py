@@ -12,7 +12,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-
 # revision identifiers, used by Alembic.
 revision: str = "026_add_agent_logs_table"
 down_revision: Union[str, None] = "025_supabase_auth_integration"
@@ -36,11 +35,9 @@ def upgrade() -> None:
             server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(
-            ["agent_id"], ["agents.id"], ondelete="CASCADE"
-        ),
+        sa.ForeignKeyConstraint(["agent_id"], ["agents.id"], ondelete="CASCADE"),
     )
-    
+
     # Create indexes
     op.create_index("ix_agent_logs_agent_id", "agent_logs", ["agent_id"])
     op.create_index("ix_agent_logs_log_type", "agent_logs", ["log_type"])
@@ -53,4 +50,3 @@ def downgrade() -> None:
     op.drop_index("ix_agent_logs_log_type", table_name="agent_logs")
     op.drop_index("ix_agent_logs_agent_id", table_name="agent_logs")
     op.drop_table("agent_logs")
-

@@ -90,4 +90,3 @@ class PatternLoader:
         resolved_config = json.loads(resolved_str)
 
         return resolved_config
-

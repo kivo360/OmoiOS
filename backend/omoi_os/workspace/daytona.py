@@ -43,7 +43,9 @@ class DaytonaWorkspaceConfig:
     public: bool = False  # Make ports publicly accessible without auth
 
     @classmethod
-    def from_settings(cls, settings: "DaytonaSettings" = None, **overrides) -> "DaytonaWorkspaceConfig":
+    def from_settings(
+        cls, settings: "DaytonaSettings" = None, **overrides
+    ) -> "DaytonaWorkspaceConfig":
         """Create config from DaytonaSettings (loads from YAML/env).
 
         Args:
@@ -65,6 +67,7 @@ class DaytonaWorkspaceConfig:
         """
         if settings is None:
             from omoi_os.config import load_daytona_settings
+
             settings = load_daytona_settings()
 
         if not settings.api_key:
@@ -82,7 +85,9 @@ class DaytonaWorkspaceConfig:
         language = language or "python"
 
         # Set working_dir based on image or default
-        working_dir = overrides.get("working_dir", getattr(settings, "working_dir", None))
+        working_dir = overrides.get(
+            "working_dir", getattr(settings, "working_dir", None)
+        )
         if not working_dir:
             # nikolaik images use /home/pn
             if image and "nikolaik" in image:
@@ -241,7 +246,9 @@ class DaytonaWorkspace:
                 ephemeral=self.config.ephemeral,
                 public=self.config.public,
             )
-            logger.info(f"Creating Daytona sandbox with image: {self.config.image} (public={self.config.public})")
+            logger.info(
+                f"Creating Daytona sandbox with image: {self.config.image} (public={self.config.public})"
+            )
         else:
             params = CreateSandboxBaseParams(
                 language=CodeLanguage(self.config.language),
@@ -249,7 +256,9 @@ class DaytonaWorkspace:
                 ephemeral=self.config.ephemeral,
                 public=self.config.public,
             )
-            logger.info(f"Creating Daytona sandbox with language: {self.config.language} (public={self.config.public})")
+            logger.info(
+                f"Creating Daytona sandbox with language: {self.config.language} (public={self.config.public})"
+            )
 
         self._sandbox = self._daytona.create(
             params=params,
@@ -286,7 +295,9 @@ class DaytonaWorkspace:
             ephemeral=self.config.ephemeral,
         )
 
-        logger.info(f"Creating Daytona sandbox (async) with language: {self.config.language}")
+        logger.info(
+            f"Creating Daytona sandbox (async) with language: {self.config.language}"
+        )
         self._sandbox = await self._async_daytona.create(
             params=params,
             timeout=self.config.timeout,
@@ -312,7 +323,9 @@ class DaytonaWorkspace:
     def sandbox(self):
         """Get the underlying Daytona sandbox instance."""
         if self._sandbox is None:
-            raise RuntimeError("Workspace not initialized. Use 'with' or 'async with' context.")
+            raise RuntimeError(
+                "Workspace not initialized. Use 'with' or 'async with' context."
+            )
         return self._sandbox
 
     @property
@@ -414,6 +427,7 @@ class DaytonaWorkspace:
             logger.debug(f"Wrote file: {remote_path}")
         finally:
             import os
+
             os.unlink(tmp_path)
 
     def read_file(self, remote_path: str) -> bytes:
@@ -564,7 +578,9 @@ class DaytonaWorkspaceManager(WorkspaceManager):
     def _create_executor(self) -> CommandExecutor:
         """Create Daytona command executor."""
         if self._daytona_workspace is None:
-            raise RuntimeError("Daytona workspace not initialized. Call prepare_workspace() first.")
+            raise RuntimeError(
+                "Daytona workspace not initialized. Call prepare_workspace() first."
+            )
         return self._daytona_workspace._executor
 
     def get_repo_directory(self, repo_name: str) -> Path:
@@ -673,7 +689,9 @@ class OpenHandsDaytonaWorkspace:
         Returns:
             CommandResult from openhands.sdk.workspace.models
         """
-        from openhands.sdk.workspace.models import CommandResult as OpenHandsCommandResult
+        from openhands.sdk.workspace.models import (
+            CommandResult as OpenHandsCommandResult,
+        )
 
         if self._daytona_workspace is None:
             raise RuntimeError("Workspace not initialized. Use 'with' context.")

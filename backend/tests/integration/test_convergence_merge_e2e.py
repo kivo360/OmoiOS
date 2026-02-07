@@ -14,43 +14,37 @@ Critical scenarios tested:
 7. Synthesis context preservation through merge
 """
 
-import asyncio
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, MagicMock
 from uuid import uuid4
-from typing import List
 
 from omoi_os.models.merge_attempt import MergeAttempt, MergeStatus
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.synthesis_service import (
     SynthesisService,
-    PendingJoin,
     reset_synthesis_service,
 )
 from omoi_os.services.convergence_merge_service import (
     ConvergenceMergeService,
     ConvergenceMergeConfig,
-    ConvergenceMergeResult,
     reset_convergence_merge_service,
 )
 from omoi_os.services.ownership_validation import (
     OwnershipValidationService,
-    ValidationResult,
 )
 from omoi_os.services.conflict_scorer import (
     ConflictScorer,
     BranchScore,
     ScoredMergeOrder,
 )
-from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.database import DatabaseService
-from omoi_os.utils.datetime import utc_now
-
 
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def db_service(test_database_url):
@@ -223,6 +217,7 @@ def reset_singletons():
 # Test: End-to-End Synthesis → Context Injection
 # ============================================================================
 
+
 class TestSynthesisE2E:
     """End-to-end tests for SynthesisService."""
 
@@ -252,8 +247,10 @@ class TestSynthesisE2E:
 
         # Verify synthesis.completed event was published
         synthesis_events = [
-            e for e in mock_event_bus.published_events
-            if hasattr(e, 'event_type') and e.event_type == "coordination.synthesis.completed"
+            e
+            for e in mock_event_bus.published_events
+            if hasattr(e, "event_type")
+            and e.event_type == "coordination.synthesis.completed"
         ]
         assert len(synthesis_events) == 1
 
@@ -281,9 +278,9 @@ class TestSynthesisE2E:
 
         # Verify continuation task has synthesis_context
         with db_service.get_session() as session:
-            continuation = session.query(Task).filter(
-                Task.id == continuation_id
-            ).first()
+            continuation = (
+                session.query(Task).filter(Task.id == continuation_id).first()
+            )
 
             assert continuation.synthesis_context is not None
             assert "_source_results" in continuation.synthesis_context
@@ -353,15 +350,19 @@ class TestSynthesisE2E:
             if i < 2:
                 # Not all complete yet
                 synthesis_events = [
-                    e for e in mock_event_bus.published_events
-                    if hasattr(e, 'event_type') and e.event_type == "coordination.synthesis.completed"
+                    e
+                    for e in mock_event_bus.published_events
+                    if hasattr(e, "event_type")
+                    and e.event_type == "coordination.synthesis.completed"
                 ]
                 assert len(synthesis_events) == 0
             else:
                 # All complete - synthesis should trigger
                 synthesis_events = [
-                    e for e in mock_event_bus.published_events
-                    if hasattr(e, 'event_type') and e.event_type == "coordination.synthesis.completed"
+                    e
+                    for e in mock_event_bus.published_events
+                    if hasattr(e, "event_type")
+                    and e.event_type == "coordination.synthesis.completed"
                 ]
                 assert len(synthesis_events) == 1
 
@@ -392,8 +393,10 @@ class TestSynthesisE2E:
 
         # Should not trigger synthesis again (join already processed)
         synthesis_events = [
-            e for e in mock_event_bus.published_events
-            if hasattr(e, 'event_type') and e.event_type == "coordination.synthesis.completed"
+            e
+            for e in mock_event_bus.published_events
+            if hasattr(e, "event_type")
+            and e.event_type == "coordination.synthesis.completed"
         ]
         assert len(synthesis_events) == 0
 
@@ -401,6 +404,7 @@ class TestSynthesisE2E:
 # ============================================================================
 # Test: Database Transaction Semantics
 # ============================================================================
+
 
 class TestDatabaseTransactions:
     """Test database transaction behavior in merge operations."""
@@ -427,9 +431,9 @@ class TestDatabaseTransactions:
         # Verify in a completely new session (same db_service, new session)
         # This tests that data was actually committed, not just in transaction cache
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert fetched is not None
             assert fetched.task_id == continuation_id
             assert fetched.status == MergeStatus.PENDING.value
@@ -438,9 +442,9 @@ class TestDatabaseTransactions:
         service._update_merge_attempt_status(merge_id, MergeStatus.IN_PROGRESS)
 
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert fetched.status == MergeStatus.IN_PROGRESS.value
             assert fetched.started_at is not None
 
@@ -464,9 +468,9 @@ class TestDatabaseTransactions:
 
         # Verify IN_PROGRESS state
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert attempt.status == MergeStatus.IN_PROGRESS.value
             assert attempt.started_at is not None
 
@@ -480,9 +484,9 @@ class TestDatabaseTransactions:
 
         # Verify COMPLETED state
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert attempt.status == MergeStatus.COMPLETED.value
             assert attempt.success is True
             assert attempt.completed_at is not None
@@ -520,12 +524,16 @@ class TestDatabaseTransactions:
         service._update_merge_attempt_status(merge_id_2, MergeStatus.CONFLICT)
 
         with db_service.get_session() as session:
-            attempt_1 = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id_1
-            ).first()
-            attempt_2 = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id_2
-            ).first()
+            attempt_1 = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_id_1)
+                .first()
+            )
+            attempt_2 = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_id_2)
+                .first()
+            )
 
             assert attempt_1.status == MergeStatus.IN_PROGRESS.value
             assert attempt_2.status == MergeStatus.CONFLICT.value
@@ -534,6 +542,7 @@ class TestDatabaseTransactions:
 # ============================================================================
 # Test: Ownership Validation Integration
 # ============================================================================
+
 
 class TestOwnershipValidation:
     """Test ownership validation in merge context."""
@@ -547,12 +556,12 @@ class TestOwnershipValidation:
 
         with db_service.get_session() as session:
             # Task 1 and Task 2 have overlapping ownership
-            task1 = session.query(Task).filter(Task.id == task_ids[0]).first()
+            session.query(Task).filter(Task.id == task_ids[0]).first()
             task2 = session.query(Task).filter(Task.id == task_ids[1]).first()
 
             # Check if task2's files overlap with task1's
             # src/services/user/** overlaps with src/services/**
-            result = validation_service.validate_task_ownership(task2)
+            validation_service.validate_task_ownership(task2)
 
             # Should detect the overlap (depending on implementation)
             # The service should find siblings and check for conflicts
@@ -583,25 +592,36 @@ class TestOwnershipValidation:
         task_id = task_ids[0]
 
         # Should allow modifications within owned path
-        assert validation_service.validate_file_modification(
-            task_id, "src/module1/main.py"
-        ) is True
-        assert validation_service.validate_file_modification(
-            task_id, "src/module1/utils/helper.py"
-        ) is True
+        assert (
+            validation_service.validate_file_modification(
+                task_id, "src/module1/main.py"
+            )
+            is True
+        )
+        assert (
+            validation_service.validate_file_modification(
+                task_id, "src/module1/utils/helper.py"
+            )
+            is True
+        )
 
         # Should reject modifications outside owned path
-        assert validation_service.validate_file_modification(
-            task_id, "src/module2/main.py"
-        ) is False
-        assert validation_service.validate_file_modification(
-            task_id, "src/other/file.py"
-        ) is False
+        assert (
+            validation_service.validate_file_modification(
+                task_id, "src/module2/main.py"
+            )
+            is False
+        )
+        assert (
+            validation_service.validate_file_modification(task_id, "src/other/file.py")
+            is False
+        )
 
 
 # ============================================================================
 # Test: Synthesis Context Preservation Through Merge
 # ============================================================================
+
 
 class TestSynthesisContextPreservation:
     """Test that synthesis context survives the merge process."""
@@ -632,7 +652,7 @@ class TestSynthesisContextPreservation:
         # Now create a merge attempt (this shouldn't touch synthesis_context)
         # Use the actual test_ticket, not a task_id
         merge_service = ConvergenceMergeService(db=db_service)
-        merge_id = merge_service._create_merge_attempt(
+        merge_service._create_merge_attempt(
             continuation_task_id=continuation_id,
             source_task_ids=source_ids,
             ticket_id=test_ticket,  # Use actual ticket_id from fixture
@@ -651,6 +671,7 @@ class TestSynthesisContextPreservation:
 # ============================================================================
 # Test: Partial Merge Success Handling
 # ============================================================================
+
 
 class TestPartialMergeSuccess:
     """Test scenarios where some tasks merge but others fail."""
@@ -706,9 +727,9 @@ class TestPartialMergeSuccess:
 
         # Verify merge attempt was created
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert attempt is not None
             assert attempt.status == MergeStatus.PENDING.value
 
@@ -716,6 +737,7 @@ class TestPartialMergeSuccess:
 # ============================================================================
 # Test: Event Ordering and Race Conditions
 # ============================================================================
+
 
 class TestEventOrdering:
     """Test event handling edge cases."""
@@ -740,14 +762,14 @@ class TestEventOrdering:
 
         # Synthesis should trigger immediately since all tasks are complete
         synthesis_events = [
-            e for e in mock_event_bus.published_events
-            if hasattr(e, 'event_type') and e.event_type == "coordination.synthesis.completed"
+            e
+            for e in mock_event_bus.published_events
+            if hasattr(e, "event_type")
+            and e.event_type == "coordination.synthesis.completed"
         ]
         assert len(synthesis_events) == 1
 
-    def test_join_handles_unknown_task_completion(
-        self, db_service, mock_event_bus
-    ):
+    def test_join_handles_unknown_task_completion(self, db_service, mock_event_bus):
         """Test that TASK_COMPLETED for unknown tasks is handled gracefully."""
         synthesis = SynthesisService(db=db_service, event_bus=mock_event_bus)
         synthesis.subscribe_to_events()
@@ -758,19 +780,19 @@ class TestEventOrdering:
         # Should not crash, no events published
         assert len(mock_event_bus.published_events) == 0
 
-    def test_invalid_join_event_ignored(
-        self, db_service, mock_event_bus
-    ):
+    def test_invalid_join_event_ignored(self, db_service, mock_event_bus):
         """Test that invalid join events are ignored gracefully."""
         synthesis = SynthesisService(db=db_service, event_bus=mock_event_bus)
 
         # Missing required fields
-        synthesis._handle_join_created({
-            "payload": {
-                "join_id": "test",
-                # Missing source_task_ids and continuation_task_id
+        synthesis._handle_join_created(
+            {
+                "payload": {
+                    "join_id": "test",
+                    # Missing source_task_ids and continuation_task_id
+                }
             }
-        })
+        )
 
         # Should not register anything
         assert len(synthesis.get_pending_joins()) == 0
@@ -779,6 +801,7 @@ class TestEventOrdering:
 # ============================================================================
 # Test: Merge Complexity and Scoring
 # ============================================================================
+
 
 class TestMergeComplexity:
     """Test merge complexity estimation."""
@@ -799,7 +822,10 @@ class TestMergeComplexity:
                     branch="task-2",
                     task_id="task-2",
                     conflict_count=2,
-                    conflict_files=["src/common.py", "src/api.py"],  # common.py overlaps!
+                    conflict_files=[
+                        "src/common.py",
+                        "src/api.py",
+                    ],  # common.py overlaps!
                 ),
                 "task-3": BranchScore(
                     branch="task-3",
@@ -830,6 +856,7 @@ class TestMergeComplexity:
 # Test: LLM Resolution Tracking
 # ============================================================================
 
+
 class TestLLMResolutionTracking:
     """Test LLM resolution audit trail."""
 
@@ -857,9 +884,9 @@ class TestLLMResolutionTracking:
 
         # Verify it's logged
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert attempt.llm_resolution_log is not None
             assert "src/service.py" in attempt.llm_resolution_log
             assert "resolved_at" in attempt.llm_resolution_log["src/service.py"]
@@ -868,6 +895,7 @@ class TestLLMResolutionTracking:
 # ============================================================================
 # Test: Configuration Edge Cases
 # ============================================================================
+
 
 class TestConfigurationEdgeCases:
     """Test configuration boundary conditions."""
@@ -880,7 +908,7 @@ class TestConfigurationEdgeCases:
             max_conflicts_auto_resolve=0,
             require_clean_merge=True,
         )
-        service = ConvergenceMergeService(db=db_service, config=config)
+        ConvergenceMergeService(db=db_service, config=config)
 
         # Any scored order with conflicts > 0 should be rejected by config
         assert config.max_conflicts_auto_resolve == 0
@@ -903,6 +931,7 @@ class TestConfigurationEdgeCases:
 # ============================================================================
 # Test: Cleanup and State Management
 # ============================================================================
+
 
 class TestCleanupAndState:
     """Test cleanup and state management."""
@@ -947,5 +976,7 @@ class TestCleanupAndState:
 
         # Reverse lookup should be cleaned up
         for task_id in source_ids:
-            assert task_id not in synthesis._task_to_joins or \
-                   join_id not in synthesis._task_to_joins.get(task_id, [])
+            assert (
+                task_id not in synthesis._task_to_joins
+                or join_id not in synthesis._task_to_joins.get(task_id, [])
+            )

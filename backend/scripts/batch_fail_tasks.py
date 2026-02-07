@@ -44,6 +44,7 @@ def get_stale_tasks(client: httpx.Client, hours: int = 24) -> list[dict]:
     """
     Fetch tasks that are pending/running/assigned and older than specified hours.
     """
+
     # Get all tasks and filter locally (API may not have complex filtering)
     def fetch_tasks(status: str) -> list[dict]:
         response = client.get("/api/v1/tasks", params={"status": status})
@@ -167,7 +168,9 @@ def main():
         task_type = task.get("task_type", "unknown")
         title = (task.get("title") or task.get("description") or "No title")[:50]
         created = task.get("created_at", "unknown")
-        print(f"  {task_id[:8]}... | {status:10} | {task_type:20} | {title} | {created}")
+        print(
+            f"  {task_id[:8]}... | {status:10} | {task_type:20} | {title} | {created}"
+        )
     print("-" * 80)
 
     if args.dry_run:

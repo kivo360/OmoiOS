@@ -84,7 +84,9 @@ def upgrade() -> None:
                 ALTER TABLE {table_name}
                 ADD COLUMN {column_name} vector({EMBEDDING_DIMENSIONS})
             """))
-            print(f"  ✓ Created column {column_name} with vector({EMBEDDING_DIMENSIONS})")
+            print(
+                f"  ✓ Created column {column_name} with vector({EMBEDDING_DIMENSIONS})"
+            )
         except Exception as e:
             print(f"  ✗ Failed to create column: {e}")
             return
@@ -104,12 +106,12 @@ def upgrade() -> None:
                 USING ivfflat ({column_name} vector_cosine_ops)
                 WITH (lists = 100)
             """))
-            print(f"  ✓ Created IVFFlat index with cosine similarity")
+            print("  ✓ Created IVFFlat index with cosine similarity")
         except Exception as e:
             # IVFFlat requires training data, try without index for now
             print(f"  ⚠ Could not create IVFFlat index: {e}")
-            print(f"  Note: IVFFlat indexes require existing data for training.")
-            print(f"  The index can be created later once data is populated.")
+            print("  Note: IVFFlat indexes require existing data for training.")
+            print("  The index can be created later once data is populated.")
     else:
         print(f"  ✓ Index {index_name} already exists")
 

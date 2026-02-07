@@ -22,7 +22,9 @@ class AgentStatusTransition(Base):
 
     __tablename__ = "agent_status_transitions"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
     agent_id: Mapped[str] = mapped_column(
         String, ForeignKey("agents.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -44,4 +46,3 @@ class AgentStatusTransition(Base):
 
     def __repr__(self) -> str:
         return f"<AgentStatusTransition(agent_id={self.agent_id}, {self.from_status} → {self.to_status})>"
-

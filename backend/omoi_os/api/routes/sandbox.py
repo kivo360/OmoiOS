@@ -259,9 +259,7 @@ async def _update_spec_phase_data(
     """
     try:
         async with db.get_async_session() as session:
-            result = await session.execute(
-                select(Spec).where(Spec.id == spec_id)
-            )
+            result = await session.execute(select(Spec).where(Spec.id == spec_id))
             spec = result.scalar_one_or_none()
 
             if not spec:
@@ -274,7 +272,13 @@ async def _update_spec_phase_data(
                 existing_phase_data[phase_name] = phase_content
                 logger.info(
                     f"Updated spec {spec_id} phase: {phase_name}",
-                    extra={"keys": list(phase_content.keys()) if isinstance(phase_content, dict) else "non-dict"}
+                    extra={
+                        "keys": (
+                            list(phase_content.keys())
+                            if isinstance(phase_content, dict)
+                            else "non-dict"
+                        )
+                    },
                 )
 
             spec.phase_data = existing_phase_data
@@ -285,7 +289,14 @@ async def _update_spec_phase_data(
                 # Determine current phase based on what data we have
                 # Phases: explore, prd, requirements, design, tasks, sync (6 phases)
                 # Each phase is ~16.67% but we round to nice numbers
-                phase_order = ["explore", "prd", "requirements", "design", "tasks", "sync"]
+                phase_order = [
+                    "explore",
+                    "prd",
+                    "requirements",
+                    "design",
+                    "tasks",
+                    "sync",
+                ]
                 phase_progress_map = {
                     "explore": 16.0,
                     "prd": 32.0,
@@ -323,7 +334,7 @@ async def _update_spec_phase_data(
                     "new_status": spec.status,
                     "current_phase": spec.current_phase,
                     "progress": spec.progress,
-                }
+                },
             )
 
         # Sync phase outputs to related tables for UI display
@@ -387,15 +398,15 @@ async def _sync_requirements_to_table(
                     when_idx = text_upper.index("WHEN ") + 5
                     shall_idx = text_upper.index(" THE SYSTEM SHALL ")
                     condition = text[when_idx:shall_idx].strip()
-                    action = text[shall_idx + 18:].strip()
+                    action = text[shall_idx + 18 :].strip()
                 elif "IF " in text_upper and " THEN THE SYSTEM SHALL " in text_upper:
                     if_idx = text_upper.index("IF ") + 3
                     then_idx = text_upper.index(" THEN THE SYSTEM SHALL ")
                     condition = text[if_idx:then_idx].strip()
-                    action = text[then_idx + 23:].strip()
+                    action = text[then_idx + 23 :].strip()
                 elif " THE SYSTEM SHALL " in text_upper:
                     shall_idx = text_upper.index(" THE SYSTEM SHALL ")
-                    action = text[shall_idx + 18:].strip()
+                    action = text[shall_idx + 18 :].strip()
 
                 # Extract title - prioritize explicit title, then use ID as fallback
                 # Never use category as title (category is for grouping, not display)
@@ -406,16 +417,16 @@ async def _sync_requirements_to_table(
                         # Take first 60 chars of action as title
                         title = action[:60].strip()
                         if len(action) > 60:
-                            title = title.rsplit(' ', 1)[0] + "..."
+                            title = title.rsplit(" ", 1)[0] + "..."
                     else:
                         title = req_id
-                req_type = req_data.get("type", "functional")
+                req_data.get("type", "functional")
 
                 # Check if requirement already exists
                 existing = await session.execute(
                     select(SpecRequirement).where(
                         SpecRequirement.spec_id == spec_id,
-                        SpecRequirement.title == title
+                        SpecRequirement.title == title,
                     )
                 )
                 existing_req = existing.scalar_one_or_none()
@@ -454,7 +465,9 @@ async def _sync_requirements_to_table(
             logger.info(f"Synced {synced_count} requirements for spec {spec_id}")
 
     except Exception as e:
-        logger.error(f"Failed to sync requirements for spec {spec_id}: {e}", exc_info=True)
+        logger.error(
+            f"Failed to sync requirements for spec {spec_id}: {e}", exc_info=True
+        )
 
     return synced_count
 
@@ -508,9 +521,7 @@ async def _sync_tasks_to_table(
     try:
         async with db.get_async_session() as session:
             # Get spec to find project_id
-            spec_result = await session.execute(
-                select(Spec).where(Spec.id == spec_id)
-            )
+            spec_result = await session.execute(select(Spec).where(Spec.id == spec_id))
             spec = spec_result.scalar_one_or_none()
             if not spec:
                 logger.warning(f"Spec {spec_id} not found for task sync")
@@ -542,14 +553,20 @@ async def _sync_tasks_to_table(
                     description=description,
                     phase_id="PHASE_BACKLOG",
                     status="backlog",
-                    priority=priority if priority in priority_map.values() else "MEDIUM",
+                    priority=(
+                        priority if priority in priority_map.values() else "MEDIUM"
+                    ),
                     project_id=spec.project_id,
                     user_id=spec.user_id,  # Inherit user from spec
-                    dependencies={
-                        "blocked_by": dependencies,
-                        "requirements": requirements_refs,
-                        "task_refs": task_refs,
-                    } if dependencies or requirements_refs else None,
+                    dependencies=(
+                        {
+                            "blocked_by": dependencies,
+                            "requirements": requirements_refs,
+                            "task_refs": task_refs,
+                        }
+                        if dependencies or requirements_refs
+                        else None
+                    ),
                     context={
                         "spec_id": spec_id,
                         "local_ticket_id": local_id,
@@ -582,8 +599,7 @@ async def _sync_tasks_to_table(
                 # Check if SpecTask already exists
                 existing = await session.execute(
                     select(SpecTask).where(
-                        SpecTask.spec_id == spec_id,
-                        SpecTask.title == title
+                        SpecTask.spec_id == spec_id, SpecTask.title == title
                     )
                 )
                 existing_task = existing.scalar_one_or_none()
@@ -594,7 +610,11 @@ async def _sync_tasks_to_table(
                     existing_task.phase = phase
                     existing_task.priority = priority
                     existing_task.estimated_hours = estimated_hours
-                    existing_task.dependencies = dependencies.get("depends_on", []) if isinstance(dependencies, dict) else dependencies
+                    existing_task.dependencies = (
+                        dependencies.get("depends_on", [])
+                        if isinstance(dependencies, dict)
+                        else dependencies
+                    )
                     existing_task.updated_at = utc_now()
                 else:
                     # Create new SpecTask for spec tracking
@@ -606,7 +626,11 @@ async def _sync_tasks_to_table(
                         priority=priority,
                         status="pending",
                         estimated_hours=estimated_hours,
-                        dependencies=dependencies.get("depends_on", []) if isinstance(dependencies, dict) else dependencies,
+                        dependencies=(
+                            dependencies.get("depends_on", [])
+                            if isinstance(dependencies, dict)
+                            else dependencies
+                        ),
                     )
                     session.add(new_spec_task)
                     await session.flush()
@@ -650,7 +674,9 @@ async def _sync_tasks_to_table(
 
                     if parent_ticket_id:
                         # Create Task (work unit) linked to the Ticket
-                        task_priority_upper = priority_map.get(priority.lower() if priority else "medium", "MEDIUM")
+                        task_priority_upper = priority_map.get(
+                            priority.lower() if priority else "medium", "MEDIUM"
+                        )
                         new_task = Task(
                             ticket_id=parent_ticket_id,
                             phase_id="PHASE_BACKLOG",
@@ -659,7 +685,11 @@ async def _sync_tasks_to_table(
                             description=description,
                             priority=task_priority_upper,
                             status="pending",
-                            dependencies=dependencies if isinstance(dependencies, dict) else {"depends_on": []},
+                            dependencies=(
+                                dependencies
+                                if isinstance(dependencies, dict)
+                                else {"depends_on": []}
+                            ),
                         )
                         session.add(new_task)
 
@@ -703,9 +733,7 @@ async def _sync_design_to_spec(
     """
     try:
         async with db.get_async_session() as session:
-            result = await session.execute(
-                select(Spec).where(Spec.id == spec_id)
-            )
+            result = await session.execute(select(Spec).where(Spec.id == spec_id))
             spec = result.scalar_one_or_none()
 
             if not spec:
@@ -730,7 +758,9 @@ async def _sync_design_to_spec(
             if not architecture_parts and isinstance(legacy_arch, str) and legacy_arch:
                 architecture_parts.append(legacy_arch)
 
-            architecture = "\n\n".join(architecture_parts) if architecture_parts else legacy_arch
+            architecture = (
+                "\n\n".join(architecture_parts) if architecture_parts else legacy_arch
+            )
 
             # Build data model markdown from data_models list or legacy format
             data_models = design_output.get("data_models", [])
@@ -754,7 +784,9 @@ async def _sync_design_to_spec(
                                     fname = field.get("name", "field")
                                     ftype = field.get("type", "string")
                                     fdesc = field.get("description", "")
-                                    dm_parts.append(f"- `{fname}` ({ftype}){': ' + fdesc if fdesc else ''}")
+                                    dm_parts.append(
+                                        f"- `{fname}` ({ftype}){': ' + fdesc if fdesc else ''}"
+                                    )
                         dm_parts.append("")
                 data_model = "\n".join(dm_parts) if dm_parts else legacy_dm
             else:
@@ -874,7 +906,6 @@ async def persist_sandbox_event_async(
     Returns:
         Persisted event ID
     """
-    from sqlalchemy import select
 
     from omoi_os.models.sandbox_event import SandboxEvent
 
@@ -1070,7 +1101,9 @@ def get_session_transcript(db: DatabaseService, session_id: str) -> str | None:
     return None
 
 
-async def get_session_transcript_async(db: DatabaseService, session_id: str) -> str | None:
+async def get_session_transcript_async(
+    db: DatabaseService, session_id: str
+) -> str | None:
     """
     Retrieve Claude session transcript from database (ASYNC version - non-blocking).
 
@@ -1099,7 +1132,9 @@ async def get_session_transcript_async(db: DatabaseService, session_id: str) -> 
     return None
 
 
-def get_session_transcript_for_task(db: DatabaseService, task_id: str) -> tuple[str | None, str | None]:
+def get_session_transcript_for_task(
+    db: DatabaseService, task_id: str
+) -> tuple[str | None, str | None]:
     """
     Retrieve Claude session transcript by task_id (SYNC version).
 
@@ -1334,7 +1369,9 @@ async def post_sandbox_event(
                                 )
                             )
                         else:
-                            logger.warning(f"Criterion {criterion_id} not found for update")
+                            logger.warning(
+                                f"Criterion {criterion_id} not found for update"
+                            )
 
             if task_id:
                 task_queue = TaskQueueService(db, event_bus=get_event_bus())
@@ -1365,7 +1402,10 @@ async def post_sandbox_event(
                         "stop_reason": event.event_data.get("stop_reason"),
                     }
                     # Include branch name for validation workflow
-                    if "branch_name" in event.event_data and event.event_data["branch_name"]:
+                    if (
+                        "branch_name" in event.event_data
+                        and event.event_data["branch_name"]
+                    ):
                         result["branch_name"] = event.event_data["branch_name"]
                     # Include final output if available
                     if "final_output" in event.event_data:
@@ -1388,18 +1428,20 @@ async def post_sandbox_event(
 
                     # Create code_changes artifact if code was pushed
                     if code_pushed or pr_created:
-                        artifacts.append({
-                            "type": "code_changes",
-                            "path": pr_url,
-                            "content": {
-                                "has_tests": tests_passed,
-                                "branch_name": result.get("branch_name"),
-                                "pr_created": pr_created,
-                                "pr_url": pr_url,
-                                "pr_number": pr_number,
-                                "files_changed": files_changed,
+                        artifacts.append(
+                            {
+                                "type": "code_changes",
+                                "path": pr_url,
+                                "content": {
+                                    "has_tests": tests_passed,
+                                    "branch_name": result.get("branch_name"),
+                                    "pr_created": pr_created,
+                                    "pr_url": pr_url,
+                                    "pr_number": pr_number,
+                                    "files_changed": files_changed,
+                                },
                             }
-                        })
+                        )
 
                     # Create test_coverage artifact if tests passed
                     if tests_passed:
@@ -1420,21 +1462,23 @@ async def post_sandbox_event(
                                 if check.get("state") == "completed"
                             )
 
-                        artifacts.append({
-                            "type": "test_coverage",
-                            "content": {
-                                "percentage": 80,  # Default - CI passed implies adequate coverage
-                                "all_passed": True,
-                                "has_tests": True,
-                                **test_details,
+                        artifacts.append(
+                            {
+                                "type": "test_coverage",
+                                "content": {
+                                    "percentage": 80,  # Default - CI passed implies adequate coverage
+                                    "all_passed": True,
+                                    "has_tests": True,
+                                    **test_details,
+                                },
                             }
-                        })
+                        )
 
                     if artifacts:
                         result["artifacts"] = artifacts
                         logger.info(
                             f"Task {task_id} generated {len(artifacts)} artifacts for phase gate",
-                            extra={"artifact_types": [a["type"] for a in artifacts]}
+                            extra={"artifact_types": [a["type"] for a in artifacts]},
                         )
 
                     # Handle completion events:
@@ -1461,7 +1505,9 @@ async def post_sandbox_event(
                                     "validation_type": "in_sandbox",
                                 },
                             )
-                            logger.info(f"Successfully updated task {task_id} to completed")
+                            logger.info(
+                                f"Successfully updated task {task_id} to completed"
+                            )
                         else:
                             # In-sandbox validation failed
                             logger.info(
@@ -1473,25 +1519,37 @@ async def post_sandbox_event(
                         # This is an external validator agent completion
                         validation_feedback = event.event_data.get(
                             "validation_feedback",
-                            "Validation passed" if validation_passed else "Validation failed"
+                            (
+                                "Validation passed"
+                                if validation_passed
+                                else "Validation failed"
+                            ),
                         )
                         logger.info(
                             f"Validator completed for task {task_id}: passed={validation_passed}",
-                            extra={"validation_feedback": validation_feedback}
+                            extra={"validation_feedback": validation_feedback},
                         )
 
                         # Call handle_validation_result to properly update task status
                         from omoi_os.services.task_validator import get_task_validator
 
-                        validator_service = get_task_validator(db=db, event_bus=get_event_bus())
+                        validator_service = get_task_validator(
+                            db=db, event_bus=get_event_bus()
+                        )
                         await validator_service.handle_validation_result(
                             task_id=task_id,
-                            validator_agent_id=event.event_data.get("agent_id", f"validator-{sandbox_id[:8]}"),
+                            validator_agent_id=event.event_data.get(
+                                "agent_id", f"validator-{sandbox_id[:8]}"
+                            ),
                             passed=validation_passed or False,
                             feedback=validation_feedback,
                             evidence={
-                                "tests_passed": event.event_data.get("tests_passed", False),
-                                "code_pushed": event.event_data.get("code_pushed", False),
+                                "tests_passed": event.event_data.get(
+                                    "tests_passed", False
+                                ),
+                                "code_pushed": event.event_data.get(
+                                    "code_pushed", False
+                                ),
                                 "pr_created": event.event_data.get("pr_created", False),
                                 "pr_url": event.event_data.get("pr_url"),
                             },
@@ -1527,25 +1585,36 @@ async def post_sandbox_event(
 
                                 if task_obj and task_obj.ticket_id:
                                     ticket_result = await cost_session.execute(
-                                        select(Ticket).where(Ticket.id == task_obj.ticket_id)
+                                        select(Ticket).where(
+                                            Ticket.id == task_obj.ticket_id
+                                        )
                                     )
                                     ticket_obj = ticket_result.scalar_one_or_none()
 
                                     if ticket_obj and ticket_obj.project_id:
                                         project_result = await cost_session.execute(
-                                            select(Project).where(Project.id == ticket_obj.project_id)
+                                            select(Project).where(
+                                                Project.id == ticket_obj.project_id
+                                            )
                                         )
-                                        project_obj = project_result.scalar_one_or_none()
+                                        project_obj = (
+                                            project_result.scalar_one_or_none()
+                                        )
 
                                         if project_obj and project_obj.organization_id:
                                             billing_result = await cost_session.execute(
                                                 select(BillingAccount).where(
-                                                    BillingAccount.organization_id == project_obj.organization_id
+                                                    BillingAccount.organization_id
+                                                    == project_obj.organization_id
                                                 )
                                             )
-                                            billing_account = billing_result.scalar_one_or_none()
+                                            billing_account = (
+                                                billing_result.scalar_one_or_none()
+                                            )
                                             if billing_account:
-                                                billing_account_id = str(billing_account.id)
+                                                billing_account_id = str(
+                                                    billing_account.id
+                                                )
 
                             # Record the cost
                             cost_service = CostTrackingService(db)
@@ -1556,7 +1625,9 @@ async def post_sandbox_event(
                                 input_tokens=input_tokens,
                                 output_tokens=output_tokens,
                                 model=model,
-                                agent_id=task_obj.assigned_agent_id if task_obj else None,
+                                agent_id=(
+                                    task_obj.assigned_agent_id if task_obj else None
+                                ),
                                 billing_account_id=billing_account_id,
                             )
                             logger.info(
@@ -1678,7 +1749,9 @@ async def post_sandbox_event(
                                 spec.progress = 100.0
                                 spec.updated_at = utc_now()
                                 await session.commit()
-                                logger.info(f"Spec {spec_id} marked as completed (100%)")
+                                logger.info(
+                                    f"Spec {spec_id} marked as completed (100%)"
+                                )
                     # Note: spec.criterion_met is handled above at the top level
                     # (before task_id check) to work with both task-based and spec-based events
                 else:
@@ -1757,8 +1830,12 @@ class TrajectorySummaryResponse(BaseModel):
     total_events: int  # Total including heartbeats
     trajectory_events: int  # Count excluding heartbeats and noise
     # Cursor-based pagination
-    next_cursor: Optional[str] = None  # ID of oldest event in this batch (for loading older)
-    prev_cursor: Optional[str] = None  # ID of newest event in this batch (for loading newer)
+    next_cursor: Optional[str] = (
+        None  # ID of oldest event in this batch (for loading older)
+    )
+    prev_cursor: Optional[str] = (
+        None  # ID of newest event in this batch (for loading newer)
+    )
     has_more: bool = False  # Whether there are more events to load
 
 
@@ -1922,11 +1999,10 @@ async def get_sandbox_monitoring_status():
     statuses = monitor.get_all_sandbox_status()
 
     # Compute summary statistics
-    spec_sandbox_count = sum(
-        1 for s in statuses if s["sandbox_id"].startswith("spec-")
-    )
+    spec_sandbox_count = sum(1 for s in statuses if s["sandbox_id"].startswith("spec-"))
     stuck_count = sum(
-        1 for s in statuses
+        1
+        for s in statuses
         if s.get("activity", {}).get("is_idle")
         or (s.get("phase_status", {}) or {}).get("is_stuck_between_phases")
     )
@@ -2146,7 +2222,7 @@ async def query_trajectory_summary_async(
     Returns:
         Dict with events, heartbeat_summary, counts, and pagination cursors
     """
-    from sqlalchemy import func, select, and_, or_
+    from sqlalchemy import func, select, and_
 
     from omoi_os.models.sandbox_event import SandboxEvent
 
@@ -2201,14 +2277,12 @@ async def query_trajectory_summary_async(
             if direction == "older":
                 # Get events older than cursor (created_at < cursor's created_at)
                 pagination_filter = and_(
-                    base_filter,
-                    SandboxEvent.created_at < cursor_timestamp
+                    base_filter, SandboxEvent.created_at < cursor_timestamp
                 )
             else:
                 # Get events newer than cursor (created_at > cursor's created_at)
                 pagination_filter = and_(
-                    base_filter,
-                    SandboxEvent.created_at > cursor_timestamp
+                    base_filter, SandboxEvent.created_at > cursor_timestamp
                 )
         else:
             pagination_filter = base_filter
@@ -2265,7 +2339,9 @@ async def query_trajectory_summary_async(
             return False
 
         # Apply noise filter
-        filtered_events = [e for e in trajectory_events if not is_noisy_explore_event(e)]
+        filtered_events = [
+            e for e in trajectory_events if not is_noisy_explore_event(e)
+        ]
 
         trajectory_count = len(filtered_events)
 
@@ -2308,9 +2384,15 @@ async def query_trajectory_summary_async(
 @router.get("/{sandbox_id}/trajectory", response_model=TrajectorySummaryResponse)
 async def get_sandbox_trajectory(
     sandbox_id: str,
-    limit: int = Query(default=100, le=1000, ge=1, description="Max events to return per page"),
-    cursor: Optional[str] = Query(default=None, description="Event ID cursor for pagination"),
-    direction: str = Query(default="older", description="Load 'older' or 'newer' events from cursor"),
+    limit: int = Query(
+        default=100, le=1000, ge=1, description="Max events to return per page"
+    ),
+    cursor: Optional[str] = Query(
+        default=None, description="Event ID cursor for pagination"
+    ),
+    direction: str = Query(
+        default="older", description="Load 'older' or 'newer' events from cursor"
+    ),
 ) -> TrajectorySummaryResponse:
     """
     Get trajectory summary for a sandbox with heartbeat aggregation and cursor-based pagination.
@@ -2380,6 +2462,7 @@ async def get_sandbox_trajectory(
         )
     except Exception as e:
         import traceback
+
         error_details = traceback.format_exc()
         logger.error(
             f"Failed to get trajectory for sandbox {sandbox_id}: {e}\n{error_details}"
@@ -2622,7 +2705,9 @@ class TaskCompleteRequest(BaseModel):
     """Request schema for sandbox to report task completion."""
 
     task_id: str = Field(..., description="Task ID that completed")
-    success: bool = Field(default=True, description="Whether task completed successfully")
+    success: bool = Field(
+        default=True, description="Whether task completed successfully"
+    )
     result: Optional[dict] = Field(
         default=None, description="Task result data (output, artifacts, etc.)"
     )
@@ -2727,8 +2812,10 @@ async def report_task_complete(
 
                     if request.task_id in depends_on:
                         # Check if all dependencies are now completed
-                        all_deps_complete = await task_queue._check_dependencies_complete_async(
-                            session, task
+                        all_deps_complete = (
+                            await task_queue._check_dependencies_complete_async(
+                                session, task
+                            )
                         )
                         if all_deps_complete:
                             unblocked_task_ids.append(str(task.id))

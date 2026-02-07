@@ -29,7 +29,9 @@ import sys
 from uuid import uuid4
 
 # Ensure we can import from omoi_os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(
+    0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
 
 # Set environment before imports
 os.environ.setdefault("TASK_VALIDATION_ENABLED", "true")
@@ -45,9 +47,14 @@ def create_test_data(db):
 
     with db.get_session() as session:
         # Create or get test user
-        user = session.query(User).filter(User.email == "validation-test@example.com").first()
+        user = (
+            session.query(User)
+            .filter(User.email == "validation-test@example.com")
+            .first()
+        )
         if not user:
             from omoi_os.services.auth_service import AuthService
+
             auth = AuthService(
                 db=db,
                 jwt_secret="test-secret",
@@ -124,8 +131,6 @@ def create_test_data(db):
 async def test_validation_pass(db, event_bus, test_data, dry_run=False):
     """Test validation that passes on first attempt."""
     from omoi_os.services.task_validator import TaskValidatorService
-    from omoi_os.models.task import Task
-    from omoi_os.models.validation_review import ValidationReview
     from unittest.mock import AsyncMock, patch
 
     print("\n" + "=" * 60)
@@ -136,7 +141,9 @@ async def test_validation_pass(db, event_bus, test_data, dry_run=False):
 
     if dry_run:
         # Mock the spawner
-        with patch.object(validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+        with patch.object(
+            validator, "_spawn_validator", new_callable=AsyncMock
+        ) as mock_spawn:
             validator_agent_id = str(uuid4())
             mock_spawn.return_value = {
                 "sandbox_id": f"validator-sandbox-{uuid4().hex[:8]}",
@@ -158,9 +165,13 @@ async def test_validation_pass(db, event_bus, test_data, dry_run=False):
         print(f"📋 Validation requested: {validation_id}")
         print("⏳ Waiting for validator to complete (check Daytona logs)...")
         print("   When validator finishes, run:")
-        print(f'   curl -X POST http://localhost:18000/api/v1/sandbox/<validator-sandbox>/validation-result \\')
-        print(f'     -H "Content-Type: application/json" \\')
-        print(f'     -d \'{{"task_id": "{test_data["task_id"]}", "passed": true, "feedback": "All tests pass"}}\'')
+        print(
+            "   curl -X POST http://localhost:18000/api/v1/sandbox/<validator-sandbox>/validation-result \\"
+        )
+        print('     -H "Content-Type: application/json" \\')
+        print(
+            f'     -d \'{{"task_id": "{test_data["task_id"]}", "passed": true, "feedback": "All tests pass"}}\''
+        )
 
 
 async def _run_validation_pass(validator, db, test_data, validator_agent_id):
@@ -185,7 +196,9 @@ async def _run_validation_pass(validator, db, test_data, validator_agent_id):
     with db.get_session() as session:
         task = session.get(Task, test_data["task_id"])
         print(f"   Task status: {task.status}")
-        assert task.status == "pending_validation", f"Expected pending_validation, got {task.status}"
+        assert (
+            task.status == "pending_validation"
+        ), f"Expected pending_validation, got {task.status}"
         print("   ✅ Task is pending_validation")
 
     # Step 2: Simulate validation passing
@@ -210,9 +223,11 @@ async def _run_validation_pass(validator, db, test_data, validator_agent_id):
         assert task.status == "completed", f"Expected completed, got {task.status}"
         print("   ✅ Task is completed")
 
-        reviews = session.query(ValidationReview).filter(
-            ValidationReview.task_id == test_data["task_id"]
-        ).all()
+        reviews = (
+            session.query(ValidationReview)
+            .filter(ValidationReview.task_id == test_data["task_id"])
+            .all()
+        )
         print(f"   Validation reviews: {len(reviews)}")
         assert len(reviews) == 1
         assert reviews[0].validation_passed is True
@@ -226,7 +241,6 @@ async def _run_validation_pass(validator, db, test_data, validator_agent_id):
 async def test_validation_fail(db, event_bus, test_data, dry_run=False):
     """Test validation that fails."""
     from omoi_os.services.task_validator import TaskValidatorService
-    from omoi_os.models.task import Task
     from unittest.mock import AsyncMock, patch
 
     print("\n" + "=" * 60)
@@ -236,7 +250,9 @@ async def test_validation_fail(db, event_bus, test_data, dry_run=False):
     validator = TaskValidatorService(db=db, event_bus=event_bus)
 
     if dry_run:
-        with patch.object(validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+        with patch.object(
+            validator, "_spawn_validator", new_callable=AsyncMock
+        ) as mock_spawn:
             validator_agent_id = str(uuid4())
             mock_spawn.return_value = {
                 "sandbox_id": f"validator-sandbox-{uuid4().hex[:8]}",
@@ -257,7 +273,10 @@ async def _run_validation_fail(validator, db, test_data, validator_agent_id):
     await validator.request_validation(
         task_id=test_data["task_id"],
         sandbox_id=test_data["sandbox_id"],
-        implementation_result={"success": True, "branch_name": test_data["branch_name"]},
+        implementation_result={
+            "success": True,
+            "branch_name": test_data["branch_name"],
+        },
     )
 
     with db.get_session() as session:
@@ -289,10 +308,16 @@ async def _run_validation_fail(validator, db, test_data, validator_agent_id):
     with db.get_session() as session:
         task = session.get(Task, test_data["task_id"])
         print(f"   Task status: {task.status}")
-        assert task.status == "needs_revision", f"Expected needs_revision, got {task.status}"
+        assert (
+            task.status == "needs_revision"
+        ), f"Expected needs_revision, got {task.status}"
         print("   ✅ Task is needs_revision")
-        print(f"   Revision feedback: {task.result.get('revision_feedback', '')[:50]}...")
-        print(f"   Recommendations: {len(task.result.get('revision_recommendations', []))} items")
+        print(
+            f"   Revision feedback: {task.result.get('revision_feedback', '')[:50]}..."
+        )
+        print(
+            f"   Recommendations: {len(task.result.get('revision_recommendations', []))} items"
+        )
 
     print("\n" + "=" * 60)
     print("✅ VALIDATION FAIL TEST COMPLETED SUCCESSFULLY")
@@ -316,7 +341,9 @@ async def test_validation_retry(db, event_bus, test_data, dry_run=False):
         print("⚠️  Retry test requires --dry-run mode")
         return
 
-    with patch.object(validator, '_spawn_validator', new_callable=AsyncMock) as mock_spawn:
+    with patch.object(
+        validator, "_spawn_validator", new_callable=AsyncMock
+    ) as mock_spawn:
         # First validation - FAIL
         validator_agent_id_1 = str(uuid4())
         mock_spawn.return_value = {
@@ -328,7 +355,10 @@ async def test_validation_retry(db, event_bus, test_data, dry_run=False):
         await validator.request_validation(
             task_id=test_data["task_id"],
             sandbox_id=test_data["sandbox_id"],
-            implementation_result={"success": True, "branch_name": test_data["branch_name"]},
+            implementation_result={
+                "success": True,
+                "branch_name": test_data["branch_name"],
+            },
         )
 
         print("❌ Step 2: First validation FAILS...")
@@ -375,7 +405,7 @@ async def test_validation_retry(db, event_bus, test_data, dry_run=False):
         with db.get_session() as session:
             task = session.get(Task, test_data["task_id"])
             print(f"   Iteration: {task.result.get('validation_iteration')}")
-            assert task.result.get('validation_iteration') == 2
+            assert task.result.get("validation_iteration") == 2
 
         print("✅ Step 5: Second validation PASSES...")
         await validator.handle_validation_result(
@@ -391,9 +421,12 @@ async def test_validation_retry(db, event_bus, test_data, dry_run=False):
             assert task.status == "completed"
             print(f"   Final status: {task.status}")
 
-            reviews = session.query(ValidationReview).filter(
-                ValidationReview.task_id == test_data["task_id"]
-            ).order_by(ValidationReview.iteration_number).all()
+            reviews = (
+                session.query(ValidationReview)
+                .filter(ValidationReview.task_id == test_data["task_id"])
+                .order_by(ValidationReview.iteration_number)
+                .all()
+            )
             print(f"   Total reviews: {len(reviews)}")
             assert len(reviews) == 2
             assert reviews[0].validation_passed is False
@@ -406,10 +439,18 @@ async def test_validation_retry(db, event_bus, test_data, dry_run=False):
 
 async def main():
     parser = argparse.ArgumentParser(description="Test the validation flow")
-    parser.add_argument("--pass", dest="test_pass", action="store_true", help="Test passing validation")
-    parser.add_argument("--fail", dest="test_fail", action="store_true", help="Test failing validation")
-    parser.add_argument("--retry", action="store_true", help="Test fail->pass retry flow")
-    parser.add_argument("--dry-run", action="store_true", help="Don't spawn real sandboxes")
+    parser.add_argument(
+        "--pass", dest="test_pass", action="store_true", help="Test passing validation"
+    )
+    parser.add_argument(
+        "--fail", dest="test_fail", action="store_true", help="Test failing validation"
+    )
+    parser.add_argument(
+        "--retry", action="store_true", help="Test fail->pass retry flow"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Don't spawn real sandboxes"
+    )
     args = parser.parse_args()
 
     if not any([args.test_pass, args.test_fail, args.retry]):
@@ -421,7 +462,9 @@ async def main():
     from omoi_os.services.database import DatabaseService
     from omoi_os.services.event_bus import EventBusService
 
-    db_url = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db")
+    db_url = os.getenv(
+        "DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
+    )
     redis_url = os.getenv("REDIS_URL", "redis://localhost:16379")
 
     print("🔧 Initializing services...")

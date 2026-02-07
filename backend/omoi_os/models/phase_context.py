@@ -19,7 +19,9 @@ class PhaseContext(Base):
 
     __tablename__ = "phase_context"
 
-    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid4()))
+    id: Mapped[str] = mapped_column(
+        String, primary_key=True, default=lambda: str(uuid4())
+    )
     ticket_id: Mapped[str] = mapped_column(
         String,
         ForeignKey("tickets.id", ondelete="CASCADE"),
@@ -34,7 +36,3 @@ class PhaseContext(Base):
         nullable=False,
         default=utc_now,
     )
-
-
-
-

@@ -14,7 +14,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-
 # revision identifiers, used by Alembic.
 revision: str = "051_add_user_id_to_specs"
 down_revision: Union[str, Sequence[str], None] = "050_add_promo_codes"

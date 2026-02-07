@@ -39,7 +39,9 @@ class ContextSummarizer:
             context_json=context_str,
         )
 
-        system_prompt = template_service.render_system_prompt("system/context_analysis.md.j2")
+        system_prompt = template_service.render_system_prompt(
+            "system/context_analysis.md.j2"
+        )
 
         # Run extraction using LLM service
         llm = get_llm_service()
@@ -118,7 +120,3 @@ def _safe_iterable(value: Any) -> list[Any]:
     if isinstance(value, (list, tuple, set)):
         return list(value)
     return [value]
-
-
-
-

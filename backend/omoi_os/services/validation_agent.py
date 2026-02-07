@@ -85,6 +85,8 @@ class ValidationAgent:
             "feedback": f"Artifacts for ticket {ticket_id} in {phase_id} reviewed. "
             f"Found {len(artifacts)} artifacts.",
             "blocking_reasons": [] if passed else ["No artifacts found"],
-            "completeness_score": min(1.0, len(artifacts) / 3.0),  # Assume 3+ is complete
+            "completeness_score": min(
+                1.0, len(artifacts) / 3.0
+            ),  # Assume 3+ is complete
             "missing_artifacts": [],
         }

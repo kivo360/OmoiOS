@@ -29,6 +29,7 @@ import yaml
 @dataclass
 class ValidationResult:
     """Result of validating a document."""
+
     file: Path
     doc_type: str
     errors: list[str] = field(default_factory=list)
@@ -179,7 +180,9 @@ def validate_ticket(file_path: Path) -> ValidationResult:
     if "id" not in frontmatter:
         result.errors.append("Missing 'id' field in frontmatter")
     elif not frontmatter["id"].startswith("TKT-"):
-        result.errors.append(f"Invalid ticket ID format: {frontmatter['id']} (expected TKT-XXX)")
+        result.errors.append(
+            f"Invalid ticket ID format: {frontmatter['id']} (expected TKT-XXX)"
+        )
 
     # Check for required fields in frontmatter
     required_fields = {
@@ -199,17 +202,23 @@ def validate_ticket(file_path: Path) -> ValidationResult:
     # Validate status value
     valid_statuses = ["backlog", "ready", "in_progress", "review", "done", "blocked"]
     if frontmatter.get("status") and frontmatter["status"] not in valid_statuses:
-        result.warnings.append(f"Non-standard status: {frontmatter['status']} (expected one of: {', '.join(valid_statuses)})")
+        result.warnings.append(
+            f"Non-standard status: {frontmatter['status']} (expected one of: {', '.join(valid_statuses)})"
+        )
 
     # Validate priority value
     valid_priorities = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
     if frontmatter.get("priority") and frontmatter["priority"] not in valid_priorities:
-        result.warnings.append(f"Non-standard priority: {frontmatter['priority']} (expected one of: {', '.join(valid_priorities)})")
+        result.warnings.append(
+            f"Non-standard priority: {frontmatter['priority']} (expected one of: {', '.join(valid_priorities)})"
+        )
 
     # Validate estimate value
     valid_estimates = ["XS", "S", "M", "L", "XL"]
     if frontmatter.get("estimate") and frontmatter["estimate"] not in valid_estimates:
-        result.warnings.append(f"Non-standard estimate: {frontmatter['estimate']} (expected one of: {', '.join(valid_estimates)})")
+        result.warnings.append(
+            f"Non-standard estimate: {frontmatter['estimate']} (expected one of: {', '.join(valid_estimates)})"
+        )
 
     # Check for acceptance criteria in body
     if "## Acceptance Criteria" not in body:
@@ -217,7 +226,9 @@ def validate_ticket(file_path: Path) -> ValidationResult:
 
     # Check for requirements traceability
     if not frontmatter.get("requirements"):
-        result.warnings.append("No requirements linked (consider adding requirements field)")
+        result.warnings.append(
+            "No requirements linked (consider adding requirements field)"
+        )
 
     # Check for dependency structure
     deps = frontmatter.get("dependencies", {})
@@ -244,7 +255,9 @@ def validate_task(file_path: Path) -> ValidationResult:
     if "id" not in frontmatter:
         result.errors.append("Missing 'id' field in frontmatter")
     elif not frontmatter["id"].startswith("TSK-"):
-        result.errors.append(f"Invalid task ID format: {frontmatter['id']} (expected TSK-XXX)")
+        result.errors.append(
+            f"Invalid task ID format: {frontmatter['id']} (expected TSK-XXX)"
+        )
 
     # Check for required fields in frontmatter
     required_fields = {
@@ -261,18 +274,26 @@ def validate_task(file_path: Path) -> ValidationResult:
             result.errors.append(f"Missing required field: {field_key} ({description})")
 
     # Check parent ticket reference format
-    if frontmatter.get("parent_ticket") and not frontmatter["parent_ticket"].startswith("TKT-"):
-        result.errors.append(f"Invalid parent_ticket format: {frontmatter['parent_ticket']} (expected TKT-XXX)")
+    if frontmatter.get("parent_ticket") and not frontmatter["parent_ticket"].startswith(
+        "TKT-"
+    ):
+        result.errors.append(
+            f"Invalid parent_ticket format: {frontmatter['parent_ticket']} (expected TKT-XXX)"
+        )
 
     # Validate status value
     valid_statuses = ["pending", "in_progress", "review", "done", "blocked"]
     if frontmatter.get("status") and frontmatter["status"] not in valid_statuses:
-        result.warnings.append(f"Non-standard status: {frontmatter['status']} (expected one of: {', '.join(valid_statuses)})")
+        result.warnings.append(
+            f"Non-standard status: {frontmatter['status']} (expected one of: {', '.join(valid_statuses)})"
+        )
 
     # Validate estimate value
     valid_estimates = ["XS", "S", "M", "L", "XL"]
     if frontmatter.get("estimate") and frontmatter["estimate"] not in valid_estimates:
-        result.warnings.append(f"Non-standard estimate: {frontmatter['estimate']} (expected one of: {', '.join(valid_estimates)})")
+        result.warnings.append(
+            f"Non-standard estimate: {frontmatter['estimate']} (expected one of: {', '.join(valid_estimates)})"
+        )
 
     # Check for objective/description in body
     if "## Objective" not in body and "## Description" not in body:
@@ -359,28 +380,14 @@ def main():
     parser.add_argument(
         "--path",
         default=None,
-        help="Path to .omoi_os directory (auto-detected if not specified)"
+        help="Path to .omoi_os directory (auto-detected if not specified)",
     )
     parser.add_argument(
-        "--requirements",
-        action="store_true",
-        help="Validate only requirements"
+        "--requirements", action="store_true", help="Validate only requirements"
     )
-    parser.add_argument(
-        "--designs",
-        action="store_true",
-        help="Validate only designs"
-    )
-    parser.add_argument(
-        "--tickets",
-        action="store_true",
-        help="Validate only tickets"
-    )
-    parser.add_argument(
-        "--tasks",
-        action="store_true",
-        help="Validate only tasks"
-    )
+    parser.add_argument("--designs", action="store_true", help="Validate only designs")
+    parser.add_argument("--tickets", action="store_true", help="Validate only tickets")
+    parser.add_argument("--tasks", action="store_true", help="Validate only tasks")
 
     args = parser.parse_args()
 

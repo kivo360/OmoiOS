@@ -64,9 +64,7 @@ class TestReasoningIntegration:
 
     def test_ticket_timeline(self, client: TestClient, sample_ticket):
         """Test getting timeline for a real ticket."""
-        response = client.get(
-            f"/api/v1/reasoning/timeline/ticket/{sample_ticket.id}"
-        )
+        response = client.get(f"/api/v1/reasoning/timeline/ticket/{sample_ticket.id}")
 
         assert response.status_code == 200
         data = response.json()

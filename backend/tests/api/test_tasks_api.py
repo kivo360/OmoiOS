@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from uuid import uuid4
 
 from omoi_os.models.task import Task
-from omoi_os.models.ticket import Ticket
 
 
 @pytest.mark.unit

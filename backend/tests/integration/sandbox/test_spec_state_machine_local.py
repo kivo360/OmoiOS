@@ -7,7 +7,6 @@ without requiring a full backend setup (no database, no redis, etc).
 The tests simulate what happens when the worker runs in a Daytona sandbox.
 """
 
-import asyncio
 import json
 import os
 import shutil
@@ -109,14 +108,18 @@ class TestSpecStateMachineLocalExecution:
         # Create a checkpoint file
         checkpoint_dir = Path(temp_workspace) / ".omoi_os" / "checkpoints"
         checkpoint_dir.mkdir(parents=True)
-        (checkpoint_dir / "state.json").write_text(json.dumps({
-            "title": "My Spec",
-            "description": "A test spec",
-            "current_phase": "requirements",
-            "phase_data": {"explore": {"project_type": "web_app"}},
-            "phase_attempts": {"explore": 1},
-            "session_transcripts": {},
-        }))
+        (checkpoint_dir / "state.json").write_text(
+            json.dumps(
+                {
+                    "title": "My Spec",
+                    "description": "A test spec",
+                    "current_phase": "requirements",
+                    "phase_data": {"explore": {"project_type": "web_app"}},
+                    "phase_attempts": {"explore": 1},
+                    "session_transcripts": {},
+                }
+            )
+        )
 
         machine = SpecStateMachine(
             spec_id="test-spec-123",
@@ -145,7 +148,7 @@ class TestSpecStateMachineLocalExecution:
         # Write phase data
         await machine._write_file_checkpoint(
             SpecPhase.EXPLORE,
-            {"project_type": "api", "tech_stack": ["python", "fastapi"]}
+            {"project_type": "api", "tech_stack": ["python", "fastapi"]},
         )
 
         # Verify file was created
@@ -225,7 +228,9 @@ class TestSpecStateMachineEvaluators:
         )
 
         assert isinstance(machine.evaluators[SpecPhase.EXPLORE], ExplorationEvaluator)
-        assert isinstance(machine.evaluators[SpecPhase.REQUIREMENTS], RequirementEvaluator)
+        assert isinstance(
+            machine.evaluators[SpecPhase.REQUIREMENTS], RequirementEvaluator
+        )
         assert isinstance(machine.evaluators[SpecPhase.DESIGN], DesignEvaluator)
         assert isinstance(machine.evaluators[SpecPhase.TASKS], TaskEvaluator)
 
@@ -310,10 +315,13 @@ class TestSpecStateMachinePrompts:
     def mock_spec(self):
         """Create a mock spec for prompt testing."""
         from omoi_os.workers.spec_state_machine import _MockSpec
+
         spec = _MockSpec("test-123", "Test Feature", "Implement user authentication")
         return spec
 
-    def test_explore_prompt_includes_spec_info(self, mock_db, temp_workspace, mock_spec):
+    def test_explore_prompt_includes_spec_info(
+        self, mock_db, temp_workspace, mock_spec
+    ):
         """Test explore prompt includes spec title and description."""
         from omoi_os.workers.spec_state_machine import SpecStateMachine
 
@@ -329,7 +337,9 @@ class TestSpecStateMachinePrompts:
         assert "authentication" in prompt.lower()
         assert len(prompt) > 100  # Should be substantive
 
-    def test_requirements_prompt_builds_correctly(self, mock_db, temp_workspace, mock_spec):
+    def test_requirements_prompt_builds_correctly(
+        self, mock_db, temp_workspace, mock_spec
+    ):
         """Test requirements prompt includes exploration data."""
         from omoi_os.workers.spec_state_machine import SpecStateMachine
 
@@ -441,7 +451,7 @@ class TestSpecStateMachinePhaseTransitions:
 
     def test_phase_timeouts_are_reasonable(self, mock_db, temp_workspace):
         """Test phase timeouts are reasonable values."""
-        from omoi_os.workers.spec_state_machine import SpecPhase, SpecStateMachine
+        from omoi_os.workers.spec_state_machine import SpecStateMachine
 
         machine = SpecStateMachine(
             spec_id="test",
@@ -524,11 +534,15 @@ class TestWorkerPhaseAwareRouting:
         }
         encoded = base64.b64encode(json.dumps(phase_data).encode()).decode()
 
-        with patch.dict(os.environ, {
-            "SPEC_ID": "test",
-            "SPEC_PHASE": "design",
-            "PHASE_DATA_B64": encoded,
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "SPEC_ID": "test",
+                "SPEC_PHASE": "design",
+                "PHASE_DATA_B64": encoded,
+            },
+            clear=False,
+        ):
             from omoi_os.workers.claude_sandbox_worker import WorkerConfig
 
             config = WorkerConfig()

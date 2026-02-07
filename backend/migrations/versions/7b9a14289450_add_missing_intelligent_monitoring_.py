@@ -14,7 +14,6 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import NoSuchTableError
 
-
 # revision identifiers, used by Alembic.
 revision: str = "7b9a14289450"
 down_revision: Union[str, Sequence[str], None] = "028_add_persistence_dir_to_tasks"

@@ -23,9 +23,7 @@ class Recommendation(BaseModel):
     """A recommendation for resolving a workflow issue."""
 
     description: str = Field(..., description="Description of the recommendation")
-    priority: str = Field(
-        ..., description="Priority: CRITICAL, HIGH, MEDIUM, or LOW"
-    )
+    priority: str = Field(..., description="Priority: CRITICAL, HIGH, MEDIUM, or LOW")
     estimated_effort: str = Field(..., description="Estimated effort: S, M, or L")
     creates_followup_task: bool = Field(
         default=False, description="Whether this should create a follow-up task"
@@ -47,4 +45,3 @@ class DiagnosticAnalysis(BaseModel):
     confidence: float = Field(
         ..., ge=0.0, le=1.0, description="Overall confidence in the analysis"
     )
-

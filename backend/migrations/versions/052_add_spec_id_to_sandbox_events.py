@@ -13,7 +13,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "052_add_spec_id_to_sandbox_events"
 down_revision: Union[str, Sequence[str], None] = "051_add_user_id_to_specs"
@@ -58,7 +57,9 @@ def downgrade() -> None:
     op.drop_index("ix_sandbox_events_spec_id", table_name="sandbox_events")
 
     # Drop foreign key
-    op.drop_constraint("fk_sandbox_events_spec_id", "sandbox_events", type_="foreignkey")
+    op.drop_constraint(
+        "fk_sandbox_events_spec_id", "sandbox_events", type_="foreignkey"
+    )
 
     # Drop column
     op.drop_column("sandbox_events", "spec_id")

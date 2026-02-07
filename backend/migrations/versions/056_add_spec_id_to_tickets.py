@@ -13,7 +13,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "056_add_spec_id_to_tickets"
 down_revision: Union[str, Sequence[str], None] = "055_add_ticket_pull_requests"

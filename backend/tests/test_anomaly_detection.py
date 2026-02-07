@@ -1,8 +1,7 @@
 """Tests for anomaly detection system (REQ-FT-AN-001, REQ-FT-AN-002, REQ-FT-AN-003)."""
 
 import pytest
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import timedelta
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_baseline import AgentBaseline
@@ -10,12 +9,8 @@ from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.services.baseline_learner import BaselineLearner
 from omoi_os.services.composite_anomaly_scorer import CompositeAnomalyScorer
-from omoi_os.services.database import DatabaseService
 from omoi_os.services.monitor import MonitorService
-from omoi_os.services.event_bus import EventBusService
 from omoi_os.utils.datetime import utc_now
-
-
 
 
 @pytest.fixture
@@ -198,7 +193,10 @@ class TestCompositeAnomalyScorer:
 
         # Compute z-score for high latency
         z_score = composite_scorer.compute_latency_z_score(
-            agent.id, 130.0, agent, baseline_learner.get_baseline(agent.agent_type, agent.phase_id)
+            agent.id,
+            130.0,
+            agent,
+            baseline_learner.get_baseline(agent.agent_type, agent.phase_id),
         )
 
         # z-score = (130 - 100) / 10 = 3.0
@@ -215,7 +213,10 @@ class TestCompositeAnomalyScorer:
 
         # Compute error rate EMA
         error_rate_score = composite_scorer.compute_error_rate_ema(
-            agent.id, 0.15, agent, baseline_learner.get_baseline(agent.agent_type, agent.phase_id)
+            agent.id,
+            0.15,
+            agent,
+            baseline_learner.get_baseline(agent.agent_type, agent.phase_id),
         )
 
         # Error rate increased from 0.05 to 0.15 (3x increase)
@@ -281,7 +282,9 @@ class TestCompositeAnomalyScorer:
             assert queue_impact > 0.0
             assert queue_impact <= 1.0
 
-    def test_compute_anomaly_score_composite(self, composite_scorer, agent, baseline_learner, db_service, ticket):
+    def test_compute_anomaly_score_composite(
+        self, composite_scorer, agent, baseline_learner, db_service, ticket
+    ):
         """Test composite anomaly score calculation."""
         # Learn baseline
         baseline_learner.learn_baseline(
@@ -316,7 +319,9 @@ class TestCompositeAnomalyScorer:
 class TestMonitorServiceAnomalyDetection:
     """Test MonitorService agent-level anomaly detection (REQ-FT-AN-001)."""
 
-    def test_compute_agent_anomaly_scores(self, monitor_service, agent, db_service, ticket):
+    def test_compute_agent_anomaly_scores(
+        self, monitor_service, agent, db_service, ticket
+    ):
         """Test computing anomaly scores for agents."""
         with db_service.get_session() as session:
             # Create tasks for agent to compute metrics
@@ -352,7 +357,9 @@ class TestMonitorServiceAnomalyDetection:
             updated_agent = session.query(Agent).filter(Agent.id == agent.id).first()
             assert updated_agent.anomaly_score is not None
 
-    def test_consecutive_anomalous_readings(self, monitor_service, agent, db_service, ticket):
+    def test_consecutive_anomalous_readings(
+        self, monitor_service, agent, db_service, ticket
+    ):
         """Test consecutive anomalous readings tracking."""
         # Simulate 3 consecutive high anomaly scores
         for i in range(3):
@@ -383,7 +390,9 @@ class TestMonitorServiceAnomalyDetection:
         if final_result["consecutive_readings"] >= 3:
             assert final_result["should_quarantine"] is True
 
-    def test_baseline_learning_integration(self, monitor_service, agent, db_service, ticket):
+    def test_baseline_learning_integration(
+        self, monitor_service, agent, db_service, ticket
+    ):
         """Test baseline learning integration with MonitorService."""
         # Create successful tasks to learn baseline
         with db_service.get_session() as session:
@@ -403,7 +412,7 @@ class TestMonitorServiceAnomalyDetection:
             session.commit()
 
         # Compute anomaly scores (should learn baseline)
-        results = monitor_service.compute_agent_anomaly_scores(agent_ids=[agent.id])
+        monitor_service.compute_agent_anomaly_scores(agent_ids=[agent.id])
 
         # Check baseline was created
         baseline = monitor_service.baseline_learner.get_baseline(
@@ -412,7 +421,9 @@ class TestMonitorServiceAnomalyDetection:
         assert baseline is not None
         assert baseline.sample_count > 0
 
-    def test_event_publishing_on_anomaly(self, monitor_service, agent, db_service, ticket, event_bus_service):
+    def test_event_publishing_on_anomaly(
+        self, monitor_service, agent, db_service, ticket, event_bus_service
+    ):
         """Test event publishing when anomaly detected."""
         # Create failed tasks to trigger anomaly
         with db_service.get_session() as session:
@@ -454,6 +465,7 @@ class TestAnomalyDetectionIntegration:
 
         # Register agent
         from omoi_os.services.agent_registry import AgentRegistryService
+
         registry = AgentRegistryService(db_service, event_bus_service)
         agent = registry.register_agent(
             agent_type="worker",
@@ -530,6 +542,8 @@ class TestAnomalyDetectionIntegration:
 
         # Final result should indicate quarantine if threshold met
         final_result = results[0]
-        if final_result["anomaly_score"] >= 0.8 and final_result["consecutive_readings"] >= 3:
+        if (
+            final_result["anomaly_score"] >= 0.8
+            and final_result["consecutive_readings"] >= 3
+        ):
             assert final_result["should_quarantine"] is True
-

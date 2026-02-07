@@ -233,14 +233,23 @@ class HeartbeatManager:
                     )
                 elif ack.message:
                     # Log warnings from acknowledgment (e.g., sequence gaps)
-                    logger.debug("Heartbeat acknowledged", agent_id=self.agent_id, message=ack.message)
+                    logger.debug(
+                        "Heartbeat acknowledged",
+                        agent_id=self.agent_id,
+                        message=ack.message,
+                    )
 
                 # Get adaptive interval based on status
                 interval = self._get_interval()
                 time.sleep(interval)
 
             except Exception as e:
-                logger.error("Error in heartbeat loop", agent_id=self.agent_id, error=str(e), exc_info=True)
+                logger.error(
+                    "Error in heartbeat loop",
+                    agent_id=self.agent_id,
+                    error=str(e),
+                    exc_info=True,
+                )
                 # Continue running even if there's an error
                 interval = self._get_interval()
                 time.sleep(interval)
@@ -411,7 +420,7 @@ class AsyncHeartbeatManager:
                 heartbeat_message = await self._create_heartbeat_message_async()
 
                 # Use async method if available, otherwise fall back to sync
-                if hasattr(self.heartbeat_protocol_service, 'receive_heartbeat_async'):
+                if hasattr(self.heartbeat_protocol_service, "receive_heartbeat_async"):
                     ack = await self.heartbeat_protocol_service.receive_heartbeat_async(
                         heartbeat_message
                     )
@@ -444,10 +453,7 @@ class AsyncHeartbeatManager:
             # Non-blocking sleep with early exit support
             interval = await self._get_interval_async()
             try:
-                await asyncio.wait_for(
-                    self._stop_event.wait(),
-                    timeout=interval
-                )
+                await asyncio.wait_for(self._stop_event.wait(), timeout=interval)
                 break  # Stop event was set
             except asyncio.TimeoutError:
                 pass  # Normal timeout, continue loop
@@ -509,7 +515,7 @@ class AsyncTimeoutManager:
         while not self._stop_event.is_set():
             try:
                 # Use async method if available
-                if hasattr(self.task_queue, 'get_timed_out_tasks_async'):
+                if hasattr(self.task_queue, "get_timed_out_tasks_async"):
                     timed_out_tasks = await self.task_queue.get_timed_out_tasks_async()
                 else:
                     timed_out_tasks = self.task_queue.get_timed_out_tasks()
@@ -517,8 +523,10 @@ class AsyncTimeoutManager:
                 for task in timed_out_tasks:
                     try:
                         # Use async method if available
-                        if hasattr(self.task_queue, 'mark_task_timeout_async'):
-                            success = await self.task_queue.mark_task_timeout_async(task.id)
+                        if hasattr(self.task_queue, "mark_task_timeout_async"):
+                            success = await self.task_queue.mark_task_timeout_async(
+                                task.id
+                            )
                         else:
                             success = self.task_queue.mark_task_timeout(task.id)
 
@@ -569,8 +577,7 @@ class AsyncTimeoutManager:
             # Non-blocking sleep with early exit support
             try:
                 await asyncio.wait_for(
-                    self._stop_event.wait(),
-                    timeout=self.interval_seconds
+                    self._stop_event.wait(), timeout=self.interval_seconds
                 )
                 break  # Stop event was set
             except asyncio.TimeoutError:
@@ -588,9 +595,8 @@ class AsyncTimeoutManager:
         """
         async with self.task_queue.db.get_async_session() as session:
             from sqlalchemy import select
-            result = await session.execute(
-                select(Task).filter(Task.id == task.id)
-            )
+
+            result = await session.execute(select(Task).filter(Task.id == task.id))
             current_task = result.scalar_one_or_none()
 
             if not current_task:
@@ -688,16 +694,25 @@ class TimeoutManager:
                                 )
                             )
                         else:
-                            logger.error("Failed to mark task as timed out", task_id=str(task.id))
+                            logger.error(
+                                "Failed to mark task as timed out", task_id=str(task.id)
+                            )
 
                     except Exception as e:
-                        logger.error("Error handling timeout for task", task_id=str(task.id), error=str(e), exc_info=True)
+                        logger.error(
+                            "Error handling timeout for task",
+                            task_id=str(task.id),
+                            error=str(e),
+                            exc_info=True,
+                        )
 
                 # Sleep for the interval
                 time.sleep(self.interval_seconds)
 
             except Exception as e:
-                logger.error("Error in timeout monitoring loop", error=str(e), exc_info=True)
+                logger.error(
+                    "Error in timeout monitoring loop", error=str(e), exc_info=True
+                )
                 # Continue running even if there's an error
                 time.sleep(self.interval_seconds)
 
@@ -744,7 +759,9 @@ class TimeoutManager:
             # Attempt to terminate the OpenHands conversation
             if hasattr(executor, "terminate_conversation"):
                 executor.terminate_conversation()
-                logger.info("Terminated conversation for timed-out task", task_id=str(task.id))
+                logger.info(
+                    "Terminated conversation for timed-out task", task_id=str(task.id)
+                )
             else:
                 logger.warning(
                     "Executor does not support conversation termination",
@@ -752,7 +769,12 @@ class TimeoutManager:
                 )
 
         except Exception as e:
-            logger.error("Error handling timeout for task", task_id=str(task.id), error=str(e), exc_info=True)
+            logger.error(
+                "Error handling timeout for task",
+                task_id=str(task.id),
+                error=str(e),
+                exc_info=True,
+            )
 
 
 def main():
@@ -767,7 +789,7 @@ def main():
     db = DatabaseService(database_url)
     event_bus = EventBusService(redis_url)
     task_queue = TaskQueueService(db, event_bus=event_bus)
-    health_service = AgentHealthService(db)
+    AgentHealthService(db)
 
     # Import heartbeat protocol service for enhanced heartbeat
     from omoi_os.services.heartbeat_protocol import HeartbeatProtocolService
@@ -802,9 +824,9 @@ def main():
             "cpu_usage_percent": 0.0,
             "memory_usage_mb": 0,
             "active_connections": 0,
-            "pending_operations": len(task_queue.get_assigned_tasks(agent_id))
-            if task_queue
-            else 0,
+            "pending_operations": (
+                len(task_queue.get_assigned_tasks(agent_id)) if task_queue else 0
+            ),
             "last_error_timestamp": None,
             "custom_metrics": {},
         }
@@ -1153,7 +1175,10 @@ def execute_task_with_retry(
                     def schedule_retry():
                         time.sleep(delay)
                         # The task will be picked up by get_next_task() since it's now "pending"
-                        logger.info("Retry delay completed, task is now pending", task_id=str(task.id))
+                        logger.info(
+                            "Retry delay completed, task is now pending",
+                            task_id=str(task.id),
+                        )
 
                     # Start retry timer in background thread
                     retry_thread = threading.Thread(target=schedule_retry, daemon=True)
@@ -1308,7 +1333,9 @@ def execute_task(
 
     except Exception as e:
         error_message = str(e)
-        logger.error("Task failed", task_id=str(task.id), error=error_message, exc_info=True)
+        logger.error(
+            "Task failed", task_id=str(task.id), error=error_message, exc_info=True
+        )
 
         # Update task status to failed
         task_queue.update_task_status(task.id, "failed", error_message=error_message)

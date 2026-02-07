@@ -5,6 +5,7 @@ Revises: 009_diagnostic_system
 Create Date: 2025-01-27
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -56,7 +57,7 @@ def upgrade() -> None:
             ondelete="RESTRICT",
         ),
     )
-    
+
     # Indexes for validation_reviews
     op.create_index(
         "ix_validation_reviews_task_id",
@@ -73,15 +74,19 @@ def upgrade() -> None:
         "validation_reviews",
         ["task_id", "iteration_number"],
     )
-    
+
     # Task model extensions (REQ-VAL-DM-001)
     op.add_column(
         "tasks",
-        sa.Column("validation_enabled", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column(
+            "validation_enabled", sa.Boolean(), nullable=False, server_default="false"
+        ),
     )
     op.add_column(
         "tasks",
-        sa.Column("validation_iteration", sa.Integer(), nullable=False, server_default="0"),
+        sa.Column(
+            "validation_iteration", sa.Integer(), nullable=False, server_default="0"
+        ),
     )
     op.add_column(
         "tasks",
@@ -91,7 +96,7 @@ def upgrade() -> None:
         "tasks",
         sa.Column("review_done", sa.Boolean(), nullable=False, server_default="false"),
     )
-    
+
     # Agent model extensions (REQ-VAL-DM-002)
     op.add_column(
         "agents",
@@ -107,16 +112,15 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Agent extensions
     op.drop_column("agents", "kept_alive_for_validation")
-    
+
     # Task extensions
     op.drop_column("tasks", "review_done")
     op.drop_column("tasks", "last_validation_feedback")
     op.drop_column("tasks", "validation_iteration")
     op.drop_column("tasks", "validation_enabled")
-    
+
     # ValidationReview table
     op.drop_index("ix_validation_reviews_task_iteration", "validation_reviews")
     op.drop_index("ix_validation_reviews_validator_agent_id", "validation_reviews")
     op.drop_index("ix_validation_reviews_task_id", "validation_reviews")
     op.drop_table("validation_reviews")
-

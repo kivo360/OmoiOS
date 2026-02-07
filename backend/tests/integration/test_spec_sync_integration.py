@@ -8,7 +8,7 @@ Tests the full sync flow including:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 from omoi_os.services.spec_dedup import (
     SpecDeduplicationService,
@@ -16,7 +16,6 @@ from omoi_os.services.spec_dedup import (
     EntityType,
 )
 from omoi_os.services.spec_sync import SpecSyncService, SyncStats
-
 
 # =============================================================================
 # Test: SyncStats
@@ -234,7 +233,7 @@ class TestBulkDeduplication:
     async def test_bulk_criteria_dedup_mixed(self, mock_db, mock_session):
         """Test bulk criteria deduplication with mix of new and duplicate."""
         # Setup: First criterion exists, second is new
-        existing_hash = compute_content_hash("existing criterion")
+        compute_content_hash("existing criterion")
 
         mock_existing = MagicMock()
         mock_existing.id = "crit-existing"
@@ -244,7 +243,7 @@ class TestBulkDeduplication:
             result = MagicMock()
             # Check if query is for the existing criterion
             # Simple mock: return existing for first call, None for second
-            if hasattr(mock_execute, 'call_count'):
+            if hasattr(mock_execute, "call_count"):
                 mock_execute.call_count += 1
             else:
                 mock_execute.call_count = 1

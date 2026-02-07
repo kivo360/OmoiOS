@@ -1,7 +1,7 @@
 """Tests for validation system (Enhanced Validation - Squad C)."""
 
 import pytest
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.task import Task
@@ -15,7 +15,10 @@ from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.memory import MemoryService
 from omoi_os.services.monitor import MonitorService
 from omoi_os.services.discovery import DiscoveryService
-from omoi_os.services.validation_orchestrator import ValidationOrchestrator, ValidationState
+from omoi_os.services.validation_orchestrator import (
+    ValidationOrchestrator,
+    ValidationState,
+)
 from omoi_os.utils.datetime import utc_now
 
 
@@ -41,7 +44,7 @@ def diagnostic_service(
     memory = MemoryService(embedding_service=embedding, event_bus=event_bus_service)
     discovery = DiscoveryService(event_bus=event_bus_service)
     monitor = MonitorService(db=db_service, event_bus=event_bus_service)
-    
+
     return DiagnosticService(
         db=db_service,
         discovery=discovery,
@@ -132,19 +135,19 @@ def test_transition_to_under_review_success(
     validation_enabled_task: Task,
 ):
     """Test successful transition to under_review state.
-    
+
     Note: When validation_enabled=True, the transition_to_under_review method
     auto-spawns a validator which immediately transitions to validation_in_progress.
     """
     commit_sha = "abc123def456"
-    
+
     success = validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     assert success is True
-    
+
     # Verify task state (should be validation_in_progress due to auto-spawn)
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
@@ -164,31 +167,31 @@ def test_transition_to_under_review_increments_iteration(
 ):
     """Test that validation_iteration increments on each transition."""
     commit_sha = "abc123def456"
-    
+
     # First transition
     validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     # Verify iteration incremented
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.validation_iteration == 1
-    
+
     # Reset status for second transition
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         task.status = "running"
         task.review_done = False
         session.commit()
-    
+
     # Second transition
     validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     # Verify iteration incremented again
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
@@ -215,12 +218,12 @@ def test_transition_to_under_review_auto_spawns_validator(
 ):
     """Test that validator is auto-spawned when task enters under_review (REQ-VAL-LC-001)."""
     commit_sha = "abc123def456"
-    
+
     validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     # Verify validator was spawned (check active validators)
     assert validation_enabled_task.id in validation_orchestrator._active_validators
 
@@ -237,27 +240,27 @@ def test_spawn_validator_success(
 ):
     """Test successful validator spawning."""
     commit_sha = "abc123def456"
-    
+
     # Set task to under_review state
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         task.status = ValidationState.UNDER_REVIEW
         session.commit()
-    
+
     validator_id = validation_orchestrator.spawn_validator(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     assert validator_id is not None
-    
+
     # Verify validator agent was created
     with db_service.get_session() as session:
         validator = session.get(Agent, validator_id)
         assert validator is not None
         assert validator.agent_type == "validator"
         assert validator.phase_id == validation_enabled_task.phase_id
-    
+
     # Verify task transitioned to validation_in_progress
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
@@ -271,20 +274,20 @@ def test_spawn_validator_prevents_duplicate(
 ):
     """Test that spawning validator twice returns None if already active."""
     commit_sha = "abc123def456"
-    
+
     # Set task to under_review state
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         task.status = ValidationState.UNDER_REVIEW
         session.commit()
-    
+
     # First spawn
     validator_id1 = validation_orchestrator.spawn_validator(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
     assert validator_id1 is not None
-    
+
     # Second spawn should return None (already active)
     validator_id2 = validation_orchestrator.spawn_validator(
         task_id=validation_enabled_task.id,
@@ -300,19 +303,19 @@ def test_spawn_validator_only_if_validation_enabled(
 ):
     """Test that validator is not spawned if validation_enabled=False."""
     commit_sha = "abc123def456"
-    
+
     # Set task to under_review but validation disabled
     with db_service.get_session() as session:
         task = session.get(Task, sample_task.id)
         task.status = ValidationState.UNDER_REVIEW
         task.validation_enabled = False
         session.commit()
-    
+
     validator_id = validation_orchestrator.spawn_validator(
         task_id=sample_task.id,
         commit_sha=commit_sha,
     )
-    
+
     assert validator_id is None
 
 
@@ -334,10 +337,12 @@ def test_give_review_success_validation_passed(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 1
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # Submit review
     result = validation_orchestrator.give_review(
         task_id=validation_enabled_task.id,
@@ -345,17 +350,17 @@ def test_give_review_success_validation_passed(
         validation_passed=True,
         feedback="All checks passed. Code looks good.",
     )
-    
+
     assert result["status"] == "completed"
     assert result["message"] == "Validation passed"
     assert result["iteration"] == 1
-    
+
     # Verify task transitioned to done
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.status == ValidationState.DONE
         assert task.review_done is True
-    
+
     # Verify ValidationReview was created
     with db_service.get_session() as session:
         reviews = (
@@ -381,12 +386,14 @@ def test_give_review_success_validation_failed(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 1
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     feedback_text = "Missing error handling in function X."
-    
+
     # Submit review
     result = validation_orchestrator.give_review(
         task_id=validation_enabled_task.id,
@@ -396,17 +403,17 @@ def test_give_review_success_validation_failed(
         evidence={"error_count": 3, "critical_issues": ["missing_error_handling"]},
         recommendations=["Add try-catch blocks", "Add input validation"],
     )
-    
+
     assert result["status"] == "needs_work"
     assert result["message"] == "Validation failed; feedback recorded"
     assert result["iteration"] == 1
-    
+
     # Verify task transitioned to needs_work
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.status == ValidationState.NEEDS_WORK
         assert task.last_validation_feedback == feedback_text
-    
+
     # Verify ValidationReview was created with evidence and recommendations
     with db_service.get_session() as session:
         reviews = (
@@ -417,8 +424,14 @@ def test_give_review_success_validation_failed(
         assert len(reviews) == 1
         assert reviews[0].validation_passed is False
         assert reviews[0].feedback == feedback_text
-        assert reviews[0].evidence == {"error_count": 3, "critical_issues": ["missing_error_handling"]}
-        assert reviews[0].recommendations == ["Add try-catch blocks", "Add input validation"]
+        assert reviews[0].evidence == {
+            "error_count": 3,
+            "critical_issues": ["missing_error_handling"],
+        }
+        assert reviews[0].recommendations == [
+            "Add try-catch blocks",
+            "Add input validation",
+        ]
 
 
 def test_give_review_only_validator_agent(
@@ -434,9 +447,11 @@ def test_give_review_only_validator_agent(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 1
         session.commit()
-    
+
     # Try to submit review with worker agent (should fail)
-    with pytest.raises(PermissionError, match="Only validator agents may call give_review"):
+    with pytest.raises(
+        PermissionError, match="Only validator agents may call give_review"
+    ):
         validation_orchestrator.give_review(
             task_id=validation_enabled_task.id,
             validator_agent_id=worker_agent.id,
@@ -458,7 +473,7 @@ def test_give_review_requires_validation_in_progress_state(
         task.status = "running"
         task.validation_iteration = 1
         session.commit()
-    
+
     # Try to submit review (should fail)
     with pytest.raises(ValueError, match="must be in validation_in_progress state"):
         validation_orchestrator.give_review(
@@ -482,12 +497,16 @@ def test_give_review_requires_feedback_on_failure(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 1
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # Try to submit review without feedback (should fail)
-    with pytest.raises(ValueError, match="feedback required when validation_passed=False"):
+    with pytest.raises(
+        ValueError, match="feedback required when validation_passed=False"
+    ):
         validation_orchestrator.give_review(
             task_id=validation_enabled_task.id,
             validator_agent_id=validator_agent.id,
@@ -509,14 +528,14 @@ def test_send_feedback_success(
 ):
     """Test successful feedback delivery to agent."""
     feedback_text = "Please add error handling to function X."
-    
+
     # Mock event publishing to verify it's called
-    with patch.object(event_bus_service, 'publish') as mock_publish:
+    with patch.object(event_bus_service, "publish") as mock_publish:
         delivered = validation_orchestrator.send_feedback(
             agent_id=worker_agent.id,
             feedback=feedback_text,
         )
-        
+
         assert delivered is True
         mock_publish.assert_called_once()
         call_args = mock_publish.call_args[0][0]
@@ -534,7 +553,7 @@ def test_send_feedback_agent_not_found(
         agent_id="non-existent-agent-id",
         feedback="Some feedback",
     )
-    
+
     assert delivered is False
 
 
@@ -557,9 +576,9 @@ def test_get_validation_status_success(
         task.review_done = False
         task.last_validation_feedback = "Previous feedback"
         session.commit()
-    
+
     status = validation_orchestrator.get_validation_status(validation_enabled_task.id)
-    
+
     assert status is not None
     assert status["task_id"] == validation_enabled_task.id
     assert status["state"] == ValidationState.UNDER_REVIEW
@@ -597,19 +616,21 @@ def test_validation_review_records_memory(
         task.validation_iteration = 1
         task.ticket_id = sample_ticket.id
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # Mock memory service to verify it's called
-    with patch.object(memory_service, 'store_execution') as mock_store:
+    with patch.object(memory_service, "store_execution") as mock_store:
         validation_orchestrator.give_review(
             task_id=validation_enabled_task.id,
             validator_agent_id=validator_agent.id,
             validation_passed=True,
             feedback="All checks passed.",
         )
-        
+
         # Verify memory was recorded
         mock_store.assert_called_once()
         call_args = mock_store.call_args[1]
@@ -640,10 +661,12 @@ def test_repeated_failures_spawn_diagnosis(
         task.validation_iteration = 1
         task.ticket_id = sample_ticket.id
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # First failure
     validation_orchestrator.give_review(
         task_id=validation_enabled_task.id,
@@ -651,18 +674,20 @@ def test_repeated_failures_spawn_diagnosis(
         validation_passed=False,
         feedback="First failure feedback.",
     )
-    
+
     # Reset to validation_in_progress for second failure
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 2
         session.commit()
-    
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # Mock diagnostic service to verify it's called on second failure
-    with patch.object(diagnostic_service, 'spawn_diagnostic_agent') as mock_spawn:
+    with patch.object(diagnostic_service, "spawn_diagnostic_agent") as mock_spawn:
         # Second failure (should trigger diagnosis)
         validation_orchestrator.give_review(
             task_id=validation_enabled_task.id,
@@ -670,7 +695,7 @@ def test_repeated_failures_spawn_diagnosis(
             validation_passed=False,
             feedback="Second failure feedback.",
         )
-        
+
         # Verify diagnostic agent was spawned
         mock_spawn.assert_called_once()
         call_args = mock_spawn.call_args[1]
@@ -694,27 +719,30 @@ def test_check_validator_timeouts(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.ticket_id = sample_ticket.id
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # Set validator heartbeat to old timestamp (simulating timeout)
     from datetime import timedelta
+
     with db_service.get_session() as session:
         validator = session.get(Agent, validator_agent.id)
         validator.last_heartbeat = utc_now() - timedelta(minutes=15)  # 15 minutes ago
         session.commit()
-    
+
     # Mock diagnostic service to verify it's called on timeout
-    with patch.object(diagnostic_service, 'spawn_diagnostic_agent') as mock_spawn:
+    with patch.object(diagnostic_service, "spawn_diagnostic_agent") as mock_spawn:
         validation_orchestrator.check_validator_timeouts(timeout_minutes=10)
-        
+
         # Verify diagnostic agent was spawned for timeout
         mock_spawn.assert_called_once()
         call_args = mock_spawn.call_args[1]
         assert call_args["context"]["trigger"] == "validation_timeout"
         assert call_args["context"]["validator_agent_id"] == validator_agent.id
-    
+
     # Verify task was marked as failed
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
@@ -741,14 +769,14 @@ def test_validation_started_event_published(
         task.status = ValidationState.UNDER_REVIEW
         task.validation_iteration = 1
         session.commit()
-    
+
     # Mock event publishing
-    with patch.object(event_bus_service, 'publish') as mock_publish:
+    with patch.object(event_bus_service, "publish") as mock_publish:
         validation_orchestrator.transition_to_validation_in_progress(
             task_id=validation_enabled_task.id,
             validator_agent_id=validator_agent.id,
         )
-        
+
         # Verify validation_started event was published
         mock_publish.assert_called_once()
         call_args = mock_publish.call_args[0][0]
@@ -772,24 +800,26 @@ def test_validation_passed_event_published(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 1
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     # Mock event publishing
-    with patch.object(event_bus_service, 'publish') as mock_publish:
+    with patch.object(event_bus_service, "publish") as mock_publish:
         validation_orchestrator.give_review(
             task_id=validation_enabled_task.id,
             validator_agent_id=validator_agent.id,
             validation_passed=True,
             feedback="All checks passed.",
         )
-        
+
         # Verify validation_passed event was published
         calls = [call[0][0] for call in mock_publish.call_args_list]
         event_types = [call.event_type for call in calls]
         assert "validation_passed" in event_types
-        
+
         # Find validation_passed event
         passed_event = next(c for c in calls if c.event_type == "validation_passed")
         assert passed_event.entity_id == validation_enabled_task.id
@@ -810,26 +840,28 @@ def test_validation_failed_event_published(
         task.status = ValidationState.VALIDATION_IN_PROGRESS
         task.validation_iteration = 1
         session.commit()
-    
+
     # Track validator
-    validation_orchestrator._active_validators[validation_enabled_task.id] = validator_agent.id
-    
+    validation_orchestrator._active_validators[validation_enabled_task.id] = (
+        validator_agent.id
+    )
+
     feedback_text = "Missing error handling."
-    
+
     # Mock event publishing
-    with patch.object(event_bus_service, 'publish') as mock_publish:
+    with patch.object(event_bus_service, "publish") as mock_publish:
         validation_orchestrator.give_review(
             task_id=validation_enabled_task.id,
             validator_agent_id=validator_agent.id,
             validation_passed=False,
             feedback=feedback_text,
         )
-        
+
         # Verify validation_failed event was published
         calls = [call[0][0] for call in mock_publish.call_args_list]
         event_types = [call.event_type for call in calls]
         assert "validation_failed" in event_types
-        
+
         # Find validation_failed event
         failed_event = next(c for c in calls if c.event_type == "validation_failed")
         assert failed_event.entity_id == validation_enabled_task.id
@@ -850,17 +882,19 @@ def test_complete_validation_workflow(
 ):
     """Test complete validation workflow: under_review -> validation_in_progress -> done."""
     commit_sha = "abc123def456"
-    
+
     # Step 1: Transition to under_review
     validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     # Verify validator spawned
-    validator_id = validation_orchestrator._active_validators.get(validation_enabled_task.id)
+    validator_id = validation_orchestrator._active_validators.get(
+        validation_enabled_task.id
+    )
     assert validator_id is not None
-    
+
     # Step 2: Submit review with validation_passed=True
     result = validation_orchestrator.give_review(
         task_id=validation_enabled_task.id,
@@ -868,16 +902,16 @@ def test_complete_validation_workflow(
         validation_passed=True,
         feedback="All checks passed. Code is production-ready.",
     )
-    
+
     assert result["status"] == "completed"
-    
+
     # Step 3: Verify final state
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.status == ValidationState.DONE
         assert task.review_done is True
         assert task.validation_iteration == 1
-        
+
         # Verify ValidationReview exists
         reviews = (
             session.query(ValidationReview)
@@ -897,15 +931,17 @@ def test_validation_workflow_with_feedback_loop(
 ):
     """Test validation workflow with feedback loop: failed -> needs_work -> in_progress -> done."""
     commit_sha = "abc123def456"
-    
+
     # Step 1: Transition to under_review and spawn validator
     validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
-    validator_id = validation_orchestrator._active_validators.get(validation_enabled_task.id)
-    
+
+    validator_id = validation_orchestrator._active_validators.get(
+        validation_enabled_task.id
+    )
+
     # Step 2: First review fails
     result1 = validation_orchestrator.give_review(
         task_id=validation_enabled_task.id,
@@ -913,35 +949,40 @@ def test_validation_workflow_with_feedback_loop(
         validation_passed=False,
         feedback="Missing error handling. Please add try-catch blocks.",
     )
-    
+
     assert result1["status"] == "needs_work"
-    
+
     # Verify task in needs_work state
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.status == ValidationState.NEEDS_WORK
-        assert task.last_validation_feedback == "Missing error handling. Please add try-catch blocks."
-    
+        assert (
+            task.last_validation_feedback
+            == "Missing error handling. Please add try-catch blocks."
+        )
+
     # Step 3: Worker resumes (manually set status for test)
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         task.status = "running"
         session.commit()
-    
+
     # Step 4: Transition to under_review again (second iteration)
     validation_orchestrator.transition_to_under_review(
         task_id=validation_enabled_task.id,
         commit_sha=commit_sha,
     )
-    
+
     # Verify iteration incremented
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.validation_iteration == 2
-    
+
     # Get new validator
-    validator_id2 = validation_orchestrator._active_validators.get(validation_enabled_task.id)
-    
+    validator_id2 = validation_orchestrator._active_validators.get(
+        validation_enabled_task.id
+    )
+
     # Step 5: Second review passes
     result2 = validation_orchestrator.give_review(
         task_id=validation_enabled_task.id,
@@ -949,16 +990,16 @@ def test_validation_workflow_with_feedback_loop(
         validation_passed=True,
         feedback="All issues resolved. Code is ready.",
     )
-    
+
     assert result2["status"] == "completed"
-    
+
     # Verify final state
     with db_service.get_session() as session:
         task = session.get(Task, validation_enabled_task.id)
         assert task.status == ValidationState.DONE
         assert task.review_done is True
         assert task.validation_iteration == 2
-        
+
         # Verify both reviews exist
         reviews = (
             session.query(ValidationReview)
@@ -968,5 +1009,4 @@ def test_validation_workflow_with_feedback_loop(
         )
         assert len(reviews) == 2
         assert reviews[0].validation_passed is False  # First review failed
-        assert reviews[1].validation_passed is True   # Second review passed
-
+        assert reviews[1].validation_passed is True  # Second review passed

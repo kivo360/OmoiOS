@@ -9,12 +9,12 @@ Links cost tracking to sandbox execution and billing for:
 - Aggregating costs per organization (via billing_account_id)
 - Supporting subscription usage limits
 """
+
 from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
-
 
 # revision identifiers, used by Alembic.
 revision: str = "041_cost_record_billing_integration"
@@ -29,9 +29,7 @@ def upgrade() -> None:
         "cost_records",
         sa.Column("sandbox_id", sa.String(length=100), nullable=True),
     )
-    op.create_index(
-        "ix_cost_records_sandbox_id", "cost_records", ["sandbox_id"]
-    )
+    op.create_index("ix_cost_records_sandbox_id", "cost_records", ["sandbox_id"])
 
     # Add billing_account_id column with foreign key (UUID to match billing_accounts.id)
     op.add_column(

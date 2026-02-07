@@ -18,7 +18,6 @@ Changes:
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 from sqlalchemy import inspect, text
 
 # revision identifiers, used by Alembic.
@@ -85,23 +84,27 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
     if _column_exists(inspector, table_name, column_name):
         # Column exists - check if we need to alter its type
         print(f"Column {table_name}.{column_name} exists, checking dimensions...")
-        
+
         # Get column type info
         columns = inspector.get_columns(table_name)
         col_info = next((c for c in columns if c["name"] == column_name), None)
-        
+
         if col_info:
             col_type = str(col_info.get("type", ""))
             print(f"  Current type: {col_type}")
-            
+
             # Check if dimension is already set
             # pgvector types look like: VECTOR or VECTOR(1536)
             if f"({EMBEDDING_DIMENSIONS})" in col_type.upper():
-                print(f"  ✓ Column already has correct dimensions ({EMBEDDING_DIMENSIONS})")
+                print(
+                    f"  ✓ Column already has correct dimensions ({EMBEDDING_DIMENSIONS})"
+                )
             else:
                 # Need to recreate with proper dimensions
-                print(f"  Recreating column with explicit dimensions ({EMBEDDING_DIMENSIONS})...")
-                
+                print(
+                    f"  Recreating column with explicit dimensions ({EMBEDDING_DIMENSIONS})..."
+                )
+
                 # Drop existing index first
                 if _index_exists(inspector, table_name, index_name):
                     print(f"  Dropping existing index {index_name}...")
@@ -109,7 +112,7 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                         bind.execute(text(f"DROP INDEX IF EXISTS {index_name}"))
                     except Exception as e:
                         print(f"  ⚠ Could not drop index: {e}")
-                
+
                 # Alter column type to have explicit dimensions
                 # Note: This will fail if there's data with wrong dimensions
                 try:
@@ -120,8 +123,8 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                     print(f"  ✓ Updated column to vector({EMBEDDING_DIMENSIONS})")
                 except Exception as e:
                     print(f"  ⚠ Could not alter column type: {e}")
-                    print(f"  Attempting to recreate column...")
-                    
+                    print("  Attempting to recreate column...")
+
                     # Backup data, drop, recreate, restore
                     try:
                         # Create temp column
@@ -129,24 +132,26 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                             ALTER TABLE {table_name} 
                             ADD COLUMN {column_name}_backup vector({EMBEDDING_DIMENSIONS})
                         """))
-                        
+
                         # Copy data (truncating if needed)
                         bind.execute(text(f"""
                             UPDATE {table_name} 
                             SET {column_name}_backup = {column_name}::vector({EMBEDDING_DIMENSIONS})
                             WHERE {column_name} IS NOT NULL
                         """))
-                        
+
                         # Drop old column
-                        bind.execute(text(f"ALTER TABLE {table_name} DROP COLUMN {column_name}"))
-                        
+                        bind.execute(
+                            text(f"ALTER TABLE {table_name} DROP COLUMN {column_name}")
+                        )
+
                         # Rename backup
                         bind.execute(text(f"""
                             ALTER TABLE {table_name} 
                             RENAME COLUMN {column_name}_backup TO {column_name}
                         """))
-                        
-                        print(f"  ✓ Recreated column with correct dimensions")
+
+                        print("  ✓ Recreated column with correct dimensions")
                     except Exception as e2:
                         print(f"  ✗ Failed to recreate column: {e2}")
                         # Clean up temp column if it exists
@@ -166,7 +171,9 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                 ALTER TABLE {table_name} 
                 ADD COLUMN {column_name} vector({EMBEDDING_DIMENSIONS})
             """))
-            print(f"  ✓ Created column {column_name} with vector({EMBEDDING_DIMENSIONS})")
+            print(
+                f"  ✓ Created column {column_name} with vector({EMBEDDING_DIMENSIONS})"
+            )
         except Exception as e:
             print(f"  ✗ Failed to create column: {e}")
             return
@@ -174,7 +181,7 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
     # Step 3: Create IVFFlat index for similarity search
     # Refresh inspector to see new column
     inspector = inspect(bind)
-    
+
     if not _index_exists(inspector, table_name, index_name):
         print(f"Creating index {index_name}...")
         try:
@@ -186,12 +193,12 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                 USING ivfflat ({column_name} vector_cosine_ops) 
                 WITH (lists = 100)
             """))
-            print(f"  ✓ Created IVFFlat index with cosine similarity")
+            print("  ✓ Created IVFFlat index with cosine similarity")
         except Exception as e:
             # IVFFlat requires training data, try without index for now
             print(f"  ⚠ Could not create IVFFlat index: {e}")
-            print(f"  Note: IVFFlat indexes require existing data for training.")
-            print(f"  The index can be created later once data is populated.")
+            print("  Note: IVFFlat indexes require existing data for training.")
+            print("  The index can be created later once data is populated.")
     else:
         print(f"  ✓ Index {index_name} already exists")
 
@@ -203,7 +210,7 @@ def downgrade() -> None:
 
     # We don't actually want to remove dimensions in downgrade
     # as that would break things. Just drop the index if we created it.
-    
+
     if _table_exists(inspector, "tickets"):
         index_name = "idx_tickets_embedding_vector"
         if _index_exists(inspector, "tickets", index_name):

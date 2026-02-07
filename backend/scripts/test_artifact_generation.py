@@ -27,18 +27,20 @@ def generate_artifacts_from_event(event_data: dict) -> list[dict]:
 
     # Create code_changes artifact if code was pushed
     if code_pushed or pr_created:
-        artifacts.append({
-            "type": "code_changes",
-            "path": pr_url,
-            "content": {
-                "has_tests": tests_passed,
-                "branch_name": branch_name,
-                "pr_created": pr_created,
-                "pr_url": pr_url,
-                "pr_number": pr_number,
-                "files_changed": files_changed,
+        artifacts.append(
+            {
+                "type": "code_changes",
+                "path": pr_url,
+                "content": {
+                    "has_tests": tests_passed,
+                    "branch_name": branch_name,
+                    "pr_created": pr_created,
+                    "pr_url": pr_url,
+                    "pr_number": pr_number,
+                    "files_changed": files_changed,
+                },
             }
-        })
+        )
 
     # Create test_coverage artifact if tests passed
     if tests_passed:
@@ -58,15 +60,17 @@ def generate_artifacts_from_event(event_data: dict) -> list[dict]:
                 if check.get("state") == "completed"
             )
 
-        artifacts.append({
-            "type": "test_coverage",
-            "content": {
-                "percentage": 80,
-                "all_passed": True,
-                "has_tests": True,
-                **test_details,
+        artifacts.append(
+            {
+                "type": "test_coverage",
+                "content": {
+                    "percentage": 80,
+                    "all_passed": True,
+                    "has_tests": True,
+                    **test_details,
+                },
             }
-        })
+        )
 
     return artifacts
 
@@ -98,7 +102,7 @@ def main():
         "ci_status": [
             {"name": "tests", "state": "completed", "conclusion": "success"},
             {"name": "lint", "state": "completed", "conclusion": "success"},
-        ]
+        ],
     }
 
     artifacts = generate_artifacts_from_event(event_data)
@@ -112,12 +116,18 @@ def main():
 
     if has_code_changes:
         code_artifact = next(a for a in artifacts if a["type"] == "code_changes")
-        print_test("code_changes.has_tests", code_artifact["content"]["has_tests"] == True)
-        print_test("code_changes.pr_number", code_artifact["content"]["pr_number"] == 123)
+        print_test(
+            "code_changes.has_tests", code_artifact["content"]["has_tests"] is True
+        )
+        print_test(
+            "code_changes.pr_number", code_artifact["content"]["pr_number"] == 123
+        )
 
     if has_test_coverage:
         test_artifact = next(a for a in artifacts if a["type"] == "test_coverage")
-        print_test("test_coverage.all_passed", test_artifact["content"]["all_passed"] == True)
+        print_test(
+            "test_coverage.all_passed", test_artifact["content"]["all_passed"] is True
+        )
         print_test("test_coverage has CI checks", "checks" in test_artifact["content"])
 
     all_passed = all_passed and has_code_changes and has_test_coverage
@@ -131,7 +141,9 @@ def main():
     }
 
     artifacts = generate_artifacts_from_event(event_data)
-    print_test("No artifacts for research task", len(artifacts) == 0, f"count={len(artifacts)}")
+    print_test(
+        "No artifacts for research task", len(artifacts) == 0, f"count={len(artifacts)}"
+    )
     all_passed = all_passed and len(artifacts) == 0
 
     # Test 3: Code pushed but no CI
@@ -156,7 +168,10 @@ def main():
 
     if has_test_coverage:
         test_artifact = next(a for a in artifacts if a["type"] == "test_coverage")
-        print_test("test_coverage.all_passed (no CI)", test_artifact["content"]["all_passed"] == True)
+        print_test(
+            "test_coverage.all_passed (no CI)",
+            test_artifact["content"]["all_passed"] is True,
+        )
         print_test("No CI checks in content", "checks" not in test_artifact["content"])
 
     all_passed = all_passed and has_code_changes and has_test_coverage
@@ -173,7 +188,7 @@ def main():
         "branch_name": "feature/wip",
         "ci_status": [
             {"name": "tests", "state": "completed", "conclusion": "failure"},
-        ]
+        ],
     }
 
     artifacts = generate_artifacts_from_event(event_data)
@@ -185,7 +200,10 @@ def main():
 
     if has_code_changes:
         code_artifact = next(a for a in artifacts if a["type"] == "code_changes")
-        print_test("code_changes.has_tests = False", code_artifact["content"]["has_tests"] == False)
+        print_test(
+            "code_changes.has_tests = False",
+            code_artifact["content"]["has_tests"] is False,
+        )
 
     all_passed = all_passed and has_code_changes and not has_test_coverage
 
@@ -202,4 +220,5 @@ def main():
 
 if __name__ == "__main__":
     import sys
+
     sys.exit(main())

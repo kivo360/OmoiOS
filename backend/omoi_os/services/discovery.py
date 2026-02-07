@@ -496,7 +496,7 @@ class DiscoveryService:
                         if rec.startswith("["):
                             bracket_end = rec.find("]")
                             if bracket_end > 0:
-                                rec = rec[bracket_end + 1:].strip()
+                                rec = rec[bracket_end + 1 :].strip()
                         if rec:
                             title = rec[:70]
                             return title if len(title) <= 70 else title[:67] + "..."
@@ -506,7 +506,11 @@ class DiscoveryService:
         for line in lines:
             line = line.strip()
             # Skip empty lines and generic prefixes
-            if not line or line.startswith("Diagnostic:") or line.startswith("Hypotheses:"):
+            if (
+                not line
+                or line.startswith("Diagnostic:")
+                or line.startswith("Hypotheses:")
+            ):
                 continue
             if line.startswith("-") or line.startswith("•"):
                 line = line.lstrip("-•").strip()

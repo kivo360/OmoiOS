@@ -40,7 +40,9 @@ class MonitoringConfig:
     auto_steering_enabled: bool = False  # Auto-execute steering interventions
     max_concurrent_analyses: int = 5  # Limit concurrent analyses
     workspace_root: Optional[str] = None  # Root directory for agent workspaces
-    llm_analysis_enabled: bool = True  # Enable LLM-based trajectory analysis (disable to save tokens)
+    llm_analysis_enabled: bool = (
+        True  # Enable LLM-based trajectory analysis (disable to save tokens)
+    )
 
 
 @dataclass
@@ -132,7 +134,9 @@ class MonitoringLoop:
         self._health_check_task = asyncio.create_task(self._health_check_loop())
 
         # Publish startup event
-        self._publish_event("monitoring.started", {"cycle_id": str(self.current_cycle_id)})
+        self._publish_event(
+            "monitoring.started", {"cycle_id": str(self.current_cycle_id)}
+        )
 
     async def stop(self) -> None:
         """Stop the monitoring loop."""
@@ -277,12 +281,16 @@ class MonitoringLoop:
             # Force analyze specified agents
             emergency_analyses = []
             for agent_id in agent_ids:
-                analysis = await self.analyze_agent_trajectory(agent_id, force_analysis=True)
+                analysis = await self.analyze_agent_trajectory(
+                    agent_id, force_analysis=True
+                )
                 if analysis:
                     emergency_analyses.append(analysis)
 
             # Run immediate conductor analysis
-            conductor_response = await self.conductor.analyze_system_coherence_response()
+            conductor_response = (
+                await self.conductor.analyze_system_coherence_response()
+            )
 
             # Generate emergency interventions if needed
             emergency_interventions = []
@@ -496,7 +504,9 @@ class MonitoringLoop:
                     },
                 )
 
-                logger.info(f"Conductor analysis: coherence={analysis.coherence_score:.2f}")
+                logger.info(
+                    f"Conductor analysis: coherence={analysis.coherence_score:.2f}"
+                )
                 return result
 
             return {}
@@ -593,9 +603,13 @@ class MonitoringLoop:
             # Calculate system metrics
             system_metrics = {
                 "guardian_analyses": len(guardian_analyses),
-                "average_alignment": sum(a.get("alignment_score", 0) for a in guardian_analyses)
+                "average_alignment": sum(
+                    a.get("alignment_score", 0) for a in guardian_analyses
+                )
                 / max(len(guardian_analyses), 1),
-                "agents_need_steering": sum(1 for a in guardian_analyses if a.get("needs_steering", False)),
+                "agents_need_steering": sum(
+                    1 for a in guardian_analyses if a.get("needs_steering", False)
+                ),
                 "system_coherence": conductor_analysis.get("coherence_score", 0.0),
                 "duplicate_count": conductor_analysis.get("duplicate_count", 0),
                 "timestamp": utc_now().isoformat(),
@@ -646,7 +660,9 @@ class MonitoringLoop:
         """Get current monitoring loop status."""
         return {
             "running": self.running,
-            "current_cycle_id": str(self.current_cycle_id) if self.current_cycle_id else None,
+            "current_cycle_id": (
+                str(self.current_cycle_id) if self.current_cycle_id else None
+            ),
             "config": {
                 "guardian_interval": self.config.guardian_interval_seconds,
                 "conductor_interval": self.config.conductor_interval_seconds,
@@ -655,9 +671,21 @@ class MonitoringLoop:
                 "max_concurrent_analyses": self.config.max_concurrent_analyses,
             },
             "timing": {
-                "last_guardian_run": self.last_guardian_run.isoformat() if self.last_guardian_run else None,
-                "last_conductor_run": self.last_conductor_run.isoformat() if self.last_conductor_run else None,
-                "last_health_check": self.last_health_check.isoformat() if self.last_health_check else None,
+                "last_guardian_run": (
+                    self.last_guardian_run.isoformat()
+                    if self.last_guardian_run
+                    else None
+                ),
+                "last_conductor_run": (
+                    self.last_conductor_run.isoformat()
+                    if self.last_conductor_run
+                    else None
+                ),
+                "last_health_check": (
+                    self.last_health_check.isoformat()
+                    if self.last_health_check
+                    else None
+                ),
             },
             "metrics": {
                 "total_cycles": self.total_cycles,

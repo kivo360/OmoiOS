@@ -14,8 +14,6 @@ with the spec-driven development workflow.
 import pytest
 from dataclasses import asdict
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
-
 
 # =============================================================================
 # Test: Data Classes
@@ -266,7 +264,7 @@ class TestValidateTaskNoCriteria:
     async def test_validate_task_no_criteria_auto_passes(self):
         """Test spec with no criteria auto-passes validation."""
         from omoi_os.models.task import Task
-        from omoi_os.models.spec import Spec, SpecTask, SpecRequirement
+        from omoi_os.models.spec import Spec, SpecTask
         from omoi_os.services.spec_acceptance_validator import SpecAcceptanceValidator
 
         # Create mock task
@@ -584,7 +582,7 @@ class TestEventPublishing:
             llm_service=mock_llm,
             event_bus=mock_event_bus,
         )
-        result = await validator.validate_task(task_id="task-123")
+        await validator.validate_task(task_id="task-123")
 
         # Verify event was published
         mock_event_bus.publish.assert_called_once()
@@ -818,9 +816,7 @@ class TestLLMFailureHandling:
 
         # Mock LLM that fails
         mock_llm = MagicMock()
-        mock_llm.structured_output = AsyncMock(
-            side_effect=Exception("LLM API Error")
-        )
+        mock_llm.structured_output = AsyncMock(side_effect=Exception("LLM API Error"))
 
         mock_db = MagicMock()
         mock_session = AsyncMock()
@@ -935,7 +931,6 @@ class TestGetSpecAcceptanceValidator:
         """Test factory uses provided services."""
         from omoi_os.services.spec_acceptance_validator import (
             get_spec_acceptance_validator,
-            SpecAcceptanceValidator,
         )
 
         mock_db = MagicMock()

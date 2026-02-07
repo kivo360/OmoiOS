@@ -897,9 +897,7 @@ async def verify_project_access(
 
     async with db.get_async_session() as session:
         # Get the project
-        result = await session.execute(
-            select(Project).where(Project.id == project_id)
-        )
+        result = await session.execute(select(Project).where(Project.id == project_id))
         project = result.scalar_one_or_none()
 
         if not project:
@@ -958,9 +956,7 @@ async def verify_ticket_access(
 
     async with db.get_async_session() as session:
         # Get the ticket
-        result = await session.execute(
-            select(Ticket).where(Ticket.id == ticket_id)
-        )
+        result = await session.execute(select(Ticket).where(Ticket.id == ticket_id))
         ticket = result.scalar_one_or_none()
 
         if not ticket:
@@ -1017,9 +1013,7 @@ async def verify_task_access(
 
     async with db.get_async_session() as session:
         # Get the task
-        result = await session.execute(
-            select(Task).where(Task.id == task_id)
-        )
+        result = await session.execute(select(Task).where(Task.id == task_id))
         task = result.scalar_one_or_none()
 
         if not task:
@@ -1061,9 +1055,7 @@ async def verify_spec_access(
 
     async with db.get_async_session() as session:
         # Get the spec
-        result = await session.execute(
-            select(Spec).where(Spec.id == spec_id)
-        )
+        result = await session.execute(select(Spec).where(Spec.id == spec_id))
         spec = result.scalar_one_or_none()
 
         if not spec:
@@ -1073,7 +1065,11 @@ async def verify_spec_access(
             )
 
         # Check direct user ownership first (user_id field)
-        if hasattr(spec, 'user_id') and spec.user_id and spec.user_id == current_user.id:
+        if (
+            hasattr(spec, "user_id")
+            and spec.user_id
+            and spec.user_id == current_user.id
+        ):
             return spec_id
 
         # If spec has a project, verify project access

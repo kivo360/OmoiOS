@@ -113,8 +113,7 @@ def upgrade() -> None:
     # - "maintenance" -> "IDLE" (maintenance mode should be idle)
     # - "quarantined" -> "QUARANTINED" (if exists)
     # - "spawning" -> "SPAWNING" (if exists)
-    op.execute(
-        """
+    op.execute("""
         UPDATE agents
         SET status = CASE
             WHEN LOWER(status) = 'idle' THEN 'IDLE'
@@ -131,8 +130,7 @@ def upgrade() -> None:
         END
         WHERE status != UPPER(status)
            OR LOWER(status) IN ('stale', 'unresponsive', 'maintenance')
-        """
-    )
+        """)
 
     # Add updated_at column to agents table if it doesn't exist
     # Check if column exists first (for backwards compatibility)
@@ -165,12 +163,10 @@ def downgrade() -> None:
     op.drop_constraint(op.f("ck_agents_valid_status"), "agents", type_="check")
 
     # Revert status values to lowercase (best effort)
-    op.execute(
-        """
+    op.execute("""
         UPDATE agents
         SET status = LOWER(status)
-        """
-    )
+        """)
 
     # Drop foreign keys
     op.drop_constraint(

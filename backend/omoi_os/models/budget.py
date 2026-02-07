@@ -90,15 +90,17 @@ class Budget(Base):
             "limit_amount": self.limit_amount,
             "spent_amount": self.spent_amount,
             "remaining_amount": self.remaining_amount,
-            "period_start": self.period_start.isoformat()
-            if self.period_start
-            else None,
+            "period_start": (
+                self.period_start.isoformat() if self.period_start else None
+            ),
             "period_end": self.period_end.isoformat() if self.period_end else None,
             "alert_threshold": self.alert_threshold,
             "alert_triggered": bool(self.alert_triggered),
-            "utilization_percent": (self.spent_amount / self.limit_amount * 100)
-            if self.limit_amount > 0
-            else 0,
+            "utilization_percent": (
+                (self.spent_amount / self.limit_amount * 100)
+                if self.limit_amount > 0
+                else 0
+            ),
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

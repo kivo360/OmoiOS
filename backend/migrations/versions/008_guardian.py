@@ -32,9 +32,7 @@ def upgrade() -> None:
         sa.Column("approved_by", sa.String(), nullable=True),
         sa.Column("executed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("reverted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column(
-            "audit_log", postgresql.JSONB(astext_type=sa.Text()), nullable=True
-        ),
+        sa.Column("audit_log", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -43,7 +41,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
-    
+
     # Indexes for efficient queries
     op.create_index(
         "ix_guardian_actions_action_type", "guardian_actions", ["action_type"]
@@ -54,7 +52,7 @@ def upgrade() -> None:
     op.create_index(
         "ix_guardian_actions_initiated_by", "guardian_actions", ["initiated_by"]
     )
-    
+
     # Composite index for audit trail queries (actions by entity)
     op.create_index(
         "ix_guardian_actions_entity_type",
@@ -70,7 +68,6 @@ def downgrade() -> None:
     op.drop_index("ix_guardian_actions_initiated_by", table_name="guardian_actions")
     op.drop_index("ix_guardian_actions_target_entity", table_name="guardian_actions")
     op.drop_index("ix_guardian_actions_action_type", table_name="guardian_actions")
-    
+
     # Drop table
     op.drop_table("guardian_actions")
-

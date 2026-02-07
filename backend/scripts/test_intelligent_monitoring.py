@@ -111,7 +111,7 @@ class IntelligentMonitoringSmokeTest:
             # Test log collection
             if active_agents:
                 agent_id = active_agents[0].id
-                output = collector.get_agent_output(agent_id)
+                collector.get_agent_output(agent_id)
                 self.log_test_result(
                     "AgentOutputCollector - Get Agent Output",
                     True,
@@ -155,7 +155,7 @@ class IntelligentMonitoringSmokeTest:
                     return
 
                 # Test context building
-                context = trajectory_context.build_accumulated_context(agent.id)
+                trajectory_context.build_accumulated_context(agent.id)
                 self.log_test_result(
                     "TrajectoryContext - Build Context",
                     True,

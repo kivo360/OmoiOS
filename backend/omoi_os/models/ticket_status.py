@@ -27,7 +27,7 @@ class TicketStatus(StrEnum):
     def is_blocked_state(cls, status: str) -> bool:
         """
         Check if status is a blocked state.
-        
+
         Note: Blocked is handled as an overlay via is_blocked flag,
         not as a separate status value.
         """
@@ -40,7 +40,10 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     TicketStatus.ANALYZING.value: [TicketStatus.BUILDING.value],
     TicketStatus.BUILDING.value: [TicketStatus.BUILDING_DONE.value],
     TicketStatus.BUILDING_DONE.value: [TicketStatus.TESTING.value],
-    TicketStatus.TESTING.value: [TicketStatus.DONE.value, TicketStatus.BUILDING.value],  # Can regress on fix needed
+    TicketStatus.TESTING.value: [
+        TicketStatus.DONE.value,
+        TicketStatus.BUILDING.value,
+    ],  # Can regress on fix needed
     TicketStatus.DONE.value: [],  # Terminal state
 }
 
@@ -53,7 +56,9 @@ BLOCKED_TRANSITIONS: list[str] = [
 ]
 
 
-def is_valid_transition(from_status: str, to_status: str, is_blocked: bool = False) -> bool:
+def is_valid_transition(
+    from_status: str, to_status: str, is_blocked: bool = False
+) -> bool:
     """
     Validate state transition per REQ-TKT-SM-002.
 
@@ -79,4 +84,3 @@ def is_valid_transition(from_status: str, to_status: str, is_blocked: bool = Fal
     # Check normal transitions
     allowed = VALID_TRANSITIONS.get(from_status, [])
     return to_status in allowed
-

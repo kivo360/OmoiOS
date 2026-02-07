@@ -77,7 +77,9 @@ class QualityPredictorService:
             patterns=patterns[:3] if patterns else [],
         )
 
-        system_prompt = template_service.render_system_prompt("system/quality_predictor.md.j2")
+        system_prompt = template_service.render_system_prompt(
+            "system/quality_predictor.md.j2"
+        )
 
         # Run prediction using LLM service
         llm = get_llm_service()

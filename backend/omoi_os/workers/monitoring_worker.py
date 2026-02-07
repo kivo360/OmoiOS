@@ -55,13 +55,7 @@ shutdown_event = asyncio.Event()
 
 async def heartbeat_monitoring_loop():
     """Check for missed heartbeats and trigger restarts."""
-    global \
-        db, \
-        heartbeat_protocol_service, \
-        registry_service, \
-        queue, \
-        event_bus, \
-        agent_status_manager
+    global db, heartbeat_protocol_service, registry_service, queue, event_bus, agent_status_manager
 
     if not db or not heartbeat_protocol_service:
         logger.warning("Heartbeat monitoring: Required services not available")
@@ -104,7 +98,9 @@ async def heartbeat_monitoring_loop():
                             logger.info(
                                 "Agent restarted successfully",
                                 agent_id=agent_id,
-                                replacement_agent_id=restart_result["replacement_agent_id"],
+                                replacement_agent_id=restart_result[
+                                    "replacement_agent_id"
+                                ],
                             )
                         else:
                             logger.warning(
@@ -113,14 +109,21 @@ async def heartbeat_monitoring_loop():
                             )
 
                     except Exception as e:
-                        logger.error("Error initiating restart for agent", agent_id=agent_id, error=str(e), exc_info=True)
+                        logger.error(
+                            "Error initiating restart for agent",
+                            agent_id=agent_id,
+                            error=str(e),
+                            exc_info=True,
+                        )
 
             await asyncio.sleep(10)
 
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error("Error in heartbeat monitoring loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in heartbeat monitoring loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(10)
 
 
@@ -162,7 +165,11 @@ async def diagnostic_monitoring_loop():
                 workflow_id = workflow_info["workflow_id"]
                 time_stuck = workflow_info["time_stuck_seconds"]
 
-                logger.warning("Workflow stuck detected", workflow_id=workflow_id, time_stuck_seconds=time_stuck)
+                logger.warning(
+                    "Workflow stuck detected",
+                    workflow_id=workflow_id,
+                    time_stuck_seconds=time_stuck,
+                )
 
                 context = diagnostic_service.build_diagnostic_context(
                     workflow_id=workflow_id,
@@ -188,7 +195,9 @@ async def diagnostic_monitoring_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error("Error in diagnostic monitoring loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in diagnostic monitoring loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(60)
 
 
@@ -260,7 +269,9 @@ async def blocking_detection_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error("Error in blocking detection loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in blocking detection loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(300)
 
 
@@ -293,7 +304,11 @@ async def anomaly_monitoring_loop():
                     and consecutive_readings >= 3
                     and agent_id not in triggered_agents
                 ):
-                    logger.warning("Agent anomaly detected", agent_id=agent_id, anomaly_score=anomaly_score)
+                    logger.warning(
+                        "Agent anomaly detected",
+                        agent_id=agent_id,
+                        anomaly_score=anomaly_score,
+                    )
 
                     with db.get_session() as session:
                         from omoi_os.models.task import Task
@@ -348,7 +363,9 @@ async def anomaly_monitoring_loop():
         except asyncio.CancelledError:
             break
         except Exception as e:
-            logger.error("Error in anomaly monitoring loop", error=str(e), exc_info=True)
+            logger.error(
+                "Error in anomaly monitoring loop", error=str(e), exc_info=True
+            )
             await asyncio.sleep(60)
 
 
@@ -425,7 +442,9 @@ async def init_services():
             title_service = get_title_generation_service()
             logger.info("Title generation service initialized")
         except Exception as e:
-            logger.warning("Title generation service not available, using fallback", error=str(e))
+            logger.warning(
+                "Title generation service not available, using fallback", error=str(e)
+            )
 
         discovery_service = DiscoveryService(
             event_bus=event_bus,

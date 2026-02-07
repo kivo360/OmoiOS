@@ -84,9 +84,11 @@ class ApprovalService:
                     entity_id=str(ticket.id),
                     payload={
                         "ticket_id": str(ticket.id),
-                        "deadline_at": ticket.approval_deadline_at.isoformat()
-                        if ticket.approval_deadline_at
-                        else None,
+                        "deadline_at": (
+                            ticket.approval_deadline_at.isoformat()
+                            if ticket.approval_deadline_at
+                            else None
+                        ),
                     },
                 )
             )
@@ -335,10 +337,11 @@ class ApprovalService:
             return {
                 "ticket_id": str(ticket_id),
                 "approval_status": ticket.approval_status,
-                "deadline_at": ticket.approval_deadline_at.isoformat()
-                if ticket.approval_deadline_at
-                else None,
+                "deadline_at": (
+                    ticket.approval_deadline_at.isoformat()
+                    if ticket.approval_deadline_at
+                    else None
+                ),
                 "requested_by_agent_id": ticket.requested_by_agent_id,
                 "rejection_reason": ticket.rejection_reason,
             }
-

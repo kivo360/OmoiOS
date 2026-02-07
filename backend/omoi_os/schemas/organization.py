@@ -9,19 +9,22 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 class OrganizationBase(BaseModel):
     """Base organization schema."""
+
     name: str = Field(..., min_length=1, max_length=255)
-    slug: str = Field(..., pattern=r'^[a-z0-9-]+$', max_length=255)
+    slug: str = Field(..., pattern=r"^[a-z0-9-]+$", max_length=255)
     description: Optional[str] = None
     billing_email: Optional[str] = None
 
 
 class OrganizationCreate(OrganizationBase):
     """Schema for creating organization."""
+
     pass
 
 
 class OrganizationUpdate(BaseModel):
     """Schema for updating organization."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = None
     billing_email: Optional[str] = None
@@ -32,6 +35,7 @@ class OrganizationUpdate(BaseModel):
 
 class OrganizationResponse(OrganizationBase):
     """Schema for organization response."""
+
     id: UUID
     owner_id: UUID
     is_active: bool
@@ -45,6 +49,7 @@ class OrganizationResponse(OrganizationBase):
 
 class OrganizationSummary(BaseModel):
     """Summary schema for organization (in user lists)."""
+
     id: UUID
     name: str
     slug: str
@@ -55,6 +60,7 @@ class OrganizationSummary(BaseModel):
 
 class RoleBase(BaseModel):
     """Base role schema."""
+
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
     permissions: List[str] = Field(default_factory=list)
@@ -62,12 +68,14 @@ class RoleBase(BaseModel):
 
 class RoleCreate(RoleBase):
     """Schema for creating role."""
+
     organization_id: UUID
     inherits_from: Optional[UUID] = None
 
 
 class RoleUpdate(BaseModel):
     """Schema for updating role."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
     permissions: Optional[List[str]] = None
@@ -76,6 +84,7 @@ class RoleUpdate(BaseModel):
 
 class RoleResponse(RoleBase):
     """Schema for role response."""
+
     id: UUID
     organization_id: Optional[UUID]
     is_system: bool
@@ -87,33 +96,36 @@ class RoleResponse(RoleBase):
 
 class MembershipCreate(BaseModel):
     """Schema for creating membership."""
+
     user_id: Optional[UUID] = None
     agent_id: Optional[UUID] = None
     role_id: UUID
 
-    @field_validator('user_id', 'agent_id')
+    @field_validator("user_id", "agent_id")
     @classmethod
     def validate_actor(cls, v, info):
         """Ensure either user_id or agent_id is provided, not both."""
         values = info.data
-        user_id = values.get('user_id')
-        agent_id = values.get('agent_id')
+        user_id = values.get("user_id")
+        agent_id = values.get("agent_id")
 
         if user_id and agent_id:
-            raise ValueError('Cannot specify both user_id and agent_id')
+            raise ValueError("Cannot specify both user_id and agent_id")
         if not user_id and not agent_id:
-            raise ValueError('Must specify either user_id or agent_id')
+            raise ValueError("Must specify either user_id or agent_id")
 
         return v
 
 
 class MembershipUpdate(BaseModel):
     """Schema for updating membership."""
+
     role_id: UUID
 
 
 class MembershipResponse(BaseModel):
     """Schema for membership response."""
+
     id: UUID
     user_id: Optional[UUID]
     agent_id: Optional[UUID]
@@ -127,6 +139,7 @@ class MembershipResponse(BaseModel):
 
 class InviteMemberRequest(BaseModel):
     """Schema for inviting member to organization."""
+
     email: str
     role_id: UUID
     send_email: bool = True
@@ -134,10 +147,10 @@ class InviteMemberRequest(BaseModel):
 
 class UserWithOrganizations(BaseModel):
     """User with their organizations."""
+
     id: UUID
     email: str
     full_name: Optional[str]
     organizations: List[OrganizationSummary]
 
     model_config = ConfigDict(from_attributes=True)
-

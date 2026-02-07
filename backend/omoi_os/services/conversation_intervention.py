@@ -77,9 +77,11 @@ class ConversationInterventionService:
             # If agent is idle, trigger processing
             # If agent is running, message will be queued and processed automatically
             from openhands.sdk.conversation.state import AgentExecutionStatus
+
             if conversation.state.agent_status == AgentExecutionStatus.IDLE:
                 # Start processing in background thread to avoid blocking
                 import threading
+
                 thread = threading.Thread(target=conversation.run, daemon=True)
                 thread.start()
                 logger.info(
@@ -99,4 +101,3 @@ class ConversationInterventionService:
                 exc_info=True,
             )
             return False
-

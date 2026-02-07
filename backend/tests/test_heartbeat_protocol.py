@@ -28,7 +28,9 @@ def event_bus_service():
 
 
 @pytest.fixture
-def heartbeat_protocol_service(db_service: DatabaseService, event_bus_service: EventBusService):
+def heartbeat_protocol_service(
+    db_service: DatabaseService, event_bus_service: EventBusService
+):
     """Create heartbeat protocol service."""
     return HeartbeatProtocolService(db=db_service, event_bus=event_bus_service)
 
@@ -38,6 +40,7 @@ def sample_agent(db_service: DatabaseService):
     """Create a sample agent for testing."""
     from uuid import uuid4
     from omoi_os.models.agent_status import AgentStatus
+
     agent_id = f"test-agent-{uuid4().hex[:8]}"
     with db_service.get_session() as session:
         agent = Agent(
@@ -63,6 +66,7 @@ def running_agent(db_service: DatabaseService):
     """Create a running agent for testing."""
     from uuid import uuid4
     from omoi_os.models.agent_status import AgentStatus
+
     agent_id = f"running-agent-{uuid4().hex[:8]}"
     with db_service.get_session() as session:
         agent = Agent(
@@ -99,7 +103,7 @@ class TestHeartbeatProtocolService:
             "health_metrics": {"cpu_usage_percent": 45.2, "memory_usage_mb": 384},
         }
         checksum = heartbeat_protocol_service._calculate_checksum(payload)
-        
+
         message = HeartbeatMessage(
             agent_id=sample_agent.id,
             timestamp=timestamp,
@@ -125,7 +129,9 @@ class TestHeartbeatProtocolService:
             assert agent.consecutive_missed_heartbeats == 0
             assert agent.last_heartbeat is not None
 
-    def test_receive_heartbeat_invalid_checksum(self, heartbeat_protocol_service, sample_agent):
+    def test_receive_heartbeat_invalid_checksum(
+        self, heartbeat_protocol_service, sample_agent
+    ):
         """Test heartbeat rejection with invalid checksum."""
         message = HeartbeatMessage(
             agent_id=sample_agent.id,
@@ -154,7 +160,7 @@ class TestHeartbeatProtocolService:
             "health_metrics": {},
         }
         checksum = heartbeat_protocol_service._calculate_checksum(payload)
-        
+
         message = HeartbeatMessage(
             agent_id="non-existent-agent",
             timestamp=timestamp,
@@ -170,7 +176,9 @@ class TestHeartbeatProtocolService:
         assert ack.received is False
         assert "Agent not found" in ack.message
 
-    def test_receive_heartbeat_sequence_gap_detection(self, heartbeat_protocol_service, running_agent):
+    def test_receive_heartbeat_sequence_gap_detection(
+        self, heartbeat_protocol_service, running_agent
+    ):
         """Test sequence gap detection (REQ-FT-HB-003)."""
         # Agent has sequence_number=5, last_expected_sequence=6
         # Send heartbeat with sequence_number=8 (gaps at 6 and 7)
@@ -184,7 +192,7 @@ class TestHeartbeatProtocolService:
             "health_metrics": {},
         }
         checksum = heartbeat_protocol_service._calculate_checksum(payload)
-        
+
         message = HeartbeatMessage(
             agent_id=running_agent.id,
             timestamp=timestamp,
@@ -217,7 +225,9 @@ class TestHeartbeatProtocolService:
         threshold = heartbeat_protocol_service._get_ttl_threshold("running", "monitor")
         assert threshold == 15
 
-    def test_check_missed_heartbeats_none(self, heartbeat_protocol_service, sample_agent):
+    def test_check_missed_heartbeats_none(
+        self, heartbeat_protocol_service, sample_agent
+    ):
         """Test checking missed heartbeats when none are missed."""
         # Update agent with recent heartbeat
         with heartbeat_protocol_service.db.get_session() as session:
@@ -231,9 +241,12 @@ class TestHeartbeatProtocolService:
         test_agent_missed = [m for m in missed if m[0]["id"] == sample_agent.id]
         assert len(test_agent_missed) == 0
 
-    def test_check_missed_heartbeats_one_missed(self, heartbeat_protocol_service, sample_agent, event_bus_service):
+    def test_check_missed_heartbeats_one_missed(
+        self, heartbeat_protocol_service, sample_agent, event_bus_service
+    ):
         """Test escalation ladder: 1 missed → warn (REQ-FT-AR-001)."""
         from omoi_os.models.agent_status import AgentStatus
+
         # Update agent with old heartbeat (beyond TTL threshold)
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, sample_agent.id)
@@ -256,7 +269,8 @@ class TestHeartbeatProtocolService:
         assert event_bus_service.publish.called
         # Find the call for our specific agent (entity_id is the agent ID)
         heartbeat_missed_calls = [
-            call[0][0] for call in event_bus_service.publish.call_args_list
+            call[0][0]
+            for call in event_bus_service.publish.call_args_list
             if call[0][0].event_type == "HEARTBEAT_MISSED"
             and call[0][0].entity_id == sample_agent.id
         ]
@@ -265,9 +279,12 @@ class TestHeartbeatProtocolService:
         assert call_args.payload["missed_count"] == 1
         assert call_args.payload["escalation_level"] == "warn"
 
-    def test_check_missed_heartbeats_two_missed_degraded(self, heartbeat_protocol_service, sample_agent, event_bus_service):
+    def test_check_missed_heartbeats_two_missed_degraded(
+        self, heartbeat_protocol_service, sample_agent, event_bus_service
+    ):
         """Test escalation ladder: 2 missed → DEGRADED (REQ-FT-AR-001)."""
         from omoi_os.models.agent_status import AgentStatus
+
         # Set agent to 1 missed heartbeat, then check again
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, sample_agent.id)
@@ -295,16 +312,22 @@ class TestHeartbeatProtocolService:
         assert event_bus_service.publish.call_count >= 2
         # Check for AGENT_STATUS_CHANGED event for our specific agent
         status_changed_calls = [
-            call[0][0] for call in event_bus_service.publish.call_args_list
+            call[0][0]
+            for call in event_bus_service.publish.call_args_list
             if call[0][0].event_type == "AGENT_STATUS_CHANGED"
             and call[0][0].entity_id == sample_agent.id
         ]
         assert len(status_changed_calls) > 0
-        assert status_changed_calls[0].payload["new_status"] == AgentStatus.DEGRADED.value
+        assert (
+            status_changed_calls[0].payload["new_status"] == AgentStatus.DEGRADED.value
+        )
 
-    def test_check_missed_heartbeats_three_missed_unresponsive(self, heartbeat_protocol_service, sample_agent, event_bus_service):
+    def test_check_missed_heartbeats_three_missed_unresponsive(
+        self, heartbeat_protocol_service, sample_agent, event_bus_service
+    ):
         """Test escalation ladder: 3 missed → FAILED (REQ-FT-AR-001)."""
         from omoi_os.models.agent_status import AgentStatus
+
         # Set agent to 2 missed heartbeats, then check again
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, sample_agent.id)
@@ -326,12 +349,15 @@ class TestHeartbeatProtocolService:
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, sample_agent.id)
             assert agent.status == AgentStatus.FAILED.value  # Status is FAILED
-            assert agent.health_status == "unresponsive"  # health_status is unresponsive
+            assert (
+                agent.health_status == "unresponsive"
+            )  # health_status is unresponsive
 
         # Verify restart protocol event was published for our test agent
         # Event uses entity_id, not agent_id in payload
         restart_calls = [
-            call[0][0] for call in event_bus_service.publish.call_args_list
+            call[0][0]
+            for call in event_bus_service.publish.call_args_list
             if call[0][0].event_type == "HEARTBEAT_MISSED"
             and call[0][0].payload.get("escalation_level") == "unresponsive"
             and call[0][0].entity_id == sample_agent.id
@@ -339,9 +365,12 @@ class TestHeartbeatProtocolService:
         assert len(restart_calls) > 0
         assert restart_calls[0].payload["action"] == "Initiate restart protocol"
 
-    def test_check_agent_health_with_ttl_idle(self, heartbeat_protocol_service, sample_agent):
+    def test_check_agent_health_with_ttl_idle(
+        self, heartbeat_protocol_service, sample_agent
+    ):
         """Test health check with state-based TTL for IDLE agent."""
         from omoi_os.models.agent_status import AgentStatus
+
         # Update agent with recent heartbeat
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, sample_agent.id)
@@ -355,9 +384,12 @@ class TestHeartbeatProtocolService:
         assert health["ttl_threshold"] == 30
         assert health["time_since_last_heartbeat"] < 30
 
-    def test_check_agent_health_with_ttl_running(self, heartbeat_protocol_service, running_agent):
+    def test_check_agent_health_with_ttl_running(
+        self, heartbeat_protocol_service, running_agent
+    ):
         """Test health check with state-based TTL for RUNNING agent."""
         from omoi_os.models.agent_status import AgentStatus
+
         # Update agent with recent heartbeat
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, running_agent.id)
@@ -365,15 +397,20 @@ class TestHeartbeatProtocolService:
             agent.status = AgentStatus.RUNNING.value
             session.commit()
 
-        health = heartbeat_protocol_service.check_agent_health_with_ttl(running_agent.id)
+        health = heartbeat_protocol_service.check_agent_health_with_ttl(
+            running_agent.id
+        )
 
         assert health["healthy"] is True
         assert health["ttl_threshold"] == 15
         assert health["time_since_last_heartbeat"] < 15
 
-    def test_check_agent_health_with_ttl_stale_running(self, heartbeat_protocol_service, running_agent):
+    def test_check_agent_health_with_ttl_stale_running(
+        self, heartbeat_protocol_service, running_agent
+    ):
         """Test health check detects stale RUNNING agent beyond TTL."""
         from omoi_os.models.agent_status import AgentStatus
+
         # Update agent with old heartbeat (beyond 15s TTL)
         with heartbeat_protocol_service.db.get_session() as session:
             agent = session.get(Agent, running_agent.id)
@@ -381,7 +418,9 @@ class TestHeartbeatProtocolService:
             agent.status = AgentStatus.RUNNING.value
             session.commit()
 
-        health = heartbeat_protocol_service.check_agent_health_with_ttl(running_agent.id)
+        health = heartbeat_protocol_service.check_agent_health_with_ttl(
+            running_agent.id
+        )
 
         assert health["healthy"] is False
         assert health["ttl_threshold"] == 15
@@ -410,14 +449,16 @@ class TestHeartbeatProtocolService:
         checksum1 = heartbeat_protocol_service._calculate_checksum(payload1)
         checksum2 = heartbeat_protocol_service._calculate_checksum(payload2)
 
-        assert checksum1 != checksum2  # Different payloads should have different checksums
+        assert (
+            checksum1 != checksum2
+        )  # Different payloads should have different checksums
         assert len(checksum1) == 64  # SHA256 hex string length
         assert len(checksum2) == 64
 
     def test_validate_checksum_valid(self, heartbeat_protocol_service):
         """Test checksum validation with valid checksum."""
         from datetime import datetime, timezone
-        
+
         # Use a fixed timestamp for consistent checksum
         fixed_timestamp = datetime(2025, 1, 27, 12, 0, 0, tzinfo=timezone.utc)
         payload = {
@@ -456,7 +497,9 @@ class TestHeartbeatProtocolService:
 
         assert heartbeat_protocol_service._validate_checksum(message) is False
 
-    def test_receive_heartbeat_resets_missed_count(self, heartbeat_protocol_service, sample_agent):
+    def test_receive_heartbeat_resets_missed_count(
+        self, heartbeat_protocol_service, sample_agent
+    ):
         """Test that receiving heartbeat resets consecutive_missed_heartbeats."""
         # Set agent to have missed heartbeats
         with heartbeat_protocol_service.db.get_session() as session:
@@ -475,7 +518,7 @@ class TestHeartbeatProtocolService:
             "health_metrics": {},
         }
         checksum = heartbeat_protocol_service._calculate_checksum(payload)
-        
+
         message = HeartbeatMessage(
             agent_id=sample_agent.id,
             timestamp=timestamp,
@@ -506,7 +549,7 @@ class TestRestartOrchestrator:
 
         registry = AgentRegistryService(db_service, event_bus_service)
         queue = TaskQueueService(db_service)
-        
+
         return RestartOrchestrator(
             db=db_service,
             agent_registry=registry,
@@ -514,7 +557,9 @@ class TestRestartOrchestrator:
             event_bus=event_bus_service,
         )
 
-    def test_initiate_restart_success(self, restart_orchestrator, sample_agent, event_bus_service):
+    def test_initiate_restart_success(
+        self, restart_orchestrator, sample_agent, event_bus_service
+    ):
         """Test successful restart initiation (REQ-FT-AR-002)."""
         from omoi_os.models.guardian_action import AuthorityLevel
 
@@ -533,13 +578,16 @@ class TestRestartOrchestrator:
         # Verify AGENT_RESTARTED event was published
         assert event_bus_service.publish.called
         restart_calls = [
-            call[0][0] for call in event_bus_service.publish.call_args_list
+            call[0][0]
+            for call in event_bus_service.publish.call_args_list
             if call[0][0].event_type == "AGENT_RESTARTED"
         ]
         assert len(restart_calls) > 0
         assert restart_calls[0].entity_id == sample_agent.id
 
-    def test_initiate_restart_insufficient_authority(self, restart_orchestrator, sample_agent):
+    def test_initiate_restart_insufficient_authority(
+        self, restart_orchestrator, sample_agent
+    ):
         """Test restart fails with insufficient authority."""
         from omoi_os.models.guardian_action import AuthorityLevel
 
@@ -554,7 +602,7 @@ class TestRestartOrchestrator:
 class TestEnhancedHeartbeatManager:
     """Test cases for enhanced HeartbeatManager."""
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_manager_adaptive_interval_idle(self, mock_sleep):
         """Test adaptive interval for IDLE agents (30s per REQ-FT-HB-002)."""
         from omoi_os.worker import HeartbeatManager
@@ -576,7 +624,7 @@ class TestEnhancedHeartbeatManager:
         interval = manager._get_interval()
         assert interval == 30
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_manager_adaptive_interval_running(self, mock_sleep):
         """Test adaptive interval for RUNNING agents (15s per REQ-FT-HB-002)."""
         from omoi_os.worker import HeartbeatManager
@@ -604,7 +652,7 @@ class TestEnhancedHeartbeatManager:
 
         mock_protocol_service = Mock()
         mock_protocol_service._calculate_checksum.return_value = "test_checksum"
-        
+
         manager = HeartbeatManager(
             agent_id="test-agent",
             heartbeat_protocol_service=mock_protocol_service,
@@ -629,7 +677,7 @@ class TestEnhancedHeartbeatManager:
 
         mock_protocol_service = Mock()
         mock_protocol_service._calculate_checksum.return_value = "test_checksum"
-        
+
         def collect_metrics():
             return {
                 "cpu_usage_percent": 45.2,
@@ -650,7 +698,7 @@ class TestEnhancedHeartbeatManager:
         assert message.health_metrics["memory_usage_mb"] == 384
         assert message.health_metrics["active_connections"] == 3
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_manager_loop_with_acknowledgment(self, mock_sleep):
         """Test heartbeat loop processes acknowledgment correctly."""
         from omoi_os.worker import HeartbeatManager
@@ -672,6 +720,7 @@ class TestEnhancedHeartbeatManager:
 
         manager._running = True
         call_count = 0
+
         def side_effect(*args, **kwargs):
             nonlocal call_count
             call_count += 1
@@ -688,7 +737,7 @@ class TestEnhancedHeartbeatManager:
         # Verify sleep was called with 30s interval for IDLE
         assert mock_sleep.call_args_list[0][0][0] == 30
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_heartbeat_manager_loop_no_acknowledgment(self, mock_sleep):
         """Test heartbeat loop handles missing acknowledgment."""
         from omoi_os.worker import HeartbeatManager
@@ -709,6 +758,7 @@ class TestEnhancedHeartbeatManager:
         )
 
         manager._running = True
+
         def side_effect(*args, **kwargs):
             manager._running = False
             return None
@@ -718,4 +768,3 @@ class TestEnhancedHeartbeatManager:
         manager._heartbeat_loop()
 
         assert mock_protocol_service.receive_heartbeat.call_count == 1
-

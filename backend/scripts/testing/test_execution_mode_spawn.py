@@ -37,6 +37,7 @@ from uuid import uuid4
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from dotenv import load_dotenv
+
 load_dotenv(Path(__file__).parent.parent.parent / ".env.local")
 
 from omoi_os.config import get_app_settings
@@ -45,6 +46,7 @@ from omoi_os.config import get_app_settings
 def get_db():
     """Get database service with proper connection string."""
     from omoi_os.services.database import DatabaseService
+
     app_settings = get_app_settings()
     return DatabaseService(connection_string=app_settings.database.url)
 
@@ -56,10 +58,7 @@ def list_tickets(limit: int = 20):
     db = get_db()
     with db.get_session() as session:
         tickets = (
-            session.query(Ticket)
-            .order_by(Ticket.created_at.desc())
-            .limit(limit)
-            .all()
+            session.query(Ticket).order_by(Ticket.created_at.desc()).limit(limit).all()
         )
 
         if not tickets:
@@ -69,7 +68,11 @@ def list_tickets(limit: int = 20):
         print(f"\n{'ID':<40} {'Status':<15} {'Title':<50}")
         print("-" * 105)
         for t in tickets:
-            title = (t.title or "Untitled")[:47] + "..." if len(t.title or "") > 50 else (t.title or "Untitled")
+            title = (
+                (t.title or "Untitled")[:47] + "..."
+                if len(t.title or "") > 50
+                else (t.title or "Untitled")
+            )
             print(f"{t.id:<40} {t.status:<15} {title:<50}")
 
 
@@ -158,23 +161,27 @@ async def spawn_sandbox(
     print("🧪 EXECUTION MODE SPAWN TEST")
     print("=" * 60)
 
-    print(f"\n📋 Task Details:")
+    print("\n📋 Task Details:")
     print(f"   Task ID: {task.id}")
     print(f"   Task Type: {task.task_type}")
     print(f"   Status: {task.status}")
     print(f"   Phase: {task.phase_id}")
     if task.description:
-        desc = task.description[:100] + "..." if len(task.description) > 100 else task.description
+        desc = (
+            task.description[:100] + "..."
+            if len(task.description) > 100
+            else task.description
+        )
         print(f"   Description: {desc}")
 
     if ticket:
-        print(f"\n📝 Ticket Details:")
+        print("\n📝 Ticket Details:")
         print(f"   Ticket ID: {ticket.id}")
         print(f"   Title: {ticket.title}")
         if project_info:
             print(f"   Project: {project_info.get('name', 'Unknown')}")
 
-    print(f"\n🎯 Execution Mode:")
+    print("\n🎯 Execution Mode:")
     print(f"   Auto-detected: {auto_mode}")
     if mode_override:
         print(f"   Override: {mode_override}")
@@ -190,7 +197,7 @@ async def spawn_sandbox(
             if idx + 1 < len(parts):
                 skill_names.add(parts[idx + 1])
 
-    print(f"\n📦 Skills to Load:")
+    print("\n📦 Skills to Load:")
     for skill in sorted(skill_names):
         marker = "📝" if skill == "spec-driven-dev" else "🔧"
         print(f"   {marker} {skill}")
@@ -202,7 +209,7 @@ async def spawn_sandbox(
         print("\n🔍 DRY RUN - Not spawning actual sandbox")
         print("   Would spawn sandbox with:")
         print(f"   - execution_mode={execution_mode}")
-        print(f"   - runtime=claude")
+        print("   - runtime=claude")
         print(f"   - skills={sorted(skill_names)}")
         return
 
@@ -241,7 +248,7 @@ async def spawn_sandbox(
 
     agent_id = f"test-agent-{uuid4().hex[:8]}"
 
-    print(f"\n🚀 Spawning sandbox...")
+    print("\n🚀 Spawning sandbox...")
     print(f"   Agent ID: {agent_id}")
     print(f"   Execution Mode: {execution_mode}")
 
@@ -269,9 +276,11 @@ async def spawn_sandbox(
         # Verify skills were uploaded
         sandbox = info.extra_data.get("daytona_sandbox") if info else None
         if sandbox:
-            print(f"\n🔍 Verifying skills in sandbox...")
-            result = sandbox.process.exec("ls -la /root/.claude/skills/ 2>/dev/null || echo 'Skills dir not found'")
-            print(f"   Skills directory:")
+            print("\n🔍 Verifying skills in sandbox...")
+            result = sandbox.process.exec(
+                "ls -la /root/.claude/skills/ 2>/dev/null || echo 'Skills dir not found'"
+            )
+            print("   Skills directory:")
             for line in result.result.strip().split("\n"):
                 print(f"      {line}")
 
@@ -280,19 +289,22 @@ async def spawn_sandbox(
             print(f"\n   EXECUTION_MODE env var: {result.result.strip()}")
 
             # Also check /tmp/.sandbox_env file for persistent env vars
-            result = sandbox.process.exec("cat /tmp/.sandbox_env | grep EXECUTION_MODE || echo 'Not in file'")
+            result = sandbox.process.exec(
+                "cat /tmp/.sandbox_env | grep EXECUTION_MODE || echo 'Not in file'"
+            )
             print(f"   EXECUTION_MODE in env file: {result.result.strip()}")
 
-        print(f"\n🎉 Sandbox ready for testing!")
+        print("\n🎉 Sandbox ready for testing!")
         print(f"   You can connect to: {sandbox_id}")
 
         # Ask if user wants to terminate
-        print(f"\n⚠️  Remember to terminate the sandbox when done:")
+        print("\n⚠️  Remember to terminate the sandbox when done:")
         print(f"   await spawner.terminate_sandbox('{sandbox_id}')")
 
     except Exception as e:
         print(f"\n❌ Failed to spawn sandbox: {e}")
         import traceback
+
         traceback.print_exc()
 
 
@@ -300,18 +312,26 @@ def main():
     parser = argparse.ArgumentParser(
         description="Test spawning sandboxes with different execution modes",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__
+        epilog=__doc__,
     )
 
-    parser.add_argument("--list-tickets", action="store_true", help="List recent tickets")
-    parser.add_argument("--list-tasks", metavar="TICKET_ID", help="List tasks for a ticket")
-    parser.add_argument("--task", metavar="TASK_ID", help="Task ID to spawn sandbox for")
+    parser.add_argument(
+        "--list-tickets", action="store_true", help="List recent tickets"
+    )
+    parser.add_argument(
+        "--list-tasks", metavar="TICKET_ID", help="List tasks for a ticket"
+    )
+    parser.add_argument(
+        "--task", metavar="TASK_ID", help="Task ID to spawn sandbox for"
+    )
     parser.add_argument(
         "--mode",
         choices=["exploration", "implementation", "validation"],
-        help="Override execution mode (default: auto-detect from task_type)"
+        help="Override execution mode (default: auto-detect from task_type)",
     )
-    parser.add_argument("--dry-run", action="store_true", help="Show what would happen without spawning")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would happen without spawning"
+    )
 
     args = parser.parse_args()
 
@@ -320,11 +340,13 @@ def main():
     elif args.list_tasks:
         list_tasks(args.list_tasks)
     elif args.task:
-        asyncio.run(spawn_sandbox(
-            task_id=args.task,
-            mode_override=args.mode,
-            dry_run=args.dry_run,
-        ))
+        asyncio.run(
+            spawn_sandbox(
+                task_id=args.task,
+                mode_override=args.mode,
+                dry_run=args.dry_run,
+            )
+        )
     else:
         parser.print_help()
 

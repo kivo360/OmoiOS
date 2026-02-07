@@ -205,7 +205,7 @@ class TitleGenerationService:
     ) -> str:
         """Build prompt for title-only generation."""
         parts = [
-            f"Generate a concise title (max 70 chars) for this task:",
+            "Generate a concise title (max 70 chars) for this task:",
             f"Task type: {task_type}",
         ]
         if description:
@@ -351,14 +351,16 @@ class TitleGenerationService:
             parts.append(f"Project: {project_name}")
         if project_description:
             parts.append(f"Project context: {project_description}")
-        parts.extend([
-            "",
-            "Guidelines:",
-            "- The title should be a clear, professional name for the feature/system",
-            "- Start with a noun or gerund (e.g., 'User authentication system', 'Real-time notifications')",
-            "- The description should summarize the key functionality in 1-2 sentences",
-            "- Do not include implementation details",
-        ])
+        parts.extend(
+            [
+                "",
+                "Guidelines:",
+                "- The title should be a clear, professional name for the feature/system",
+                "- Start with a noun or gerund (e.g., 'User authentication system', 'Real-time notifications')",
+                "- The description should summarize the key functionality in 1-2 sentences",
+                "- Do not include implementation details",
+            ]
+        )
         return "\n".join(parts)
 
     def _create_spec_fallback_title(self, user_input: str) -> str:

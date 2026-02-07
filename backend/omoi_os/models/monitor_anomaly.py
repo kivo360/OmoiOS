@@ -27,17 +27,17 @@ class MonitorAnomaly(Base):
     severity: Mapped[str] = mapped_column(
         String(20), nullable=False, index=True
     )  # info, warning, error, critical
-    
+
     baseline_value: Mapped[float] = mapped_column(Float, nullable=False)
     observed_value: Mapped[float] = mapped_column(Float, nullable=False)
     deviation_percent: Mapped[float] = mapped_column(Float, nullable=False)
-    
+
     description: Mapped[str] = mapped_column(Text, nullable=False)
     labels: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     context: Mapped[Optional[dict]] = mapped_column(
         JSONB, nullable=True
     )  # Additional diagnostic info
-    
+
     detected_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
@@ -62,12 +62,12 @@ class Alert(Base):
     severity: Mapped[str] = mapped_column(
         String(20), nullable=False, index=True
     )  # info, warning, error, critical
-    
+
     current_value: Mapped[float] = mapped_column(Float, nullable=False)
     threshold: Mapped[float] = mapped_column(Float, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     labels: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    
+
     triggered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
     )
@@ -80,4 +80,3 @@ class Alert(Base):
     )
     resolved_by: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     resolution_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-

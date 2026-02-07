@@ -24,11 +24,14 @@ def _hash_password(password: str) -> str:
 
 def _verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify password against bcrypt hash."""
-    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )
 
 
 class TokenData(BaseModel):
     """Token payload data."""
+
     user_id: UUID
     token_type: str  # "access" or "refresh"
 
@@ -42,7 +45,7 @@ class AuthService:
         jwt_secret: str,
         jwt_algorithm: str = "HS256",
         access_token_expire_minutes: int = 15,
-        refresh_token_expire_days: int = 7
+        refresh_token_expire_days: int = 7,
     ):
         self.db = db
         self.jwt_secret = jwt_secret
@@ -62,29 +65,27 @@ class AuthService:
     def validate_password_strength(self, password: str) -> Tuple[bool, Optional[str]]:
         """
         Validate password strength.
-        
+
         Returns:
             Tuple of (is_valid, error_message)
         """
         if len(password) < 8:
             return False, "Password must be at least 8 characters"
-        
+
         if not any(c.isupper() for c in password):
             return False, "Password must contain at least one uppercase letter"
-        
+
         if not any(c.islower() for c in password):
             return False, "Password must contain at least one lowercase letter"
-        
+
         if not any(c.isdigit() for c in password):
             return False, "Password must contain at least one digit"
-        
+
         return True, None
 
     # JWT operations
     def create_access_token(
-        self,
-        user_id: UUID,
-        expires_delta: Optional[timedelta] = None
+        self, user_id: UUID, expires_delta: Optional[timedelta] = None
     ) -> str:
         """Create JWT access token."""
         if expires_delta:
@@ -96,19 +97,13 @@ class AuthService:
             "sub": str(user_id),
             "exp": expire.timestamp(),
             "iat": utc_now().timestamp(),
-            "type": "access"
+            "type": "access",
         }
 
-        return jwt.encode(
-            payload,
-            self.jwt_secret,
-            algorithm=self.jwt_algorithm
-        )
+        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
 
     def create_refresh_token(
-        self,
-        user_id: UUID,
-        expires_delta: Optional[timedelta] = None
+        self, user_id: UUID, expires_delta: Optional[timedelta] = None
     ) -> str:
         """Create JWT refresh token."""
         if expires_delta:
@@ -120,27 +115,23 @@ class AuthService:
             "sub": str(user_id),
             "exp": expire.timestamp(),
             "iat": utc_now().timestamp(),
-            "type": "refresh"
+            "type": "refresh",
         }
 
-        return jwt.encode(
-            payload,
-            self.jwt_secret,
-            algorithm=self.jwt_algorithm
-        )
+        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
 
-    def verify_token(self, token: str, token_type: str = "access") -> Optional[TokenData]:
+    def verify_token(
+        self, token: str, token_type: str = "access"
+    ) -> Optional[TokenData]:
         """
         Verify and decode JWT token.
-        
+
         Returns:
             TokenData if valid, None if invalid
         """
         try:
             payload = jwt.decode(
-                token,
-                self.jwt_secret,
-                algorithms=[self.jwt_algorithm]
+                token, self.jwt_secret, algorithms=[self.jwt_algorithm]
             )
 
             user_id = UUID(payload.get("sub"))
@@ -209,22 +200,16 @@ class AuthService:
 
         return user
 
-    async def authenticate_user(
-        self,
-        email: str,
-        password: str
-    ) -> Optional[User]:
+    async def authenticate_user(self, email: str, password: str) -> Optional[User]:
         """
         Authenticate user by email and password.
-        
+
         Returns:
             User if authenticated, None if invalid credentials
         """
         result = await self.db.execute(
             select(User).where(
-                User.email == email,
-                User.is_active == True,
-                User.deleted_at.is_(None)
+                User.email == email, User.is_active is True, User.deleted_at.is_(None)
             )
         )
         user = result.scalar_one_or_none()
@@ -240,9 +225,7 @@ class AuthService:
 
         # Update last login
         await self.db.execute(
-            update(User)
-            .where(User.id == user.id)
-            .values(last_login_at=utc_now())
+            update(User).where(User.id == user.id).values(last_login_at=utc_now())
         )
         await self.db.commit()
         await self.db.refresh(user)
@@ -253,9 +236,7 @@ class AuthService:
         """Get user by ID."""
         result = await self.db.execute(
             select(User).where(
-                User.id == user_id,
-                User.is_active == True,
-                User.deleted_at.is_(None)
+                User.id == user_id, User.is_active is True, User.deleted_at.is_(None)
             )
         )
         return result.scalar_one_or_none()
@@ -263,10 +244,7 @@ class AuthService:
     async def get_user_by_email(self, email: str) -> Optional[User]:
         """Get user by email."""
         result = await self.db.execute(
-            select(User).where(
-                User.email == email,
-                User.deleted_at.is_(None)
-            )
+            select(User).where(User.email == email, User.deleted_at.is_(None))
         )
         return result.scalar_one_or_none()
 
@@ -275,7 +253,7 @@ class AuthService:
         self,
         user_id: UUID,
         ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        user_agent: Optional[str] = None,
     ) -> Session:
         """Create a new session for user."""
         # Generate session token
@@ -284,13 +262,13 @@ class AuthService:
 
         # Create session
         expires_at = utc_now() + timedelta(days=self.refresh_token_expire_days)
-        
+
         session = Session(
             user_id=user_id,
             token_hash=token_hash,
             ip_address=ip_address,
             user_agent=user_agent,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
 
         self.db.add(session)
@@ -305,12 +283,9 @@ class AuthService:
 
         result = await self.db.execute(
             select(Session)
-            .where(
-                Session.token_hash == token_hash,
-                Session.expires_at > utc_now()
-            )
+            .where(Session.token_hash == token_hash, Session.expires_at > utc_now())
             .join(User)
-            .where(User.is_active == True, User.deleted_at.is_(None))
+            .where(User.is_active is True, User.deleted_at.is_(None))
         )
         session = result.scalar_one_or_none()
 
@@ -325,9 +300,7 @@ class AuthService:
 
     async def invalidate_session(self, session_id: UUID):
         """Invalidate a session."""
-        result = await self.db.execute(
-            select(Session).where(Session.id == session_id)
-        )
+        result = await self.db.execute(select(Session).where(Session.id == session_id))
         session = result.scalar_one_or_none()
 
         if session:
@@ -336,9 +309,7 @@ class AuthService:
 
     async def cleanup_expired_sessions(self):
         """Remove expired sessions."""
-        await self.db.execute(
-            select(Session).where(Session.expires_at <= utc_now())
-        )
+        await self.db.execute(select(Session).where(Session.expires_at <= utc_now()))
         # SQLAlchemy will handle the delete
         await self.db.commit()
 
@@ -346,7 +317,7 @@ class AuthService:
     def generate_api_key(self) -> Tuple[str, str, str]:
         """
         Generate API key.
-        
+
         Returns:
             Tuple of (full_key, prefix, hashed_key)
         """
@@ -363,14 +334,14 @@ class AuthService:
         name: str,
         scopes: Optional[list[str]] = None,
         organization_id: Optional[UUID] = None,
-        expires_in_days: Optional[int] = None
+        expires_in_days: Optional[int] = None,
     ) -> Tuple[APIKey, str]:
         """
         Create API key for user.
-        
+
         Returns:
             Tuple of (APIKey object, full_key_string)
-            
+
         Note: Full key is returned only once!
         """
         full_key, prefix, hashed_key = self.generate_api_key()
@@ -387,7 +358,7 @@ class AuthService:
             hashed_key=hashed_key,
             scopes=scopes or [],
             is_active=True,
-            expires_at=expires_at
+            expires_at=expires_at,
         )
 
         self.db.add(api_key)
@@ -399,7 +370,7 @@ class AuthService:
     async def verify_api_key(self, key: str) -> Optional[Tuple[User, APIKey]]:
         """
         Verify API key and return associated user.
-        
+
         Returns:
             Tuple of (User, APIKey) if valid, None if invalid
         """
@@ -407,13 +378,8 @@ class AuthService:
 
         result = await self.db.execute(
             select(APIKey)
-            .where(
-                APIKey.hashed_key == hashed_key,
-                APIKey.is_active == True
-            )
-            .where(
-                (APIKey.expires_at.is_(None)) | (APIKey.expires_at > utc_now())
-            )
+            .where(APIKey.hashed_key == hashed_key, APIKey.is_active is True)
+            .where((APIKey.expires_at.is_(None)) | (APIKey.expires_at > utc_now()))
         )
         api_key = result.scalar_one_or_none()
 
@@ -424,8 +390,8 @@ class AuthService:
         user_result = await self.db.execute(
             select(User).where(
                 User.id == api_key.user_id,
-                User.is_active == True,
-                User.deleted_at.is_(None)
+                User.is_active is True,
+                User.deleted_at.is_(None),
             )
         )
         user = user_result.scalar_one_or_none()
@@ -435,9 +401,7 @@ class AuthService:
 
         # Update last_used_at
         await self.db.execute(
-            update(APIKey)
-            .where(APIKey.id == api_key.id)
-            .values(last_used_at=utc_now())
+            update(APIKey).where(APIKey.id == api_key.id).values(last_used_at=utc_now())
         )
         await self.db.commit()
 
@@ -446,9 +410,7 @@ class AuthService:
     async def revoke_api_key(self, key_id: UUID):
         """Revoke an API key."""
         await self.db.execute(
-            update(APIKey)
-            .where(APIKey.id == key_id)
-            .values(is_active=False)
+            update(APIKey).where(APIKey.id == key_id).values(is_active=False)
         )
         await self.db.commit()
 
@@ -460,19 +422,15 @@ class AuthService:
         payload = {
             "sub": str(user_id),
             "exp": expire.timestamp(),
-            "type": "email_verification"
+            "type": "email_verification",
         }
 
-        return jwt.encode(
-            payload,
-            self.jwt_secret,
-            algorithm=self.jwt_algorithm
-        )
+        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
 
     async def verify_email(self, token: str) -> bool:
         """
         Verify email using verification token.
-        
+
         Returns:
             True if successful, False if invalid
         """
@@ -482,9 +440,7 @@ class AuthService:
 
         # Mark user as verified
         await self.db.execute(
-            update(User)
-            .where(User.id == token_data.user_id)
-            .values(is_verified=True)
+            update(User).where(User.id == token_data.user_id).values(is_verified=True)
         )
         await self.db.commit()
 
@@ -498,19 +454,15 @@ class AuthService:
         payload = {
             "sub": str(user_id),
             "exp": expire.timestamp(),
-            "type": "password_reset"
+            "type": "password_reset",
         }
 
-        return jwt.encode(
-            payload,
-            self.jwt_secret,
-            algorithm=self.jwt_algorithm
-        )
+        return jwt.encode(payload, self.jwt_secret, algorithm=self.jwt_algorithm)
 
     async def reset_password(self, token: str, new_password: str) -> bool:
         """
         Reset password using reset token.
-        
+
         Returns:
             True if successful, False if invalid
         """
@@ -539,4 +491,3 @@ class AuthService:
         await self.db.commit()
 
         return True
-

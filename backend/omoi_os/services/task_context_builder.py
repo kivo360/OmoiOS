@@ -13,15 +13,14 @@ has everything it needs without making additional API calls.
 
 from dataclasses import dataclass, field
 from functools import lru_cache
-from typing import Any, Optional
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from omoi_os.logging import get_logger
-from omoi_os.models.spec import Spec, SpecAcceptanceCriterion, SpecRequirement, SpecTask
+from omoi_os.models.spec import Spec, SpecRequirement
 from omoi_os.models.task import Task
-from omoi_os.models.ticket import Ticket
 from omoi_os.services.database import DatabaseService
 
 logger = get_logger(__name__)
@@ -257,7 +256,9 @@ class FullTaskContext:
                 lines.append(f"- **Phase**: {self.current_spec_task.phase}")
                 lines.append(f"- **Status**: {self.current_spec_task.status}")
                 if self.current_spec_task.dependencies:
-                    lines.append(f"- **Dependencies**: {', '.join(self.current_spec_task.dependencies)}")
+                    lines.append(
+                        f"- **Dependencies**: {', '.join(self.current_spec_task.dependencies)}"
+                    )
                 lines.append("")
                 if self.current_spec_task.description:
                     lines.append("### Task Description")
@@ -280,7 +281,9 @@ class FullTaskContext:
                         lines.append("#### Acceptance Criteria")
                         for criterion in req.acceptance_criteria:
                             status = "✅" if criterion.completed else "⬜"
-                            lines.append(f"- {status} **{criterion.id}**: {criterion.text}")
+                            lines.append(
+                                f"- {status} **{criterion.id}**: {criterion.text}"
+                            )
                         lines.append("")
 
             # Design artifacts
@@ -403,7 +406,9 @@ class TaskContextBuilder:
             # Check for revision feedback in task result
             if task.result:
                 context.revision_feedback = task.result.get("revision_feedback")
-                context.revision_recommendations = task.result.get("revision_recommendations")
+                context.revision_recommendations = task.result.get(
+                    "revision_recommendations"
+                )
                 context.validation_iteration = task.result.get("validation_iteration")
 
                 # Get spec context if this is a spec-driven task
@@ -411,7 +416,9 @@ class TaskContextBuilder:
                 spec_task_id = task.result.get("spec_task_id")
 
                 if spec_id:
-                    await self._add_spec_context(session, context, spec_id, spec_task_id)
+                    await self._add_spec_context(
+                        session, context, spec_id, spec_task_id
+                    )
 
             # Include synthesis context if present (merged from parallel predecessors)
             if task.synthesis_context:
@@ -547,7 +554,9 @@ class TaskContextBuilder:
             # Check for revision feedback in task result
             if task.result:
                 context.revision_feedback = task.result.get("revision_feedback")
-                context.revision_recommendations = task.result.get("revision_recommendations")
+                context.revision_recommendations = task.result.get(
+                    "revision_recommendations"
+                )
                 context.validation_iteration = task.result.get("validation_iteration")
 
                 # Get spec context if this is a spec-driven task
@@ -650,7 +659,9 @@ class TaskContextBuilder:
 
 
 @lru_cache(maxsize=1)
-def get_task_context_builder(db: Optional[DatabaseService] = None) -> TaskContextBuilder:
+def get_task_context_builder(
+    db: Optional[DatabaseService] = None,
+) -> TaskContextBuilder:
     """Get or create TaskContextBuilder instance.
 
     Args:
@@ -661,6 +672,7 @@ def get_task_context_builder(db: Optional[DatabaseService] = None) -> TaskContex
     """
     if db is None:
         from omoi_os.services.database import get_database_service
+
         db = get_database_service()
 
     return TaskContextBuilder(db=db)

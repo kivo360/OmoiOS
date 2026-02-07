@@ -5,6 +5,7 @@ Revises: 039_add_tasks_embedding_vector
 Create Date: 2025-12-24
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -33,11 +34,15 @@ def upgrade() -> None:
         sa.Column("stripe_product_id", sa.String(length=255), nullable=True),
         # Subscription details
         sa.Column("tier", sa.String(length=50), nullable=False, server_default="free"),
-        sa.Column("status", sa.String(length=50), nullable=False, server_default="active"),
+        sa.Column(
+            "status", sa.String(length=50), nullable=False, server_default="active"
+        ),
         # Billing cycle
         sa.Column("current_period_start", sa.DateTime(timezone=True), nullable=True),
         sa.Column("current_period_end", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("cancel_at_period_end", sa.Boolean(), nullable=False, server_default="false"),
+        sa.Column(
+            "cancel_at_period_end", sa.Boolean(), nullable=False, server_default="false"
+        ),
         sa.Column("canceled_at", sa.DateTime(timezone=True), nullable=True),
         # Trial tracking
         sa.Column("trial_start", sa.DateTime(timezone=True), nullable=True),
@@ -95,16 +100,30 @@ def upgrade() -> None:
     )
 
     # Indexes for common queries
-    op.create_index("ix_subscriptions_organization_id", "subscriptions", ["organization_id"])
-    op.create_index("ix_subscriptions_billing_account_id", "subscriptions", ["billing_account_id"])
-    op.create_index("ix_subscriptions_stripe_subscription_id", "subscriptions", ["stripe_subscription_id"])
+    op.create_index(
+        "ix_subscriptions_organization_id", "subscriptions", ["organization_id"]
+    )
+    op.create_index(
+        "ix_subscriptions_billing_account_id", "subscriptions", ["billing_account_id"]
+    )
+    op.create_index(
+        "ix_subscriptions_stripe_subscription_id",
+        "subscriptions",
+        ["stripe_subscription_id"],
+    )
     op.create_index("ix_subscriptions_tier", "subscriptions", ["tier"])
     op.create_index("ix_subscriptions_status", "subscriptions", ["status"])
     op.create_index("ix_subscriptions_created_at", "subscriptions", ["created_at"])
-    op.create_index("ix_subscriptions_current_period_end", "subscriptions", ["current_period_end"])
+    op.create_index(
+        "ix_subscriptions_current_period_end", "subscriptions", ["current_period_end"]
+    )
     # Composite indexes for common queries
-    op.create_index("idx_subscription_org_status", "subscriptions", ["organization_id", "status"])
-    op.create_index("idx_subscription_period_end", "subscriptions", ["current_period_end", "status"])
+    op.create_index(
+        "idx_subscription_org_status", "subscriptions", ["organization_id", "status"]
+    )
+    op.create_index(
+        "idx_subscription_period_end", "subscriptions", ["current_period_end", "status"]
+    )
 
 
 def downgrade() -> None:

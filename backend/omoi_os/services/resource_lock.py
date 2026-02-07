@@ -100,9 +100,9 @@ class ResourceLockService:
             True if released successfully
         """
         with self.db.get_session() as session:
-            lock = session.query(ResourceLock).filter(
-                ResourceLock.id == lock_id
-            ).first()
+            lock = (
+                session.query(ResourceLock).filter(ResourceLock.id == lock_id).first()
+            )
             if not lock:
                 return False
 
@@ -263,4 +263,3 @@ class ResourceLockService:
                 session.expunge(lock)
 
             return locks
-

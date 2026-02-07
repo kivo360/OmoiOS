@@ -10,9 +10,8 @@ These tests verify the data flow without requiring actual Daytona sandboxes.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
-
 
 # =============================================================================
 # Test: Task Creation Flow
@@ -62,7 +61,10 @@ class TestTaskCreationFlow:
         from omoi_os.services.spec_task_execution import SpecTaskExecutionService
 
         # These phase IDs should match what orchestrator_worker expects
-        assert SpecTaskExecutionService.PHASE_MAP["Implementation"] == "PHASE_IMPLEMENTATION"
+        assert (
+            SpecTaskExecutionService.PHASE_MAP["Implementation"]
+            == "PHASE_IMPLEMENTATION"
+        )
         assert SpecTaskExecutionService.PHASE_MAP["Testing"] == "PHASE_INTEGRATION"
         assert SpecTaskExecutionService.PHASE_MAP["Requirements"] == "PHASE_INITIAL"
         assert SpecTaskExecutionService.PHASE_MAP["Design"] == "PHASE_INITIAL"
@@ -104,7 +106,9 @@ class TestEventPublishingForOrchestrator:
 
         # Verify subscriptions match what orchestrator publishes
         calls = [call[0][0] for call in mock_event_bus.subscribe.call_args_list]
-        assert "TASK_COMPLETED" in calls  # Orchestrator publishes this on sandbox completion
+        assert (
+            "TASK_COMPLETED" in calls
+        )  # Orchestrator publishes this on sandbox completion
         assert "TASK_FAILED" in calls  # Orchestrator publishes this on sandbox failure
 
 
@@ -275,10 +279,6 @@ class TestTaskTypeDetermination:
         }
 
         # From orchestrator_worker.py VALIDATION_TASK_TYPES
-        validation_types = {
-            "validate",
-            "run_tests",
-        }
 
         # Implementation types (not in exploration or validation)
         implementation_types = {
@@ -315,17 +315,21 @@ class TestStatusUpdates:
         mock_spec_task.status = "in_progress"
 
         mock_session = MagicMock()
-        mock_session.get = MagicMock(side_effect=lambda model, id: {
-            Task: mock_task,
-            SpecTask: mock_spec_task,
-        }.get(model))
+        mock_session.get = MagicMock(
+            side_effect=lambda model, id: {
+                Task: mock_task,
+                SpecTask: mock_spec_task,
+            }.get(model)
+        )
         mock_session.commit = MagicMock()
 
         mock_db = MagicMock()
-        mock_db.get_session = MagicMock(return_value=MagicMock(
-            __enter__=MagicMock(return_value=mock_session),
-            __exit__=MagicMock(return_value=None),
-        ))
+        mock_db.get_session = MagicMock(
+            return_value=MagicMock(
+                __enter__=MagicMock(return_value=mock_session),
+                __exit__=MagicMock(return_value=None),
+            )
+        )
 
         return mock_db, mock_spec_task
 

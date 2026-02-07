@@ -4,11 +4,12 @@ import pytest
 
 from omoi_os.models.agent import Agent
 from omoi_os.models.agent_status import AgentStatus, is_valid_transition
-from omoi_os.models.agent_status_transition import AgentStatusTransition
-from omoi_os.services.agent_status_manager import AgentStatusManager, InvalidTransitionError
+from omoi_os.services.agent_status_manager import (
+    AgentStatusManager,
+    InvalidTransitionError,
+)
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService
-from omoi_os.utils.datetime import utc_now
 
 
 @pytest.fixture
@@ -34,7 +35,9 @@ def agent(db_service: DatabaseService) -> Agent:
 
 
 @pytest.fixture
-def status_manager(db_service: DatabaseService, event_bus_service: EventBusService) -> AgentStatusManager:
+def status_manager(
+    db_service: DatabaseService, event_bus_service: EventBusService
+) -> AgentStatusManager:
     """Create an AgentStatusManager instance."""
     return AgentStatusManager(db_service, event_bus_service)
 
@@ -77,56 +80,144 @@ class TestAgentStatus:
     def test_valid_transitions(self):
         """Test valid state transitions per REQ-ALM-004."""
         # SPAWNING → IDLE, FAILED, TERMINATED
-        assert is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.IDLE.value) is True
-        assert is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.FAILED.value) is True
-        assert is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.TERMINATED.value) is True
+        assert (
+            is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.IDLE.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.FAILED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(
+                AgentStatus.SPAWNING.value, AgentStatus.TERMINATED.value
+            )
+            is True
+        )
 
         # IDLE → RUNNING, DEGRADED, QUARANTINED, TERMINATED
-        assert is_valid_transition(AgentStatus.IDLE.value, AgentStatus.RUNNING.value) is True
-        assert is_valid_transition(AgentStatus.IDLE.value, AgentStatus.DEGRADED.value) is True
-        assert is_valid_transition(AgentStatus.IDLE.value, AgentStatus.QUARANTINED.value) is True
-        assert is_valid_transition(AgentStatus.IDLE.value, AgentStatus.TERMINATED.value) is True
+        assert (
+            is_valid_transition(AgentStatus.IDLE.value, AgentStatus.RUNNING.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.IDLE.value, AgentStatus.DEGRADED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.IDLE.value, AgentStatus.QUARANTINED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.IDLE.value, AgentStatus.TERMINATED.value)
+            is True
+        )
 
         # RUNNING → IDLE, FAILED, DEGRADED, QUARANTINED
-        assert is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.IDLE.value) is True
-        assert is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.FAILED.value) is True
-        assert is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.DEGRADED.value) is True
-        assert is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.QUARANTINED.value) is True
+        assert (
+            is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.IDLE.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.FAILED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.RUNNING.value, AgentStatus.DEGRADED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(
+                AgentStatus.RUNNING.value, AgentStatus.QUARANTINED.value
+            )
+            is True
+        )
 
         # DEGRADED → IDLE, FAILED, QUARANTINED, TERMINATED
-        assert is_valid_transition(AgentStatus.DEGRADED.value, AgentStatus.IDLE.value) is True
-        assert is_valid_transition(AgentStatus.DEGRADED.value, AgentStatus.FAILED.value) is True
-        assert is_valid_transition(AgentStatus.DEGRADED.value, AgentStatus.QUARANTINED.value) is True
-        assert is_valid_transition(AgentStatus.DEGRADED.value, AgentStatus.TERMINATED.value) is True
+        assert (
+            is_valid_transition(AgentStatus.DEGRADED.value, AgentStatus.IDLE.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.DEGRADED.value, AgentStatus.FAILED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(
+                AgentStatus.DEGRADED.value, AgentStatus.QUARANTINED.value
+            )
+            is True
+        )
+        assert (
+            is_valid_transition(
+                AgentStatus.DEGRADED.value, AgentStatus.TERMINATED.value
+            )
+            is True
+        )
 
         # FAILED → QUARANTINED, TERMINATED
-        assert is_valid_transition(AgentStatus.FAILED.value, AgentStatus.QUARANTINED.value) is True
-        assert is_valid_transition(AgentStatus.FAILED.value, AgentStatus.TERMINATED.value) is True
+        assert (
+            is_valid_transition(AgentStatus.FAILED.value, AgentStatus.QUARANTINED.value)
+            is True
+        )
+        assert (
+            is_valid_transition(AgentStatus.FAILED.value, AgentStatus.TERMINATED.value)
+            is True
+        )
 
         # QUARANTINED → IDLE, TERMINATED
-        assert is_valid_transition(AgentStatus.QUARANTINED.value, AgentStatus.IDLE.value) is True
-        assert is_valid_transition(AgentStatus.QUARANTINED.value, AgentStatus.TERMINATED.value) is True
+        assert (
+            is_valid_transition(AgentStatus.QUARANTINED.value, AgentStatus.IDLE.value)
+            is True
+        )
+        assert (
+            is_valid_transition(
+                AgentStatus.QUARANTINED.value, AgentStatus.TERMINATED.value
+            )
+            is True
+        )
 
     def test_invalid_transitions(self):
         """Test invalid state transitions per REQ-ALM-004."""
         # SPAWNING cannot go to RUNNING directly
-        assert is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.RUNNING.value) is False
+        assert (
+            is_valid_transition(AgentStatus.SPAWNING.value, AgentStatus.RUNNING.value)
+            is False
+        )
 
         # IDLE cannot go to FAILED directly
-        assert is_valid_transition(AgentStatus.IDLE.value, AgentStatus.FAILED.value) is False
+        assert (
+            is_valid_transition(AgentStatus.IDLE.value, AgentStatus.FAILED.value)
+            is False
+        )
 
         # TERMINATED cannot transition anywhere (terminal state)
-        assert is_valid_transition(AgentStatus.TERMINATED.value, AgentStatus.IDLE.value) is False
-        assert is_valid_transition(AgentStatus.TERMINATED.value, AgentStatus.RUNNING.value) is False
+        assert (
+            is_valid_transition(AgentStatus.TERMINATED.value, AgentStatus.IDLE.value)
+            is False
+        )
+        assert (
+            is_valid_transition(AgentStatus.TERMINATED.value, AgentStatus.RUNNING.value)
+            is False
+        )
 
         # FAILED cannot go to IDLE or RUNNING
-        assert is_valid_transition(AgentStatus.FAILED.value, AgentStatus.IDLE.value) is False
-        assert is_valid_transition(AgentStatus.FAILED.value, AgentStatus.RUNNING.value) is False
+        assert (
+            is_valid_transition(AgentStatus.FAILED.value, AgentStatus.IDLE.value)
+            is False
+        )
+        assert (
+            is_valid_transition(AgentStatus.FAILED.value, AgentStatus.RUNNING.value)
+            is False
+        )
 
         # Cannot skip states (e.g., IDLE → QUARANTINED without going through DEGRADED)
         # Actually, IDLE → QUARANTINED is valid per the requirements
         # But IDLE → FAILED is not valid (must go through DEGRADED or RUNNING first)
-        assert is_valid_transition(AgentStatus.IDLE.value, AgentStatus.FAILED.value) is False
+        assert (
+            is_valid_transition(AgentStatus.IDLE.value, AgentStatus.FAILED.value)
+            is False
+        )
 
 
 class TestAgentStatusManager:
@@ -235,13 +326,17 @@ class TestAgentStatusManager:
         assert len(transitions) >= 1
 
     def test_transition_status_updates_updated_at(
-        self, status_manager: AgentStatusManager, agent: Agent, db_service: DatabaseService
+        self,
+        status_manager: AgentStatusManager,
+        agent: Agent,
+        db_service: DatabaseService,
     ):
         """Test that transition updates agent's updated_at timestamp."""
         original_updated_at = agent.updated_at
 
         # Wait a tiny bit to ensure timestamp difference
         import time
+
         time.sleep(0.01)
 
         updated = status_manager.transition_status(
@@ -254,7 +349,11 @@ class TestAgentStatusManager:
         assert updated.updated_at > original_updated_at
 
     def test_transition_status_with_task_id(
-        self, status_manager: AgentStatusManager, agent: Agent, db_service: DatabaseService, sample_ticket
+        self,
+        status_manager: AgentStatusManager,
+        agent: Agent,
+        db_service: DatabaseService,
+        sample_ticket,
     ):
         """Test transition with task_id association."""
         # Create a real task for the foreign key constraint
@@ -275,7 +374,7 @@ class TestAgentStatusManager:
             task_id = task.id
             session.expunge(task)
 
-        updated = status_manager.transition_status(
+        status_manager.transition_status(
             agent.id,
             to_status=AgentStatus.RUNNING.value,
             initiated_by="test",
@@ -294,7 +393,7 @@ class TestAgentStatusManager:
         """Test transition with metadata."""
         metadata = {"error_code": "TIMEOUT", "retry_count": 2}
 
-        updated = status_manager.transition_status(
+        status_manager.transition_status(
             agent.id,
             to_status=AgentStatus.DEGRADED.value,
             initiated_by="test",
@@ -316,9 +415,15 @@ class TestAgentStatusManager:
     ):
         """Test getting transition history."""
         # Make multiple transitions
-        status_manager.transition_status(agent.id, AgentStatus.RUNNING.value, initiated_by="test", reason="T1")
-        status_manager.transition_status(agent.id, AgentStatus.IDLE.value, initiated_by="test", reason="T2")
-        status_manager.transition_status(agent.id, AgentStatus.DEGRADED.value, initiated_by="test", reason="T3")
+        status_manager.transition_status(
+            agent.id, AgentStatus.RUNNING.value, initiated_by="test", reason="T1"
+        )
+        status_manager.transition_status(
+            agent.id, AgentStatus.IDLE.value, initiated_by="test", reason="T2"
+        )
+        status_manager.transition_status(
+            agent.id, AgentStatus.DEGRADED.value, initiated_by="test", reason="T3"
+        )
 
         # Get history (should be most recent first)
         transitions = status_manager.get_transition_history(agent.id, limit=10)
@@ -362,11 +467,15 @@ class TestAgentStatusManager:
     # ---------------------------------------------------------------------
 
     def test_transition_status_publishes_event(
-        self, status_manager: AgentStatusManager, agent: Agent, event_bus_service: EventBusService
+        self,
+        status_manager: AgentStatusManager,
+        agent: Agent,
+        event_bus_service: EventBusService,
     ):
         """Test that status transition publishes AGENT_STATUS_CHANGED event."""
         # Subscribe to events
         events_received = []
+
         def event_handler(event):
             events_received.append(event)
 
@@ -388,7 +497,10 @@ class TestAgentStatusManager:
     # ---------------------------------------------------------------------
 
     def test_full_lifecycle(
-        self, status_manager: AgentStatusManager, db_service: DatabaseService, sample_ticket
+        self,
+        status_manager: AgentStatusManager,
+        db_service: DatabaseService,
+        sample_ticket,
     ):
         """Test full agent lifecycle with state machine."""
         from omoi_os.models.task import Task
@@ -426,37 +538,56 @@ class TestAgentStatusManager:
 
         # SPAWNING → IDLE
         agent = status_manager.transition_status(
-            agent_id, AgentStatus.IDLE.value, initiated_by="system", reason="Registration complete"
+            agent_id,
+            AgentStatus.IDLE.value,
+            initiated_by="system",
+            reason="Registration complete",
         )
         assert agent.status == AgentStatus.IDLE.value
 
         # IDLE → RUNNING
         agent = status_manager.transition_status(
-            agent_id, AgentStatus.RUNNING.value, initiated_by="worker", reason="Task assigned", task_id=task_id
+            agent_id,
+            AgentStatus.RUNNING.value,
+            initiated_by="worker",
+            reason="Task assigned",
+            task_id=task_id,
         )
         assert agent.status == AgentStatus.RUNNING.value
 
         # RUNNING → IDLE (task completed)
         agent = status_manager.transition_status(
-            agent_id, AgentStatus.IDLE.value, initiated_by="worker", reason="Task completed"
+            agent_id,
+            AgentStatus.IDLE.value,
+            initiated_by="worker",
+            reason="Task completed",
         )
         assert agent.status == AgentStatus.IDLE.value
 
         # IDLE → DEGRADED (anomaly detected)
         agent = status_manager.transition_status(
-            agent_id, AgentStatus.DEGRADED.value, initiated_by="monitor", reason="Anomaly detected"
+            agent_id,
+            AgentStatus.DEGRADED.value,
+            initiated_by="monitor",
+            reason="Anomaly detected",
         )
         assert agent.status == AgentStatus.DEGRADED.value
 
         # DEGRADED → QUARANTINED (escalation)
         agent = status_manager.transition_status(
-            agent_id, AgentStatus.QUARANTINED.value, initiated_by="guardian", reason="Escalation"
+            agent_id,
+            AgentStatus.QUARANTINED.value,
+            initiated_by="guardian",
+            reason="Escalation",
         )
         assert agent.status == AgentStatus.QUARANTINED.value
 
         # QUARANTINED → TERMINATED (cleanup)
         agent = status_manager.transition_status(
-            agent_id, AgentStatus.TERMINATED.value, initiated_by="system", reason="Cleanup"
+            agent_id,
+            AgentStatus.TERMINATED.value,
+            initiated_by="system",
+            reason="Cleanup",
         )
         assert agent.status == AgentStatus.TERMINATED.value
 
@@ -467,41 +598,56 @@ class TestAgentStatusManager:
         # Verify final state is terminal
         assert AgentStatus.is_terminal(agent.status) is True
 
-    def test_degradation_path(
-        self, status_manager: AgentStatusManager, agent: Agent
-    ):
+    def test_degradation_path(self, status_manager: AgentStatusManager, agent: Agent):
         """Test degradation path: RUNNING → DEGRADED → FAILED."""
         # IDLE → RUNNING
         agent = status_manager.transition_status(
-            agent.id, AgentStatus.RUNNING.value, initiated_by="test", reason="Start task"
+            agent.id,
+            AgentStatus.RUNNING.value,
+            initiated_by="test",
+            reason="Start task",
         )
 
         # RUNNING → DEGRADED (missed heartbeats)
         agent = status_manager.transition_status(
-            agent.id, AgentStatus.DEGRADED.value, initiated_by="monitor", reason="Missed heartbeats"
+            agent.id,
+            AgentStatus.DEGRADED.value,
+            initiated_by="monitor",
+            reason="Missed heartbeats",
         )
         assert agent.status == AgentStatus.DEGRADED.value
 
         # DEGRADED → FAILED (unresponsive)
         agent = status_manager.transition_status(
-            agent.id, AgentStatus.FAILED.value, initiated_by="monitor", reason="Unresponsive"
+            agent.id,
+            AgentStatus.FAILED.value,
+            initiated_by="monitor",
+            reason="Unresponsive",
         )
         assert agent.status == AgentStatus.FAILED.value
 
         # FAILED → TERMINATED (restart protocol)
         agent = status_manager.transition_status(
-            agent.id, AgentStatus.TERMINATED.value, initiated_by="restart_orchestrator", reason="Restart"
+            agent.id,
+            AgentStatus.TERMINATED.value,
+            initiated_by="restart_orchestrator",
+            reason="Restart",
         )
         assert agent.status == AgentStatus.TERMINATED.value
 
-    def test_recovery_path(
-        self, status_manager: AgentStatusManager, agent: Agent
-    ):
+    def test_recovery_path(self, status_manager: AgentStatusManager, agent: Agent):
         """Test recovery path: QUARANTINED → IDLE."""
         # First, transition to QUARANTINED through valid path
         # IDLE → DEGRADED → QUARANTINED
-        status_manager.transition_status(agent.id, AgentStatus.DEGRADED.value, initiated_by="test", reason="Degrade")
-        status_manager.transition_status(agent.id, AgentStatus.QUARANTINED.value, initiated_by="test", reason="Quarantine")
+        status_manager.transition_status(
+            agent.id, AgentStatus.DEGRADED.value, initiated_by="test", reason="Degrade"
+        )
+        status_manager.transition_status(
+            agent.id,
+            AgentStatus.QUARANTINED.value,
+            initiated_by="test",
+            reason="Quarantine",
+        )
 
         # QUARANTINED → IDLE (recovery)
         agent = status_manager.transition_status(
@@ -509,4 +655,3 @@ class TestAgentStatusManager:
         )
         assert agent.status == AgentStatus.IDLE.value
         assert AgentStatus.is_active(agent.status) is True
-

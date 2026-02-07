@@ -59,10 +59,12 @@ class TestTaskTimeoutMethods:
 
     def test_check_task_timeout_true(self, task_queue, sample_task):
         """Test timeout detection for timed-out task."""
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             # Should return True since task started 35s ago with 30s timeout
             assert task_queue.check_task_timeout("test-task-123") is True
@@ -75,10 +77,12 @@ class TestTaskTimeoutMethods:
         recent_task.timeout_seconds = 30
         recent_task.started_at = utc_now() - timedelta(seconds=10)  # 10 seconds ago
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = recent_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                recent_task
+            )
 
             # Should return False since only 10s elapsed with 30s timeout
             assert task_queue.check_task_timeout("test-task-123") is False
@@ -87,10 +91,12 @@ class TestTaskTimeoutMethods:
         """Test timeout detection for non-running task."""
         sample_task.status = "completed"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             # Should return False since task is not running
             assert task_queue.check_task_timeout("test-task-123") is False
@@ -99,10 +105,12 @@ class TestTaskTimeoutMethods:
         """Test successful task cancellation."""
         sample_task.status = "running"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             result = task_queue.cancel_task("test-task-123", "user_requested")
 
@@ -113,10 +121,12 @@ class TestTaskTimeoutMethods:
 
     def test_cancel_task_not_found(self, task_queue):
         """Test cancellation of non-existent task."""
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = None
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                None
+            )
 
             result = task_queue.cancel_task("non-existent")
 
@@ -126,10 +136,12 @@ class TestTaskTimeoutMethods:
         """Test cancellation of completed task."""
         sample_task.status = "completed"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             result = task_queue.cancel_task("test-task-123")
 
@@ -147,10 +159,13 @@ class TestTaskTimeoutMethods:
         running_task.started_at = utc_now() - timedelta(seconds=10)
         running_task.timeout_seconds = 30
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.all.return_value = [timed_out_task, running_task]
+            mock_session.query.return_value.filter.return_value.all.return_value = [
+                timed_out_task,
+                running_task,
+            ]
 
             # Mock expunge
             mock_session.expunge = Mock()
@@ -165,10 +180,12 @@ class TestTaskTimeoutMethods:
         """Test marking task as timed out."""
         sample_task.status = "running"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             result = task_queue.mark_task_timeout("test-task-123", "timeout_exceeded")
 
@@ -192,11 +209,12 @@ class TestTaskTimeoutMethods:
         completed_task.id = "completed-task"
         completed_task.status = "completed"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
             mock_session.query.return_value.filter.return_value.all.return_value = [
-                running_task, assigned_task  # Only return cancellable tasks (filter applied)
+                running_task,
+                assigned_task,  # Only return cancellable tasks (filter applied)
             ]
 
             # Mock expunge
@@ -213,10 +231,12 @@ class TestTaskTimeoutMethods:
 
     def test_get_task_elapsed_time(self, task_queue, sample_task):
         """Test getting elapsed time for running task."""
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             elapsed = task_queue.get_task_elapsed_time("test-task-123")
 
@@ -227,10 +247,12 @@ class TestTaskTimeoutMethods:
         """Test getting comprehensive timeout status."""
         sample_task.timeout_seconds = 60
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
             status = task_queue.get_task_timeout_status("test-task-123")
 
@@ -243,10 +265,12 @@ class TestTaskTimeoutMethods:
 
     def test_get_task_timeout_status_not_found(self, task_queue):
         """Test timeout status for non-existent task."""
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = None
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                None
+            )
 
             status = task_queue.get_task_timeout_status("non-existent")
 
@@ -275,20 +299,31 @@ class TestTimeoutManager:
         timeout_manager.stop()
         assert timeout_manager._running is False
 
-    @patch('time.sleep')
+    @patch("time.sleep")
     def test_timeout_monitoring_loop(self, mock_sleep, timeout_manager, sample_task):
         """Test timeout monitoring loop."""
         # Mock the timed out tasks response
-        with patch.object(timeout_manager.task_queue, 'get_timed_out_tasks') as mock_get_timed_out, \
-             patch.object(timeout_manager.task_queue, 'mark_task_timeout') as mock_mark_timeout, \
-             patch.object(timeout_manager.task_queue, 'get_task_elapsed_time') as mock_get_elapsed, \
-             patch.object(timeout_manager.event_bus, 'publish') as mock_publish:
+        with patch.object(
+            timeout_manager.task_queue, "get_timed_out_tasks"
+        ) as mock_get_timed_out, patch.object(
+            timeout_manager.task_queue, "mark_task_timeout"
+        ) as mock_mark_timeout, patch.object(
+            timeout_manager.task_queue, "get_task_elapsed_time"
+        ) as mock_get_elapsed, patch.object(
+            timeout_manager.event_bus, "publish"
+        ) as mock_publish:
 
             # Setup mocks
-            mock_get_timed_out.side_effect = [[sample_task], []]  # First call returns task, second is empty
+            mock_get_timed_out.side_effect = [
+                [sample_task],
+                [],
+            ]  # First call returns task, second is empty
             mock_mark_timeout.return_value = True
             mock_get_elapsed.return_value = 35.0
-            mock_sleep.side_effect = [None, KeyboardInterrupt]  # Sleep once then interrupt
+            mock_sleep.side_effect = [
+                None,
+                KeyboardInterrupt,
+            ]  # Sleep once then interrupt
 
             # Set running to True to start the loop
             timeout_manager._running = True
@@ -308,56 +343,86 @@ class TestTimeoutManager:
             assert event_call.event_type == "TASK_TIMED_OUT"
             assert event_call.entity_id == str(sample_task.id)
 
-    def test_check_task_cancellation_before_execution_success(self, timeout_manager, sample_task):
+    def test_check_task_cancellation_before_execution_success(
+        self, timeout_manager, sample_task
+    ):
         """Test cancellation check before execution - task can proceed."""
         sample_task.status = "running"
 
-        with patch.object(timeout_manager.task_queue.db, 'get_session') as mock_get_session:
+        with patch.object(
+            timeout_manager.task_queue.db, "get_session"
+        ) as mock_get_session:
             mock_session = Mock()
             mock_get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
-            result = timeout_manager.check_task_cancellation_before_execution(sample_task)
+            result = timeout_manager.check_task_cancellation_before_execution(
+                sample_task
+            )
 
             assert result is True
 
-    def test_check_task_cancellation_before_execution_cancelled(self, timeout_manager, sample_task):
+    def test_check_task_cancellation_before_execution_cancelled(
+        self, timeout_manager, sample_task
+    ):
         """Test cancellation check before execution - task was cancelled."""
         sample_task.status = "failed"
 
-        with patch.object(timeout_manager.task_queue.db, 'get_session') as mock_get_session:
+        with patch.object(
+            timeout_manager.task_queue.db, "get_session"
+        ) as mock_get_session:
             mock_session = Mock()
             mock_get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = sample_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                sample_task
+            )
 
-            with patch('builtins.print') as mock_print:
-                result = timeout_manager.check_task_cancellation_before_execution(sample_task)
+            with patch("builtins.print") as mock_print:
+                result = timeout_manager.check_task_cancellation_before_execution(
+                    sample_task
+                )
 
                 assert result is False
-                mock_print.assert_called_with(f"Task {sample_task.id} status changed to {sample_task.status}, cancelling execution")
+                mock_print.assert_called_with(
+                    f"Task {sample_task.id} status changed to {sample_task.status}, cancelling execution"
+                )
 
-    def test_handle_task_timeout_during_execution_with_termination(self, timeout_manager, sample_task):
+    def test_handle_task_timeout_during_execution_with_termination(
+        self, timeout_manager, sample_task
+    ):
         """Test handling timeout during execution with termination support."""
         mock_executor = Mock()
         mock_executor.terminate_conversation = Mock()
 
-        with patch('builtins.print') as mock_print:
-            timeout_manager.handle_task_timeout_during_execution(sample_task, mock_executor)
+        with patch("builtins.print") as mock_print:
+            timeout_manager.handle_task_timeout_during_execution(
+                sample_task, mock_executor
+            )
 
             mock_executor.terminate_conversation.assert_called_once()
             mock_print.assert_any_call(f"Handling timeout for task {sample_task.id}")
-            mock_print.assert_any_call(f"Terminated conversation for timed-out task {sample_task.id}")
+            mock_print.assert_any_call(
+                f"Terminated conversation for timed-out task {sample_task.id}"
+            )
 
-    def test_handle_task_timeout_during_execution_without_termination(self, timeout_manager, sample_task):
+    def test_handle_task_timeout_during_execution_without_termination(
+        self, timeout_manager, sample_task
+    ):
         """Test handling timeout during execution without termination support."""
         mock_executor = Mock(spec=[])  # Empty spec means no attributes
         # Don't add terminate_conversation method
 
-        with patch('builtins.print') as mock_print:
-            timeout_manager.handle_task_timeout_during_execution(sample_task, mock_executor)
+        with patch("builtins.print") as mock_print:
+            timeout_manager.handle_task_timeout_during_execution(
+                sample_task, mock_executor
+            )
 
             mock_print.assert_any_call(f"Handling timeout for task {sample_task.id}")
-            mock_print.assert_any_call(f"Executor for task {sample_task.id} does not support conversation termination")
+            mock_print.assert_any_call(
+                f"Executor for task {sample_task.id} does not support conversation termination"
+            )
 
 
 class TestTimeoutIntegration:
@@ -374,16 +439,20 @@ class TestTimeoutIntegration:
         timed_out_task.phase_id = "PHASE_IMPLEMENTATION"
         timed_out_task.task_type = "implement_feature"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
 
             # Test timeout detection
-            mock_session.query.return_value.filter.return_value.first.return_value = timed_out_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                timed_out_task
+            )
             assert task_queue.check_task_timeout("timeout-test-task") is True
 
             # Test marking as timed out
-            mock_session.query.return_value.filter.return_value.first.return_value = timed_out_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                timed_out_task
+            )
             result = task_queue.mark_task_timeout("timeout-test-task")
             assert result is True
 
@@ -398,10 +467,12 @@ class TestTimeoutIntegration:
         running_task.id = "cancel-test-task"
         running_task.status = "running"
 
-        with patch.object(task_queue, 'db') as mock_db:
+        with patch.object(task_queue, "db") as mock_db:
             mock_session = Mock()
             mock_db.get_session.return_value.__enter__.return_value = mock_session
-            mock_session.query.return_value.filter.return_value.first.return_value = running_task
+            mock_session.query.return_value.filter.return_value.first.return_value = (
+                running_task
+            )
 
             # Cancel the task
             result = task_queue.cancel_task("cancel-test-task", "user_request")
@@ -413,8 +484,9 @@ class TestTimeoutIntegration:
 
     def test_timeout_manager_with_no_tasks(self, timeout_manager):
         """Test timeout manager when no tasks are timed out."""
-        with patch.object(timeout_manager.task_queue, 'get_timed_out_tasks') as mock_get_timed_out, \
-             patch('time.sleep') as mock_sleep:
+        with patch.object(
+            timeout_manager.task_queue, "get_timed_out_tasks"
+        ) as mock_get_timed_out, patch("time.sleep") as mock_sleep:
 
             # No timed out tasks
             mock_get_timed_out.return_value = []

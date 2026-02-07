@@ -30,7 +30,10 @@ class BoardService:
         self.event_bus = event_bus
 
     def get_board_view(
-        self, session: Session, project_id: Optional[str] = None, user_id: Optional[Union[str, UUID]] = None
+        self,
+        session: Session,
+        project_id: Optional[str] = None,
+        user_id: Optional[Union[str, UUID]] = None,
     ) -> Dict[str, Any]:
         """
         Get complete Kanban board view with all columns and tickets.
@@ -56,7 +59,9 @@ class BoardService:
             all_phase_ids.extend(column.phase_mapping)
 
         # Fetch all tickets for all phases in a single query (fixes N+1)
-        tickets_by_phase: Dict[str, List[Ticket]] = {phase_id: [] for phase_id in all_phase_ids}
+        tickets_by_phase: Dict[str, List[Ticket]] = {
+            phase_id: [] for phase_id in all_phase_ids
+        }
 
         if all_phase_ids:
             # Query tickets, excluding those linked to archived specs
@@ -176,7 +181,9 @@ class BoardService:
         if not force:
             # Use ticket's project_id if not explicitly provided
             filter_project_id = project_id or ticket.project_id
-            current_count = self._count_tickets_in_column(session, column, filter_project_id)
+            current_count = self._count_tickets_in_column(
+                session, column, filter_project_id
+            )
             if not column.can_accept_more_work(current_count):
                 raise ValueError(
                     f"Column {target_column_id} WIP limit exceeded "
@@ -240,7 +247,9 @@ class BoardService:
         violations = []
         for column in columns:
             if column.wip_limit is not None:
-                current_count = self._count_tickets_in_column(session, column, project_id)
+                current_count = self._count_tickets_in_column(
+                    session, column, project_id
+                )
                 if current_count > column.wip_limit:
                     violations.append(
                         {

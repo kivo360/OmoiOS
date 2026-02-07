@@ -30,15 +30,17 @@ from omoi_os.services.authorization_service import AuthorizationService, ActorTy
 router = APIRouter()
 
 
-@router.post("", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_organization(
     request: OrganizationCreate,
     current_user: User = Depends(get_approved_user),
-    db: AsyncSession = Depends(get_db_session)
+    db: AsyncSession = Depends(get_db_session),
 ):
     """
     Create a new organization.
-    
+
     The current user becomes the owner with full permissions.
     """
     # Check if slug already exists
@@ -48,7 +50,7 @@ async def create_organization(
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Organization slug already exists"
+            detail="Organization slug already exists",
         )
 
     # Create organization
@@ -58,7 +60,7 @@ async def create_organization(
         description=request.description,
         owner_id=current_user.id,
         billing_email=request.billing_email,
-        is_active=True
+        is_active=True,
     )
 
     db.add(org)
@@ -67,18 +69,14 @@ async def create_organization(
     # Get owner role
     owner_role_result = await db.execute(
         select(Role).where(
-            Role.name == "owner",
-            Role.is_system == True,
-            Role.organization_id.is_(None)
+            Role.name == "owner", Role.is_system is True, Role.organization_id.is_(None)
         )
     )
     owner_role = owner_role_result.scalar_one()
 
     # Create membership for owner
     membership = OrganizationMembership(
-        user_id=current_user.id,
-        organization_id=org.id,
-        role_id=owner_role.id
+        user_id=current_user.id, organization_id=org.id, role_id=owner_role.id
     )
 
     db.add(membership)
@@ -92,7 +90,7 @@ async def create_organization(
 async def list_organizations(
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """List all organizations the current user is a member of."""
     orgs = await auth_service.get_user_organizations(current_user.id)
@@ -102,7 +100,7 @@ async def list_organizations(
             id=org["organization_id"],
             name=org["organization_name"],
             slug=org["organization_slug"],
-            role=org["role"]
+            role=org["role"],
         )
         for org in orgs
     ]
@@ -113,7 +111,7 @@ async def get_organization(
     org_id: UUID,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Get organization details."""
     # Check permission
@@ -121,24 +119,18 @@ async def get_organization(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:read",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one_or_none()
 
     if not org:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
         )
 
     return OrganizationResponse.model_validate(org)
@@ -150,7 +142,7 @@ async def update_organization(
     request: OrganizationUpdate,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Update organization."""
     # Check permission
@@ -158,14 +150,11 @@ async def update_organization(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:write",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Update organization
     update_data = {}
@@ -184,15 +173,11 @@ async def update_organization(
 
     if update_data:
         await db.execute(
-            update(Organization)
-            .where(Organization.id == org_id)
-            .values(**update_data)
+            update(Organization).where(Organization.id == org_id).values(**update_data)
         )
         await db.commit()
 
-    result = await db.execute(
-        select(Organization).where(Organization.id == org_id)
-    )
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
     org = result.scalar_one()
 
     return OrganizationResponse.model_validate(org)
@@ -203,11 +188,11 @@ async def delete_organization(
     org_id: UUID,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """
     Delete (archive) organization.
-    
+
     Only owner can delete. This is a soft delete.
     """
     # Check if user is owner
@@ -216,14 +201,12 @@ async def delete_organization(
     if not is_owner:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only organization owner can delete organization"
+            detail="Only organization owner can delete organization",
         )
 
     # Soft delete
     await db.execute(
-        update(Organization)
-        .where(Organization.id == org_id)
-        .values(is_active=False)
+        update(Organization).where(Organization.id == org_id).values(is_active=False)
     )
     await db.commit()
 
@@ -232,13 +215,18 @@ async def delete_organization(
 
 # Member management
 
-@router.post("/{org_id}/members", response_model=MembershipResponse, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/{org_id}/members",
+    response_model=MembershipResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_member(
     org_id: UUID,
     request: MembershipCreate,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Add a member to organization."""
     # Check permission
@@ -246,23 +234,17 @@ async def add_member(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:members:write",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Verify role exists
-    role_result = await db.execute(
-        select(Role).where(Role.id == request.role_id)
-    )
+    role_result = await db.execute(select(Role).where(Role.id == request.role_id))
     if not role_result.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Role not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
         )
 
     # Create membership
@@ -271,7 +253,7 @@ async def add_member(
         agent_id=request.agent_id,
         organization_id=org_id,
         role_id=request.role_id,
-        invited_by=current_user.id
+        invited_by=current_user.id,
     )
 
     db.add(membership)
@@ -279,9 +261,7 @@ async def add_member(
     await db.refresh(membership)
 
     # Load role for response
-    role = await db.execute(
-        select(Role).where(Role.id == membership.role_id)
-    )
+    role = await db.execute(select(Role).where(Role.id == membership.role_id))
     role_obj = role.scalar_one()
 
     response = MembershipResponse.model_validate(membership)
@@ -295,7 +275,7 @@ async def list_members(
     org_id: UUID,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """List organization members."""
     # Check permission
@@ -303,14 +283,11 @@ async def list_members(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:members:read",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     from sqlalchemy.orm import selectinload
 
@@ -329,7 +306,7 @@ async def list_members(
             organization_id=m.organization_id,
             role_id=m.role_id,
             role_name=m.role.name,
-            joined_at=m.joined_at
+            joined_at=m.joined_at,
         )
         for m in memberships
     ]
@@ -342,7 +319,7 @@ async def update_member(
     request: MembershipUpdate,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Update member role."""
     # Check permission
@@ -350,21 +327,18 @@ async def update_member(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:members:write",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Update membership
     await db.execute(
         update(OrganizationMembership)
         .where(
             OrganizationMembership.id == member_id,
-            OrganizationMembership.organization_id == org_id
+            OrganizationMembership.organization_id == org_id,
         )
         .values(role_id=request.role_id)
     )
@@ -386,7 +360,7 @@ async def update_member(
         organization_id=membership.organization_id,
         role_id=membership.role_id,
         role_name=membership.role.name,
-        joined_at=membership.joined_at
+        joined_at=membership.joined_at,
     )
 
 
@@ -396,7 +370,7 @@ async def remove_member(
     member_id: UUID,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Remove member from organization."""
     # Check permission
@@ -404,28 +378,24 @@ async def remove_member(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:members:delete",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Delete membership
     result = await db.execute(
         select(OrganizationMembership).where(
             OrganizationMembership.id == member_id,
-            OrganizationMembership.organization_id == org_id
+            OrganizationMembership.organization_id == org_id,
         )
     )
     membership = result.scalar_one_or_none()
 
     if not membership:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Member not found"
         )
 
     await db.delete(membership)
@@ -436,13 +406,14 @@ async def remove_member(
 
 # Role management
 
+
 @router.get("/{org_id}/roles", response_model=List[RoleResponse])
 async def list_roles(
     org_id: UUID,
     include_system: bool = True,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """List roles available in organization."""
     # Check permission
@@ -450,14 +421,11 @@ async def list_roles(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:read",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Get org-specific roles
     query = select(Role).where(Role.organization_id == org_id)
@@ -465,7 +433,7 @@ async def list_roles(
     # Include system roles if requested
     if include_system:
         query = select(Role).where(
-            (Role.organization_id == org_id) | (Role.is_system == True)
+            (Role.organization_id == org_id) | (Role.is_system is True)
         )
 
     result = await db.execute(query)
@@ -474,13 +442,15 @@ async def list_roles(
     return [RoleResponse.model_validate(role) for role in roles]
 
 
-@router.post("/{org_id}/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{org_id}/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_role(
     org_id: UUID,
     request: RoleCreate,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Create custom role for organization."""
     # Check permission (admin only)
@@ -488,14 +458,11 @@ async def create_role(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:write",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Create role
     role = Role(
@@ -504,7 +471,7 @@ async def create_role(
         description=request.description,
         permissions=request.permissions,
         is_system=False,
-        inherits_from=request.inherits_from
+        inherits_from=request.inherits_from,
     )
 
     db.add(role)
@@ -521,7 +488,7 @@ async def update_role(
     request: RoleUpdate,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Update custom role (cannot update system roles)."""
     # Check permission
@@ -529,34 +496,26 @@ async def update_role(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:write",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Get role
     result = await db.execute(
-        select(Role).where(
-            Role.id == role_id,
-            Role.organization_id == org_id
-        )
+        select(Role).where(Role.id == role_id, Role.organization_id == org_id)
     )
     role = result.scalar_one_or_none()
 
     if not role:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Role not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
         )
 
     if role.is_system:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot modify system roles"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot modify system roles"
         )
 
     # Update role
@@ -571,16 +530,10 @@ async def update_role(
         update_data["inherits_from"] = request.inherits_from
 
     if update_data:
-        await db.execute(
-            update(Role)
-            .where(Role.id == role_id)
-            .values(**update_data)
-        )
+        await db.execute(update(Role).where(Role.id == role_id).values(**update_data))
         await db.commit()
 
-        result = await db.execute(
-            select(Role).where(Role.id == role_id)
-        )
+        result = await db.execute(select(Role).where(Role.id == role_id))
         role = result.scalar_one()
 
     return RoleResponse.model_validate(role)
@@ -592,7 +545,7 @@ async def delete_role(
     role_id: UUID,
     current_user: User = Depends(get_approved_user),
     db: AsyncSession = Depends(get_db_session),
-    auth_service: AuthorizationService = Depends(get_authorization_service)
+    auth_service: AuthorizationService = Depends(get_authorization_service),
 ):
     """Delete custom role (cannot delete system roles)."""
     # Check permission
@@ -600,34 +553,26 @@ async def delete_role(
         actor_id=current_user.id,
         actor_type=ActorType.USER,
         action="org:write",
-        organization_id=org_id
+        organization_id=org_id,
     )
 
     if not allowed:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=reason
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=reason)
 
     # Get role
     result = await db.execute(
-        select(Role).where(
-            Role.id == role_id,
-            Role.organization_id == org_id
-        )
+        select(Role).where(Role.id == role_id, Role.organization_id == org_id)
     )
     role = result.scalar_one_or_none()
 
     if not role:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Role not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Role not found"
         )
 
     if role.is_system:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot delete system roles"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete system roles"
         )
 
     await db.delete(role)
@@ -640,10 +585,10 @@ async def delete_role(
 # Debug/Admin Endpoints (disable before production launch)
 # =============================================================================
 
+
 @router.get("/{org_id}/debug/owner-info")
 async def get_organization_owner_info(
-    org_id: UUID,
-    db: AsyncSession = Depends(get_db_session)
+    org_id: UUID, db: AsyncSession = Depends(get_db_session)
 ):
     """
     Debug endpoint to get organization owner info.
@@ -661,8 +606,7 @@ async def get_organization_owner_info(
 
     if not org:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found"
         )
 
     owner = org.owner
@@ -674,11 +618,15 @@ async def get_organization_owner_info(
             "slug": org.slug,
             "billing_email": org.billing_email,
         },
-        "owner": {
-            "id": str(owner.id) if owner else None,
-            "email": owner.email if owner else None,
-            "full_name": owner.full_name if owner else None,
-        } if owner else None,
-        "effective_billing_email": org.billing_email or (owner.email if owner else None),
+        "owner": (
+            {
+                "id": str(owner.id) if owner else None,
+                "email": owner.email if owner else None,
+                "full_name": owner.full_name if owner else None,
+            }
+            if owner
+            else None
+        ),
+        "effective_billing_email": org.billing_email
+        or (owner.email if owner else None),
     }
-

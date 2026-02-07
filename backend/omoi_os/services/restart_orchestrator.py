@@ -17,7 +17,7 @@ from omoi_os.utils.datetime import utc_now
 class RestartOrchestrator:
     """
     Restart orchestrator per REQ-FT-AR-002.
-    
+
     Executes restart steps:
     1. Graceful stop (10s timeout)
     2. Force terminate if graceful fails
@@ -56,7 +56,10 @@ class RestartOrchestrator:
         self.status_manager = status_manager
 
     def initiate_restart(
-        self, agent_id: str, reason: str, authority: AuthorityLevel = AuthorityLevel.MONITOR
+        self,
+        agent_id: str,
+        reason: str,
+        authority: AuthorityLevel = AuthorityLevel.MONITOR,
     ) -> Optional[dict]:
         """
         Initiate restart protocol for an agent per REQ-FT-AR-002.
@@ -74,7 +77,9 @@ class RestartOrchestrator:
         """
         # Check authority (only MONITOR, GUARDIAN, or SYSTEM can initiate restarts)
         if authority < AuthorityLevel.MONITOR:
-            raise PermissionError(f"Insufficient authority to initiate restart: {authority}")
+            raise PermissionError(
+                f"Insufficient authority to initiate restart: {authority}"
+            )
 
         with self.db.get_session() as session:
             agent = session.query(Agent).filter(Agent.id == agent_id).first()
@@ -300,4 +305,3 @@ class RestartOrchestrator:
 
             session.commit()
             return reassigned_task_ids
-

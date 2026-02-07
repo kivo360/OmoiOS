@@ -43,7 +43,10 @@ class TestRetryLogic:
     def test_calculate_backoff_delay_jitter(self):
         """Test that jitter adds randomness to delays."""
         # Run multiple times to ensure we get different values
-        delays = [calculate_backoff_delay(2, base_delay=1.0, max_delay=60.0) for _ in range(10)]
+        delays = [
+            calculate_backoff_delay(2, base_delay=1.0, max_delay=60.0)
+            for _ in range(10)
+        ]
 
         # Should have some variation (not all identical)
         assert len(set(round(d, 2) for d in delays)) > 1
@@ -53,7 +56,7 @@ class TestRetryLogic:
         for retry_count in range(5):
             for _ in range(100):  # Test many times for each retry count
                 base_delay = 1.0
-                expected_delay = base_delay * (2 ** retry_count)
+                expected_delay = base_delay * (2**retry_count)
                 max_delay = 60.0
 
                 delay = calculate_backoff_delay(retry_count, base_delay, max_delay)
@@ -247,7 +250,9 @@ class TestTaskQueueServiceRetryMethods:
 
         # Should return tasks from implementation phase that haven't exceeded retries
         # and automatically filter by retry count < max_retries
-        implementation_tasks = [t for t in [task1, task2, task3] if t.retry_count < t.max_retries]
+        implementation_tasks = [
+            t for t in [task1, task2, task3] if t.retry_count < t.max_retries
+        ]
         expected_count = len(implementation_tasks)
 
         assert len(result) == expected_count
@@ -282,7 +287,9 @@ class TestTaskQueueServiceRetryMethods:
         result = task_queue_service.get_retryable_tasks()
 
         # Should automatically filter by retry count < max_retries
-        retryable_tasks = [t for t in [task1, task2, task3] if t.retry_count < t.max_retries]
+        retryable_tasks = [
+            t for t in [task1, task2, task3] if t.retry_count < t.max_retries
+        ]
 
         assert len(result) == len(retryable_tasks)
         mock_session.expunge.assert_called()
@@ -353,12 +360,30 @@ class TestTaskQueueServiceRetryMethods:
     def test_is_retryable_error_partial_match(self, task_queue_service):
         """Test is_retryable_error matches partial strings."""
         # Should match permanent error patterns anywhere in the string
-        assert task_queue_service.is_retryable_error("Error: permission denied while accessing file") is False
-        assert task_queue_service.is_retryable_error("Failed due to authentication failed") is False
+        assert (
+            task_queue_service.is_retryable_error(
+                "Error: permission denied while accessing file"
+            )
+            is False
+        )
+        assert (
+            task_queue_service.is_retryable_error("Failed due to authentication failed")
+            is False
+        )
 
         # Should match retryable error patterns anywhere in the string
-        assert task_queue_service.is_retryable_error("Error: connection timeout after 30 seconds") is True
-        assert task_queue_service.is_retryable_error("Failed due to network connectivity issues") is True
+        assert (
+            task_queue_service.is_retryable_error(
+                "Error: connection timeout after 30 seconds"
+            )
+            is True
+        )
+        assert (
+            task_queue_service.is_retryable_error(
+                "Failed due to network connectivity issues"
+            )
+            is True
+        )
 
 
 class TestRetryIntegration:
@@ -453,6 +478,7 @@ class TestRetryIntegration:
         for retry_count in range(4):
             # Call with fixed random seed for predictable jitter
             import random
+
             random.seed(42)  # Fixed seed for predictable jitter
             delay = calculate_backoff_delay(retry_count, base_delay=1.0, max_delay=60.0)
             delays.append(delay)
@@ -464,15 +490,14 @@ class TestRetryIntegration:
         # retry 3: ~8.0 (6.0-10.0)
 
         assert 0.75 <= delays[0] <= 1.25  # retry 0
-        assert 1.5 <= delays[1] <= 2.5   # retry 1
-        assert 3.0 <= delays[2] <= 5.0   # retry 2
+        assert 1.5 <= delays[1] <= 2.5  # retry 1
+        assert 3.0 <= delays[2] <= 5.0  # retry 2
         assert 6.0 <= delays[3] <= 10.0  # retry 3
 
 
 class TestRetryErrorHandling:
     """Test error handling in retry functionality."""
 
-    
     def test_task_queue_service_init(self):
         """Test TaskQueueService initialization."""
         mock_db = Mock(spec=DatabaseService)

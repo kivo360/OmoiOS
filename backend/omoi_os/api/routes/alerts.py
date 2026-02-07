@@ -61,9 +61,7 @@ async def acknowledge_alert(
 ):
     """Acknowledge an alert."""
     try:
-        alert = alert_service.acknowledge_alert(
-            str(alert_id), request.acknowledged_by
-        )
+        alert = alert_service.acknowledge_alert(str(alert_id), request.acknowledged_by)
         return AlertResponse.model_validate(alert)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -104,4 +102,3 @@ async def list_alert_rules(
             )
         )
     return rules
-

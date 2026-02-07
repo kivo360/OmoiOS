@@ -37,7 +37,9 @@ def test_workspace_factory_daytona():
     daytona_settings = load_daytona_settings()
 
     print(f"\nWorkspace Mode: {ws_settings.mode}")
-    print(f"Daytona API Key: {'***' + daytona_settings.api_key[-8:] if daytona_settings.api_key else 'NOT SET'}")
+    print(
+        f"Daytona API Key: {'***' + daytona_settings.api_key[-8:] if daytona_settings.api_key else 'NOT SET'}"
+    )
     print(f"Daytona Target: {daytona_settings.target}")
 
     if ws_settings.mode != "daytona":
@@ -45,7 +47,7 @@ def test_workspace_factory_daytona():
         print("    For now, testing with explicit Daytona workspace creation...")
 
     # Create factory
-    factory = OpenHandsWorkspaceFactory(settings=ws_settings)
+    OpenHandsWorkspaceFactory(settings=ws_settings)
 
     # For testing, we'll create a Daytona workspace directly
     if daytona_settings.api_key:
@@ -108,6 +110,7 @@ def test_agent_executor_with_daytona():
 
     # Check for LLM key
     import os
+
     llm_key = os.environ.get("LLM_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     if not llm_key:
         print("\n❌ LLM_API_KEY not set. Cannot test AgentExecutor.")
@@ -122,7 +125,7 @@ def test_agent_executor_with_daytona():
             phase_id="PHASE_IMPLEMENTATION",
             planning_mode=False,
         )
-        print(f"✓ AgentExecutor created")
+        print("✓ AgentExecutor created")
         print(f"  Workspace: {executor.workspace_dir}")
         print(f"  Mode: {ws_settings.mode}")
 

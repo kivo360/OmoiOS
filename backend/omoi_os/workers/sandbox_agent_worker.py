@@ -188,7 +188,10 @@ class EventReporter:
             )
             return response.status_code == 200
         except Exception as e:
-            logger.error("Failed to report event", extra={"event_type": event_type, "error": str(e)})
+            logger.error(
+                "Failed to report event",
+                extra={"event_type": event_type, "error": str(e)},
+            )
             return False
 
     async def heartbeat(self) -> bool:
@@ -281,7 +284,10 @@ async def process_sdk_response(
                                 "block_type": "text",
                             },
                         )
-                        logger.info("Assistant message", extra={"text_preview": block.text[:100]})
+                        logger.info(
+                            "Assistant message",
+                            extra={"text_preview": block.text[:100]},
+                        )
 
                     elif isinstance(block, ThinkingBlock):
                         # Report thinking (if present)
@@ -292,7 +298,10 @@ async def process_sdk_response(
                                 "block_type": "thinking",
                             },
                         )
-                        logger.debug("Agent thinking", extra={"thinking_preview": block.thinking[:50]})
+                        logger.debug(
+                            "Agent thinking",
+                            extra={"thinking_preview": block.thinking[:50]},
+                        )
 
                     elif isinstance(block, ToolUseBlock):
                         # Report tool use
@@ -305,7 +314,10 @@ async def process_sdk_response(
                                 "block_type": "tool_use",
                             },
                         )
-                        logger.info("Tool use", extra={"tool_name": block.name, "tool_id": block.id})
+                        logger.info(
+                            "Tool use",
+                            extra={"tool_name": block.name, "tool_id": block.id},
+                        )
 
                     elif isinstance(block, ToolResultBlock):
                         # Report tool result
@@ -319,11 +331,15 @@ async def process_sdk_response(
                             },
                         )
                         log_level = logging.ERROR if block.is_error else logging.INFO
-                        logger.log(log_level, "Tool result", extra={
-                            "tool_id": block.tool_use_id,
-                            "is_error": block.is_error,
-                            "result_preview": str(block.content)[:50],
-                        })
+                        logger.log(
+                            log_level,
+                            "Tool result",
+                            extra={
+                                "tool_id": block.tool_use_id,
+                                "is_error": block.is_error,
+                                "result_preview": str(block.content)[:50],
+                            },
+                        )
 
             elif isinstance(msg, ResultMessage):
                 # Conversation turn completed
@@ -339,18 +355,25 @@ async def process_sdk_response(
                         "duration_api_ms": msg.duration_api_ms,
                     },
                 )
-                logger.info("Turn complete", extra={
-                    "num_turns": msg.num_turns,
-                    "total_cost_usd": msg.total_cost_usd,
-                    "is_error": msg.is_error,
-                })
+                logger.info(
+                    "Turn complete",
+                    extra={
+                        "num_turns": msg.num_turns,
+                        "total_cost_usd": msg.total_cost_usd,
+                        "is_error": msg.is_error,
+                    },
+                )
 
     except Exception as e:
         await reporter.report(
             "agent.error",
             {"error": str(e), "error_type": type(e).__name__},
         )
-        logger.error("Response processing error", extra={"error": str(e), "error_type": type(e).__name__}, exc_info=True)
+        logger.error(
+            "Response processing error",
+            extra={"error": str(e), "error_type": type(e).__name__},
+            exc_info=True,
+        )
 
     return result
 
@@ -395,7 +418,9 @@ class SandboxWorker:
             return 1
 
         if not SDK_AVAILABLE:
-            logger.error("claude_agent_sdk package not installed - Run: pip install claude-agent-sdk")
+            logger.error(
+                "claude_agent_sdk package not installed - Run: pip install claude-agent-sdk"
+            )
             return 1
 
         # Create SDK options
@@ -420,7 +445,9 @@ class SandboxWorker:
                         if self.config.initial_prompt:
                             logger.info(
                                 "Processing initial prompt",
-                                extra={"prompt_preview": self.config.initial_prompt[:50]}
+                                extra={
+                                    "prompt_preview": self.config.initial_prompt[:50]
+                                },
                             )
                             await client.query(self.config.initial_prompt)
                             await process_sdk_response(client, reporter)
@@ -448,7 +475,13 @@ class SandboxWorker:
                                     if not content:
                                         continue
 
-                                    logger.info("Received message", extra={"msg_type": msg_type, "content_preview": content[:50]})
+                                    logger.info(
+                                        "Received message",
+                                        extra={
+                                            "msg_type": msg_type,
+                                            "content_preview": content[:50],
+                                        },
+                                    )
 
                                     # Handle interrupt specially
                                     if msg_type == "interrupt":
@@ -456,7 +489,10 @@ class SandboxWorker:
                                             "agent.interrupted",
                                             {"reason": content},
                                         )
-                                        logger.warning("Interrupt received", extra={"reason": content})
+                                        logger.warning(
+                                            "Interrupt received",
+                                            extra={"reason": content},
+                                        )
                                         await client.interrupt()
                                         continue
 
@@ -499,7 +535,11 @@ class SandboxWorker:
                             except asyncio.CancelledError:
                                 break
                             except Exception as e:
-                                logger.error("Main loop error", extra={"error": str(e)}, exc_info=True)
+                                logger.error(
+                                    "Main loop error",
+                                    extra={"error": str(e)},
+                                    exc_info=True,
+                                )
                                 await reporter.report(
                                     "agent.error",
                                     {"error": str(e)},
@@ -507,7 +547,11 @@ class SandboxWorker:
                                 await asyncio.sleep(1)  # Back off on error
 
                 except Exception as e:
-                    logger.error("SDK initialization error", extra={"error": str(e)}, exc_info=True)
+                    logger.error(
+                        "SDK initialization error",
+                        extra={"error": str(e)},
+                        exc_info=True,
+                    )
                     await reporter.report(
                         "agent.error",
                         {"error": str(e), "phase": "initialization"},
@@ -525,7 +569,9 @@ class SandboxWorker:
                     source="worker",
                 )
 
-                logger.info("Worker shutdown complete", extra={"total_turns": total_turns})
+                logger.info(
+                    "Worker shutdown complete", extra={"total_turns": total_turns}
+                )
 
         return 0
 

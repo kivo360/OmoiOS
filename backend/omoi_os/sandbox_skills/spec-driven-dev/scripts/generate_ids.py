@@ -82,8 +82,9 @@ def get_next_id(id_type: str, prefix: Optional[str] = None) -> str:
     else:
         full_base = base
         # Get IDs without custom prefix
-        relevant = [(id_, num) for id_, num in existing
-                    if re.match(rf"{base}-\d+$", id_)]
+        relevant = [
+            (id_, num) for id_, num in existing if re.match(rf"{base}-\d+$", id_)
+        ]
 
     # Find next number
     if relevant:
@@ -131,24 +132,15 @@ def list_all_ids() -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Generate next ticket or task IDs"
+    parser = argparse.ArgumentParser(description="Generate next ticket or task IDs")
+    parser.add_argument(
+        "type", nargs="?", choices=["ticket", "task"], help="Type of ID to generate"
     )
     parser.add_argument(
-        "type",
-        nargs="?",
-        choices=["ticket", "task"],
-        help="Type of ID to generate"
+        "--prefix", help="Optional prefix for the ID (e.g., COLLAB for TKT-COLLAB-001)"
     )
     parser.add_argument(
-        "--prefix",
-        help="Optional prefix for the ID (e.g., COLLAB for TKT-COLLAB-001)"
-    )
-    parser.add_argument(
-        "--list",
-        action="store_true",
-        dest="list_ids",
-        help="List all existing IDs"
+        "--list", action="store_true", dest="list_ids", help="List all existing IDs"
     )
 
     args = parser.parse_args()

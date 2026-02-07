@@ -38,7 +38,9 @@ def mock_conversation():
     conversation.state.execution_status = "finished"
     conversation.state.events = [Mock(), Mock()]  # 2 events
     conversation.conversation_stats = Mock()
-    conversation.conversation_stats.get_combined_metrics = Mock(return_value=Mock(accumulated_cost=0.05))
+    conversation.conversation_stats.get_combined_metrics = Mock(
+        return_value=Mock(accumulated_cost=0.05)
+    )
     conversation.close = Mock()
     return conversation
 
@@ -139,7 +141,9 @@ def test_execute_task_failure(
     mock_conversation.state.execution_status = "failed"
     mock_conversation.state.events = []
     mock_conversation.conversation_stats = Mock()
-    mock_conversation.conversation_stats.get_combined_metrics = Mock(return_value=Mock(accumulated_cost=0.0))
+    mock_conversation.conversation_stats.get_combined_metrics = Mock(
+        return_value=Mock(accumulated_cost=0.0)
+    )
     mock_conversation.close = Mock()
 
     mock_conversation_class.return_value = mock_conversation
@@ -217,4 +221,3 @@ def test_result_structure(
     assert isinstance(result["status"], str)
     assert isinstance(result["event_count"], int)
     assert isinstance(result["cost"], (int, float))
-

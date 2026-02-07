@@ -14,11 +14,8 @@ Usage:
     taskiq worker omoi_os.tasks.broker:broker
 """
 
-import asyncio
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
-from uuid import UUID
 
 from omoi_os.tasks.broker import broker
 
@@ -28,6 +25,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # Payment Retry / Dunning Tasks
 # =============================================================================
+
 
 @broker.task(
     schedule=[
@@ -130,7 +128,11 @@ async def process_failed_payments() -> dict:
                     attempt_count = len(failed_payments)
 
                     # Determine action based on attempt count and time since last attempt
-                    last_attempt = failed_payments[0].created_at if failed_payments else invoice.due_date
+                    last_attempt = (
+                        failed_payments[0].created_at
+                        if failed_payments
+                        else invoice.due_date
+                    )
                     hours_since_last = (utc_now() - last_attempt).total_seconds() / 3600
 
                     # Retry schedule:
@@ -205,7 +207,9 @@ async def process_failed_payments() -> dict:
 
                         except Exception as e:
                             errors.append(f"Invoice {invoice.id}: {str(e)}")
-                            logger.error(f"Failed to retry payment for invoice {invoice.id}: {e}")
+                            logger.error(
+                                f"Failed to retry payment for invoice {invoice.id}: {e}"
+                            )
 
                 except Exception as e:
                     errors.append(f"Invoice {invoice.id}: {str(e)}")
@@ -266,8 +270,7 @@ async def send_payment_reminder() -> dict:
             three_days_from_now = now + timedelta(days=3)
 
             result = session.execute(
-                select(Invoice)
-                .where(
+                select(Invoice).where(
                     and_(
                         Invoice.status == InvoiceStatus.OPEN.value,
                         Invoice.due_date.isnot(None),
@@ -316,7 +319,9 @@ async def send_payment_reminder() -> dict:
 
                 except Exception as e:
                     errors.append(f"Invoice {invoice.id}: {str(e)}")
-                    logger.error(f"Failed to send reminder for invoice {invoice.id}: {e}")
+                    logger.error(
+                        f"Failed to send reminder for invoice {invoice.id}: {e}"
+                    )
 
     except Exception as e:
         logger.error(f"Payment reminder task error: {e}")
@@ -333,6 +338,7 @@ async def send_payment_reminder() -> dict:
 # =============================================================================
 # Invoice Generation Tasks
 # =============================================================================
+
 
 @broker.task(
     schedule=[
@@ -386,7 +392,7 @@ async def generate_scheduled_invoices() -> dict:
                     usage_result = session.execute(
                         select(UsageRecord).where(
                             UsageRecord.billing_account_id == account.id,
-                            UsageRecord.billed == False,
+                            UsageRecord.billed is False,
                         )
                     )
                     unbilled_usage = list(usage_result.scalars().all())
@@ -429,7 +435,9 @@ async def generate_scheduled_invoices() -> dict:
 
                 except Exception as e:
                     errors.append(f"Account {account.id}: {str(e)}")
-                    logger.error(f"Failed to generate invoice for account {account.id}: {e}")
+                    logger.error(
+                        f"Failed to generate invoice for account {account.id}: {e}"
+                    )
 
             session.commit()
 
@@ -449,6 +457,7 @@ async def generate_scheduled_invoices() -> dict:
 # =============================================================================
 # Low Credit Warning Tasks
 # =============================================================================
+
 
 @broker.task(
     schedule=[
@@ -507,10 +516,12 @@ async def check_low_credit_balances() -> dict:
                         select(Subscription).where(
                             and_(
                                 Subscription.organization_id == account.organization_id,
-                                Subscription.status.in_([
-                                    SubscriptionStatus.ACTIVE.value,
-                                    SubscriptionStatus.TRIALING.value,
-                                ]),
+                                Subscription.status.in_(
+                                    [
+                                        SubscriptionStatus.ACTIVE.value,
+                                        SubscriptionStatus.TRIALING.value,
+                                    ]
+                                ),
                             )
                         )
                     )
@@ -543,7 +554,9 @@ async def check_low_credit_balances() -> dict:
 
                 except Exception as e:
                     errors.append(f"Account {account.id}: {str(e)}")
-                    logger.error(f"Failed to send low credit warning for account {account.id}: {e}")
+                    logger.error(
+                        f"Failed to send low credit warning for account {account.id}: {e}"
+                    )
 
     except Exception as e:
         logger.error(f"Low credit check task error: {e}")
@@ -560,6 +573,7 @@ async def check_low_credit_balances() -> dict:
 # =============================================================================
 # Manual Task Triggers (can be called directly)
 # =============================================================================
+
 
 @broker.task
 async def retry_single_payment(invoice_id: str) -> dict:
@@ -592,7 +606,9 @@ async def retry_single_payment(invoice_id: str) -> dict:
             "success": success,
             "payment_id": str(payment.id),
             "status": payment.status,
-            "message": "Payment processed successfully" if success else "Payment failed",
+            "message": (
+                "Payment processed successfully" if success else "Payment failed"
+            ),
         }
     except Exception as e:
         logger.error(f"Manual payment retry failed: {e}")

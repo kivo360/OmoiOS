@@ -75,7 +75,9 @@ def main():
 
         # Test 5: Install a package and run code
         print("Test 5: Install package and run code")
-        result = workspace.execute_command("pip install cowsay -q && python -c \"import cowsay; cowsay.cow('OmoiOS!')\"")
+        result = workspace.execute_command(
+            "pip install cowsay -q && python -c \"import cowsay; cowsay.cow('OmoiOS!')\""
+        )
         print(f"{result.stdout}")
 
     print("-" * 50)
@@ -84,7 +86,6 @@ def main():
 
 async def async_example():
     """Async version of the example."""
-    import asyncio
 
     try:
         config = DaytonaWorkspaceConfig.from_settings()

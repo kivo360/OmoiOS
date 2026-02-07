@@ -31,7 +31,6 @@ from openhands.sdk.tool.registry import list_registered_tools
 from omoi_os.config import load_daytona_settings, load_llm_settings
 from omoi_os.workspace.daytona_sdk import DaytonaLocalWorkspace
 
-
 # All available tool names
 ALL_TOOLS = ["terminal", "file_editor", "grep", "glob", "task_tracker"]
 
@@ -86,7 +85,9 @@ def create_daytona_agent(
 
     # Create agent with tools
     tool_names = tools or ALL_TOOLS
-    tool_specs = [Tool(name=name) for name in tool_names if name in list_registered_tools()]
+    tool_specs = [
+        Tool(name=name) for name in tool_names if name in list_registered_tools()
+    ]
 
     agent = Agent(llm=llm, tools=tool_specs)
 

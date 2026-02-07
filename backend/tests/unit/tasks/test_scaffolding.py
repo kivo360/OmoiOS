@@ -2,7 +2,6 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from uuid import uuid4
 
 from omoi_os.tasks.scaffolding import (
     trigger_scaffolding,
@@ -89,6 +88,7 @@ class TestCreateSpecFromDescription:
         # Make refresh set the id attribute
         async def set_spec_id(spec):
             spec.id = "spec-123"
+
         mock_session.refresh = AsyncMock(side_effect=set_spec_id)
 
         mock_db.get_async_session.return_value = mock_session
@@ -158,7 +158,9 @@ class TestRunSpecStateMachine:
 
         mock_db.get_async_session.return_value = mock_session
 
-        with patch("omoi_os.workers.spec_state_machine.SpecStateMachine") as MockMachine:
+        with patch(
+            "omoi_os.workers.spec_state_machine.SpecStateMachine"
+        ) as MockMachine:
             mock_machine = MagicMock()
             mock_machine.run = AsyncMock(return_value=True)
             MockMachine.return_value = mock_machine
@@ -187,7 +189,9 @@ class TestRunSpecStateMachine:
 
         mock_db.get_async_session.return_value = mock_session
 
-        with patch("omoi_os.workers.spec_state_machine.SpecStateMachine") as MockMachine:
+        with patch(
+            "omoi_os.workers.spec_state_machine.SpecStateMachine"
+        ) as MockMachine:
             MockMachine.side_effect = Exception("State machine error")
 
             success = await _run_spec_state_machine(
@@ -205,10 +209,15 @@ class TestTriggerScaffolding:
     @pytest.mark.asyncio
     async def test_full_workflow_success(self):
         """Test successful full scaffolding workflow."""
-        with patch("omoi_os.api.dependencies.get_database_service") as mock_get_db, \
-             patch("omoi_os.services.event_bus.get_event_bus") as mock_get_bus, \
-             patch("omoi_os.tasks.scaffolding._create_spec_from_description") as mock_create, \
-             patch("omoi_os.tasks.scaffolding._run_spec_state_machine") as mock_run:
+        with patch(
+            "omoi_os.api.dependencies.get_database_service"
+        ) as mock_get_db, patch(
+            "omoi_os.services.event_bus.get_event_bus"
+        ) as mock_get_bus, patch(
+            "omoi_os.tasks.scaffolding._create_spec_from_description"
+        ) as mock_create, patch(
+            "omoi_os.tasks.scaffolding._run_spec_state_machine"
+        ) as mock_run:
 
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
@@ -235,9 +244,13 @@ class TestTriggerScaffolding:
     @pytest.mark.asyncio
     async def test_returns_error_when_spec_creation_fails(self):
         """Test returns error when spec creation fails."""
-        with patch("omoi_os.api.dependencies.get_database_service") as mock_get_db, \
-             patch("omoi_os.services.event_bus.get_event_bus") as mock_get_bus, \
-             patch("omoi_os.tasks.scaffolding._create_spec_from_description") as mock_create:
+        with patch(
+            "omoi_os.api.dependencies.get_database_service"
+        ) as mock_get_db, patch(
+            "omoi_os.services.event_bus.get_event_bus"
+        ) as mock_get_bus, patch(
+            "omoi_os.tasks.scaffolding._create_spec_from_description"
+        ) as mock_create:
 
             mock_db = MagicMock()
             mock_get_db.return_value = mock_db
@@ -259,8 +272,11 @@ class TestTriggerScaffolding:
     @pytest.mark.asyncio
     async def test_handles_exception_gracefully(self):
         """Test handles exceptions gracefully."""
-        with patch("omoi_os.api.dependencies.get_database_service") as mock_get_db, \
-             patch("omoi_os.services.event_bus.get_event_bus") as mock_get_bus:
+        with patch(
+            "omoi_os.api.dependencies.get_database_service"
+        ) as mock_get_db, patch(
+            "omoi_os.services.event_bus.get_event_bus"
+        ) as mock_get_bus:
 
             mock_get_db.side_effect = Exception("Database connection failed")
 
@@ -283,8 +299,11 @@ class TestTriggerScaffoldingForTicket:
     @pytest.mark.asyncio
     async def test_uses_ticket_description(self):
         """Test that ticket description is used for scaffolding."""
-        with patch("omoi_os.api.dependencies.get_database_service") as mock_get_db, \
-             patch("omoi_os.tasks.scaffolding.trigger_scaffolding") as mock_trigger:
+        with patch(
+            "omoi_os.api.dependencies.get_database_service"
+        ) as mock_get_db, patch(
+            "omoi_os.tasks.scaffolding.trigger_scaffolding"
+        ) as mock_trigger:
 
             # Setup mock database
             mock_db = MagicMock()

@@ -156,7 +156,7 @@ class TestSandboxEventFiltering:
             # Subscribe to specific sandbox
             with client.websocket_connect(
                 "/api/v1/ws/events?entity_types=sandbox&entity_ids=sandbox-abc"
-            ) as websocket:
+            ):
                 # Post event to DIFFERENT sandbox
                 response = client.post(
                     "/api/v1/sandboxes/sandbox-xyz/events",

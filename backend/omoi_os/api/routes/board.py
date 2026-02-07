@@ -83,7 +83,9 @@ def _get_board_view_sync(
             board_service.create_default_board(session=session)
             session.commit()
 
-        board_data = board_service.get_board_view(session=session, project_id=project_id, user_id=user_id)
+        board_data = board_service.get_board_view(
+            session=session, project_id=project_id, user_id=user_id
+        )
         return board_data
 
 
@@ -130,7 +132,9 @@ def _check_wip_violations_sync(
 ) -> List[Dict[str, Any]]:
     """Check WIP violations (runs in thread pool)."""
     with db.get_session() as session:
-        violations = board_service.check_wip_limits(session=session, project_id=project_id)
+        violations = board_service.check_wip_limits(
+            session=session, project_id=project_id
+        )
         return violations
 
 
@@ -141,7 +145,9 @@ def _auto_transition_ticket_sync(
 ) -> Optional[Dict[str, Any]]:
     """Auto transition ticket (runs in thread pool)."""
     with db.get_session() as session:
-        result = board_service.auto_transition_ticket(session=session, ticket_id=ticket_id)
+        result = board_service.auto_transition_ticket(
+            session=session, ticket_id=ticket_id
+        )
 
         if result:
             session.commit()
@@ -170,7 +176,9 @@ def _get_column_for_phase_sync(
 
 @router.get("/view", response_model=BoardViewResponse)
 async def get_board_view(
-    project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for cross-project board."),
+    project_id: Optional[str] = Query(
+        None, description="Filter tickets by project ID. Omit for cross-project board."
+    ),
     current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
@@ -228,7 +236,9 @@ async def move_ticket(
 
 @router.get("/stats", response_model=List[ColumnStatsResponse])
 async def get_column_stats(
-    project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for all projects."),
+    project_id: Optional[str] = Query(
+        None, description="Filter tickets by project ID. Omit for all projects."
+    ),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> List[ColumnStatsResponse]:
@@ -254,7 +264,9 @@ async def get_column_stats(
 
 @router.get("/wip-violations", response_model=List[WIPViolationResponse])
 async def check_wip_violations(
-    project_id: Optional[str] = Query(None, description="Filter tickets by project ID. Omit for all projects."),
+    project_id: Optional[str] = Query(
+        None, description="Filter tickets by project ID. Omit for all projects."
+    ),
     db: DatabaseService = Depends(get_db_service),
     board_service: BoardService = Depends(get_board_service),
 ) -> List[WIPViolationResponse]:

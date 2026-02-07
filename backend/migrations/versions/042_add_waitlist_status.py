@@ -11,7 +11,6 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-
 # revision identifiers, used by Alembic.
 revision: str = "042_add_waitlist_status"
 down_revision: Union[str, None] = "041_cost_record_billing_integration"
@@ -51,7 +50,9 @@ def upgrade() -> None:
     )
 
     # Set existing users to 'approved' so they're not blocked
-    op.execute("UPDATE users SET waitlist_status = 'approved' WHERE waitlist_status = 'pending'")
+    op.execute(
+        "UPDATE users SET waitlist_status = 'approved' WHERE waitlist_status = 'pending'"
+    )
 
 
 def downgrade() -> None:

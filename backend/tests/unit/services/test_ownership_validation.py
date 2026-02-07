@@ -6,7 +6,6 @@ Uses real database fixtures to properly test SQLAlchemy queries.
 
 import pytest
 from unittest.mock import MagicMock
-from uuid import uuid4
 
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
@@ -18,7 +17,6 @@ from omoi_os.services.ownership_validation import (
     get_ownership_validation_service,
     reset_ownership_service,
 )
-
 
 # =============================================================================
 # DATACLASS TESTS (No database needed)
@@ -127,7 +125,9 @@ class TestPatternMatching:
         """Test recursive ** wildcard matching."""
         patterns = ["src/**"]
         assert ownership_service._file_matches_patterns("src/file.py", patterns)
-        assert ownership_service._file_matches_patterns("src/deep/nested/file.py", patterns)
+        assert ownership_service._file_matches_patterns(
+            "src/deep/nested/file.py", patterns
+        )
         assert not ownership_service._file_matches_patterns("other/file.py", patterns)
 
     def test_file_matches_recursive_with_extension(self, ownership_service):
@@ -149,8 +149,12 @@ class TestPatternMatching:
         """Test that any matching pattern succeeds."""
         patterns = ["tests/**", "src/services/**"]
         assert ownership_service._file_matches_patterns("tests/test_foo.py", patterns)
-        assert ownership_service._file_matches_patterns("src/services/user.py", patterns)
-        assert not ownership_service._file_matches_patterns("src/api/routes.py", patterns)
+        assert ownership_service._file_matches_patterns(
+            "src/services/user.py", patterns
+        )
+        assert not ownership_service._file_matches_patterns(
+            "src/api/routes.py", patterns
+        )
 
 
 # =============================================================================
@@ -191,7 +195,9 @@ class TestPatternOverlapDetection:
         task_patterns = ["src/**"]
         sibling_patterns = ["src/services/**", "tests/**"]
 
-        overlaps = ownership_service._find_pattern_overlaps(task_patterns, sibling_patterns)
+        overlaps = ownership_service._find_pattern_overlaps(
+            task_patterns, sibling_patterns
+        )
 
         assert len(overlaps) == 1  # Only src/** overlaps with src/services/**
         assert overlaps[0]["task_pattern"] == "src/**"
@@ -224,17 +230,23 @@ class TestOwnershipValidationWithDatabase:
             return ticket
 
     @pytest.fixture
-    def ownership_service(self, db_service: DatabaseService) -> OwnershipValidationService:
+    def ownership_service(
+        self, db_service: DatabaseService
+    ) -> OwnershipValidationService:
         """Create an OwnershipValidationService with real database."""
         reset_ownership_service()
         return OwnershipValidationService(db=db_service, strict_mode=False)
 
     @pytest.fixture
-    def strict_ownership_service(self, db_service: DatabaseService) -> OwnershipValidationService:
+    def strict_ownership_service(
+        self, db_service: DatabaseService
+    ) -> OwnershipValidationService:
         """Create a strict OwnershipValidationService."""
         return OwnershipValidationService(db=db_service, strict_mode=True)
 
-    def test_task_without_ownership_always_valid(self, ownership_service, db_service, ticket):
+    def test_task_without_ownership_always_valid(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that tasks without owned_files are always valid."""
         with db_service.get_session() as session:
             task = Task(
@@ -277,7 +289,9 @@ class TestOwnershipValidationWithDatabase:
         assert result.valid
         assert not result.has_conflicts
 
-    def test_conflict_detected_overlapping_patterns(self, strict_ownership_service, db_service, ticket):
+    def test_conflict_detected_overlapping_patterns(
+        self, strict_ownership_service, db_service, ticket
+    ):
         """Test that overlapping patterns are detected as conflicts in strict mode."""
         with db_service.get_session() as session:
             # Create sibling task first (running, with ownership)
@@ -349,7 +363,9 @@ class TestOwnershipValidationWithDatabase:
         assert not result.has_conflicts
         assert result.has_warnings
 
-    def test_no_conflict_with_completed_tasks(self, ownership_service, db_service, ticket):
+    def test_no_conflict_with_completed_tasks(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that completed tasks don't cause conflicts."""
         with db_service.get_session() as session:
             completed_task = Task(
@@ -383,7 +399,9 @@ class TestOwnershipValidationWithDatabase:
         assert result.valid
         assert not result.has_warnings
 
-    def test_no_conflict_with_different_ownership(self, ownership_service, db_service, ticket):
+    def test_no_conflict_with_different_ownership(
+        self, ownership_service, db_service, ticket
+    ):
         """Test no conflict when ownership patterns don't overlap."""
         with db_service.get_session() as session:
             sibling = Task(
@@ -427,7 +445,9 @@ class TestFileModificationValidation:
     """Tests for validating individual file modifications."""
 
     @pytest.fixture
-    def ownership_service(self, db_service: DatabaseService) -> OwnershipValidationService:
+    def ownership_service(
+        self, db_service: DatabaseService
+    ) -> OwnershipValidationService:
         """Create an OwnershipValidationService with real database."""
         reset_ownership_service()
         return OwnershipValidationService(db=db_service, strict_mode=False)
@@ -449,7 +469,9 @@ class TestFileModificationValidation:
             session.expunge(ticket)
             return ticket
 
-    def test_modification_allowed_within_ownership(self, ownership_service, db_service, ticket):
+    def test_modification_allowed_within_ownership(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that modifications within ownership patterns are allowed."""
         with db_service.get_session() as session:
             task = Task(
@@ -465,10 +487,16 @@ class TestFileModificationValidation:
             session.commit()
             task_id = task.id
 
-        assert ownership_service.validate_file_modification(task_id, "src/services/user.py")
-        assert ownership_service.validate_file_modification(task_id, "src/services/deep/nested.py")
+        assert ownership_service.validate_file_modification(
+            task_id, "src/services/user.py"
+        )
+        assert ownership_service.validate_file_modification(
+            task_id, "src/services/deep/nested.py"
+        )
 
-    def test_modification_blocked_outside_ownership(self, ownership_service, db_service, ticket):
+    def test_modification_blocked_outside_ownership(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that modifications outside ownership patterns are blocked."""
         with db_service.get_session() as session:
             task = Task(
@@ -484,10 +512,16 @@ class TestFileModificationValidation:
             session.commit()
             task_id = task.id
 
-        assert not ownership_service.validate_file_modification(task_id, "src/api/routes.py")
-        assert not ownership_service.validate_file_modification(task_id, "tests/test_services.py")
+        assert not ownership_service.validate_file_modification(
+            task_id, "src/api/routes.py"
+        )
+        assert not ownership_service.validate_file_modification(
+            task_id, "tests/test_services.py"
+        )
 
-    def test_modification_allowed_no_restrictions(self, ownership_service, db_service, ticket):
+    def test_modification_allowed_no_restrictions(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that tasks without ownership can modify any file."""
         with db_service.get_session() as session:
             task = Task(
@@ -504,12 +538,16 @@ class TestFileModificationValidation:
             task_id = task.id
 
         assert ownership_service.validate_file_modification(task_id, "any/path/file.py")
-        assert ownership_service.validate_file_modification(task_id, "anywhere/at/all.txt")
+        assert ownership_service.validate_file_modification(
+            task_id, "anywhere/at/all.txt"
+        )
 
     def test_modification_allowed_task_not_found(self, ownership_service):
         """Test that unknown tasks are allowed (lenient behavior)."""
         # Task doesn't exist - lenient mode allows it
-        assert ownership_service.validate_file_modification("non-existent-id", "any/file.py")
+        assert ownership_service.validate_file_modification(
+            "non-existent-id", "any/file.py"
+        )
 
 
 # =============================================================================
@@ -521,7 +559,9 @@ class TestFileOwnershipCheck:
     """Tests for checking who owns a file."""
 
     @pytest.fixture
-    def ownership_service(self, db_service: DatabaseService) -> OwnershipValidationService:
+    def ownership_service(
+        self, db_service: DatabaseService
+    ) -> OwnershipValidationService:
         """Create an OwnershipValidationService with real database."""
         reset_ownership_service()
         return OwnershipValidationService(db=db_service, strict_mode=False)
@@ -543,7 +583,9 @@ class TestFileOwnershipCheck:
             session.expunge(ticket)
             return ticket
 
-    def test_check_file_ownership_finds_owner(self, ownership_service, db_service, ticket):
+    def test_check_file_ownership_finds_owner(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that check_file_ownership finds the correct owner."""
         with db_service.get_session() as session:
             owner_task = Task(
@@ -572,10 +614,14 @@ class TestFileOwnershipCheck:
             other_id = other_task.id
 
         # Check ownership
-        result = ownership_service.check_file_ownership(other_id, "src/services/user.py")
+        result = ownership_service.check_file_ownership(
+            other_id, "src/services/user.py"
+        )
         assert result == owner_id
 
-    def test_check_file_ownership_returns_none_no_owner(self, ownership_service, db_service, ticket):
+    def test_check_file_ownership_returns_none_no_owner(
+        self, ownership_service, db_service, ticket
+    ):
         """Test that check_file_ownership returns None when no owner."""
         with db_service.get_session() as session:
             task = Task(

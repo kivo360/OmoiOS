@@ -16,7 +16,7 @@ from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
 from omoi_os.models.base import Base
 from omoi_os.utils.datetime import utc_now
@@ -24,14 +24,15 @@ from omoi_os.utils.datetime import utc_now
 
 class MergeStatus(str, Enum):
     """Status of a merge attempt."""
-    PENDING = "pending"         # Waiting for merge to start
-    IN_PROGRESS = "in_progress" # Merge in progress
-    COMPLETED = "completed"     # Merge completed successfully
-    CONFLICT = "conflict"       # Conflicts detected, needs resolution
-    RESOLVING = "resolving"     # LLM resolution in progress
-    RESOLVED = "resolved"       # Conflicts resolved by LLM
-    FAILED = "failed"           # Merge failed (after retries)
-    MANUAL = "manual"           # Flagged for manual intervention
+
+    PENDING = "pending"  # Waiting for merge to start
+    IN_PROGRESS = "in_progress"  # Merge in progress
+    COMPLETED = "completed"  # Merge completed successfully
+    CONFLICT = "conflict"  # Conflicts detected, needs resolution
+    RESOLVING = "resolving"  # LLM resolution in progress
+    RESOLVED = "resolved"  # Conflicts resolved by LLM
+    FAILED = "failed"  # Merge failed (after retries)
+    MANUAL = "manual"  # Flagged for manual intervention
 
 
 class MergeAttempt(Base):

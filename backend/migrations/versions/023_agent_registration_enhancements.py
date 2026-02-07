@@ -5,6 +5,7 @@ Revises: 022_add_required_capabilities_to_tasks
 Create Date: 2025-01-30
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -30,7 +31,7 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_agents_agent_name", "agents", ["agent_name"], unique=False)
-    
+
     # Add cryptographic identity fields (REQ-ALM-001 Step 2)
     op.add_column(
         "agents",
@@ -50,7 +51,7 @@ def upgrade() -> None:
             comment="Cryptographic identity metadata: key_id, algorithm, created_at (REQ-ALM-001)",
         ),
     )
-    
+
     # Add metadata field for version, config, resource requirements (REQ-ALM-001)
     op.add_column(
         "agents",
@@ -61,7 +62,7 @@ def upgrade() -> None:
             comment="Additional agent metadata: version, binary_path, config, resource_requirements (REQ-ALM-001)",
         ),
     )
-    
+
     # Add registered_by field (REQ-ALM-001 Step 3)
     op.add_column(
         "agents",
@@ -82,4 +83,3 @@ def downgrade() -> None:
     op.drop_column("agents", "crypto_public_key")
     op.drop_index("ix_agents_agent_name", table_name="agents")
     op.drop_column("agents", "agent_name")
-

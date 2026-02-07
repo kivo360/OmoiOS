@@ -5,6 +5,7 @@ Revises: 002_phase1
 Create Date: 2025-11-16
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -58,7 +59,9 @@ def upgrade() -> None:
     op.alter_column("agents", "health_status", server_default=None)
 
     # Indexes to accelerate capability/tag searches
-    op.create_index("ix_agents_health_status", "agents", ["health_status"], unique=False)
+    op.create_index(
+        "ix_agents_health_status", "agents", ["health_status"], unique=False
+    )
     op.create_index(
         "idx_agents_capabilities",
         "agents",

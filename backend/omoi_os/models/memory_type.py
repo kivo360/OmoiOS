@@ -22,4 +22,3 @@ class MemoryType(str, Enum):
     def is_valid(cls, memory_type: str) -> bool:
         """Check if memory type is valid (REQ-MEM-TAX-002)."""
         return memory_type in cls.all_types()
-

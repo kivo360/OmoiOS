@@ -10,13 +10,11 @@ These tests use mocked LLM responses to simulate the state machine flow
 without requiring actual LLM API calls.
 """
 
-import asyncio
 import json
 import shutil
 import tempfile
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from typing import Any, Dict
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
@@ -25,9 +23,7 @@ from sqlalchemy.orm import selectinload
 
 from omoi_os.models.spec import (
     Spec,
-    SpecAcceptanceCriterion,
     SpecRequirement,
-    SpecTask,
 )
 from omoi_os.schemas.spec_generation import SpecPhase
 from omoi_os.services.database import DatabaseService
@@ -38,7 +34,6 @@ from omoi_os.workers.spec_state_machine import (
     SpecStateMachine,
     _MockSpec,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -68,7 +63,9 @@ def mock_db_session():
     # Default: no existing records
     mock_result = MagicMock()
     mock_result.scalar_one_or_none = MagicMock(return_value=None)
-    mock_result.scalars = MagicMock(return_value=MagicMock(all=MagicMock(return_value=[])))
+    mock_result.scalars = MagicMock(
+        return_value=MagicMock(all=MagicMock(return_value=[]))
+    )
     session.execute.return_value = mock_result
 
     return session
@@ -89,8 +86,16 @@ def sample_explore_output() -> Dict[str, Any]:
         "project_type": "web_api",
         "tech_stack": ["python", "fastapi", "postgresql", "sqlalchemy"],
         "existing_models": [
-            {"name": "User", "file": "models/user.py", "fields": ["id", "email", "name"]},
-            {"name": "Task", "file": "models/task.py", "fields": ["id", "title", "status"]},
+            {
+                "name": "User",
+                "file": "models/user.py",
+                "fields": ["id", "email", "name"],
+            },
+            {
+                "name": "Task",
+                "file": "models/task.py",
+                "fields": ["id", "title", "status"],
+            },
         ],
         "existing_routes": ["/api/users", "/api/tasks", "/health"],
         "database_type": "postgresql",
@@ -444,9 +449,7 @@ class TestDeduplicationE2E:
         return session
 
     @pytest.mark.asyncio
-    async def test_criterion_deduplication_on_retry(
-        self, mock_db, mock_session
-    ):
+    async def test_criterion_deduplication_on_retry(self, mock_db, mock_session):
         """Test that duplicate criteria are skipped on retry."""
         # First sync: No existing criteria
         mock_result_none = MagicMock()
@@ -483,9 +486,7 @@ class TestDeduplicationE2E:
         assert result2.action == "skip"
 
     @pytest.mark.asyncio
-    async def test_requirement_deduplication_by_hash(
-        self, mock_db, mock_session
-    ):
+    async def test_requirement_deduplication_by_hash(self, mock_db, mock_session):
         """Test requirement deduplication using content hash."""
         # Create two requirements with same content
         content1 = "WHEN user clicks THE SYSTEM SHALL respond"
@@ -516,9 +517,7 @@ class TestDeduplicationE2E:
         assert result1.content_hash == hash1
 
     @pytest.mark.asyncio
-    async def test_bulk_dedup_returns_correct_categories(
-        self, mock_db, mock_session
-    ):
+    async def test_bulk_dedup_returns_correct_categories(self, mock_db, mock_session):
         """Test bulk deduplication categorizes items correctly."""
         # Setup: First criterion exists, second is new
         existing_text = "existing criterion"
@@ -730,9 +729,7 @@ class TestSpecAPIIntegration:
 
         # Verify only 2 requirements exist (not 4)
         async with db_service.get_async_session() as session:
-            query = select(SpecRequirement).filter(
-                SpecRequirement.spec_id == spec_id
-            )
+            query = select(SpecRequirement).filter(SpecRequirement.spec_id == spec_id)
             db_result = await session.execute(query)
             requirements = db_result.scalars().all()
 

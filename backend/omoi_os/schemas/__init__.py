@@ -146,4 +146,3 @@ __all__ = [
     "SpecGenerationState",
     "EvaluationResult",
 ]
-

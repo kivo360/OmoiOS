@@ -25,4 +25,3 @@ class ApprovalStatus(str, Enum):
     def can_proceed(cls, status: str) -> bool:
         """Check if ticket can proceed to workflow (must be approved)."""
         return status == cls.APPROVED.value
-

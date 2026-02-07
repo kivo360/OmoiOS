@@ -31,4 +31,3 @@ class QualityPrediction(BaseModel):
         ..., ge=0, description="Number of similar tasks found"
     )
     pattern_count: int = Field(..., ge=0, description="Number of patterns matched")
-

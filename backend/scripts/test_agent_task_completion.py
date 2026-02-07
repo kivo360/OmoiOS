@@ -30,7 +30,6 @@ from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.services.event_bus import EventBusService
 from omoi_os.services.phase_gate import PhaseGateService
 from omoi_os.services.phase_progression_service import (
-    PhaseProgressionService,
     get_phase_progression_service,
 )
 from omoi_os.services.ticket_workflow import TicketWorkflowOrchestrator
@@ -104,17 +103,25 @@ class AgentTaskCompletionTester:
                     session.delete(task)
 
             for ticket_id in self.test_ids["tickets"]:
-                ticket = session.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+                ticket = (
+                    session.query(Ticket).filter(Ticket.id == str(ticket_id)).first()
+                )
                 if ticket:
                     session.delete(ticket)
 
             for project_id in self.test_ids["projects"]:
-                project = session.query(Project).filter(Project.id == project_id).first()
+                project = (
+                    session.query(Project).filter(Project.id == project_id).first()
+                )
                 if project:
                     session.delete(project)
 
             for org_id in self.test_ids["orgs"]:
-                org = session.query(Organization).filter(Organization.id == org_id).first()
+                org = (
+                    session.query(Organization)
+                    .filter(Organization.id == org_id)
+                    .first()
+                )
                 if org:
                     session.delete(org)
 
@@ -192,14 +199,19 @@ class AgentTaskCompletionTester:
 
             # Step 3: Spawn tasks for the phase (simulates Hook 2)
             print_step(3, "Spawning tasks for PHASE_IMPLEMENTATION (Hook 2)")
-            tasks_spawned = self.progression._spawn_phase_tasks(ticket_id, "PHASE_IMPLEMENTATION")
+            tasks_spawned = self.progression._spawn_phase_tasks(
+                ticket_id, "PHASE_IMPLEMENTATION"
+            )
             print_result("Tasks spawned", tasks_spawned > 0, f"count={tasks_spawned}")
 
             # Get the task ID
             with self.db.get_session() as session:
                 task = (
                     session.query(Task)
-                    .filter(Task.ticket_id == ticket_id, Task.phase_id == "PHASE_IMPLEMENTATION")
+                    .filter(
+                        Task.ticket_id == ticket_id,
+                        Task.phase_id == "PHASE_IMPLEMENTATION",
+                    )
                     .first()
                 )
                 if not task:
@@ -218,7 +230,9 @@ class AgentTaskCompletionTester:
                 phase_before = ticket.phase_id
                 status_before = ticket.status
 
-            print_result("Current state", True, f"phase={phase_before}, status={status_before}")
+            print_result(
+                "Current state", True, f"phase={phase_before}, status={status_before}"
+            )
 
             # Step 5: SIMULATE AGENT COMPLETING THE TASK
             # This is exactly what Claude Code does via MCP
@@ -229,7 +243,10 @@ class AgentTaskCompletionTester:
             self.queue.update_task_status(
                 task_id=task_id,
                 status="completed",
-                result={"summary": "Task completed by test agent", "files_modified": ["test.py"]},
+                result={
+                    "summary": "Task completed by test agent",
+                    "files_modified": ["test.py"],
+                },
             )
 
             print_result("Task marked complete", True)
@@ -249,7 +266,9 @@ class AgentTaskCompletionTester:
             advanced = result.get("advanced", False)
 
             print_result("All phase tasks complete", all_complete)
-            print_result("Ticket advanced", advanced, f"new_phase={result.get('new_phase')}")
+            print_result(
+                "Ticket advanced", advanced, f"new_phase={result.get('new_phase')}"
+            )
 
             # Step 7: Check final state
             print_step(7, "Checking final ticket state")
@@ -262,7 +281,11 @@ class AgentTaskCompletionTester:
             print_result(
                 "Phase transition",
                 phase_changed,
-                f"{phase_before} → {phase_after}" if phase_changed else f"Still {phase_after}"
+                (
+                    f"{phase_before} → {phase_after}"
+                    if phase_changed
+                    else f"Still {phase_after}"
+                ),
             )
             print_result("Final status", True, f"status={status_after}")
 
@@ -285,10 +308,14 @@ class AgentTaskCompletionTester:
                 print_result(
                     "New phase tasks spawned",
                     len(new_tasks) > 0,
-                    f"count={len(new_tasks)}"
+                    f"count={len(new_tasks)}",
                 )
             else:
-                print_result("No new tasks (phase didn't change)", True, "Expected if gate not met")
+                print_result(
+                    "No new tasks (phase didn't change)",
+                    True,
+                    "Expected if gate not met",
+                )
 
             # Summary
             print_header("Test Results")
@@ -303,11 +330,13 @@ class AgentTaskCompletionTester:
 
             if advanced:
                 print("\n  🎉 SUCCESS! The full flow worked:")
-                print(f"      1. Task completed → TASK_COMPLETED event fired")
-                print(f"      2. Hook 1 detected all tasks complete")
+                print("      1. Task completed → TASK_COMPLETED event fired")
+                print("      2. Hook 1 detected all tasks complete")
                 print(f"      3. Ticket advanced: {phase_before} → {phase_after}")
                 if new_tasks:
-                    print(f"      4. Hook 2 spawned {len(new_tasks)} tasks for {phase_after}")
+                    print(
+                        f"      4. Hook 2 spawned {len(new_tasks)} tasks for {phase_after}"
+                    )
                 return True
             else:
                 print("\n  ⚠️  Task completed but ticket didn't advance.")

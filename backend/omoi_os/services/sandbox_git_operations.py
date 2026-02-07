@@ -21,37 +21,39 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from omoi_os.logging import get_logger
-from omoi_os.utils.datetime import utc_now
 
 if TYPE_CHECKING:
-    from daytona_sdk import Daytona, Sandbox
+    from daytona_sdk import Sandbox
 
 logger = get_logger(__name__)
 
 
 class MergeResultStatus(str, Enum):
     """Status of a merge operation."""
-    SUCCESS = "success"       # Merge completed cleanly
-    CONFLICT = "conflict"     # Merge has conflicts requiring resolution
-    FAILED = "failed"         # Merge failed (not due to conflicts)
-    ABORTED = "aborted"       # Merge was aborted
+
+    SUCCESS = "success"  # Merge completed cleanly
+    CONFLICT = "conflict"  # Merge has conflicts requiring resolution
+    FAILED = "failed"  # Merge failed (not due to conflicts)
+    ABORTED = "aborted"  # Merge was aborted
 
 
 @dataclass
 class ConflictInfo:
     """Information about a single conflict in a file."""
+
     file_path: str
     conflict_type: str  # "content", "rename", "delete", "mode"
-    ours_content: Optional[str] = None    # Content from target branch
+    ours_content: Optional[str] = None  # Content from target branch
     theirs_content: Optional[str] = None  # Content from incoming branch
-    base_content: Optional[str] = None    # Content from common ancestor
-    markers_start: Optional[int] = None   # Line number of <<<<<<< marker
-    markers_end: Optional[int] = None     # Line number of >>>>>>> marker
+    base_content: Optional[str] = None  # Content from common ancestor
+    markers_start: Optional[int] = None  # Line number of <<<<<<< marker
+    markers_end: Optional[int] = None  # Line number of >>>>>>> marker
 
 
 @dataclass
 class MergeResult:
     """Result of a merge operation."""
+
     status: MergeResultStatus
     success: bool
     conflicts: List[ConflictInfo] = field(default_factory=list)
@@ -73,6 +75,7 @@ class MergeResult:
 @dataclass
 class DryRunResult:
     """Result of a dry-run merge check."""
+
     would_conflict: bool
     conflict_count: int
     conflict_files: List[str] = field(default_factory=list)
@@ -226,7 +229,10 @@ class SandboxGitOperations:
         result = self._exec(f"git merge-tree --write-tree HEAD {branch} 2>&1 || true")
 
         # If merge-tree isn't available, fall back to checking merge
-        if "unknown option" in result["stderr"] or "not a git command" in result["stderr"]:
+        if (
+            "unknown option" in result["stderr"]
+            or "not a git command" in result["stderr"]
+        ):
             return await self._count_conflicts_fallback(branch)
 
         # Parse merge-tree output
@@ -282,7 +288,9 @@ class SandboxGitOperations:
 
             # Check for conflicts
             status = self._exec("git diff --name-only --diff-filter=U")
-            conflict_files = [f.strip() for f in status["stdout"].split("\n") if f.strip()]
+            conflict_files = [
+                f.strip() for f in status["stdout"].split("\n") if f.strip()
+            ]
 
             # Abort the merge
             self._exec("git merge --abort")
@@ -462,7 +470,9 @@ class SandboxGitOperations:
         """
         # Escape content for shell
         escaped_content = content.replace("'", "'\\''")
-        result = self._exec(f"cat > '{file_path}' << 'RESOLVED_EOF'\n{escaped_content}\nRESOLVED_EOF")
+        result = self._exec(
+            f"cat > '{file_path}' << 'RESOLVED_EOF'\n{escaped_content}\nRESOLVED_EOF"
+        )
         return result["exit_code"] == 0
 
     async def stage_file(self, file_path: str) -> bool:

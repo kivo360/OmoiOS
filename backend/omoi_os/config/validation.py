@@ -10,6 +10,7 @@ def get_env_files():
 
     # Check for .env.local first (highest priority)
     import os
+
     if os.path.exists(".env.local"):
         env_files.append(".env.local")
 

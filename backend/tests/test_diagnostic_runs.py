@@ -3,7 +3,6 @@
 import pytest
 
 from omoi_os.models.agent import Agent
-from omoi_os.models.diagnostic_run import DiagnosticRun
 from omoi_os.models.task import Task
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.workflow_result import WorkflowResult
@@ -26,7 +25,7 @@ def diagnostic_service(
     memory = MemoryService(embedding_service=embedding, event_bus=event_bus_service)
     discovery = DiscoveryService(event_bus=event_bus_service)
     monitor = MonitorService(db=db_service, event_bus=event_bus_service)
-    
+
     return DiagnosticService(
         db=db_service,
         discovery=discovery,
@@ -66,6 +65,7 @@ def test_find_stuck_workflows(
         # Set completed_at to 10 minutes ago
         from datetime import timedelta
         from omoi_os.utils.datetime import utc_now
+
         task.completed_at = utc_now() - timedelta(minutes=10)
         session.commit()
 
@@ -77,7 +77,9 @@ def test_find_stuck_workflows(
 
     # Should find the workflow
     assert len(stuck) > 0
-    stuck_workflow = next((w for w in stuck if w["workflow_id"] == sample_ticket.id), None)
+    stuck_workflow = next(
+        (w for w in stuck if w["workflow_id"] == sample_ticket.id), None
+    )
     assert stuck_workflow is not None
     assert stuck_workflow["total_tasks"] >= 1
     assert stuck_workflow["done_tasks"] >= 1
@@ -109,7 +111,9 @@ def test_find_stuck_workflows_with_validated_result(
     )
 
     # Should NOT find this workflow
-    stuck_workflow = next((w for w in stuck if w["workflow_id"] == sample_ticket.id), None)
+    stuck_workflow = next(
+        (w for w in stuck if w["workflow_id"] == sample_ticket.id), None
+    )
     assert stuck_workflow is None
 
 
@@ -130,7 +134,9 @@ def test_find_stuck_workflows_with_active_tasks(
     stuck = diagnostic_service.find_stuck_workflows()
 
     # Should NOT find this workflow (has active task)
-    stuck_workflow = next((w for w in stuck if w["workflow_id"] == sample_ticket.id), None)
+    stuck_workflow = next(
+        (w for w in stuck if w["workflow_id"] == sample_ticket.id), None
+    )
     assert stuck_workflow is None
 
 
@@ -146,6 +152,7 @@ def test_cooldown_enforcement(
         task = session.get(Task, completed_task.id)
         from datetime import timedelta
         from omoi_os.utils.datetime import utc_now
+
         task.completed_at = utc_now() - timedelta(minutes=10)
         session.commit()
 
@@ -164,7 +171,9 @@ def test_cooldown_enforcement(
         cooldown_seconds=300,
         stuck_threshold_seconds=1,
     )
-    stuck_workflow = next((w for w in stuck2 if w["workflow_id"] == sample_ticket.id), None)
+    stuck_workflow = next(
+        (w for w in stuck2 if w["workflow_id"] == sample_ticket.id), None
+    )
     assert stuck_workflow is None
 
 
@@ -180,6 +189,7 @@ def test_stuck_threshold(
         task = session.get(Task, sample_task.id)
         task.status = "completed"
         from omoi_os.utils.datetime import utc_now
+
         task.completed_at = utc_now()  # Just now
         session.commit()
 
@@ -190,7 +200,9 @@ def test_stuck_threshold(
     )
 
     # Should NOT find (not stuck long enough)
-    stuck_workflow = next((w for w in stuck if w["workflow_id"] == sample_ticket.id), None)
+    stuck_workflow = next(
+        (w for w in stuck if w["workflow_id"] == sample_ticket.id), None
+    )
     assert stuck_workflow is None
 
 
@@ -255,7 +267,7 @@ def test_complete_diagnostic_run(
         "failed_tasks": 0,
         "time_stuck_seconds": 300,
     }
-    
+
     diagnostic_run = diagnostic_service.spawn_diagnostic_agent(
         workflow_id=sample_ticket.id,
         context=context,
@@ -281,14 +293,26 @@ def test_diagnostic_run_tracking(
 ):
     """Test tracking multiple diagnostic runs."""
     # Create two diagnostic runs
-    context1 = {"total_tasks": 5, "done_tasks": 5, "failed_tasks": 0, "time_stuck_seconds": 300}
-    context2 = {"total_tasks": 6, "done_tasks": 6, "failed_tasks": 0, "time_stuck_seconds": 600}
-    
+    context1 = {
+        "total_tasks": 5,
+        "done_tasks": 5,
+        "failed_tasks": 0,
+        "time_stuck_seconds": 300,
+    }
+    context2 = {
+        "total_tasks": 6,
+        "done_tasks": 6,
+        "failed_tasks": 0,
+        "time_stuck_seconds": 600,
+    }
+
     run1 = diagnostic_service.spawn_diagnostic_agent(sample_ticket.id, context1)
     run2 = diagnostic_service.spawn_diagnostic_agent(sample_ticket.id, context2)
 
     # Get all runs
-    runs = diagnostic_service.get_diagnostic_runs(workflow_id=sample_ticket.id, limit=100)
+    runs = diagnostic_service.get_diagnostic_runs(
+        workflow_id=sample_ticket.id, limit=100
+    )
 
     assert len(runs) == 2
     # Should be sorted by most recent first
@@ -314,7 +338,7 @@ def test_diagnostic_integration_with_discovery(
             suggested_phase="PHASE_FINAL",
             suggested_priority="HIGH",
         )
-        
+
         session.commit()
         session.refresh(recovery_task)
         session.expunge(recovery_task)
@@ -324,4 +348,3 @@ def test_diagnostic_integration_with_discovery(
     assert recovery_task.ticket_id == sample_ticket.id
     assert recovery_task.priority == "HIGH"
     assert "Diagnostic recovery" in recovery_task.description
-

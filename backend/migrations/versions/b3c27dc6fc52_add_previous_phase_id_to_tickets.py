@@ -24,7 +24,6 @@ from migration_utils import (
     safe_drop_column,
 )
 
-
 # revision identifiers, used by Alembic.
 revision: str = "b3c27dc6fc52"
 down_revision: Union[str, Sequence[str], None] = "0c12d7c40d6c"

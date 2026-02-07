@@ -42,12 +42,10 @@ import json
 import os
 import sys
 from collections import defaultdict
-from pathlib import Path
 from typing import Optional
 
 from models import ParseResult, ParsedTask, ParsedTicket, ValidationError
 from parse_specs import SpecParser
-
 
 # ============================================================================
 # Validation (Phase 3)
@@ -499,7 +497,7 @@ def print_traceability(result: ParseResult):
         f"  Tickets:      {stats['tickets']['linked']}/{stats['tickets']['total']} linked ({stats['tickets']['coverage']:.1f}%)"
     )
     print()
-    print(f"TASK STATUS:")
+    print("TASK STATUS:")
     print(
         f"  Done: {stats['tasks']['done']} | In Progress: {stats['tasks']['in_progress']} | Pending: {stats['tasks']['pending']}"
     )

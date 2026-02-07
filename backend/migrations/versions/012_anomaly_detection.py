@@ -5,6 +5,7 @@ Revises: 011_enhanced_heartbeat
 Create Date: 2025-01-27
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -151,5 +152,3 @@ def downgrade() -> None:
     # Remove anomaly detection fields from agents table
     op.drop_column("agents", "consecutive_anomalous_readings")
     op.drop_column("agents", "anomaly_score")
-
-

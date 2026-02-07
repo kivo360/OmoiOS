@@ -5,6 +5,7 @@ Revises: 021_watchdog_service
 Create Date: 2025-01-30
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -29,7 +30,7 @@ def upgrade() -> None:
             comment="Required capabilities: ['python', 'fastapi', 'postgres'] (REQ-TQM-ASSIGN-001)",
         ),
     )
-    
+
     # Create GIN index for efficient capability matching queries
     op.create_index(
         "ix_tasks_required_capabilities",
@@ -43,7 +44,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     # Drop index
     op.drop_index("ix_tasks_required_capabilities", table_name="tasks")
-    
+
     # Drop column
     op.drop_column("tasks", "required_capabilities")
-

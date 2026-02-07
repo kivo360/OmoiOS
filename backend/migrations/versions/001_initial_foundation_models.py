@@ -29,11 +29,15 @@ def upgrade() -> None:
         inspector = inspect(conn)
         if "alembic_version" in inspector.get_table_names():
             # Check current column type and alter if needed
-            columns = {col["name"]: col for col in inspector.get_columns("alembic_version")}
+            columns = {
+                col["name"]: col for col in inspector.get_columns("alembic_version")
+            }
             if "version_num" in columns:
                 current_type = str(columns["version_num"]["type"])
                 if "32" in current_type or "VARCHAR(32)" in current_type.upper():
-                    op.alter_column("alembic_version", "version_num", type_=sa.String(255))
+                    op.alter_column(
+                        "alembic_version", "version_num", type_=sa.String(255)
+                    )
     except Exception as e:
         # If inspection fails, continue with migration - alembic_version will be handled later
         print(f"Note: Could not alter alembic_version column: {e}")
@@ -55,7 +59,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_tickets_phase_id"), "tickets", ["phase_id"], unique=False)
     op.create_index(op.f("ix_tickets_priority"), "tickets", ["priority"], unique=False)
     op.create_index(op.f("ix_tickets_status"), "tickets", ["status"], unique=False)
-    
+
     # Verify table was created
     try:
         conn = op.get_bind()

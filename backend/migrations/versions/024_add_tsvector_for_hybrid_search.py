@@ -5,11 +5,10 @@ Revises: 023_agent_registration_enhancements
 Create Date: 2025-01-30
 
 """
+
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = "024_add_tsvector_for_hybrid_search"
@@ -33,7 +32,7 @@ def upgrade() -> None:
             )
         ) STORED;
     """)
-    
+
     # Create GIN index for fast full-text search
     op.create_index(
         "ix_task_memories_content_tsv",
@@ -46,8 +45,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Drop index
-    op.drop_index("ix_task_memories_content_tsv", table_name="task_memories", postgresql_using="gin")
-    
+    op.drop_index(
+        "ix_task_memories_content_tsv",
+        table_name="task_memories",
+        postgresql_using="gin",
+    )
+
     # Drop tsvector column
     op.drop_column("task_memories", "content_tsv")
-

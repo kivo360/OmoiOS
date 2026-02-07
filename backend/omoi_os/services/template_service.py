@@ -101,4 +101,3 @@ def reset_template_service():
     """Reset the global template service instance (useful for testing)."""
     global _template_service
     _template_service = None
-

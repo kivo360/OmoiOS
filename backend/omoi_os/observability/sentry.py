@@ -120,7 +120,9 @@ def _scrub_pii_from_string(value: str | None) -> str:
     return result
 
 
-def _scrub_dict(data: Dict[str, Any], depth: int = 0, max_depth: int = 10) -> Dict[str, Any]:
+def _scrub_dict(
+    data: Dict[str, Any], depth: int = 0, max_depth: int = 10
+) -> Dict[str, Any]:
     """Recursively scrub PII from a dictionary."""
     if depth > max_depth:
         return {"_truncated": True}
@@ -134,8 +136,11 @@ def _scrub_dict(data: Dict[str, Any], depth: int = 0, max_depth: int = 10) -> Di
             result[key] = _scrub_dict(value, depth + 1, max_depth)
         elif isinstance(value, (list, tuple)):
             result[key] = [
-                _scrub_dict(v, depth + 1, max_depth) if isinstance(v, dict)
-                else _scrub_pii_from_string(v) if isinstance(v, str) else v
+                (
+                    _scrub_dict(v, depth + 1, max_depth)
+                    if isinstance(v, dict)
+                    else _scrub_pii_from_string(v) if isinstance(v, str) else v
+                )
                 for v in value
             ]
         elif isinstance(value, str):
@@ -189,7 +194,9 @@ def filter_pii(event: Dict[str, Any], hint: Dict[str, Any]) -> Optional[Dict[str
                 "id": user.get("id"),
                 "username": "[REDACTED]" if user.get("username") else None,
                 "email": "[REDACTED]" if user.get("email") else None,
-                "ip_address": user.get("ip_address"),  # Keep for geo but scrub if needed
+                "ip_address": user.get(
+                    "ip_address"
+                ),  # Keep for geo but scrub if needed
             }
 
         # Scrub exception values for PII patterns
@@ -264,6 +271,7 @@ def init_sentry() -> bool:
         from sentry_sdk.integrations.redis import RedisIntegration
         from sentry_sdk.integrations.logging import LoggingIntegration
         from sentry_sdk.integrations.httpx import HttpxIntegration
+
         # Configure logging integration - capture errors and warnings
         logging_integration = LoggingIntegration(
             level=None,  # Don't capture logs at any level as breadcrumbs
@@ -276,9 +284,13 @@ def init_sentry() -> bool:
             release=settings.release,
             debug=settings.debug,
             # Sampling
-            traces_sample_rate=settings.traces_sample_rate if settings.enable_tracing else 0.0,
+            traces_sample_rate=(
+                settings.traces_sample_rate if settings.enable_tracing else 0.0
+            ),
             # Profiling (continuous profiling tied to traces)
-            profile_session_sample_rate=settings.profile_session_sample_rate if settings.enable_tracing else 0.0,
+            profile_session_sample_rate=(
+                settings.profile_session_sample_rate if settings.enable_tracing else 0.0
+            ),
             profile_lifecycle=settings.profile_lifecycle,
             # PII
             send_default_pii=settings.send_default_pii,
@@ -332,7 +344,14 @@ def _traces_sampler(sampling_context: Dict[str, Any]) -> float:
     # Always skip health check endpoints
     if any(
         path in transaction_name.lower()
-        for path in ["/health", "/healthz", "/ready", "/readiness", "/liveness", "/metrics"]
+        for path in [
+            "/health",
+            "/healthz",
+            "/ready",
+            "/readiness",
+            "/liveness",
+            "/metrics",
+        ]
     ):
         return 0.0
 
@@ -399,7 +418,9 @@ def capture_message(message: str, level: str = "info", **context: Any) -> Option
         return sentry_sdk.capture_message(message, level=level)
 
 
-def set_user(user_id: str, email: Optional[str] = None, username: Optional[str] = None) -> None:
+def set_user(
+    user_id: str, email: Optional[str] = None, username: Optional[str] = None
+) -> None:
     """Set the current user context for Sentry.
 
     Args:
@@ -412,11 +433,13 @@ def set_user(user_id: str, email: Optional[str] = None, username: Optional[str] 
 
     import sentry_sdk
 
-    sentry_sdk.set_user({
-        "id": user_id,
-        "email": email,
-        "username": username,
-    })
+    sentry_sdk.set_user(
+        {
+            "id": user_id,
+            "email": email,
+            "username": username,
+        }
+    )
 
 
 def set_tag(key: str, value: str) -> None:
@@ -458,7 +481,9 @@ def set_context(name: str, data: Dict[str, Any]) -> None:
 # These are lightweight and don't require sampling - they aggregate on Sentry's side.
 
 
-def metric_increment(name: str, value: int = 1, tags: Optional[Dict[str, str]] = None) -> None:
+def metric_increment(
+    name: str, value: int = 1, tags: Optional[Dict[str, str]] = None
+) -> None:
     """Increment a counter metric.
 
     Use for counting events like task completions, failures, retries.
@@ -476,10 +501,13 @@ def metric_increment(name: str, value: int = 1, tags: Optional[Dict[str, str]] =
         return
 
     from sentry_sdk import metrics
+
     metrics.incr(name, value, tags=tags or {})
 
 
-def metric_gauge(name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+def metric_gauge(
+    name: str, value: float, tags: Optional[Dict[str, str]] = None
+) -> None:
     """Set a gauge metric (point-in-time value).
 
     Use for tracking current state like queue depth, active workers.
@@ -497,10 +525,13 @@ def metric_gauge(name: str, value: float, tags: Optional[Dict[str, str]] = None)
         return
 
     from sentry_sdk import metrics
+
     metrics.gauge(name, value, tags=tags or {})
 
 
-def metric_distribution(name: str, value: float, tags: Optional[Dict[str, str]] = None) -> None:
+def metric_distribution(
+    name: str, value: float, tags: Optional[Dict[str, str]] = None
+) -> None:
     """Record a distribution metric (for percentiles, histograms).
 
     Use for tracking values that vary like task duration, payload sizes.
@@ -518,6 +549,7 @@ def metric_distribution(name: str, value: float, tags: Optional[Dict[str, str]] 
         return
 
     from sentry_sdk import metrics
+
     metrics.distribution(name, value, tags=tags or {})
 
 
@@ -539,6 +571,7 @@ def metric_set(name: str, value: str, tags: Optional[Dict[str, str]] = None) -> 
         return
 
     from sentry_sdk import metrics
+
     metrics.set(name, value, tags=tags or {})
 
 
@@ -567,7 +600,9 @@ def track_task_failed(task_id: str, phase: str, error_type: str) -> None:
         phase: Task phase (e.g., "PHASE_IMPLEMENTATION")
         error_type: Type of error (e.g., "timeout", "validation", "llm_error")
     """
-    metric_increment("omoios.task.failed", tags={"phase": phase, "error_type": error_type})
+    metric_increment(
+        "omoios.task.failed", tags={"phase": phase, "error_type": error_type}
+    )
 
 
 def track_task_retried(task_id: str, phase: str, retry_count: int) -> None:
@@ -582,7 +617,9 @@ def track_task_retried(task_id: str, phase: str, retry_count: int) -> None:
     metric_gauge("omoios.task.retry_count", retry_count, tags={"task_id": task_id})
 
 
-def track_queue_depth(queue_name: str, depth: int, priority: Optional[str] = None) -> None:
+def track_queue_depth(
+    queue_name: str, depth: int, priority: Optional[str] = None
+) -> None:
     """Track current queue depth.
 
     Args:
@@ -607,7 +644,9 @@ def track_agent_health(agent_id: str, status: str) -> None:
     metric_set("omoios.agents.active", agent_id)
 
 
-def track_llm_usage(model: str, tokens_in: int, tokens_out: int, duration_ms: float) -> None:
+def track_llm_usage(
+    model: str, tokens_in: int, tokens_out: int, duration_ms: float
+) -> None:
     """Track LLM API usage.
 
     Args:

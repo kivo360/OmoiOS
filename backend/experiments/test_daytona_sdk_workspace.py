@@ -12,7 +12,6 @@ Expected outcome based on SDK analysis:
 Run with: uv run python experiments/test_daytona_sdk_workspace.py
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -44,7 +43,7 @@ def test_current_implementation():
 
     is_local = isinstance(workspace, LocalWorkspace)
     print(f"isinstance(workspace, LocalWorkspace): {is_local}")
-    print(f"Expected: False (old adapter doesn't inherit)")
+    print("Expected: False (old adapter doesn't inherit)")
     return not is_local  # Pass if it's NOT a LocalWorkspace (proving the issue)
 
 

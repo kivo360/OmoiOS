@@ -21,7 +21,6 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-
 # revision identifiers, used by Alembic.
 revision: str = "044_add_execution_config_to_tasks"
 down_revision: Union[str, None] = "043_add_user_id_to_tickets"

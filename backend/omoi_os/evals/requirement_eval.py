@@ -21,15 +21,38 @@ class RequirementEvaluator(BaseEvaluator):
     """
 
     # Action words that indicate testable criteria
-    TESTABLE_WORDS = frozenset([
-        "should", "must", "will", "shall",
-        "returns", "displays", "shows", "creates",
-        "updates", "deletes", "modifies", "validates",
-        "within", "less than", "greater than", "at least",
-        "exactly", "between", "responds", "accepts",
-        "rejects", "stores", "retrieves", "sends",
-        "receives", "generates", "triggers", "logs",
-    ])
+    TESTABLE_WORDS = frozenset(
+        [
+            "should",
+            "must",
+            "will",
+            "shall",
+            "returns",
+            "displays",
+            "shows",
+            "creates",
+            "updates",
+            "deletes",
+            "modifies",
+            "validates",
+            "within",
+            "less than",
+            "greater than",
+            "at least",
+            "exactly",
+            "between",
+            "responds",
+            "accepts",
+            "rejects",
+            "stores",
+            "retrieves",
+            "sends",
+            "receives",
+            "generates",
+            "triggers",
+            "logs",
+        ]
+    )
 
     def evaluate(self, requirements: Any) -> EvalResult:
         """
@@ -79,23 +102,16 @@ class RequirementEvaluator(BaseEvaluator):
 
         # Check 2: EARS format (WHEN condition exists)
         ears_valid = all(
-            self._has_ears_condition(req.get("condition", ""))
-            for req in req_list
+            self._has_ears_condition(req.get("condition", "")) for req in req_list
         )
         checks.append(("ears_format", ears_valid))
 
         # Check 3: Has action clause
-        has_actions = all(
-            bool(req.get("action"))
-            for req in req_list
-        )
+        has_actions = all(bool(req.get("action")) for req in req_list)
         checks.append(("has_actions", has_actions))
 
         # Check 4: Has acceptance criteria (at least 2 per requirement)
-        has_criteria = all(
-            len(self._get_criteria(req)) >= 2
-            for req in req_list
-        )
+        has_criteria = all(len(self._get_criteria(req)) >= 2 for req in req_list)
         checks.append(("has_criteria", has_criteria))
 
         # Check 5: No duplicate titles
@@ -104,10 +120,7 @@ class RequirementEvaluator(BaseEvaluator):
         checks.append(("no_duplicates", no_duplicates))
 
         # Check 6: All have titles and actions
-        complete = all(
-            req.get("title") and req.get("action")
-            for req in req_list
-        )
+        complete = all(req.get("title") and req.get("action") for req in req_list)
         checks.append(("complete_fields", complete))
 
         # Check 7: Criteria are testable (have action words)
@@ -116,20 +129,14 @@ class RequirementEvaluator(BaseEvaluator):
             all_criteria.extend(self._get_criteria(req))
 
         if all_criteria:
-            testable_count = sum(
-                1 for c in all_criteria
-                if self._is_testable(c)
-            )
+            testable_count = sum(1 for c in all_criteria if self._is_testable(c))
             criteria_testable = testable_count >= len(all_criteria) * 0.7
         else:
             criteria_testable = False
         checks.append(("testable_criteria", criteria_testable))
 
         # Check 8: Has priority assigned
-        has_priority = all(
-            req.get("priority") is not None
-            for req in req_list
-        )
+        has_priority = all(req.get("priority") is not None for req in req_list)
         checks.append(("has_priority", has_priority))
 
         result = self._make_result(checks)

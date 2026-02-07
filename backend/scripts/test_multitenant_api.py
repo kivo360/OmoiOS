@@ -8,9 +8,6 @@ Run: uv run python scripts/test_multitenant_api.py
 
 import asyncio
 import httpx
-import json
-from typing import Any
-
 
 BASE_URL = "http://localhost:18000"
 EMAIL = "kevin@autoworkz.org"
@@ -31,17 +28,26 @@ def print_response(name: str, response: httpx.Response, show_data: bool = True):
                     for item in data:
                         if isinstance(item, dict):
                             # Show key fields
-                            id_val = item.get("id", item.get("ticket_id", "?"))[:8] + "..."
-                            name_val = item.get("title", item.get("name", item.get("description", "?")))
+                            id_val = (
+                                item.get("id", item.get("ticket_id", "?"))[:8] + "..."
+                            )
+                            name_val = item.get(
+                                "title", item.get("name", item.get("description", "?"))
+                            )
                             if isinstance(name_val, str) and len(name_val) > 40:
                                 name_val = name_val[:40] + "..."
                             print(f"      - {id_val}: {name_val}")
                 elif data and len(data) > 5:
-                    print(f"   (showing first 5)")
+                    print("   (showing first 5)")
                     for item in data[:5]:
                         if isinstance(item, dict):
-                            id_val = str(item.get("id", item.get("ticket_id", "?")))[:8] + "..."
-                            name_val = item.get("title", item.get("name", item.get("description", "?")))
+                            id_val = (
+                                str(item.get("id", item.get("ticket_id", "?")))[:8]
+                                + "..."
+                            )
+                            name_val = item.get(
+                                "title", item.get("name", item.get("description", "?"))
+                            )
                             if isinstance(name_val, str) and len(name_val) > 40:
                                 name_val = name_val[:40] + "..."
                             print(f"      - {id_val}: {name_val}")
@@ -56,7 +62,7 @@ def print_response(name: str, response: httpx.Response, show_data: bool = True):
                     print(f"   Token received: {data['access_token'][:20]}...")
                 if "error" in data or "detail" in data:
                     print(f"   Error: {data.get('error', data.get('detail', '?'))}")
-        except Exception as e:
+        except Exception:
             print(f"   Raw: {response.text[:200]}")
 
 
@@ -73,10 +79,9 @@ async def main():
         print("📝 Step 1: Authentication")
         print("-" * 40)
 
-        login_response = await client.post("/api/v1/auth/login", json={
-            "email": EMAIL,
-            "password": PASSWORD
-        })
+        login_response = await client.post(
+            "/api/v1/auth/login", json={"email": EMAIL, "password": PASSWORD}
+        )
         print_response("Login", login_response)
 
         if login_response.status_code != 200:

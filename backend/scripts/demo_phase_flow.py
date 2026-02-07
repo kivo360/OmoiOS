@@ -207,7 +207,9 @@ async def test_mock_mode():
             return True
         else:
             print("\n" + "=" * 70)
-            print(f"❌ FAILED: Expected PHASE_DONE, got {ticket.phase_id}/{ticket.status}")
+            print(
+                f"❌ FAILED: Expected PHASE_DONE, got {ticket.phase_id}/{ticket.status}"
+            )
             print("=" * 70)
             return False
 
@@ -291,7 +293,7 @@ async def test_integration_mode():
 
     context = context_builder.build_context_sync(task_id)
     if context:
-        print(f"✓ Context built successfully")
+        print("✓ Context built successfully")
         print(f"  - Task: {context.task_description[:50]}...")
         print(f"  - Ticket: {context.ticket_title}")
         print(f"  - Spec: {context.spec_title or '(no spec linked)'}")
@@ -320,14 +322,16 @@ async def test_integration_mode():
     print("  (In real flow: DaytonaSpawner creates sandbox with TASK_DATA_BASE64)")
 
     # Trigger task started
-    phase_manager._handle_task_started({
-        "event_type": "TASK_STARTED",
-        "payload": {
-            "task_id": task_id,
-            "ticket_id": ticket_id,
-            "task_type": "implement_feature",
-        },
-    })
+    phase_manager._handle_task_started(
+        {
+            "event_type": "TASK_STARTED",
+            "payload": {
+                "task_id": task_id,
+                "ticket_id": ticket_id,
+                "task_type": "implement_feature",
+            },
+        }
+    )
     print("✓ TASK_STARTED event processed")
 
     with db.get_session() as session:
@@ -347,14 +351,16 @@ async def test_integration_mode():
         session.commit()
 
     # Trigger task completed
-    phase_manager._handle_task_completed({
-        "event_type": "TASK_COMPLETED",
-        "payload": {
-            "task_id": task_id,
-            "ticket_id": ticket_id,
-            "task_type": "implement_feature",
-        },
-    })
+    phase_manager._handle_task_completed(
+        {
+            "event_type": "TASK_COMPLETED",
+            "payload": {
+                "task_id": task_id,
+                "ticket_id": ticket_id,
+                "task_type": "implement_feature",
+            },
+        }
+    )
     print("✓ TASK_COMPLETED event processed")
 
     # Verify results
@@ -385,7 +391,7 @@ async def test_integration_mode():
             return True
         else:
             print("\n" + "=" * 70)
-            print(f"❌ FAILED: Phase transition did not complete")
+            print("❌ FAILED: Phase transition did not complete")
             print("=" * 70)
             return False
 
@@ -484,10 +490,18 @@ Examples:
   uv run python scripts/demo_phase_flow.py --mock --local  # Use local database
         """,
     )
-    parser.add_argument("--mock", action="store_true", help="Run mock test (direct handler calls)")
-    parser.add_argument("--integration", action="store_true", help="Run integration test (mocked Daytona)")
+    parser.add_argument(
+        "--mock", action="store_true", help="Run mock test (direct handler calls)"
+    )
+    parser.add_argument(
+        "--integration",
+        action="store_true",
+        help="Run integration test (mocked Daytona)",
+    )
     parser.add_argument("--ui", action="store_true", help="Print manual UI test steps")
-    parser.add_argument("--local", action="store_true", help="Use local database instead of cloud")
+    parser.add_argument(
+        "--local", action="store_true", help="Use local database instead of cloud"
+    )
     args = parser.parse_args()
 
     # Default to mock if no option specified

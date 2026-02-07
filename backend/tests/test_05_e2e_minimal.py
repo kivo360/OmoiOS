@@ -17,11 +17,13 @@ from omoi_os.services.task_queue import TaskQueueService
 def mock_agent_executor():
     """Create a mock AgentExecutor that simulates task execution."""
     executor = Mock(spec=AgentExecutor)
-    executor.execute_task = Mock(return_value={
-        "status": "finished",
-        "event_count": 3,
-        "cost": 0.10,
-    })
+    executor.execute_task = Mock(
+        return_value={
+            "status": "finished",
+            "event_count": 3,
+            "cost": 0.10,
+        }
+    )
     return executor
 
 
@@ -246,11 +248,16 @@ def test_e2e_multiple_tasks_per_ticket(
     # Verify all tasks are pending
     with db_service.get_session() as session:
         from sqlalchemy.orm import joinedload
-        ticket = session.query(Ticket).options(joinedload(Ticket.tasks)).filter(Ticket.id == ticket_id).first()
+
+        ticket = (
+            session.query(Ticket)
+            .options(joinedload(Ticket.tasks))
+            .filter(Ticket.id == ticket_id)
+            .first()
+        )
         assert ticket is not None
         assert len(ticket.tasks) == 3
 
         # Verify priority ordering
         next_task = task_queue_service.get_next_task("PHASE_REQUIREMENTS")
         assert next_task.id == task1.id  # HIGH priority first
-

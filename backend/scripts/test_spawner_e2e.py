@@ -295,7 +295,7 @@ asyncio.run(test())
         # Try to cleanup
         try:
             await spawner.terminate_sandbox(sandbox_id)
-        except:
+        except Exception:
             pass
 
     print("\n" + "=" * 60)

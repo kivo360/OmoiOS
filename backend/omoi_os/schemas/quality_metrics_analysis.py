@@ -23,13 +23,10 @@ class QualityMetricsExtraction(BaseModel):
     lint_errors: List[LintError] = Field(
         default_factory=list, description="List of lint errors"
     )
-    complexity_score: Optional[float] = Field(
-        None, description="Code complexity score"
-    )
+    complexity_score: Optional[float] = Field(None, description="Code complexity score")
     code_quality_score: float = Field(
         ..., ge=0.0, le=1.0, description="Overall code quality score (0.0-1.0)"
     )
     recommendations: List[str] = Field(
         default_factory=list, description="Quality improvement recommendations"
     )
-

@@ -16,7 +16,12 @@ from pydantic import Field
 from rich.text import Text
 
 from openhands.sdk import Action, Observation, TextContent
-from openhands.sdk.tool import ToolDefinition, ToolAnnotations, ToolExecutor, register_tool
+from openhands.sdk.tool import (
+    ToolDefinition,
+    ToolAnnotations,
+    ToolExecutor,
+    register_tool,
+)
 
 from omoi_os.tools.protocols import (
     DatabaseServiceProtocol,
@@ -76,9 +81,15 @@ class GetPhaseContextAction(Action):
 class SearchSimilarTasksAction(Action):
     """Search for similar tasks from memory."""
 
-    query: str = Field(min_length=5, description="Description of task to find similar tasks for")
-    top_k: int = Field(default=5, ge=1, le=20, description="Number of results to return")
-    success_only: bool = Field(default=True, description="Only return successful task executions")
+    query: str = Field(
+        min_length=5, description="Description of task to find similar tasks for"
+    )
+    top_k: int = Field(
+        default=5, ge=1, le=20, description="Number of results to return"
+    )
+    success_only: bool = Field(
+        default=True, description="Only return successful task executions"
+    )
 
 
 class GetLearnedPatternsAction(Action):
@@ -119,7 +130,9 @@ class AnalyzeRequirementsAction(Action):
     """Analyze requirements and break them down into tasks."""
 
     ticket_id: str = Field(description="Ticket ID to analyze requirements for")
-    requirements_text: str = Field(min_length=10, description="Requirements text to analyze")
+    requirements_text: str = Field(
+        min_length=10, description="Requirements text to analyze"
+    )
 
 
 # ---------- Observations ----------
@@ -166,7 +179,9 @@ class PlanningObservation(Observation):
 # ---------- Executors (ToolExecutor subclasses) ----------
 
 
-class GetTicketDetailsExecutor(ToolExecutor[GetTicketDetailsAction, PlanningObservation]):
+class GetTicketDetailsExecutor(
+    ToolExecutor[GetTicketDetailsAction, PlanningObservation]
+):
     """Executor for getting ticket details."""
 
     def __call__(
@@ -183,7 +198,9 @@ class GetTicketDetailsExecutor(ToolExecutor[GetTicketDetailsAction, PlanningObse
             with _db.get_session() as session:
                 ticket = session.get(Ticket, action.ticket_id)
                 if not ticket:
-                    return PlanningObservation.error(f"Ticket {action.ticket_id} not found")
+                    return PlanningObservation.error(
+                        f"Ticket {action.ticket_id} not found"
+                    )
 
                 return PlanningObservation.ok(
                     message=f"Ticket: {ticket.title}",
@@ -195,7 +212,9 @@ class GetTicketDetailsExecutor(ToolExecutor[GetTicketDetailsAction, PlanningObse
                         "status": ticket.status,
                         "priority": ticket.priority,
                         "approval_status": ticket.approval_status,
-                        "created_at": str(ticket.created_at) if ticket.created_at else None,
+                        "created_at": (
+                            str(ticket.created_at) if ticket.created_at else None
+                        ),
                     },
                 )
         except Exception as e:
@@ -228,13 +247,20 @@ class GetPhaseContextExecutor(ToolExecutor[GetPhaseContextAction, PlanningObserv
                 results = session.execute(query).all()
                 status_counts = {status: count for status, count in results}
 
-                recent_query = select(Task).where(
-                    Task.phase_id == action.phase_id,
-                    Task.status == "completed",
-                ).order_by(Task.updated_at.desc()).limit(5)
+                recent_query = (
+                    select(Task)
+                    .where(
+                        Task.phase_id == action.phase_id,
+                        Task.status == "completed",
+                    )
+                    .order_by(Task.updated_at.desc())
+                    .limit(5)
+                )
 
                 if action.ticket_id:
-                    recent_query = recent_query.where(Task.ticket_id == action.ticket_id)
+                    recent_query = recent_query.where(
+                        Task.ticket_id == action.ticket_id
+                    )
 
                 recent_tasks = session.execute(recent_query).scalars().all()
 
@@ -257,7 +283,9 @@ class GetPhaseContextExecutor(ToolExecutor[GetPhaseContextAction, PlanningObserv
             return PlanningObservation.error(f"Failed to get phase context: {str(e)}")
 
 
-class SearchSimilarTasksExecutor(ToolExecutor[SearchSimilarTasksAction, PlanningObservation]):
+class SearchSimilarTasksExecutor(
+    ToolExecutor[SearchSimilarTasksAction, PlanningObservation]
+):
     """Executor for searching similar tasks."""
 
     def __call__(
@@ -289,17 +317,25 @@ class SearchSimilarTasksExecutor(ToolExecutor[SearchSimilarTasksAction, Planning
                                 "description": s.description[:200],
                                 "similarity": s.similarity_score,
                                 "success": s.success,
-                                "execution_summary": s.execution_summary[:200] if s.execution_summary else None,
+                                "execution_summary": (
+                                    s.execution_summary[:200]
+                                    if s.execution_summary
+                                    else None
+                                ),
                             }
                             for s in similar
                         ],
                     },
                 )
         except Exception as e:
-            return PlanningObservation.error(f"Failed to search similar tasks: {str(e)}")
+            return PlanningObservation.error(
+                f"Failed to search similar tasks: {str(e)}"
+            )
 
 
-class GetLearnedPatternsExecutor(ToolExecutor[GetLearnedPatternsAction, PlanningObservation]):
+class GetLearnedPatternsExecutor(
+    ToolExecutor[GetLearnedPatternsAction, PlanningObservation]
+):
     """Executor for getting learned patterns."""
 
     def __call__(
@@ -339,7 +375,9 @@ class GetLearnedPatternsExecutor(ToolExecutor[GetLearnedPatternsAction, Planning
             return PlanningObservation.error(f"Failed to get patterns: {str(e)}")
 
 
-class GetDependencyGraphExecutor(ToolExecutor[GetDependencyGraphAction, PlanningObservation]):
+class GetDependencyGraphExecutor(
+    ToolExecutor[GetDependencyGraphAction, PlanningObservation]
+):
     """Executor for getting dependency graph."""
 
     def __call__(
@@ -362,7 +400,9 @@ class GetDependencyGraphExecutor(ToolExecutor[GetDependencyGraphAction, Planning
                     payload={"graph": graph},
                 )
         except Exception as e:
-            return PlanningObservation.error(f"Failed to get dependency graph: {str(e)}")
+            return PlanningObservation.error(
+                f"Failed to get dependency graph: {str(e)}"
+            )
 
 
 class AnalyzeBlockersExecutor(ToolExecutor[AnalyzeBlockersAction, PlanningObservation]):
@@ -381,12 +421,16 @@ class AnalyzeBlockersExecutor(ToolExecutor[AnalyzeBlockersAction, PlanningObserv
             from sqlalchemy import select
 
             with _db.get_session() as session:
-                pending_tasks = session.execute(
-                    select(Task).where(
-                        Task.ticket_id == action.ticket_id,
-                        Task.status.in_(["pending", "blocked"]),
+                pending_tasks = (
+                    session.execute(
+                        select(Task).where(
+                            Task.ticket_id == action.ticket_id,
+                            Task.status.in_(["pending", "blocked"]),
+                        )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
 
                 blockers = []
                 for task in pending_tasks:
@@ -395,13 +439,17 @@ class AnalyzeBlockersExecutor(ToolExecutor[AnalyzeBlockersAction, PlanningObserv
                         for dep_id in dep_ids:
                             dep_task = session.get(Task, dep_id)
                             if dep_task and dep_task.status != "completed":
-                                blockers.append({
-                                    "blocked_task_id": str(task.id),
-                                    "blocked_task_desc": task.description[:100],
-                                    "blocking_task_id": str(dep_task.id),
-                                    "blocking_task_desc": dep_task.description[:100],
-                                    "blocking_status": dep_task.status,
-                                })
+                                blockers.append(
+                                    {
+                                        "blocked_task_id": str(task.id),
+                                        "blocked_task_desc": task.description[:100],
+                                        "blocking_task_id": str(dep_task.id),
+                                        "blocking_task_desc": dep_task.description[
+                                            :100
+                                        ],
+                                        "blocking_status": dep_task.status,
+                                    }
+                                )
 
                 return PlanningObservation.ok(
                     message=f"Found {len(blockers)} blockers",
@@ -411,7 +459,9 @@ class AnalyzeBlockersExecutor(ToolExecutor[AnalyzeBlockersAction, PlanningObserv
             return PlanningObservation.error(f"Failed to analyze blockers: {str(e)}")
 
 
-class GetProjectStructureExecutor(ToolExecutor[GetProjectStructureAction, PlanningObservation]):
+class GetProjectStructureExecutor(
+    ToolExecutor[GetProjectStructureAction, PlanningObservation]
+):
     """Executor for getting project structure."""
 
     def __call__(
@@ -428,15 +478,22 @@ class GetProjectStructureExecutor(ToolExecutor[GetProjectStructureAction, Planni
                     dirs[:] = []
                     continue
 
-                dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".git")]
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if not d.startswith(".")
+                    and d not in ("node_modules", "__pycache__", "venv", ".git")
+                ]
 
                 rel_path = os.path.relpath(root, action.workspace_path)
-                structure.append({
-                    "path": rel_path if rel_path != "." else "/",
-                    "type": "directory",
-                    "depth": depth,
-                    "files": [f for f in files if not f.startswith(".")],
-                })
+                structure.append(
+                    {
+                        "path": rel_path if rel_path != "." else "/",
+                        "type": "directory",
+                        "depth": depth,
+                        "files": [f for f in files if not f.startswith(".")],
+                    }
+                )
 
             return PlanningObservation.ok(
                 message=f"Project structure ({len(structure)} directories)",
@@ -446,7 +503,9 @@ class GetProjectStructureExecutor(ToolExecutor[GetProjectStructureAction, Planni
                 },
             )
         except Exception as e:
-            return PlanningObservation.error(f"Failed to get project structure: {str(e)}")
+            return PlanningObservation.error(
+                f"Failed to get project structure: {str(e)}"
+            )
 
 
 class SearchCodebaseExecutor(ToolExecutor[SearchCodebaseAction, PlanningObservation]):
@@ -462,21 +521,30 @@ class SearchCodebaseExecutor(ToolExecutor[SearchCodebaseAction, PlanningObservat
             pattern = re.compile(action.query, re.IGNORECASE)
 
             for root, dirs, files in os.walk(action.workspace_path):
-                dirs[:] = [d for d in dirs if not d.startswith(".") and d not in ("node_modules", "__pycache__", "venv", ".git")]
+                dirs[:] = [
+                    d
+                    for d in dirs
+                    if not d.startswith(".")
+                    and d not in ("node_modules", "__pycache__", "venv", ".git")
+                ]
 
                 for filename in fnmatch.filter(files, action.file_pattern):
                     filepath = os.path.join(root, filename)
                     rel_path = os.path.relpath(filepath, action.workspace_path)
 
                     try:
-                        with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+                        with open(
+                            filepath, "r", encoding="utf-8", errors="ignore"
+                        ) as f:
                             for line_num, line in enumerate(f, 1):
                                 if pattern.search(line):
-                                    matches.append({
-                                        "file": rel_path,
-                                        "line": line_num,
-                                        "content": line.strip()[:200],
-                                    })
+                                    matches.append(
+                                        {
+                                            "file": rel_path,
+                                            "line": line_num,
+                                            "content": line.strip()[:200],
+                                        }
+                                    )
                                     if len(matches) >= 50:
                                         break
                     except Exception:
@@ -499,7 +567,9 @@ class SearchCodebaseExecutor(ToolExecutor[SearchCodebaseAction, PlanningObservat
             return PlanningObservation.error(f"Failed to search codebase: {str(e)}")
 
 
-class AnalyzeRequirementsExecutor(ToolExecutor[AnalyzeRequirementsAction, PlanningObservation]):
+class AnalyzeRequirementsExecutor(
+    ToolExecutor[AnalyzeRequirementsAction, PlanningObservation]
+):
     """Executor for analyzing requirements."""
 
     def __call__(
@@ -532,7 +602,9 @@ class AnalyzeRequirementsExecutor(ToolExecutor[AnalyzeRequirementsAction, Planni
                 },
             )
         except Exception as e:
-            return PlanningObservation.error(f"Failed to analyze requirements: {str(e)}")
+            return PlanningObservation.error(
+                f"Failed to analyze requirements: {str(e)}"
+            )
 
 
 # ---------- Tool Definitions ----------
@@ -542,7 +614,9 @@ class GetTicketDetailsTool(ToolDefinition[GetTicketDetailsAction, PlanningObserv
     """Tool for getting ticket details."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["GetTicketDetailsTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["GetTicketDetailsTool"]:
         return [
             cls(
                 description="Get full details of a ticket including title, description, status, and phase.",
@@ -570,11 +644,15 @@ class GetPhaseContextTool(ToolDefinition[GetPhaseContextAction, PlanningObservat
         ]
 
 
-class SearchSimilarTasksTool(ToolDefinition[SearchSimilarTasksAction, PlanningObservation]):
+class SearchSimilarTasksTool(
+    ToolDefinition[SearchSimilarTasksAction, PlanningObservation]
+):
     """Tool for searching similar tasks from memory."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["SearchSimilarTasksTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["SearchSimilarTasksTool"]:
         return [
             cls(
                 description=(
@@ -590,11 +668,15 @@ class SearchSimilarTasksTool(ToolDefinition[SearchSimilarTasksAction, PlanningOb
         ]
 
 
-class GetLearnedPatternsTool(ToolDefinition[GetLearnedPatternsAction, PlanningObservation]):
+class GetLearnedPatternsTool(
+    ToolDefinition[GetLearnedPatternsAction, PlanningObservation]
+):
     """Tool for getting learned patterns."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["GetLearnedPatternsTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["GetLearnedPatternsTool"]:
         return [
             cls(
                 description="Get learned patterns from past task executions, optionally filtered by task type or phase.",
@@ -606,11 +688,15 @@ class GetLearnedPatternsTool(ToolDefinition[GetLearnedPatternsAction, PlanningOb
         ]
 
 
-class GetDependencyGraphTool(ToolDefinition[GetDependencyGraphAction, PlanningObservation]):
+class GetDependencyGraphTool(
+    ToolDefinition[GetDependencyGraphAction, PlanningObservation]
+):
     """Tool for getting dependency graph."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["GetDependencyGraphTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["GetDependencyGraphTool"]:
         return [
             cls(
                 description="Get the dependency graph for a ticket's tasks, showing which tasks depend on others.",
@@ -638,11 +724,15 @@ class AnalyzeBlockersTool(ToolDefinition[AnalyzeBlockersAction, PlanningObservat
         ]
 
 
-class GetProjectStructureTool(ToolDefinition[GetProjectStructureAction, PlanningObservation]):
+class GetProjectStructureTool(
+    ToolDefinition[GetProjectStructureAction, PlanningObservation]
+):
     """Tool for getting project structure."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["GetProjectStructureTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["GetProjectStructureTool"]:
         return [
             cls(
                 description="Get project structure information for planning, including directories and file listings.",
@@ -670,11 +760,15 @@ class SearchCodebaseTool(ToolDefinition[SearchCodebaseAction, PlanningObservatio
         ]
 
 
-class AnalyzeRequirementsTool(ToolDefinition[AnalyzeRequirementsAction, PlanningObservation]):
+class AnalyzeRequirementsTool(
+    ToolDefinition[AnalyzeRequirementsAction, PlanningObservation]
+):
     """Tool for analyzing requirements."""
 
     @classmethod
-    def create(cls, conv_state: "ConversationState") -> Sequence["AnalyzeRequirementsTool"]:
+    def create(
+        cls, conv_state: "ConversationState"
+    ) -> Sequence["AnalyzeRequirementsTool"]:
         return [
             cls(
                 description=(

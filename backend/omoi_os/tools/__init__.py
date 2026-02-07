@@ -60,7 +60,6 @@ from omoi_os.tools.mcp_tools import (
     GetDiscoveriesByTypeMCPTool,
 )
 
-
 _registered = False
 
 

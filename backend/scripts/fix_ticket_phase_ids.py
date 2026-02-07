@@ -19,7 +19,6 @@ from omoi_os.services.database import DatabaseService
 from omoi_os.models.ticket import Ticket
 from omoi_os.models.task import Task
 
-
 # Mapping of incorrect -> correct phase_id values
 PHASE_ID_FIXES = {
     "backlog": "PHASE_BACKLOG",
@@ -156,13 +155,17 @@ def main():
         print()
 
         if dry_run:
-            total_tickets = sum(v["tickets"] for v in results["fixes_by_phase"].values())
+            total_tickets = sum(
+                v["tickets"] for v in results["fixes_by_phase"].values()
+            )
             total_tasks = sum(v["tasks"] for v in results["fixes_by_phase"].values())
             print(f"Total to fix: {total_tickets} tickets, {total_tasks} tasks")
             print()
             print("Run with --apply to fix these issues")
         else:
-            print(f"Fixed: {results['tickets_fixed']} tickets, {results['tasks_fixed']} tasks")
+            print(
+                f"Fixed: {results['tickets_fixed']} tickets, {results['tasks_fixed']} tasks"
+            )
     else:
         print("No fixes needed - all phase_id values are correct!")
 

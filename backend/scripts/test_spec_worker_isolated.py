@@ -52,6 +52,7 @@ async def test_imports() -> bool:
             PhaseResult,
             _MockSpec,
         )
+
         print_check("SpecStateMachine imports", True)
     except ImportError as e:
         print_check("SpecStateMachine imports", False, str(e))
@@ -65,6 +66,7 @@ async def test_imports() -> bool:
             DesignEvaluator,
             TaskEvaluator,
         )
+
         print_check("Evaluators import", True)
     except ImportError as e:
         print_check("Evaluators import", False, str(e))
@@ -73,6 +75,7 @@ async def test_imports() -> bool:
     # Test schema imports
     try:
         from omoi_os.schemas.spec_generation import SpecPhase as SchemaPhase
+
         print_check("Schema imports", True)
     except ImportError as e:
         print_check("Schema imports", False, str(e))
@@ -81,6 +84,7 @@ async def test_imports() -> bool:
     # Test SDK imports (graceful if not available)
     try:
         from claude_code_sdk import query, ClaudeCodeOptions
+
         print_check("Claude SDK imports", True)
     except ImportError as e:
         print_check("Claude SDK imports", True, f"(Optional - not installed: {e})")
@@ -173,7 +177,7 @@ async def test_state_machine_creation() -> bool:
     print_header("Testing State Machine Creation")
     all_passed = True
 
-    from omoi_os.workers.spec_state_machine import SpecStateMachine, SpecPhase
+    from omoi_os.workers.spec_state_machine import SpecStateMachine
     from omoi_os.workers.claude_sandbox_worker import _MockDatabaseSession
 
     # Create with mock database
@@ -236,7 +240,9 @@ async def test_load_spec_fallback() -> bool:
             assert spec.id == "test-123"
             print_check("Mock spec has correct ID", True)
         else:
-            print_check("load_spec returned unexpected type", False, type(spec).__name__)
+            print_check(
+                "load_spec returned unexpected type", False, type(spec).__name__
+            )
             all_passed = False
 
     except Exception as e:
@@ -253,7 +259,11 @@ async def test_file_checkpoints() -> bool:
     print_header("Testing File Checkpoints")
     all_passed = True
 
-    from omoi_os.workers.spec_state_machine import SpecStateMachine, SpecPhase, _MockSpec
+    from omoi_os.workers.spec_state_machine import (
+        SpecStateMachine,
+        SpecPhase,
+        _MockSpec,
+    )
     from omoi_os.workers.claude_sandbox_worker import _MockDatabaseSession
 
     workspace = tempfile.mkdtemp(prefix="spec_test_")
@@ -321,13 +331,17 @@ async def test_checkpoint_restore() -> bool:
         checkpoint_dir = Path(workspace) / ".omoi_os" / "checkpoints"
         checkpoint_dir.mkdir(parents=True)
         state_file = checkpoint_dir / "state.json"
-        state_file.write_text(json.dumps({
-            "title": "Restored Spec",
-            "description": "A restored specification",
-            "current_phase": "design",
-            "phase_data": {"explore": {"type": "api"}},
-            "phase_attempts": {"explore": 2},
-        }))
+        state_file.write_text(
+            json.dumps(
+                {
+                    "title": "Restored Spec",
+                    "description": "A restored specification",
+                    "current_phase": "design",
+                    "phase_data": {"explore": {"type": "api"}},
+                    "phase_attempts": {"explore": 2},
+                }
+            )
+        )
 
         # Create state machine and load spec
         db = _MockDatabaseSession()
@@ -345,7 +359,11 @@ async def test_checkpoint_restore() -> bool:
             if spec.current_phase == "design":
                 print_check("Current phase restored (design)", True)
             else:
-                print_check("Current phase restored (design)", False, f"Got: {spec.current_phase}")
+                print_check(
+                    "Current phase restored (design)",
+                    False,
+                    f"Got: {spec.current_phase}",
+                )
                 all_passed = False
 
             if spec.title == "Restored Spec":
@@ -410,7 +428,9 @@ async def test_worker_config_env_vars() -> bool:
         if config.phase_data == phase_data:
             print_check("PHASE_DATA_B64 decoded correctly", True)
         else:
-            print_check("PHASE_DATA_B64 decoded correctly", False, f"Got: {config.phase_data}")
+            print_check(
+                "PHASE_DATA_B64 decoded correctly", False, f"Got: {config.phase_data}"
+            )
             all_passed = False
 
     except Exception as e:
@@ -464,7 +484,7 @@ async def test_evaluators() -> bool:
         print_check(
             "Valid output passes evaluation",
             False,
-            f"score={result.score:.2f}, failures={result.failures}"
+            f"score={result.score:.2f}, failures={result.failures}",
         )
         all_passed = False
 

@@ -810,18 +810,22 @@ class ConductorService:
                 avg_coherence = row.avg_score if row and row.avg_score else 0.0
 
                 return {
-                    "current_status": recent_analysis.get("system_status")
-                    if recent_analysis
-                    else "unknown",
-                    "current_coherence": recent_analysis.get("coherence_score")
-                    if recent_analysis
-                    else 0.0,
+                    "current_status": (
+                        recent_analysis.get("system_status")
+                        if recent_analysis
+                        else "unknown"
+                    ),
+                    "current_coherence": (
+                        recent_analysis.get("coherence_score")
+                        if recent_analysis
+                        else 0.0
+                    ),
                     "average_coherence_1h": avg_coherence,
                     "active_agents": active_count,
                     "recent_duplicates": recent_duplicates,
-                    "last_analysis": recent_analysis.get("created_at")
-                    if recent_analysis
-                    else None,
+                    "last_analysis": (
+                        recent_analysis.get("created_at") if recent_analysis else None
+                    ),
                 }
 
         except Exception as e:

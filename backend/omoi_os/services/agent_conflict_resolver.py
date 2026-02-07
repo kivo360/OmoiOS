@@ -23,9 +23,8 @@ Prerequisites:
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 
 from omoi_os.logging import get_logger
 from omoi_os.utils.datetime import utc_now
@@ -38,15 +37,19 @@ logger = get_logger(__name__)
 # Try to import Claude Agent SDK
 try:
     from claude_agent_sdk import query, ClaudeAgentOptions, AssistantMessage, TextBlock
+
     CLAUDE_SDK_AVAILABLE = True
 except ImportError:
     CLAUDE_SDK_AVAILABLE = False
-    logger.warning("claude-agent-sdk not installed. AgentConflictResolver will be limited.")
+    logger.warning(
+        "claude-agent-sdk not installed. AgentConflictResolver will be limited."
+    )
 
 
 @dataclass
 class ResolutionContext:
     """Context for conflict resolution."""
+
     file_path: str
     ours_content: str
     theirs_content: str
@@ -59,6 +62,7 @@ class ResolutionContext:
 @dataclass
 class ResolutionResult:
     """Result of a conflict resolution attempt."""
+
     success: bool
     resolved_content: Optional[str] = None
     reasoning: Optional[str] = None
@@ -235,12 +239,16 @@ class AgentConflictResolver:
                             # Look for resolution markers
                             if "<<<RESOLVED>>>" in text:
                                 # Extract content between markers
-                                start = text.find("<<<RESOLVED>>>") + len("<<<RESOLVED>>>")
+                                start = text.find("<<<RESOLVED>>>") + len(
+                                    "<<<RESOLVED>>>"
+                                )
                                 end = text.find("<<<END_RESOLVED>>>")
                                 if end > start:
                                     resolved_content = text[start:end].strip()
                             elif "<<<REASONING>>>" in text:
-                                start = text.find("<<<REASONING>>>") + len("<<<REASONING>>>")
+                                start = text.find("<<<REASONING>>>") + len(
+                                    "<<<REASONING>>>"
+                                )
                                 end = text.find("<<<END_REASONING>>>")
                                 if end > start:
                                     reasoning = text[start:end].strip()
@@ -339,7 +347,11 @@ class AgentConflictResolver:
             )
 
         # For import statements, try to combine
-        if context.file_path.endswith(".py") and "import" in ours and "import" in theirs:
+        if (
+            context.file_path.endswith(".py")
+            and "import" in ours
+            and "import" in theirs
+        ):
             combined = self._merge_imports(ours, theirs)
             if combined:
                 return ResolutionResult(
@@ -366,7 +378,9 @@ class AgentConflictResolver:
         """
         try:
             ours_lines = set(line.strip() for line in ours.split("\n") if line.strip())
-            theirs_lines = set(line.strip() for line in theirs.split("\n") if line.strip())
+            theirs_lines = set(
+                line.strip() for line in theirs.split("\n") if line.strip()
+            )
 
             # Combine unique lines
             combined = ours_lines | theirs_lines
@@ -398,63 +412,73 @@ class AgentConflictResolver:
         ]
 
         if context.task_description:
-            prompt_parts.extend([
-                f"**Task context:** {context.task_description}",
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    f"**Task context:** {context.task_description}",
+                    "",
+                ]
+            )
 
-        prompt_parts.extend([
-            "## Our version (target branch):",
-            "```",
-            context.ours_content,
-            "```",
-            "",
-            "## Their version (incoming branch):",
-            "```",
-            context.theirs_content,
-            "```",
-            "",
-        ])
+        prompt_parts.extend(
+            [
+                "## Our version (target branch):",
+                "```",
+                context.ours_content,
+                "```",
+                "",
+                "## Their version (incoming branch):",
+                "```",
+                context.theirs_content,
+                "```",
+                "",
+            ]
+        )
 
         if context.base_content:
-            prompt_parts.extend([
-                "## Common ancestor:",
-                "```",
-                context.base_content,
-                "```",
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    "## Common ancestor:",
+                    "```",
+                    context.base_content,
+                    "```",
+                    "",
+                ]
+            )
 
         if context.related_files:
-            prompt_parts.extend([
-                "## Related files you can read for context:",
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    "## Related files you can read for context:",
+                    "",
+                ]
+            )
             for f in context.related_files[:5]:  # Limit to 5
                 prompt_parts.append(f"- `{f}`")
             prompt_parts.append("")
 
-        prompt_parts.extend([
-            "## Instructions:",
-            "",
-            "1. Analyze both versions and understand what each change is trying to accomplish",
-            "2. If needed, use the Read tool to examine related files for context",
-            "3. Produce a merged version that preserves the intent of BOTH changes",
-            "4. Do NOT simply pick one side unless the other is clearly incorrect",
-            "5. Ensure the resolved code is syntactically correct",
-            "",
-            "## Output format:",
-            "",
-            "First explain your reasoning:",
-            "<<<REASONING>>>",
-            "Your reasoning here...",
-            "<<<END_REASONING>>>",
-            "",
-            "Then provide the resolved file content:",
-            "<<<RESOLVED>>>",
-            "The complete resolved file content goes here...",
-            "<<<END_RESOLVED>>>",
-        ])
+        prompt_parts.extend(
+            [
+                "## Instructions:",
+                "",
+                "1. Analyze both versions and understand what each change is trying to accomplish",
+                "2. If needed, use the Read tool to examine related files for context",
+                "3. Produce a merged version that preserves the intent of BOTH changes",
+                "4. Do NOT simply pick one side unless the other is clearly incorrect",
+                "5. Ensure the resolved code is syntactically correct",
+                "",
+                "## Output format:",
+                "",
+                "First explain your reasoning:",
+                "<<<REASONING>>>",
+                "Your reasoning here...",
+                "<<<END_REASONING>>>",
+                "",
+                "Then provide the resolved file content:",
+                "<<<RESOLVED>>>",
+                "The complete resolved file content goes here...",
+                "<<<END_RESOLVED>>>",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 

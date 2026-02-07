@@ -139,6 +139,7 @@ def configure_logging(
             def json_serializer(obj: Any, **_kwargs: Any) -> str:
                 # orjson.dumps returns bytes, decode to str for proper log output
                 return orjson.dumps(obj).decode("utf-8")
+
         except ImportError:
             import json
 

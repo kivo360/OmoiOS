@@ -8,7 +8,7 @@ Tests the DAG Merge Executor foundation:
 """
 
 import pytest
-from unittest.mock import Mock, AsyncMock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock
 from uuid import uuid4
 
 from omoi_os.models.merge_attempt import MergeAttempt, MergeStatus
@@ -21,29 +21,23 @@ from omoi_os.services.conflict_scorer import (
 )
 from omoi_os.services.convergence_merge_service import (
     ConvergenceMergeService,
-    ConvergenceMergeConfig,
-    ConvergenceMergeResult,
     reset_convergence_merge_service,
 )
 from omoi_os.services.agent_conflict_resolver import (
     AgentConflictResolver,
     ResolutionContext,
-    ResolutionResult,
 )
 from omoi_os.services.sandbox_git_operations import (
     SandboxGitOperations,
-    MergeResult,
     MergeResultStatus,
-    DryRunResult,
-    ConflictInfo,
 )
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
+
 
 @pytest.fixture
 def db_service(test_database_url):
@@ -158,6 +152,7 @@ def mock_git_ops(mock_sandbox):
 # MergeAttempt Model Tests
 # ============================================================================
 
+
 class TestMergeAttemptModel:
     """Test MergeAttempt database operations."""
 
@@ -176,16 +171,20 @@ class TestMergeAttemptModel:
             session.commit()
 
             # Verify it was created
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt.id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt.id)
+                .first()
+            )
 
             assert fetched is not None
             assert fetched.task_id == test_tasks[3]
             assert fetched.source_task_ids == test_tasks[:3]
             assert fetched.status == MergeStatus.PENDING.value
 
-    def test_merge_attempt_status_transitions(self, db_service, test_ticket, test_tasks):
+    def test_merge_attempt_status_transitions(
+        self, db_service, test_ticket, test_tasks
+    ):
         """Test MergeAttempt status transitions."""
         merge_id = str(uuid4())
 
@@ -203,18 +202,18 @@ class TestMergeAttemptModel:
 
         # Transition to IN_PROGRESS
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             attempt.status = MergeStatus.IN_PROGRESS.value
             attempt.started_at = utc_now()
             session.commit()
 
         # Transition to COMPLETED
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             attempt.status = MergeStatus.COMPLETED.value
             attempt.success = True
             attempt.completed_at = utc_now()
@@ -222,9 +221,9 @@ class TestMergeAttemptModel:
 
         # Verify final state
         with db_service.get_session() as session:
-            attempt = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            attempt = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert attempt.status == MergeStatus.COMPLETED.value
             assert attempt.success is True
             assert attempt.started_at is not None
@@ -243,7 +242,10 @@ class TestMergeAttemptModel:
                 total_conflicts=5,
                 conflict_scores={
                     test_tasks[0]: {"count": 2, "files": ["src/a.py", "src/b.py"]},
-                    test_tasks[1]: {"count": 3, "files": ["src/c.py", "src/d.py", "src/e.py"]},
+                    test_tasks[1]: {
+                        "count": 3,
+                        "files": ["src/c.py", "src/d.py", "src/e.py"],
+                    },
                     test_tasks[2]: {"count": 0, "files": []},
                 },
                 merge_order=[test_tasks[2], test_tasks[0], test_tasks[1]],
@@ -252,15 +254,19 @@ class TestMergeAttemptModel:
             session.commit()
 
             # Verify conflict data
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_attempt.id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt)
+                .filter(MergeAttempt.id == merge_attempt.id)
+                .first()
+            )
 
             assert fetched.total_conflicts == 5
             assert fetched.has_conflicts is True
             assert fetched.merge_order[0] == test_tasks[2]  # Least conflicts first
 
-    def test_merge_attempt_llm_resolution_log(self, db_service, test_ticket, test_tasks):
+    def test_merge_attempt_llm_resolution_log(
+        self, db_service, test_ticket, test_tasks
+    ):
         """Test MergeAttempt LLM resolution logging."""
         merge_id = str(uuid4())
 
@@ -289,9 +295,9 @@ class TestMergeAttemptModel:
             session.commit()
 
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
 
             assert fetched.required_llm_resolution is True
             assert fetched.llm_invocations == 3
@@ -301,6 +307,7 @@ class TestMergeAttemptModel:
 # ============================================================================
 # ConflictScorer Tests
 # ============================================================================
+
 
 class TestConflictScorer:
     """Test ConflictScorer ordering logic."""
@@ -320,6 +327,7 @@ class TestConflictScorer:
     @pytest.mark.asyncio
     async def test_score_branch_with_conflicts(self, mock_sandbox):
         """Test scoring a branch with conflicts."""
+
         # Mock sandbox to return conflicts
         def mock_exec_with_conflicts(cmd, timeout=None):
             result = Mock()
@@ -431,6 +439,7 @@ CONFLICT (content): Merge conflict in src/model.py
 # ConvergenceMergeService Tests
 # ============================================================================
 
+
 class TestConvergenceMergeService:
     """Test ConvergenceMergeService integration."""
 
@@ -456,9 +465,9 @@ class TestConvergenceMergeService:
 
         # Verify it's in the database
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert fetched is not None
             assert fetched.task_id == test_tasks[3]
             assert fetched.source_task_ids == test_tasks[:3]
@@ -481,9 +490,9 @@ class TestConvergenceMergeService:
         service._update_merge_attempt_status(merge_id, MergeStatus.IN_PROGRESS)
 
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert fetched.status == MergeStatus.IN_PROGRESS.value
             assert fetched.started_at is not None
 
@@ -502,9 +511,17 @@ class TestConvergenceMergeService:
 
         scored_order = ScoredMergeOrder(
             scores={
-                test_tasks[0]: BranchScore(branch=test_tasks[0], conflict_count=1, conflict_files=["a.py"]),
-                test_tasks[1]: BranchScore(branch=test_tasks[1], conflict_count=0, conflict_files=[]),
-                test_tasks[2]: BranchScore(branch=test_tasks[2], conflict_count=2, conflict_files=["b.py", "c.py"]),
+                test_tasks[0]: BranchScore(
+                    branch=test_tasks[0], conflict_count=1, conflict_files=["a.py"]
+                ),
+                test_tasks[1]: BranchScore(
+                    branch=test_tasks[1], conflict_count=0, conflict_files=[]
+                ),
+                test_tasks[2]: BranchScore(
+                    branch=test_tasks[2],
+                    conflict_count=2,
+                    conflict_files=["b.py", "c.py"],
+                ),
             },
             merge_order=[test_tasks[1], test_tasks[0], test_tasks[2]],
             total_conflicts=3,
@@ -515,9 +532,9 @@ class TestConvergenceMergeService:
         service._update_merge_attempt_scoring(merge_id, scored_order)
 
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert fetched.total_conflicts == 3
             assert fetched.merge_order[0] == test_tasks[1]  # Clean one first
 
@@ -545,9 +562,9 @@ class TestConvergenceMergeService:
         assert result.failed_tasks == test_tasks[:3]
 
         with db_service.get_session() as session:
-            fetched = session.query(MergeAttempt).filter(
-                MergeAttempt.id == merge_id
-            ).first()
+            fetched = (
+                session.query(MergeAttempt).filter(MergeAttempt.id == merge_id).first()
+            )
             assert fetched.status == MergeStatus.FAILED.value
             assert fetched.success is False
             assert "Test error" in fetched.error_message
@@ -556,6 +573,7 @@ class TestConvergenceMergeService:
 # ============================================================================
 # AgentConflictResolver Tests
 # ============================================================================
+
 
 class TestAgentConflictResolver:
     """Test AgentConflictResolver fallback resolution.
@@ -568,7 +586,9 @@ class TestAgentConflictResolver:
     async def test_resolve_empty_ours(self):
         """Test resolution when ours is empty."""
         # Patch to use fallback mode
-        with patch("omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False):
+        with patch(
+            "omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False
+        ):
             resolver = AgentConflictResolver()
 
             result = await resolver.resolve_conflict(
@@ -585,7 +605,9 @@ class TestAgentConflictResolver:
     @pytest.mark.asyncio
     async def test_resolve_empty_theirs(self):
         """Test resolution when theirs is empty."""
-        with patch("omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False):
+        with patch(
+            "omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False
+        ):
             resolver = AgentConflictResolver()
 
             result = await resolver.resolve_conflict(
@@ -602,7 +624,9 @@ class TestAgentConflictResolver:
     @pytest.mark.asyncio
     async def test_resolve_identical(self):
         """Test resolution when both sides are identical."""
-        with patch("omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False):
+        with patch(
+            "omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False
+        ):
             resolver = AgentConflictResolver()
 
             result = await resolver.resolve_conflict(
@@ -619,7 +643,9 @@ class TestAgentConflictResolver:
     @pytest.mark.asyncio
     async def test_resolve_extension(self):
         """Test resolution when one extends the other."""
-        with patch("omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False):
+        with patch(
+            "omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False
+        ):
             resolver = AgentConflictResolver()
 
             result = await resolver.resolve_conflict(
@@ -634,7 +660,9 @@ class TestAgentConflictResolver:
     @pytest.mark.asyncio
     async def test_merge_python_imports(self):
         """Test merging Python import statements."""
-        with patch("omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False):
+        with patch(
+            "omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False
+        ):
             resolver = AgentConflictResolver()
 
             result = await resolver.resolve_conflict(
@@ -651,7 +679,9 @@ class TestAgentConflictResolver:
     @pytest.mark.asyncio
     async def test_complex_conflict_fallback_fails(self):
         """Test that complex conflicts fail in fallback mode."""
-        with patch("omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False):
+        with patch(
+            "omoi_os.services.agent_conflict_resolver.CLAUDE_SDK_AVAILABLE", False
+        ):
             resolver = AgentConflictResolver()
 
             result = await resolver.resolve_conflict(
@@ -662,7 +692,10 @@ class TestAgentConflictResolver:
 
             # Without SDK, complex conflicts can't be resolved
             assert result.success is False
-            assert "Claude Agent SDK" in result.error_message or "automatically" in result.error_message
+            assert (
+                "Claude Agent SDK" in result.error_message
+                or "automatically" in result.error_message
+            )
 
     def test_build_resolution_prompt(self):
         """Test prompt building."""
@@ -689,6 +722,7 @@ class TestAgentConflictResolver:
 # ============================================================================
 # SandboxGitOperations Tests
 # ============================================================================
+
 
 class TestSandboxGitOperations:
     """Test SandboxGitOperations with mock sandbox."""

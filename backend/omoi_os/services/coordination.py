@@ -338,7 +338,9 @@ class CoordinationService:
                 raise ValueError("Some source tasks not found")
 
             # Verify continuation task exists
-            continuation = session.query(Task).filter(Task.id == continuation_task_id).first()
+            continuation = (
+                session.query(Task).filter(Task.id == continuation_task_id).first()
+            )
             if not continuation:
                 raise ValueError(f"Continuation task not found: {continuation_task_id}")
 
@@ -423,9 +425,11 @@ class CoordinationService:
                             "merge_id": merge_id,
                             "source_task_ids": source_task_ids,
                             "merge_strategy": merge_strategy,
-                            "result_keys": list(merged_result.keys())
-                            if isinstance(merged_result, dict)
-                            else [],
+                            "result_keys": (
+                                list(merged_result.keys())
+                                if isinstance(merged_result, dict)
+                                else []
+                            ),
                         },
                     )
                 )

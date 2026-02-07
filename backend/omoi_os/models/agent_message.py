@@ -36,7 +36,7 @@ class AgentMessage(Base):
     message_metadata: Mapped[Optional[dict]] = mapped_column(
         JSONB, nullable=True
     )  # Additional context (task_id, ticket_id, etc.)
-    
+
     read_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -69,11 +69,10 @@ class CollaborationThread(Base):
         String(50), nullable=False, default="active"
     )  # active, resolved, abandoned
     thread_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
-    
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     closed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-

@@ -28,7 +28,9 @@ class SubscriptionTier(str, Enum):
     PRO = "pro"  # $50/month - 100 workflows, 5 agents, BYO keys
     TEAM = "team"  # $150/month - 500 workflows, 10 agents, BYO keys
     ENTERPRISE = "enterprise"  # Custom - Unlimited
-    LIFETIME = "lifetime"  # $299 one-time - 50 workflows/month, 5 agents, early BYO access
+    LIFETIME = (
+        "lifetime"  # $299 one-time - 50 workflows/month, 5 agents, early BYO access
+    )
 
 
 class SubscriptionStatus(str, Enum):
@@ -94,9 +96,7 @@ class Subscription(Base):
     __tablename__ = "subscriptions"
 
     id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
 
     # Organization link
@@ -104,7 +104,7 @@ class Subscription(Base):
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Billing account link
@@ -112,19 +112,15 @@ class Subscription(Base):
         PGUUID(as_uuid=True),
         ForeignKey("billing_accounts.id", ondelete="CASCADE"),
         nullable=False,
-        index=True
+        index=True,
     )
 
     # Stripe integration
     stripe_subscription_id: Mapped[Optional[str]] = mapped_column(
         String(255), nullable=True, unique=True, index=True
     )
-    stripe_price_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
-    )
-    stripe_product_id: Mapped[Optional[str]] = mapped_column(
-        String(255), nullable=True
-    )
+    stripe_price_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    stripe_product_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
 
     # Subscription details
     tier: Mapped[str] = mapped_column(
@@ -157,26 +153,14 @@ class Subscription(Base):
     )
 
     # Usage limits for current period (can override tier defaults)
-    workflows_limit: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=5
-    )
-    workflows_used: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    agents_limit: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=1
-    )
-    storage_limit_gb: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=2
-    )
-    storage_used_gb: Mapped[float] = mapped_column(
-        Float, nullable=False, default=0.0
-    )
+    workflows_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    workflows_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    agents_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    storage_limit_gb: Mapped[int] = mapped_column(Integer, nullable=False, default=2)
+    storage_used_gb: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     # Lifetime-specific fields
-    is_lifetime: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    is_lifetime: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     lifetime_purchase_date: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -185,9 +169,7 @@ class Subscription(Base):
     )
 
     # BYO-specific fields
-    is_byo: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False
-    )
+    is_byo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     byo_providers_configured: Mapped[Optional[list]] = mapped_column(
         JSONB, nullable=True
     )  # ["anthropic", "openai", etc.]
@@ -206,9 +188,7 @@ class Subscription(Base):
     )
 
     # Relationships
-    organization: Mapped["Organization"] = relationship(
-        back_populates="subscription"
-    )
+    organization: Mapped["Organization"] = relationship(back_populates="subscription")
     billing_account: Mapped["BillingAccount"] = relationship(
         back_populates="subscription"
     )
@@ -216,7 +196,7 @@ class Subscription(Base):
     __table_args__ = (
         Index("idx_subscription_org_status", "organization_id", "status"),
         Index("idx_subscription_period_end", "current_period_end", "status"),
-        {"comment": "Subscriptions with tier-based limits and Stripe integration"}
+        {"comment": "Subscriptions with tier-based limits and Stripe integration"},
     )
 
     def __repr__(self) -> str:
@@ -234,8 +214,14 @@ class Subscription(Base):
             "stripe_subscription_id": self.stripe_subscription_id,
             "tier": self.tier,
             "status": self.status,
-            "current_period_start": self.current_period_start.isoformat() if self.current_period_start else None,
-            "current_period_end": self.current_period_end.isoformat() if self.current_period_end else None,
+            "current_period_start": (
+                self.current_period_start.isoformat()
+                if self.current_period_start
+                else None
+            ),
+            "current_period_end": (
+                self.current_period_end.isoformat() if self.current_period_end else None
+            ),
             "cancel_at_period_end": self.cancel_at_period_end,
             "trial_start": self.trial_start.isoformat() if self.trial_start else None,
             "trial_end": self.trial_end.isoformat() if self.trial_end else None,
@@ -263,7 +249,7 @@ class Subscription(Base):
         """Check if subscription is active."""
         return self.status in [
             SubscriptionStatus.ACTIVE.value,
-            SubscriptionStatus.TRIALING.value
+            SubscriptionStatus.TRIALING.value,
         ]
 
     @property
@@ -300,9 +286,14 @@ class Subscription(Base):
         self.storage_limit_gb = limits["storage_limit_gb"]
 
         # Set special flags
-        self.is_lifetime = (tier == SubscriptionTier.LIFETIME)
+        self.is_lifetime = tier == SubscriptionTier.LIFETIME
         # BYO is now a feature available on Pro/Team/Enterprise/Lifetime, not a separate tier
-        self.is_byo = tier in (SubscriptionTier.PRO, SubscriptionTier.TEAM, SubscriptionTier.ENTERPRISE, SubscriptionTier.LIFETIME)
+        self.is_byo = tier in (
+            SubscriptionTier.PRO,
+            SubscriptionTier.TEAM,
+            SubscriptionTier.ENTERPRISE,
+            SubscriptionTier.LIFETIME,
+        )
 
     def upgrade_to_tier(self, new_tier: SubscriptionTier) -> None:
         """Upgrade subscription to a new tier."""

@@ -21,15 +21,15 @@ async def get_ticket_dependency_graph(
 ) -> Dict[str, Any]:
     """
     Get dependency graph for a ticket.
-    
+
     Returns graph with nodes (tasks, discoveries) and edges (dependencies).
-    
+
     Args:
         ticket_id: Ticket ID to build graph for
         include_resolved: Whether to include completed tasks
         include_discoveries: Whether to include discovery nodes
         db: Database service
-    
+
     Returns:
         {
             "nodes": [...],
@@ -41,7 +41,7 @@ async def get_ticket_dependency_graph(
     return graph_service.build_ticket_graph(
         ticket_id=ticket_id,
         include_resolved=include_resolved,
-        include_discoveries=include_discoveries
+        include_discoveries=include_discoveries,
     )
 
 
@@ -53,19 +53,18 @@ async def get_project_dependency_graph(
 ) -> Dict[str, Any]:
     """
     Get dependency graph for entire project.
-    
+
     Args:
         project_id: Project ID (currently unused, gets all tickets)
         include_resolved: Whether to include completed tasks
         db: Database service
-    
+
     Returns:
         Graph structure with nodes and edges
     """
     graph_service = DependencyGraphService(db)
     return graph_service.build_project_graph(
-        project_id=project_id,
-        include_resolved=include_resolved
+        project_id=project_id, include_resolved=include_resolved
     )
 
 
@@ -77,12 +76,12 @@ async def get_blocked_tasks(
 ) -> Dict[str, Any]:
     """
     Get all tasks blocked by this task (i.e., tasks that depend on this task).
-    
+
     Args:
         task_id: Task ID
         db: Database service
         queue: Task queue service
-    
+
     Returns:
         {
             "task_id": "...",
@@ -99,11 +98,11 @@ async def get_blocked_tasks(
                 "description": t.description,
                 "status": t.status,
                 "priority": t.priority,
-                "phase_id": t.phase_id
+                "phase_id": t.phase_id,
             }
             for t in blocked
         ],
-        "blocked_count": len(blocked)
+        "blocked_count": len(blocked),
     }
 
 
@@ -114,11 +113,11 @@ async def get_blocking_tasks(
 ) -> Dict[str, Any]:
     """
     Get all tasks that block this task (dependencies).
-    
+
     Args:
         task_id: Task ID
         db: Database service
-    
+
     Returns:
         {
             "task_id": "...",
@@ -130,11 +129,11 @@ async def get_blocking_tasks(
         task = session.query(Task).filter(Task.id == task_id).first()
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
-        
+
         depends_on = []
         if task.dependencies:
             depends_on = task.dependencies.get("depends_on", [])
-        
+
         blocking_tasks = []
         if depends_on:
             blocking = session.query(Task).filter(Task.id.in_(depends_on)).all()
@@ -145,16 +144,17 @@ async def get_blocking_tasks(
                     "status": t.status,
                     "priority": t.priority,
                     "phase_id": t.phase_id,
-                    "is_complete": t.status == "completed"
+                    "is_complete": t.status == "completed",
                 }
                 for t in blocking
             ]
-        
+
         return {
             "task_id": task_id,
             "blocking_tasks": blocking_tasks,
-            "all_dependencies_complete": all(
-                t["is_complete"] for t in blocking_tasks
-            ) if blocking_tasks else True
+            "all_dependencies_complete": (
+                all(t["is_complete"] for t in blocking_tasks)
+                if blocking_tasks
+                else True
+            ),
         }
-

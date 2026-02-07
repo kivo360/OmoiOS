@@ -79,9 +79,9 @@ def serialize_agent(agent: Agent) -> Dict:
         "capacity": agent.capacity,
         "health_status": agent.health_status,
         "tags": agent.tags or [],
-        "last_heartbeat": agent.last_heartbeat.isoformat()
-        if agent.last_heartbeat
-        else None,
+        "last_heartbeat": (
+            agent.last_heartbeat.isoformat() if agent.last_heartbeat else None
+        ),
         "created_at": agent.created_at.isoformat() if agent.created_at else None,
     }
 
@@ -229,9 +229,11 @@ async def register_agent(
         # Registration was explicitly rejected (e.g., duplicate agent, invalid phase)
         raise HTTPException(
             status_code=400,
-            detail=f"Registration rejected: {exc.reason}"
-            if hasattr(exc, "reason") and exc.reason
-            else "Agent registration was rejected",
+            detail=(
+                f"Registration rejected: {exc.reason}"
+                if hasattr(exc, "reason") and exc.reason
+                else "Agent registration was rejected"
+            ),
         ) from exc
     except Exception as exc:
         import traceback

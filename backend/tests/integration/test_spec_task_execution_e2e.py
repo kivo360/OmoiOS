@@ -11,13 +11,9 @@ These tests use mocked database to avoid requiring a live database.
 For production database tests, set DATABASE_URL_TEST environment variable.
 """
 
-import os
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
-
-from httpx import AsyncClient
-
 
 # =============================================================================
 # Test: Full API Execution Flow (Mocked)
