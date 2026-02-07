@@ -1223,7 +1223,7 @@ class DaytonaSpawnerService:
                     ephemeral=True,  # Auto-delete when stopped
                     public=False,
                     resources=resources,
-                    auto_stop_interval=0,  # Disable Daytona auto-stop (we have our own idle detection)
+                    auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
                 )
             else:
                 logger.info(
@@ -1237,7 +1237,7 @@ class DaytonaSpawnerService:
                     ephemeral=True,  # Auto-delete when stopped
                     public=False,
                     resources=resources,
-                    auto_stop_interval=0,  # Disable Daytona auto-stop (we have our own idle detection)
+                    auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
                 )
 
             sandbox = daytona.create(params=params, timeout=120)
@@ -1832,21 +1832,21 @@ _conversation: Optional[Conversation] = None
 
 async def create_branch_via_api():
     """Call BranchWorkflowService API to create properly named branch.
-    
+
     Phase 5: Uses BranchWorkflowService for GitFlow-compliant branch naming.
     Returns the branch name if successful, None otherwise.
     """
     if not GITHUB_REPO or not TICKET_ID or not USER_ID:
         logger.info("Missing GITHUB_REPO, TICKET_ID, or USER_ID - skipping API branch creation")
         return None
-    
+
     # Parse owner/repo
     parts = GITHUB_REPO.split("/")
     if len(parts) != 2:
         logger.error(f"Invalid GITHUB_REPO format: {GITHUB_REPO}")
         return None
     owner, repo = parts
-    
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -1872,7 +1872,7 @@ async def create_branch_via_api():
                 logger.warning(f"Branch API returned {resp.status_code}")
     except Exception as e:
         logger.warning(f"Failed to create branch via API: {e}")
-    
+
     return None
 
 
@@ -1889,7 +1889,7 @@ def clone_repo(branch_name: str | None = None):
     if os.path.exists(os.path.join(WORKSPACE_PATH, ".git")):
         logger.info(f"Workspace {WORKSPACE_PATH} already has a git repo - skipping clone")
         return True
-    
+
     if not GITHUB_TOKEN or not GITHUB_REPO:
         logger.info("No GitHub credentials, skipping repo clone")
         return False
@@ -1900,23 +1900,23 @@ def clone_repo(branch_name: str | None = None):
     # Configure git user for commits
     subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
     subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
-    
+
     # Build authenticated clone URL
     clone_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git"
-    
+
     logger.info(f"Cloning {GITHUB_REPO}...")
     result = subprocess.run(
         ["git", "clone", clone_url, "/workspace"],
         capture_output=True,
         text=True
     )
-    
+
     if result.returncode != 0:
         logger.error(f"Clone failed: {result.stderr}")
         return False
-    
+
     os.chdir("/workspace")
-    
+
     # Checkout branch if specified
     if target_branch:
         logger.info(f"Checking out branch: {target_branch}")
@@ -1930,21 +1930,21 @@ def clone_repo(branch_name: str | None = None):
             # Branch doesn't exist remotely, create it locally
             logger.info(f"Creating new branch locally: {target_branch}")
             subprocess.run(["git", "checkout", "-b", target_branch], check=False)
-    
+
     logger.info("Repository ready at /workspace")
     return True
 
 
 async def setup_github_workspace():
     """Setup GitHub workspace with proper branch naming.
-    
-    Phase 5 Integration: 
+
+    Phase 5 Integration:
     1. Calls BranchWorkflowService API to create properly named branch
     2. Clones repo and checks out the branch
     """
     # Try to create branch via API (Phase 5)
     branch_name = await create_branch_via_api()
-    
+
     # Clone repo (will use API branch name or fall back to BRANCH_NAME env var)
     return clone_repo(branch_name)
 
@@ -1955,14 +1955,14 @@ async def setup_github_workspace():
 
 async def fetch_task():
     """Fetch task details - uses injected data first, falls back to API.
-    
+
     Phase 6: The orchestrator injects TASK_DATA_BASE64 with full task context,
     eliminating the need for an API call. This enables local development
     and ensures task data is always available regardless of API connectivity.
     """
     import json
     import base64
-    
+
     # First: Check for injected task data (Phase 6 - base64 encoded)
     if TASK_DATA_BASE64:
         try:
@@ -1983,7 +1983,7 @@ async def fetch_task():
             }
         except Exception as e:
             logger.warning(f"Failed to decode TASK_DATA_BASE64: {e}, falling back to API")
-    
+
     # Fallback: Fetch from API (original behavior)
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -1997,13 +1997,13 @@ async def fetch_task():
 
 async def report_event(event_type: str, event_data: dict, source: str = "agent"):
     """Report an agent event via sandbox callback endpoint.
-    
+
     Phase 3: Uses POST /api/v1/sandboxes/{sandbox_id}/events
     """
     if not SANDBOX_ID:
         logger.debug("No SANDBOX_ID, skipping event report")
         return
-    
+
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
@@ -2024,13 +2024,13 @@ async def report_event(event_type: str, event_data: dict, source: str = "agent")
 
 async def poll_messages() -> List[dict]:
     """Poll for pending messages from the message queue.
-    
+
     Phase 3: Uses GET /api/v1/sandboxes/{sandbox_id}/messages
     Messages are consumed (cleared) after retrieval.
     """
     if not SANDBOX_ID:
         return []
-    
+
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.get(f"{BASE_URL}/api/v1/sandboxes/{SANDBOX_ID}/messages")
@@ -2046,7 +2046,7 @@ async def poll_messages() -> List[dict]:
 
 def process_messages(messages: List[dict]) -> Optional[str]:
     """Process injected messages and return context to inject.
-    
+
     Handles message types:
     - user_message: Guidance from user
     - guardian_nudge: Suggestion from Guardian
@@ -2054,27 +2054,27 @@ def process_messages(messages: List[dict]) -> Optional[str]:
     - system: System notification
     """
     global _should_stop
-    
+
     context_parts = []
-    
+
     for msg in messages:
         msg_type = msg.get("message_type", "user_message")
         content = msg.get("content", "")
-        
+
         if msg_type == "interrupt":
             logger.warning(f"INTERRUPT received: {content}")
             _should_stop = True
             return f"INTERRUPT: {content}. Stop current work immediately."
-        
+
         elif msg_type == "guardian_nudge":
             context_parts.append(f"Guardian suggests: {content}")
-        
+
         elif msg_type == "user_message":
             context_parts.append(f"User message: {content}")
-        
+
         elif msg_type == "system":
             context_parts.append(f"System: {content}")
-    
+
     if context_parts:
         return "\\n".join(context_parts)
     return None
@@ -2115,36 +2115,36 @@ async def update_task_status(status: str, result: str = None):
 def create_event_callback():
     """Create event callback with message injection support."""
     global _should_stop, _conversation
-    
+
     async def check_and_report(event):
         """Event callback that checks for messages and reports events."""
         global _should_stop
-        
+
         # Report the event
         event_type = type(event).__name__
         event_data = {"message": str(event)[:300]}
         await report_event(f"agent.{event_type}", event_data)
-        
+
         # Check for pending messages (message injection)
         messages = await poll_messages()
         if messages:
             injected_context = process_messages(messages)
-            
+
             if _should_stop:
                 # Interrupt received - this will be handled in main loop
                 await report_event("agent.interrupted", {"reason": "interrupt_message"})
                 logger.warning("Interrupt flag set - agent should stop")
-            
+
             elif injected_context and _conversation:
                 # Inject the message into the conversation
                 await report_event("agent.message_injected", {"message_count": len(messages)})
                 # Send injected context as a new message
                 _conversation.send_message(f"[INJECTED GUIDANCE]\\n{injected_context}")
-    
+
     def sync_callback(event):
         """Synchronous wrapper for async callback."""
         asyncio.create_task(check_and_report(event))
-    
+
     return sync_callback
 
 
@@ -2154,16 +2154,16 @@ async def main():
     logger.info(f"OpenHands Worker starting for task {TASK_ID}")
     logger.info(f"Sandbox ID: {SANDBOX_ID}")
     logger.info(f"Backend URL: {BASE_URL}")
-    
+
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
         return
-    
+
     if not LLM_API_KEY:
         logger.error("LLM_API_KEY required")
         await update_task_status("failed", "Missing LLM_API_KEY")
         return
-    
+
     # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
     await setup_github_workspace()
 
@@ -2173,40 +2173,40 @@ async def main():
         logger.error(f"Could not fetch task {TASK_ID}")
         await update_task_status("failed", "Could not fetch task")
         return
-    
+
     task_desc = task.get("description", "No description")
     logger.info(f"Task: {task_desc}")
-    
+
     await update_task_status("in_progress")
     await report_event("agent.started", {"task": task_desc[:200]})
-    
+
     # Create LLM instance
     llm = LLM(
         model=LLM_MODEL,
         api_key=LLM_API_KEY,
     )
-    
+
     # Create agent with default tools using pre-configured helper
     # cli_mode=True disables browser tools for CLI/sandbox usage
     agent = get_default_agent(llm=llm, cli_mode=True)
-    
+
     # Create conversation with message injection callback
     _conversation = Conversation(
         agent=agent,
         workspace="/workspace",
         callbacks=[create_event_callback()],
     )
-    
+
     # Register with server for Guardian observation
     await register_conversation(str(_conversation.state.id))
-    
+
     # Send task and run
     logger.info("Sending task to agent...")
     _conversation.send_message(task_desc)
-    
+
     try:
         _conversation.run()
-        
+
         if _should_stop:
             logger.warning("Agent stopped due to interrupt")
             await update_task_status("completed", "Stopped by interrupt")
@@ -2215,7 +2215,7 @@ async def main():
             logger.info("Agent completed successfully")
             await update_task_status("completed", "Task completed successfully")
             await report_event("agent.completed", {"success": True})
-            
+
     except Exception as e:
         logger.error(f"Agent failed: {e}")
         await update_task_status("failed", str(e))
@@ -2315,23 +2315,23 @@ _should_stop: bool = False
 
 async def create_branch_via_api():
     """Call BranchWorkflowService API to create properly named branch.
-    
+
     Phase 5: Uses BranchWorkflowService for GitFlow-compliant branch naming.
     Returns the branch name if successful, None otherwise.
     """
     import httpx
-    
+
     if not GITHUB_REPO or not TICKET_ID or not USER_ID:
         logger.info("Missing GITHUB_REPO, TICKET_ID, or USER_ID - skipping API branch creation")
         return None
-    
+
     # Parse owner/repo
     parts = GITHUB_REPO.split("/")
     if len(parts) != 2:
         logger.error(f"Invalid GITHUB_REPO format: {GITHUB_REPO}")
         return None
     owner, repo = parts
-    
+
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(
@@ -2357,7 +2357,7 @@ async def create_branch_via_api():
                 logger.warning(f"Branch API returned {resp.status_code}")
     except Exception as e:
         logger.warning(f"Failed to create branch via API: {e}")
-    
+
     return None
 
 
@@ -2374,7 +2374,7 @@ def clone_repo(branch_name: str | None = None):
     if os.path.exists(os.path.join(WORKSPACE_PATH, ".git")):
         logger.info(f"Workspace {WORKSPACE_PATH} already has a git repo - skipping clone")
         return True
-    
+
     if not GITHUB_TOKEN or not GITHUB_REPO:
         logger.info("No GitHub credentials, skipping repo clone")
         return False
@@ -2385,23 +2385,23 @@ def clone_repo(branch_name: str | None = None):
     # Configure git user for commits
     subprocess.run(["git", "config", "--global", "user.email", "agent@omoios.ai"], check=False)
     subprocess.run(["git", "config", "--global", "user.name", "OmoiOS Agent"], check=False)
-    
+
     # Build authenticated clone URL
     clone_url = f"https://x-access-token:{GITHUB_TOKEN}@github.com/{GITHUB_REPO}.git"
-    
+
     logger.info(f"Cloning {GITHUB_REPO}...")
     result = subprocess.run(
         ["git", "clone", clone_url, "/workspace"],
         capture_output=True,
         text=True
     )
-    
+
     if result.returncode != 0:
         logger.error(f"Clone failed: {result.stderr}")
         return False
-    
+
     os.chdir("/workspace")
-    
+
     # Checkout branch if specified
     if target_branch:
         logger.info(f"Checking out branch: {target_branch}")
@@ -2415,21 +2415,21 @@ def clone_repo(branch_name: str | None = None):
             # Branch doesn't exist remotely, create it locally
             logger.info(f"Creating new branch locally: {target_branch}")
             subprocess.run(["git", "checkout", "-b", target_branch], check=False)
-    
+
     logger.info("Repository ready at /workspace")
     return True
 
 
 async def setup_github_workspace():
     """Setup GitHub workspace with proper branch naming.
-    
-    Phase 5 Integration: 
+
+    Phase 5 Integration:
     1. Calls BranchWorkflowService API to create properly named branch
     2. Clones repo and checks out the branch
     """
     # Try to create branch via API (Phase 5)
     branch_name = await create_branch_via_api()
-    
+
     # Clone repo (will use API branch name or fall back to BRANCH_NAME env var)
     return clone_repo(branch_name)
 
@@ -2440,14 +2440,14 @@ async def setup_github_workspace():
 
 async def fetch_task():
     """Fetch task details - uses injected data first, falls back to API.
-    
+
     Phase 6: The orchestrator injects TASK_DATA_BASE64 with full task context,
     eliminating the need for an API call.
     """
     import json
     import base64
     import httpx
-    
+
     # First: Check for injected task data (Phase 6 - base64 encoded)
     if TASK_DATA_BASE64:
         try:
@@ -2467,7 +2467,7 @@ async def fetch_task():
             }
         except Exception as e:
             logger.warning(f"Failed to decode TASK_DATA_BASE64: {e}, falling back to API")
-    
+
     # Fallback: Fetch from API
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -2494,14 +2494,14 @@ async def report_status(status: str, result: str = None):
 
 async def report_event(event_type: str, event_data: dict, source: str = "agent"):
     """Report an agent event via sandbox callback endpoint.
-    
+
     Phase 3: Uses POST /api/v1/sandboxes/{sandbox_id}/events
     """
     import httpx
     if not SANDBOX_ID:
         logger.debug("No SANDBOX_ID, skipping event report")
         return
-    
+
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
@@ -2522,17 +2522,17 @@ async def report_event(event_type: str, event_data: dict, source: str = "agent")
 
 async def poll_messages() -> List[dict]:
     """Poll for pending messages from the message queue.
-    
+
     Phase 3: Uses GET /api/v1/sandboxes/{sandbox_id}/messages
     Messages are consumed (cleared) after retrieval.
-    
+
     Returns:
         List of message dicts with content, message_type, timestamp
     """
     import httpx
     if not SANDBOX_ID:
         return []
-    
+
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             resp = await client.get(f"{BASE_URL}/api/v1/sandboxes/{SANDBOX_ID}/messages")
@@ -2548,38 +2548,38 @@ async def poll_messages() -> List[dict]:
 
 def process_messages(messages: List[dict]) -> Optional[str]:
     """Process injected messages and return context to inject.
-    
+
     Handles message types:
     - user_message: Guidance from user
     - guardian_nudge: Suggestion from Guardian
     - interrupt: Stop current work immediately
     - system: System notification
-    
+
     Returns:
         Context string to inject, or None
     """
     global _should_stop
-    
+
     context_parts = []
-    
+
     for msg in messages:
         msg_type = msg.get("message_type", "user_message")
         content = msg.get("content", "")
-        
+
         if msg_type == "interrupt":
             logger.warning(f"INTERRUPT received: {content}")
             _should_stop = True
             return f"⚠️ INTERRUPT: {content}. Stop current work immediately."
-        
+
         elif msg_type == "guardian_nudge":
             context_parts.append(f"💡 Guardian suggests: {content}")
-        
+
         elif msg_type == "user_message":
             context_parts.append(f"📝 User message: {content}")
-        
+
         elif msg_type == "system":
             context_parts.append(f"🔔 System: {content}")
-    
+
     if context_parts:
         return "\\n".join(context_parts)
     return None
@@ -2592,7 +2592,7 @@ def process_messages(messages: List[dict]) -> Optional[str]:
 def create_tools():
     """Create custom tools for the Claude agent."""
     from claude_agent_sdk import tool, create_sdk_mcp_server
-    
+
     @tool("read_file", "Read contents of a file", {"file_path": str})
     async def read_file(args: dict[str, Any]) -> dict[str, Any]:
         file_path = Path(args["file_path"])
@@ -2601,7 +2601,7 @@ def create_tools():
             return {"content": [{"type": "text", "text": content}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
-    
+
     @tool("write_file", "Write contents to a file", {"file_path": str, "content": str})
     async def write_file(args: dict[str, Any]) -> dict[str, Any]:
         file_path = Path(args["file_path"])
@@ -2612,7 +2612,7 @@ def create_tools():
             return {"content": [{"type": "text", "text": f"Wrote to {file_path}"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
-    
+
     @tool("run_command", "Execute a shell command", {"command": str})
     async def run_command(args: dict[str, Any]) -> dict[str, Any]:
         command = args["command"]
@@ -2623,7 +2623,7 @@ def create_tools():
             return {"content": [{"type": "text", "text": f"Exit: {result.returncode}\\nStdout: {result.stdout}\\nStderr: {result.stderr}"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
-    
+
     @tool("list_files", "List files in a directory", {"directory": str})
     async def list_files(args: dict[str, Any]) -> dict[str, Any]:
         directory = Path(args["directory"])
@@ -2632,7 +2632,7 @@ def create_tools():
             return {"content": [{"type": "text", "text": "\\n".join(files) or "(empty)"}]}
         except Exception as e:
             return {"content": [{"type": "text", "text": f"Error: {e}"}], "is_error": True}
-    
+
     server = create_sdk_mcp_server("workspace", tools=[read_file, write_file, run_command, list_files])
     return server, ["mcp__workspace__read_file", "mcp__workspace__write_file", "mcp__workspace__run_command", "mcp__workspace__list_files"]
 
@@ -2643,13 +2643,13 @@ def create_tools():
 
 async def run_agent(task_description: str):
     """Run the Claude Agent SDK with proper multi-turn message injection.
-    
+
     FIXED: Uses receive_messages() for indefinite streaming and client.query()
     for real message injection (matching Claude Code web behavior).
     """
     from claude_agent_sdk import (
-        ClaudeAgentOptions, 
-        ClaudeSDKClient, 
+        ClaudeAgentOptions,
+        ClaudeSDKClient,
         HookMatcher,
         # Message types
         AssistantMessage,
@@ -2662,10 +2662,10 @@ async def run_agent(task_description: str):
         ToolUseBlock,
         ToolResultBlock,
     )
-    
+
     tools_server, tool_names = create_tools()
     global _should_stop
-    
+
     # PostToolUse hook: Report tool usage for Guardian observation
     async def track_tool_use(input_data, tool_use_id, context):
         """PostToolUse hook for comprehensive event reporting."""
@@ -2699,7 +2699,7 @@ async def run_agent(task_description: str):
             "tool_input": tool_input,  # Full input, no truncation
             "tool_response": serialized_response,  # Properly serialized response
         }
-        
+
         # Special tracking for subagents
         if tool_name == "Task":
             event_data["subagent_type"] = tool_input.get("subagent_type")
@@ -2712,9 +2712,9 @@ async def run_agent(task_description: str):
             await report_event("agent.skill_completed", event_data)
         else:
             await report_event("agent.tool_completed", event_data)
-        
+
         return {}
-    
+
     # Define custom subagents for specialized tasks
     custom_agents = {
         "code-reviewer": {
@@ -2761,7 +2761,7 @@ Systematically investigate issues:
             "tools": ["Read", "Bash", "Edit", "Grep"],
         }
     }
-    
+
     options = ClaudeAgentOptions(
         # Core tools + Subagents + Skills
         allowed_tools=tool_names + [
@@ -2793,7 +2793,7 @@ Use subagents and skills when they can help accomplish the task more effectively
             "PostToolUse": [HookMatcher(matcher=None, hooks=[track_tool_use])],
         },
     )
-    
+
     try:
         async with ClaudeSDKClient(options=options) as client:
             # Start with initial task
@@ -2805,13 +2805,13 @@ Use subagents and skills when they can help accomplish the task more effectively
                 "agent_id": AGENT_ID,
                 "task_id": TASK_ID,
             })
-            
+
             # Message queue for streaming
             message_queue = asyncio.Queue()
             agent_done = asyncio.Event()
             final_output = []
             turn_count = 0
-            
+
             async def message_stream():
                 """Stream messages from Claude and map to our event types with full details."""
                 nonlocal turn_count
@@ -2827,7 +2827,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                 "stop_reason": getattr(msg, "stop_reason", None),
                                 "block_count": len(msg.content),
                             })
-                            
+
                             for block in msg.content:
                                 if isinstance(block, ThinkingBlock):
                                     # Full thinking content
@@ -2836,7 +2836,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         "content": block.text,  # Full content, no truncation
                                         "thinking_type": "extended_thinking",
                                     })
-                                    
+
                                 elif isinstance(block, ToolUseBlock):
                                     # Comprehensive tool use tracking
                                     tool_event = {
@@ -2845,7 +2845,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         "tool_use_id": block.id,
                                         "input": block.input,  # Full input dict, no truncation
                                     }
-                                    
+
                                     # Special handling for subagent dispatch
                                     if block.name == "Task":
                                         tool_event["event_subtype"] = "subagent_invoked"
@@ -2853,18 +2853,18 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         tool_event["subagent_description"] = block.input.get("description")
                                         tool_event["subagent_prompt"] = block.input.get("prompt")
                                         await report_event("agent.subagent_invoked", tool_event)
-                                    
+
                                     # Special handling for skill invocation
                                     elif block.name == "Skill":
                                         tool_event["event_subtype"] = "skill_invoked"
                                         tool_event["skill_name"] = block.input.get("name") or block.input.get("skill_name")
                                         await report_event("agent.skill_invoked", tool_event)
-                                    
+
                                     # Standard tool use
                                     else:
                                         tool_event["event_subtype"] = "tool_use"
                                         await report_event("agent.tool_use", tool_event)
-                                
+
                                 elif isinstance(block, ToolResultBlock):
                                     # Full tool result with reasonable limit for very large outputs
                                     result_content = str(block.content)
@@ -2876,7 +2876,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         "result_full_length": len(result_content),
                                         "is_error": getattr(block, "is_error", False),
                                     })
-                                
+
                                 elif isinstance(block, TextBlock):
                                     # Full text content
                                     await report_event("agent.message", {
@@ -2885,7 +2885,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         "content_length": len(block.text),
                                     })
                                     final_output.append(block.text)
-                        
+
                         elif isinstance(msg, UserMessage):
                             # Track user messages (tool results, injected messages)
                             for block in msg.content:
@@ -2903,14 +2903,14 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         "result": result_content[:5000] if len(result_content) > 5000 else result_content,
                                         "result_truncated": len(result_content) > 5000,
                                     })
-                        
+
                         elif isinstance(msg, SystemMessage):
                             # Track system messages
                             await report_event("agent.system_message", {
                                 "turn": turn_count,
                                 "metadata": getattr(msg, "metadata", {}),
                             })
-                        
+
                         elif isinstance(msg, ResultMessage):
                             # Comprehensive completion event
                             usage = getattr(msg, "usage", None)
@@ -2930,7 +2930,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                             final_output.append(f"Completed: {msg.num_turns} turns, ${msg.total_cost_usd:.4f}")
                             agent_done.set()
                             break
-                        
+
                         await message_queue.put(msg)
                 except Exception as e:
                     logger.error(f"Message stream error: {e}")
@@ -2940,13 +2940,13 @@ Use subagents and skills when they can help accomplish the task more effectively
                         "task_id": TASK_ID,
                     })
                     agent_done.set()
-            
+
             async def intervention_handler():
                 """Poll for interventions and inject as new user messages."""
                 global _should_stop
                 poll_interval = 0.5  # Poll every 500ms
                 intervention_count = 0
-                
+
                 while not agent_done.is_set():
                     try:
                         # Check for interrupt first
@@ -2961,7 +2961,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                             })
                             agent_done.set()
                             break
-                        
+
                         # Poll for new messages
                         messages = await poll_messages()
                         if messages:
@@ -2971,7 +2971,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                 content = msg.get("content", "")
                                 sender_id = msg.get("sender_id")
                                 message_id = msg.get("message_id")
-                                
+
                                 if msg_type == "interrupt":
                                     logger.warning(f"INTERRUPT: {content}")
                                     _should_stop = True
@@ -2985,7 +2985,7 @@ Use subagents and skills when they can help accomplish the task more effectively
                                     })
                                     agent_done.set()
                                     break
-                                
+
                                 elif msg_type in ["user_message", "guardian_nudge"]:
                                     # Inject as NEW USER MESSAGE (like Claude Code web)
                                     logger.info(f"Injecting message: {content[:100]}")
@@ -3001,28 +3001,28 @@ Use subagents and skills when they can help accomplish the task more effectively
                                         "agent_id": AGENT_ID,
                                     })
                                     await client.query(content)  # ← Real message injection
-                        
+
                         await asyncio.sleep(poll_interval)
                     except Exception as e:
                         logger.error(f"Intervention handler error: {e}")
                         await asyncio.sleep(poll_interval)
-            
+
             # Run message streaming and intervention handling concurrently
             await asyncio.gather(
                 message_stream(),
                 intervention_handler(),
                 return_exceptions=True
             )
-            
+
             # Wait a bit for final messages
             try:
                 await asyncio.wait_for(agent_done.wait(), timeout=5.0)
             except asyncio.TimeoutError:
                 pass
-            
+
             result_text = "\\n".join(final_output[-10:]) if final_output else "No output"
             return True, result_text
-            
+
     except Exception as e:
         logger.error(f"Agent execution failed: {e}")
         await report_event("agent.error", {"error": str(e)})
@@ -3035,16 +3035,16 @@ async def main():
     logger.info(f"Backend URL: {BASE_URL}")
     logger.info(f"Anthropic Base URL: {ANTHROPIC_BASE_URL or 'default'}")
     logger.info(f"Model: {ANTHROPIC_MODEL}")
-    
+
     if not TASK_ID or not AGENT_ID:
         logger.error("TASK_ID and AGENT_ID required")
         return
-    
+
     if not ANTHROPIC_API_KEY:
         logger.error("ANTHROPIC_API_KEY required")
         await report_status("failed", "Missing ANTHROPIC_API_KEY")
         return
-    
+
     # Phase 3.5 + Phase 5: Setup GitHub workspace with proper branch naming
     await setup_github_workspace()
 
@@ -3054,20 +3054,20 @@ async def main():
         os.environ["ANTHROPIC_BASE_URL"] = ANTHROPIC_BASE_URL
         logger.info(f"Using custom Anthropic API: {ANTHROPIC_BASE_URL}")
     logger.info(f"Using model: {ANTHROPIC_MODEL}")
-    
+
     task = await fetch_task()
     if not task:
         await report_status("failed", "Could not fetch task")
         return
-    
+
     task_desc = task.get("description", "No description")
     logger.info(f"Task: {task_desc}")
-    
+
     await report_status("in_progress")
     await report_event("agent.started", {"task": task_desc[:200]})
-    
+
     success, result = await run_agent(task_desc)
-    
+
     if success:
         await report_status("completed", result)
         await report_event("agent.completed", {"success": True})
