@@ -57,6 +57,7 @@ from omoi_os.api.routes import (
     projects,
     quality,
     reasoning,
+    resources,
     results,
     sandbox,
     specs,
@@ -1126,6 +1127,9 @@ app.include_router(explore.router, prefix="/api/v1", tags=["explore"])
 
 # Analytics proxy routes (for bypassing ad blockers)
 app.include_router(analytics_proxy.router, prefix="/ingest", tags=["analytics"])
+
+# Resource monitoring routes
+app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
 
 # Mount FastMCP server at /mcp
 app.mount("/mcp", mcp_app)

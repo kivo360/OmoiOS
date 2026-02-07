@@ -55,6 +55,7 @@ from omoi_os.models.quality_metric import MetricType, QualityMetric
 from omoi_os.models.reasoning import ReasoningEvent
 from omoi_os.models.resource_lock import ResourceLock
 from omoi_os.models.sandbox_event import SandboxEvent
+from omoi_os.models.sandbox_resource import SandboxResource
 from omoi_os.models.claude_session_transcript import ClaudeSessionTranscript
 from omoi_os.models.merge_attempt import MergeAttempt, MergeStatus
 from omoi_os.models.task import Task
@@ -143,6 +144,7 @@ __all__ = [
     "ResourceLock",
     "Role",
     "SandboxEvent",
+    "SandboxResource",
     "ClaudeSessionTranscript",
     "Session",
     "Spec",
