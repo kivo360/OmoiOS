@@ -57,6 +57,7 @@ from omoi_os.api.routes import (
     projects,
     quality,
     reasoning,
+    resources,
     results,
     sandbox,
     specs,
@@ -1137,6 +1138,9 @@ try:
     app.include_router(monitor.router, prefix="/api/v1", tags=["monitoring"])
 except ImportError:
     pass
+
+# Resource monitoring routes
+app.include_router(resources.router, prefix="/api/v1", tags=["resources"])
 
 # Mount static files for web UI
 static_dir = Path(__file__).parent.parent.parent / "static"

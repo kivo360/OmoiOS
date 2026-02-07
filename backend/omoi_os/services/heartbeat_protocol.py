@@ -12,6 +12,7 @@ from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.services.agent_status_manager import AgentStatusManager
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.resource_monitor import ResourceMonitorService
 from omoi_os.utils.datetime import utc_now
 
 
@@ -50,6 +51,7 @@ class HeartbeatProtocolService:
         db: DatabaseService,
         event_bus: Optional[EventBusService] = None,
         status_manager: Optional[AgentStatusManager] = None,
+        resource_monitor: Optional[ResourceMonitorService] = None,
     ):
         """
         Initialize HeartbeatProtocolService.
@@ -58,10 +60,12 @@ class HeartbeatProtocolService:
             db: Database service instance
             event_bus: Optional event bus for publishing heartbeat events
             status_manager: Optional status manager for state machine enforcement
+            resource_monitor: Optional resource monitor for sandbox resource tracking
         """
         self.db = db
         self.event_bus = event_bus
         self.status_manager = status_manager
+        self.resource_monitor = resource_monitor or ResourceMonitorService(db)
 
     def _calculate_checksum(self, payload: dict) -> str:
         """
@@ -98,6 +102,49 @@ class HeartbeatProtocolService:
         }
         expected_checksum = self._calculate_checksum(payload)
         return expected_checksum == message.checksum
+
+    async def _update_resource_metrics_from_heartbeat(
+        self, agent_id: str, sandbox_id: Optional[str], health_metrics: Dict
+    ) -> None:
+        """
+        Update sandbox resource metrics from heartbeat health_metrics.
+
+        Extracts CPU, memory, and disk usage from the health_metrics dict
+        and updates the sandbox_resources table for real-time monitoring.
+
+        Args:
+            agent_id: Agent ID that sent the heartbeat
+            sandbox_id: Optional sandbox ID (from current task)
+            health_metrics: Dict containing resource metrics
+        """
+        if not sandbox_id or not self.resource_monitor:
+            return
+
+        # Extract resource metrics from health_metrics dict
+        # Expected keys: cpu_usage_percent, memory_usage_percent, memory_usage_mb,
+        #                disk_usage_percent, disk_used_gb
+        cpu_percent = health_metrics.get("cpu_usage_percent", 0.0)
+        memory_percent = health_metrics.get("memory_usage_percent", 0.0)
+        memory_used_mb = health_metrics.get("memory_usage_mb", 0.0)
+        disk_percent = health_metrics.get("disk_usage_percent", 0.0)
+        disk_used_gb = health_metrics.get("disk_used_gb", 0.0)
+
+        # Only update if we have some metrics
+        if cpu_percent > 0 or memory_percent > 0:
+            try:
+                await self.resource_monitor.update_metrics(
+                    sandbox_id=sandbox_id,
+                    cpu_percent=cpu_percent,
+                    memory_percent=memory_percent,
+                    memory_used_mb=memory_used_mb,
+                    disk_percent=disk_percent,
+                    disk_used_gb=disk_used_gb,
+                    status="running",
+                    record_history=True,
+                )
+            except Exception as e:
+                # Don't fail heartbeat processing if resource update fails
+                pass
 
     def _get_ttl_threshold(self, status: str, agent_type: str) -> int:
         """
@@ -570,6 +617,16 @@ class HeartbeatProtocolService:
                 )
 
             await session.commit()
+
+            # Update resource metrics if sandbox_id is provided in health_metrics
+            # Agents running in sandboxes should include sandbox_id in their heartbeat
+            sandbox_id = message.health_metrics.get("sandbox_id")
+            if sandbox_id and message.health_metrics:
+                await self._update_resource_metrics_from_heartbeat(
+                    agent_id=message.agent_id,
+                    sandbox_id=sandbox_id,
+                    health_metrics=message.health_metrics,
+                )
 
             # Build acknowledgment message
             ack_message = None
