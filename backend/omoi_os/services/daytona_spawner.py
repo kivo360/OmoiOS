@@ -21,7 +21,7 @@ from uuid import uuid4
 from omoi_os.config import load_daytona_settings, get_app_settings
 from omoi_os.logging import get_logger
 from omoi_os.sandbox_skills import get_skills_for_upload
-from omoi_os.sandbox_modules import get_spec_state_machine_files, get_spec_sandbox_files
+from omoi_os.sandbox_modules import get_spec_sandbox_files
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
 from omoi_os.services.ownership_validation import (
@@ -936,8 +936,6 @@ class DaytonaSpawnerService:
             "REQUIRE_SPEC_SKILL": "true",
             # Use HTTP reporter to send spec.* events to backend
             "REPORTER_MODE": "http",
-            # Use spec-sandbox subsystem instead of omoi_os.workers.spec_state_machine
-            "USE_SPEC_SANDBOX": "true",
             # Explicitly disable continuous mode - spec state machine handles iteration
             "CONTINUOUS_MODE": "false",
             # Increase max turns per phase to prevent getting stuck on complex specs
@@ -1413,90 +1411,56 @@ class DaytonaSpawnerService:
 
         # Upload spec-sandbox subsystem for spec-driven development
         # This provides the SpecStateMachine with proper spec.* events via HTTPReporter
-        # Check if USE_SPEC_SANDBOX is enabled (set by spawn_for_phase)
-        if env_vars.get("USE_SPEC_SANDBOX") == "true":
-            logger.info(
-                "Uploading spec-sandbox subsystem for spec-driven development..."
+        logger.info(
+            "Uploading spec-sandbox subsystem for spec-driven development..."
+        )
+        try:
+            # Create base directory for spec_sandbox package
+            sandbox.process.exec("mkdir -p /tmp/spec_sandbox_pkg/spec_sandbox")
+
+            # Get all files needed for spec-sandbox subsystem
+            spec_sandbox_files = get_spec_sandbox_files(
+                install_path="/tmp/spec_sandbox_pkg"
             )
-            try:
-                # Create base directory for spec_sandbox package
-                sandbox.process.exec("mkdir -p /tmp/spec_sandbox_pkg/spec_sandbox")
 
-                # Get all files needed for spec-sandbox subsystem
-                spec_sandbox_files = get_spec_sandbox_files(
-                    install_path="/tmp/spec_sandbox_pkg"
+            if not spec_sandbox_files:
+                logger.warning(
+                    "No spec-sandbox files found - spec-sandbox source may not be available"
                 )
-
-                if not spec_sandbox_files:
-                    logger.warning(
-                        "No spec-sandbox files found - spec-sandbox source may not be available"
-                    )
-                else:
-                    for sandbox_path, content in spec_sandbox_files.items():
-                        # Create parent directory for the file
-                        parent_dir = "/".join(sandbox_path.rsplit("/", 1)[:-1])
-                        sandbox.process.exec(f"mkdir -p {parent_dir}")
-                        # Upload the file
-                        sandbox.fs.upload_file(content.encode("utf-8"), sandbox_path)
-                        logger.debug(f"Uploaded spec-sandbox module: {sandbox_path}")
-
-                    logger.info(
-                        f"Uploaded {len(spec_sandbox_files)} spec-sandbox modules to /tmp/spec_sandbox_pkg"
-                    )
-
-                    # Add /tmp/spec_sandbox_pkg to PYTHONPATH so imports work
-                    if "PYTHONPATH" in env_vars:
-                        env_vars["PYTHONPATH"] = (
-                            f"/tmp/spec_sandbox_pkg:{env_vars['PYTHONPATH']}"
-                        )
-                    else:
-                        env_vars["PYTHONPATH"] = "/tmp/spec_sandbox_pkg"
-
-                    # Install spec-sandbox dependencies (httpx, pydantic, pydantic-settings, pyyaml)
-                    # These are needed by the spec-sandbox but may not be in the sandbox
-                    deps_install = (
-                        "uv pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || "
-                        "pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || "
-                        "echo 'Dependencies may already be installed'"
-                    )
-                    sandbox.process.exec(deps_install, timeout=120)
-                    logger.info("spec-sandbox dependencies installed")
-
-            except Exception as e:
-                logger.warning(f"Failed to upload spec-sandbox subsystem: {e}")
-                # Continue - worker will fall back to prompt-driven execution
-        else:
-            # Legacy: Upload SpecStateMachine modules to sandbox
-            # These modules allow the sandbox to run spec phases (EXPLORE, REQUIREMENTS, etc.)
-            # without needing the full omoi_os package installed
-            logger.info("Uploading SpecStateMachine modules to sandbox...")
-            try:
-                # Create base directory for omoi_os modules
-                sandbox.process.exec("mkdir -p /tmp/omoi_os")
-
-                # Get all files needed for SpecStateMachine
-                spec_modules = get_spec_state_machine_files(install_path="/tmp/omoi_os")
-                for sandbox_path, content in spec_modules.items():
+            else:
+                for sandbox_path, content in spec_sandbox_files.items():
                     # Create parent directory for the file
                     parent_dir = "/".join(sandbox_path.rsplit("/", 1)[:-1])
                     sandbox.process.exec(f"mkdir -p {parent_dir}")
                     # Upload the file
                     sandbox.fs.upload_file(content.encode("utf-8"), sandbox_path)
-                    logger.debug(f"Uploaded module: {sandbox_path}")
+                    logger.debug(f"Uploaded spec-sandbox module: {sandbox_path}")
 
                 logger.info(
-                    f"Uploaded {len(spec_modules)} SpecStateMachine modules to /tmp/omoi_os"
+                    f"Uploaded {len(spec_sandbox_files)} spec-sandbox modules to /tmp/spec_sandbox_pkg"
                 )
 
-                # Add /tmp/omoi_os to PYTHONPATH so imports work
+                # Add /tmp/spec_sandbox_pkg to PYTHONPATH so imports work
                 if "PYTHONPATH" in env_vars:
-                    env_vars["PYTHONPATH"] = f"/tmp/omoi_os:{env_vars['PYTHONPATH']}"
+                    env_vars["PYTHONPATH"] = (
+                        f"/tmp/spec_sandbox_pkg:{env_vars['PYTHONPATH']}"
+                    )
                 else:
-                    env_vars["PYTHONPATH"] = "/tmp/omoi_os"
+                    env_vars["PYTHONPATH"] = "/tmp/spec_sandbox_pkg"
 
-            except Exception as e:
-                logger.warning(f"Failed to upload SpecStateMachine modules: {e}")
-                # Continue - worker can still run without state machine
+                # Install spec-sandbox dependencies (httpx, pydantic, pydantic-settings, pyyaml)
+                # These are needed by the spec-sandbox but may not be in the sandbox
+                deps_install = (
+                    "uv pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || "
+                    "pip install httpx pydantic pydantic-settings pyyaml 2>/dev/null || "
+                    "echo 'Dependencies may already be installed'"
+                )
+                sandbox.process.exec(deps_install, timeout=120)
+                logger.info("spec-sandbox dependencies installed")
+
+        except Exception as e:
+            logger.warning(f"Failed to upload spec-sandbox subsystem: {e}")
+            # Continue - worker will fall back to prompt-driven execution
 
         # Clone GitHub repository using Daytona SDK (if configured)
         # This uses sandbox.git.clone() directly instead of shell commands

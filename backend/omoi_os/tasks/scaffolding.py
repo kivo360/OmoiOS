@@ -304,18 +304,17 @@ async def _run_spec_state_machine(
                 # Could be cloned to a specific path
                 working_directory = f"/workspace/{project.github_repo}"
 
-        # Import here to avoid circular imports
-        from omoi_os.workers.spec_state_machine import SpecStateMachine
+        import os
+        from spec_sandbox.worker.state_machine import SpecStateMachine
+        from spec_sandbox.config import SpecSandboxSettings
 
-        # Create and run the state machine
-        machine = SpecStateMachine(
-            spec_id=spec_id,
-            db_session=db,
-            working_directory=working_directory,
-            max_retries=2,  # Fewer retries for scaffolding
-        )
+        # Set env vars that SpecSandboxSettings reads
+        os.environ["SPEC_ID"] = str(spec_id)
+        os.environ["WORKING_DIRECTORY"] = working_directory
+        os.environ.setdefault("REPORTER_MODE", "console")
 
-        # Run the state machine
+        settings = SpecSandboxSettings()
+        machine = SpecStateMachine(settings=settings)
         success = await machine.run()
 
         logger.info(
