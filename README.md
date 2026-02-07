@@ -1,104 +1,154 @@
-# OmoiOS - Autonomous Engineering Platform
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="OmoiOS" width="100%"/>
+</p>
 
-**Spec-driven multi-agent orchestration system that scales development without scaling headcount.**
+<p align="center">
+  <a href="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml"><img src="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
+  <a href="https://codecov.io/gh/kivo360/OmoiOS"><img src="https://img.shields.io/badge/tests-234%20passed-brightgreen" alt="Tests"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"/></a>
+  <img src="https://img.shields.io/badge/python-3.12+-3776ab.svg" alt="Python 3.12+"/>
+  <img src="https://img.shields.io/badge/next.js-15-000000.svg" alt="Next.js 15"/>
+  <img src="https://img.shields.io/badge/FastAPI-0.104+-009688.svg" alt="FastAPI"/>
+  <img src="https://img.shields.io/badge/PostgreSQL-16-336791.svg" alt="PostgreSQL 16"/>
+</p>
 
-OmoiOS orchestrates multiple AI agents through adaptive, phase-based workflows where agents automatically discover and spawn new work branches as they work—enabling workflows that adapt to reality rather than following rigid plans.
-
----
-
-## 📖 Start Here: Architecture Overview
-
-> **New to the codebase?** Start with **[ARCHITECTURE.md](./ARCHITECTURE.md)** — a comprehensive guide to the six core systems that power OmoiOS:
->
-> 1. **Planning System** — Spec-sandbox state machine (EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC)
-> 2. **Execution System** — OrchestratorWorker → DaytonaSpawner → ClaudeSandboxWorker pipeline
-> 3. **Discovery System** — Adaptive workflow branching (Hephaestus pattern)
-> 4. **Readjustment System** — MonitoringLoop with IntelligentGuardian and Conductor
-> 5. **Memory & Context System** — Pattern RAG and cross-phase context aggregation
-> 6. **DAG Merge System** — Parallel work convergence with conflict resolution
->
-> **Current Status**: Core systems are implemented and need integration testing before production use.
+<p align="center">
+  <b>Spec-driven multi-agent orchestration that turns feature requests into shipped code.</b>
+</p>
 
 ---
 
-## Monorepo Architecture
+## What is OmoiOS?
 
-This project uses **uv workspaces** for unified Python dependency management across all packages.
+OmoiOS is an autonomous engineering platform that orchestrates multiple AI agents through adaptive, phase-based workflows. You describe what you want built, and the system plans, executes, tests, and delivers—while you watch from a real-time dashboard.
+
+Instead of managing AI agents one prompt at a time, OmoiOS runs a structured pipeline:
 
 ```
-senior_sandbox/
-├── pyproject.toml        # Root workspace config (uv workspaces)
-├── uv.lock               # Single lock file for all packages
-│
-├── backend/              # Python FastAPI backend (omoi-os)
-│   ├── pyproject.toml    # Backend dependencies + sandbox-runtime ref
-│   ├── omoi_os/          # Main Python package
-│   └── CLAUDE.md         # Backend development guide
-│
-├── frontend/             # Next.js 15 frontend
-│   ├── package.json      # NPM dependencies
-│   └── src/app/          # App Router pages (40+)
-│
-├── subsystems/           # Workspace member packages
-│   └── sandbox-runtime/  # Lightweight spec execution runtime
-│       └── pyproject.toml
-│
-├── docs/                 # Shared documentation (30,000+ lines)
-├── containers/           # Docker configurations
-├── scripts/              # Development & deployment scripts
-└── docker-compose.yml    # Full stack orchestration
+Feature Request → Requirements → Design → Tasks → Parallel Execution → PR
 ```
 
-### UV Workspace Configuration
+Agents don't just follow a plan—they **discover** new work as they go. Find a bug during implementation? OmoiOS spawns a fix task automatically. Missing a dependency? A new requirements branch gets created. The workflow adapts to reality instead of breaking when things don't go as expected.
 
-The root `pyproject.toml` defines the workspace:
+### Who is it for?
 
-```toml
-[tool.uv.workspace]
-members = [
-    "backend",
-    "subsystems/*"
-]
+- **Engineering teams** (10–100 engineers) who need consistent output without scaling headcount
+- **Senior engineers** who want to offload repetitive planning and boilerplate
+- **Solo developers** who need to move fast with limited resources
+- **CTOs** who want to see what autonomous engineering looks like in practice
+
+## Key Capabilities
+
+### Spec-Driven Development
+Structured requirements (EARS-style `WHEN / THE SYSTEM SHALL` patterns) flow through phases automatically. Each phase produces artifacts that feed the next—no handoff gaps.
+
+### Adaptive Workflows
+Agents spawn tasks in any phase based on what they discover. Workflows are interconnected problem-solving graphs, not rigid pipelines. Structure emerges from the problem.
+
+### Self-Healing Execution
+Guardian agents monitor trajectories every 60 seconds, analyze alignment with goals using accumulated context, detect drift or stuck states, and steer agents back on track automatically.
+
+### Real-Time Visibility
+WebSocket-powered dashboard shows exactly what every agent is doing. Kanban board updates automatically as tickets move through phases. No manual status updates.
+
+### Workspace Isolation
+Each agent gets an isolated Git workspace with its own branch. Multiple agents work in parallel without conflicts. All code changes trace back to work items.
+
+### Phase Gate Approvals
+Quality validation at every phase transition. Human approval where it matters—autonomous execution everywhere else.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Frontend (Next.js 15)                     │
+│  Dashboard · Kanban Board · Agent Monitor · Spec Workspace       │
+│  65 pages · ShadCN UI · React Flow · xterm.js · WebSocket        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ REST + WebSocket
+┌──────────────────────────▼──────────────────────────────────────┐
+│                     Backend (FastAPI)                             │
+│                                                                  │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
+│  │   35 Route   │  │  103 Service │  │   59 SQLAlchemy        │  │
+│  │   Modules    │  │   Modules    │  │   Models               │  │
+│  └─────────────┘  └──────────────┘  └────────────────────────┘  │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │              Core Orchestration Services                   │   │
+│  │                                                           │   │
+│  │  SpecStateMachine    →  Phase-based workflow engine        │   │
+│  │  OrchestratorWorker  →  Task execution + sandbox spawn    │   │
+│  │  TaskQueueService    →  Priority assignment + deps        │   │
+│  │  DiscoveryService    →  Adaptive workflow branching        │   │
+│  │  IntelligentGuardian →  LLM-powered trajectory analysis   │   │
+│  │  AgentHealthService  →  Heartbeat monitoring (30s/90s)    │   │
+│  │  EventBusService     →  Redis pub/sub for real-time       │   │
+│  │  Conductor           →  System coherence scoring          │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└──────┬───────────────┬───────────────┬──────────────────────────┘
+       │               │               │
+  ┌────▼────┐   ┌──────▼──────┐  ┌─────▼─────┐
+  │ Postgres │   │    Redis    │  │  Daytona  │
+  │ 16 +     │   │  7 (cache,  │  │ (isolated │
+  │ pgvector │   │  queue,     │  │  sandbox  │
+  │          │   │  pub/sub)   │  │  exec)    │
+  └──────────┘   └─────────────┘  └───────────┘
 ```
 
-**How it works:**
-- All Python packages share a single `uv.lock` for reproducible builds
-- `backend` (omoi-os) depends on `sandbox-runtime` via workspace reference
-- Run `uv sync` from root to install all workspace dependencies
-- Requires Python 3.12+
+### How a Feature Gets Built
 
-**Dependency flow:**
 ```
-backend/pyproject.toml:
-  dependencies = [
-    "sandbox-runtime",  # Workspace reference
-    ...
-  ]
+1. You submit a feature request
+   └→ API creates a Spec record
 
-  [tool.uv.sources]
-  sandbox-runtime = { workspace = true }
+2. SpecStateMachine runs phases automatically:
+   EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC
+   └→ Each phase produces versioned artifacts
+
+3. TaskQueueService assigns work to agents
+   └→ Priority-based, respects dependencies
+
+4. OrchestratorWorker spawns isolated sandboxes
+   └→ Each agent gets its own Daytona workspace + Git branch
+
+5. Agents execute, discover, and adapt
+   └→ Guardian monitors every 60s
+   └→ Discovery creates new tasks when agents find issues
+   └→ EventBus publishes progress via WebSocket
+
+6. Phase gates validate quality
+   └→ Human approval at strategic points
+
+7. Code lands as PRs
+   └→ Full traceability from spec to commit
 ```
-
----
 
 ## Quick Start
 
-### Option 1: Full Stack (Docker)
+### Docker (Recommended)
 
 ```bash
-# Start all services (PostgreSQL, Redis, Backend API, Frontend)
+git clone https://github.com/kivo360/OmoiOS.git
+cd OmoiOS
+
+# Start all services
 docker-compose up
 
-# Services:
-# - Backend API: http://localhost:18000
-# - Frontend: http://localhost:3000
-# - PostgreSQL: localhost:15432
-# - Redis: localhost:16379
+# Services available at:
+# - Frontend:  http://localhost:3000
+# - API:       http://localhost:18000
+# - API Docs:  http://localhost:18000/docs
+# - Postgres:  localhost:15432
+# - Redis:     localhost:16379
 ```
 
-### Option 2: Manual Setup
+### Manual Setup
 
-**Backend (Python FastAPI):**
+**Prerequisites:** Python 3.12+, Node.js 22+, [uv](https://docs.astral.sh/uv/), [pnpm](https://pnpm.io/), PostgreSQL 16, Redis 7
+
+**Backend:**
 ```bash
 cd backend
 
@@ -109,274 +159,174 @@ uv sync
 uv run alembic upgrade head
 
 # Start API server
-uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-# Visit: http://localhost:8000/docs (Swagger UI)
+uv run uvicorn omoi_os.api.main:app --host 0.0.0.0 --port 18000 --reload
 ```
 
-**Frontend (Next.js 15):**
+**Frontend:**
 ```bash
 cd frontend
 
-# Install dependencies
-npm install
-
-# Start dev server
-npm run dev
-
-# Visit: http://localhost:3000
+pnpm install
+pnpm dev
+# → http://localhost:3000
 ```
 
----
+### Using the Justfile
 
-## Architecture Deep Dive
+If you have [just](https://github.com/casey/just) installed:
 
-### Backend (`backend/`)
-
-**Tech Stack:**
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Framework | FastAPI 0.104+ | Async web framework |
-| Database | PostgreSQL 16 + pgvector | Data storage + vector search |
-| Cache/Queue | Redis 7 + Taskiq | Caching + background jobs |
-| ORM | SQLAlchemy 2.0+ | Database access |
-| LLM | Anthropic Claude (claude-agent-sdk) | AI agent backbone |
-| Sandbox | Daytona | Isolated workspace execution |
-| Auth | Supabase + JWT | Authentication |
-| Observability | Sentry + OpenTelemetry + Logfire | Monitoring |
-
-**Core Services (80+):**
-- `OrchestratorWorker` - Primary task executor
-- `SpecStateMachine` - Multi-phase spec workflow (EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC)
-- `TaskQueueService` - Priority-based task assignment with dependency tracking
-- `AgentHealthService` - Heartbeat monitoring (30s intervals, 90s timeout)
-- `EventBusService` - Redis pub/sub for real-time state changes
-- `IntelligentGuardian` - LLM-powered trajectory analysis
-- `DiscoveryService` - Workflow branching and task discovery
-
-**API Structure:**
-- 35 route modules (~20,500 lines)
-- 57 SQLAlchemy models
-- 64 database migrations
-
-### Frontend (`frontend/`)
-
-**Tech Stack:**
-| Component | Technology | Purpose |
-|-----------|------------|---------|
-| Framework | Next.js 15 (App Router) | React framework with SSR |
-| UI | ShadCN UI (Radix + Tailwind) | Component library |
-| State | Zustand + React Query | Client + server state |
-| Real-Time | WebSocket | Live updates |
-| Graphs | React Flow v12 | Dependency visualization |
-| Terminal | xterm.js | Agent workspace terminal |
-
-**Page Architecture (40+ pages):**
-- **Dashboard**: Home, projects overview, activity timeline
-- **Specs & Tasks**: Spec workspace, kanban board, task details
-- **Agents**: Agent list, workspace terminal, spawn interface
-- **Monitoring**: Health dashboard, trajectories, interventions
-- **Settings**: Profile, security, integrations, billing
-
-### Subsystems (`subsystems/`)
-
-**sandbox-runtime:**
-- Lightweight Python package for spec execution
-- Zero external dependencies (standalone)
-- Used by backend via workspace reference
-
-```python
-# In backend code:
-from sandbox_runtime import ...
+```bash
+just --list          # Show all available commands
+just watch           # Backend with hot-reload
+just frontend-dev    # Frontend dev server
+just dev-all         # Everything at once
+just test            # Run affected tests (smart, fast)
+just test-all        # Full test suite
+just check           # All quality checks
 ```
 
----
+## Tech Stack
 
-## Key Workflows
+| Layer | Technology | Purpose |
+|-------|-----------|---------|
+| **Frontend** | Next.js 15 (App Router) | 65-page dashboard with SSR |
+| **UI** | ShadCN UI + Tailwind | Component library (Radix primitives) |
+| **State** | Zustand + React Query | Client + server state management |
+| **Visualization** | React Flow v12 | Dependency graphs + workflow DAGs |
+| **Terminal** | xterm.js | Live agent workspace terminal |
+| **Backend** | FastAPI 0.104+ | Async Python API framework |
+| **Database** | PostgreSQL 16 + pgvector | Relational + vector search |
+| **Cache / Queue** | Redis 7 + Taskiq | Caching, pub/sub, background jobs |
+| **ORM** | SQLAlchemy 2.0+ | Async database access |
+| **LLM** | Claude (Agent SDK) | AI agent backbone |
+| **Sandbox** | Daytona | Isolated workspace execution |
+| **Auth** | JWT + API Keys | Authentication + authorization |
+| **Observability** | Sentry + OpenTelemetry + Logfire | Monitoring + tracing |
 
-### 1. Spec-Driven Development
-```
-User submits spec
-    → API creates Spec record
-    → SpecStateMachine runs phases:
-        EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC
-    → Each phase generates outputs stored in DB
-    → Frontend displays specs in workspace
-```
+## Project Structure
 
-### 2. Task Execution
 ```
-Task created
-    → TaskQueueService assigns to agent
-    → OrchestratorWorker spawns Daytona sandbox
-    → Agent executes, sends heartbeats (30s)
-    → EventBusService publishes progress
-    → Frontend updates via WebSocket
+OmoiOS/
+├── backend/                  # Python FastAPI backend
+│   ├── omoi_os/
+│   │   ├── api/routes/       # 35 route modules (~23k lines)
+│   │   ├── models/           # 59 SQLAlchemy models
+│   │   ├── services/         # 103 service modules
+│   │   └── workers/          # Orchestrator + task workers
+│   ├── migrations/versions/  # 71 Alembic migrations
+│   ├── config/               # YAML configs per environment
+│   └── tests/                # 234+ pytest tests
+│
+├── frontend/                 # Next.js 15 frontend
+│   ├── app/                  # 65 App Router pages
+│   ├── components/           # 100+ React components
+│   ├── hooks/                # Custom hooks (WebSocket, API)
+│   └── lib/                  # API client, utilities
+│
+├── subsystems/
+│   └── sandbox-runtime/      # Lightweight spec execution runtime
+│
+├── docs/                     # 30,000+ lines of documentation
+├── containers/               # Docker configurations
+├── scripts/                  # Development + deployment scripts
+├── docker-compose.yml        # Full stack orchestration
+├── Justfile                  # Task runner commands
+├── ARCHITECTURE.md           # System architecture deep-dive
+├── CONTRIBUTING.md           # Contribution guide
+├── SECURITY.md               # Security policy
+└── CHANGELOG.md              # Version history
 ```
-
-### 3. Multi-Agent Coordination
-```
-Guardian monitors agent trajectories
-    → LLM analyzes alignment to goals
-    → Conductor computes system coherence
-    → Discovery finds new work branches
-    → Monitoring loop learns from successes/failures
-```
-
----
 
 ## Development
 
-### Backend Commands
+### Running Tests
 
 ```bash
 cd backend
 
-# Dependencies
-uv sync                    # Install all dependencies
-uv sync --group dev        # Include dev tools
-uv sync --group test       # Include test tools
+# Fast: only tests affected by your changes (testmon)
+just test
 
-# Database
-uv run alembic upgrade head           # Run migrations
-uv run alembic revision -m "message"  # Create migration
-uv run alembic downgrade -1           # Rollback
+# Full suite
+uv run pytest
 
-# Testing
-uv run pytest                         # All tests
-uv run pytest --cov=omoi_os           # With coverage
-uv run pytest -m unit                 # Unit tests only
+# With coverage
+uv run pytest --cov=omoi_os
 
-# Workers
-uv run python -m omoi_os.workers.orchestrator_worker  # Main worker
-taskiq worker omoi_os.tasks.broker:broker             # Task queue
+# Single test
+uv run pytest tests/path/test_file.py::TestClass::test_method -v
 ```
 
-### Frontend Commands
+### Code Quality
 
 ```bash
-cd frontend
+cd backend
 
-npm run dev      # Development server
-npm run build    # Production build
-npm run test     # Run tests
-npm run lint     # Lint check
+# Lint
+ruff check .
+
+# Format
+black .
+
+# Both at once
+just check
 ```
 
-### Docker Commands
+### Database Migrations
 
 ```bash
-# Full stack
-docker-compose up
+cd backend
 
-# Specific services
-docker-compose up postgres redis    # Just infrastructure
-docker-compose up -d --build backend  # Rebuild backend
-
-# Logs
-docker-compose logs -f backend
+uv run alembic upgrade head              # Apply migrations
+uv run alembic revision -m "description" # Create new migration
+uv run alembic downgrade -1              # Rollback one step
 ```
-
----
 
 ## Port Configuration
 
-To avoid conflicts with local services, all ports are offset by 10000:
+All ports are offset by +10,000 to avoid conflicts with local services:
 
-| Service | Port | Default |
-|---------|------|---------|
+| Service | Port | Standard |
+|---------|------|----------|
 | PostgreSQL | 15432 | 5432 |
 | Redis | 16379 | 6379 |
 | Backend API | 18000 | 8000 |
 | Frontend | 3000 | 3000 |
 
----
-
 ## Documentation
 
-**Product Specifications:**
-- `docs/app_overview.md` - Product concept (2-sentence summary)
-- `docs/product_vision.md` - Complete vision statement
-- `docs/page_architecture.md` - All 40+ pages detailed
-- `docs/design_system.md` - Complete design system
+| Document | Description |
+|----------|-------------|
+| **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Complete system architecture (start here) |
+| [Product Vision](docs/product_vision.md) | Full product vision + target audience |
+| [App Overview](docs/app_overview.md) | Core features + user flows |
+| [Page Architecture](docs/page_architecture.md) | All 65 frontend pages detailed |
+| [Design System](docs/design_system.md) | Complete design system |
+| [Frontend Architecture](docs/design/frontend/frontend_architecture_shadcn_nextjs.md) | Frontend patterns + components |
+| [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md) | Guardian + Conductor system |
+| [Backend Guide](backend/CLAUDE.md) | Backend development reference |
 
-**Implementation Guides:**
-- `docs/frontend_implementation_guide.md` - Build Next.js frontend
-- `docs/FRONTEND_PACKAGE.md` - Complete frontend code index
-- `backend/CLAUDE.md` - Backend development guide (comprehensive)
+## Contributing
 
-**Architecture:**
-- `docs/design/frontend/` - Frontend architecture & patterns
-- `docs/design/workflows/` - Workflow system design
-- `docs/requirements/monitoring/` - Monitoring architecture
-- `docs/architecture/` - Architecture Decision Records (ADRs)
+We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, coding standards, and PR process.
 
----
+**Quick version:**
+1. Fork the repo
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes
+4. Run `just check` to verify quality
+5. Submit a PR
 
-## Features
+## Security
 
-- **Spec-Driven Workflows**: Requirements → Design → Tasks → Execution
-- **Adaptive Phase System**: Agents spawn tasks in any phase via discovery
-- **Real-Time Kanban Board**: Tickets move through phases automatically
-- **Multi-Agent Coordination**: Parallel agents with collective memory
-- **Phase Gate Approvals**: Quality validation at each phase
-- **Discovery Branching**: Workflows adapt based on agent discoveries
-- **Workspace Isolation**: Each agent gets isolated Git workspace
-- **Intelligent Guardian**: LLM-powered trajectory analysis and intervention
+Found a vulnerability? Please report it responsibly. See [SECURITY.md](SECURITY.md) for our security policy and reporting process.
 
----
+## License
 
-## Project Status
-
-| Component | Status | Details |
-|-----------|--------|---------|
-| Backend | Production-ready | 57 models, 80+ services, 277+ tests |
-| Frontend | Ready to assemble | 40+ pages, scaffolds complete |
-| Documentation | Complete | 30,000+ lines |
-| Subsystems | Active development | sandbox-runtime integrated |
+OmoiOS is licensed under the [Apache License 2.0](LICENSE).
 
 ---
 
-## Production Deployment
-
-**Automatic Deployments:**
-
-Both frontend and backend deploy automatically when you push to the `main` branch:
-
-```bash
-git add .
-git commit -m "your changes"
-git push origin main
-# → Frontend deploys to Vercel automatically
-# → Backend deploys to Railway automatically
-```
-
-**Production URLs:**
-- Frontend: `https://omoios.dev`
-- Backend API: `https://api.omoios.dev`
-
-**Manual Deployment (if needed):**
-
-Backend (Docker):
-```bash
-cd backend
-docker build -f Dockerfile.api -t omoios-api .
-docker run -p 8000:8000 omoios-api
-```
-
-Frontend (Vercel):
-```bash
-cd frontend
-vercel deploy
-```
-
----
-
-## Learn More
-
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** — Complete system architecture (START HERE)
-- [Product Vision](docs/product_vision.md)
-- [Phase System](docs/design/workflows/omoios_phase_system_comparison.md)
-- [Frontend Package](docs/FRONTEND_PACKAGE.md)
-- [Mission Control Design](docs/design/frontend/mission_control_exploration.md)
-- [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md)
+<p align="center">
+  <b>Go to sleep. Wake up to finished features.</b>
+</p>
