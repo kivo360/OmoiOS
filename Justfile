@@ -479,7 +479,7 @@ dev:
     @just worker
 
 # Start both backend services (API and worker) in separate terminals
-# Note: This runs them in background - use 'backend-api' and 'backend-worker' 
+# Note: This runs them in background - use 'backend-api' and 'backend-worker'
 # in separate terminal windows for better control
 [group('services')]
 backend-dev:
@@ -542,19 +542,19 @@ dev-watch:
     echo "Backend API: http://localhost:{{api_port}}"
     echo "Frontend: http://localhost:{{frontend_port}}"
     echo ""
-    
+
     # Start backend in background
     cd {{backend_dir}} && docker compose watch &
     BACKEND_PID=$!
-    
+
     # Wait for API to be ready
     echo "Waiting for backend..."
     sleep 5
-    
+
     # Start frontend in foreground
     echo "Starting frontend..."
     cd {{frontend_dir}} && npm run dev -- -p {{frontend_port}}
-    
+
     # Cleanup on exit
     kill $BACKEND_PID 2>/dev/null || true
 
@@ -649,7 +649,7 @@ dev-all:
     echo "Backend API: http://localhost:{{api_port}}"
     echo "Frontend: http://localhost:{{frontend_port}}"
     echo ""
-    
+
     # Check if ports are already in use
     if lsof -Pi :{{api_port}} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
         echo "⚠️  Port {{api_port}} is already in use"
@@ -657,19 +657,19 @@ dev-all:
         echo "   Use 'just stop-all' to stop all services"
         exit 1
     fi
-    
+
     if lsof -Pi :{{frontend_port}} -sTCP:LISTEN -t >/dev/null 2>&1 ; then
         echo "⚠️  Port {{frontend_port}} is already in use"
         echo "   Use 'just kill-port {{frontend_port}}' to free the port, or"
         echo "   Use 'just stop-all' to stop all services"
         exit 1
     fi
-    
+
     echo "Starting backend API..."
     cd {{backend_dir}} && uv run --active uvicorn omoi_os.api.main:app --host 0.0.0.0 --port {{api_port}} --reload &
     API_PID=$!
     sleep 3
-    
+
     # Wait for API to be ready
     echo "Waiting for API to be ready..."
     for i in {1..30}; do
@@ -679,12 +679,12 @@ dev-all:
         fi
         sleep 1
     done
-    
+
     echo "Starting backend worker..."
     cd {{backend_dir}} && uv run --active python -m omoi_os.worker &
     WORKER_PID=$!
     sleep 2
-    
+
     echo ""
     echo "✅ Backend services started"
     echo "   API PID: $API_PID"
@@ -692,7 +692,7 @@ dev-all:
     echo ""
     echo "Starting frontend (this will block - press Ctrl+C to stop all services)..."
     echo ""
-    
+
     # Cleanup function
     cleanup() {
         echo ""
@@ -702,12 +702,12 @@ dev-all:
         echo "✅ All services stopped"
         exit 0
     }
-    
+
     trap cleanup SIGINT SIGTERM
-    
+
     # Start frontend in foreground (this blocks)
     cd {{frontend_dir}} && npm run dev -- -p {{frontend_port}}
-    
+
     # If frontend exits, cleanup
     cleanup
 
@@ -946,26 +946,26 @@ create-test category feature:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{backend_dir}}
-    
+
     mkdir -p tests/{{category}}
-    
+
     # Capitalize feature name for class (bash string manipulation)
     feature_class=$(echo "{{feature}}" | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) tolower(substr($i,2))}1' | tr -d '_')
-    
+
     cat > tests/{{category}}/test_{{feature}}.py << EOF
     """Test {{feature}}.
-    
+
     Tests cover:
     - Functionality 1
     - Functionality 2
     """
-    
+
     import pytest
-    
-    
+
+
     class Test${feature_class}:
         """Test suite for {{feature}}."""
-        
+
         @pytest.mark.{{category}}
         def test_{{feature}}_basic(self):
             """Test basic {{feature}} functionality."""
@@ -974,7 +974,7 @@ create-test category feature:
             # Assert
             pass
     EOF
-    
+
     echo "✅ Created {{backend_dir}}/tests/{{category}}/test_{{feature}}.py"
 
 # Create new documentation from template
@@ -982,31 +982,31 @@ create-test category feature:
 create-doc doc_type category feature:
     #!/usr/bin/env bash
     set -euo pipefail
-    
+
     mkdir -p docs/{{doc_type}}/{{category}}
     filepath="docs/{{doc_type}}/{{category}}/{{feature}}.md"
-    
+
     # Capitalize feature name for title (bash string manipulation)
     feature_title=$(echo "{{feature}}" | sed 's/_/ /g' | awk '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2)}1')
-    
+
     cat > "$filepath" << EOF
     # ${feature_title}
-    
+
     **Created**: $(date +%Y-%m-%d)
     **Status**: Draft
     **Purpose**: {One-sentence description}
-    
+
     ---
-    
+
     ## Overview
-    
+
     {Description here}
-    
+
     ## Details
-    
+
     {Content here}
     EOF
-    
+
     echo "✅ Created $filepath"
 
 # Interactive Python shell with OmoiOS context
@@ -1106,4 +1106,3 @@ groups:
     @echo "  just dev-watch                  - Full stack (backend + frontend)"
     @echo ""
     @echo "Use 'just --list' to see all commands"
-

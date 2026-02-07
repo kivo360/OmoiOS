@@ -103,4 +103,3 @@ ignore = [
 "scripts/*" = ["F401"]           # scripts use try/except imports to test availability
 "migrations/*" = ["E722"]        # migrations use bare except in cleanup code
 "omoi_os/workers/*" = ["F821"]   # forward references in type hints
-
