@@ -2,22 +2,23 @@
 # Environment variables override these values
 
 llm:
-  model: ${LLM_MODEL:-openai/glm-4.7}
-  api_key: ${LLM_API_KEY}
-  base_url: ${LLM_BASE_URL:-https://api.z.ai/api/coding/paas/v4}
+  model: openai/glm-4.7
+  api_key: null  # REQUIRED: Set LLM_API_KEY env var in Railway
+  base_url: https://api.z.ai/api/coding/paas/v4
 
 database:
+  # REQUIRED: Set DATABASE_URL env var in Railway
   # Use pgvector template: https://railway.com/deploy/3jJFCA
   # Then reference: DATABASE_URL=${{pgvector.DATABASE_URL}}
-  url: ${DATABASE_URL}
+  url: null
 
 redis:
-  # Railway provides REDIS_URL automatically when you add Redis
-  url: ${REDIS_URL}
+  # REQUIRED: Set REDIS_URL env var in Railway
+  url: null
 
 server:
   host: "0.0.0.0"
-  port: ${PORT:-8000}
+  port: 8000
 
 task_queue:
   age_ceiling: 3600
@@ -38,7 +39,7 @@ approval:
   on_reject: delete
 
 auth:
-  jwt_secret_key: ${JWT_SECRET_KEY}
+  jwt_secret_key: null  # REQUIRED: Set AUTH_JWT_SECRET_KEY env var in Railway
   jwt_algorithm: HS256
   access_token_expire_minutes: 15
   refresh_token_expire_days: 7
@@ -78,7 +79,7 @@ worker:
   concurrency: 2
 
 daytona:
-  api_key: ${DAYTONA_API_KEY}
+  api_key: null  # REQUIRED: Set DAYTONA_API_KEY env var in Railway
   api_url: https://app.daytona.io/api
   target: us
   image: nikolaik/python-nodejs:python3.12-nodejs22
@@ -93,16 +94,16 @@ integrations:
   # MCP server URL - permanent production domain
   mcp_server_url: https://api.omoios.dev/mcp
   enable_mcp_tools: true
-  github_token: ${GITHUB_TOKEN}
+  github_token: null  # Set INTEGRATIONS_GITHUB_TOKEN env var in Railway
 
 embedding:
   provider: fireworks
-  fireworks_api_key: ${EMBEDDING_FIREWORKS_API_KEY}
-  openai_api_key: ${OPENAI_API_KEY}
+  fireworks_api_key: null  # REQUIRED: Set EMBEDDING_FIREWORKS_API_KEY env var in Railway
+  openai_api_key: null  # Optional: Set EMBEDDING_OPENAI_API_KEY env var
   model_name: fireworks/qwen3-embedding-8b
   # Dimensions for embeddings - must be <= 2000 for pgvector standard indexing
   dimensions: 1536
 
 observability:
   enable_tracing: true
-  logfire_token: ${LOGFIRE_TOKEN}
+  logfire_token: null  # Set OBSERVABILITY_LOGFIRE_TOKEN env var in Railway

@@ -1,12 +1,12 @@
 llm:
   model: openai/glm-4.7
-  api_key: REDACTED_LLM_API_KEY
+  api_key: null  # Set LLM_API_KEY in .env or .env.local
   base_url: https://api.z.ai/api/coding/paas/v4
-  # fireworks_api_key loaded from LLM_FIREWORKS_API_KEY env var
+  fireworks_api_key: null  # Set LLM_FIREWORKS_API_KEY in .env or .env.local
 
 database:
-  # Remote Railway PostgreSQL database (default)
-  url: postgresql+psycopg://postgres:REDACTED_DB_PASSWORD@REDACTED_DB_HOST:5432/REDACTED_DB
+  # Override with DATABASE_URL in .env or .env.local
+  url: postgresql+psycopg://postgres:postgres@localhost:15432/omoi_os
   # Connection pool settings
   pool_size: 5              # Max persistent connections
   max_overflow: 5           # Additional connections above pool_size
@@ -19,8 +19,8 @@ database:
   connect_timeout: 10       # Max time to establish a new connection
 
 redis:
-  # Remote Railway Redis instance (default)
-  url: redis://default:REDACTED_REDIS_PASSWORD@crossover.proxy.rlwy.net:23902
+  # Override with REDIS_URL in .env or .env.local
+  url: redis://localhost:16379
 
 task_queue:
   age_ceiling: 3600
@@ -95,7 +95,7 @@ worker:
   concurrency: 2
 
 daytona:
-  api_key: ${DAYTONA_API_KEY}
+  api_key: null  # Set DAYTONA_API_KEY in .env or .env.local
   api_url: https://app.daytona.io/api
   target: us
   image: nikolaik/python-nodejs:python3.12-nodejs22
@@ -113,7 +113,7 @@ integrations:
 
 embedding:
   provider: fireworks
-  fireworks_api_key: ${EMBEDDING_FIREWORKS_API_KEY}
+  fireworks_api_key: null  # Set EMBEDDING_FIREWORKS_API_KEY in .env or .env.local
   openai_api_key: null
   model_name: fireworks/qwen3-embedding-8b
   # Dimensions for embeddings - must be <= 2000 for pgvector standard indexing

@@ -1,30 +1,33 @@
+# Local development overrides
+# Set credentials via .env or .env.local (never in this file)
+# Pydantic priority: env vars > .env.local > .env > YAML defaults
+
 llm:
-  api_key: REDACTED_LLM_API_KEY
+  api_key: null  # Set LLM_API_KEY in .env or .env.local
   model: openai/glm-4.7
   base_url: https://api.z.ai/api/coding/paas/v4
-
-  fireworks_api_key: REDACTED_FIREWORKS_API_KEY
+  fireworks_api_key: null  # Set LLM_FIREWORKS_API_KEY in .env or .env.local
 
 database:
-  # Remote Railway PostgreSQL database (default for local development)
-  url: postgresql+psycopg://postgres:REDACTED_DB_PASSWORD@REDACTED_DB_HOST:5432/REDACTED_DB
+  # Override with DATABASE_URL in .env or .env.local
+  url: postgresql+psycopg://postgres:postgres@localhost:15432/omoi_os
 
 redis:
-  # Remote Railway Redis instance (default for local development)
-  url: redis://default:REDACTED_REDIS_PASSWORD@crossover.proxy.rlwy.net:23902
+  # Override with REDIS_URL in .env or .env.local
+  url: redis://localhost:16379
 
 workspace:
   root: ./workspaces
   worker_dir: /tmp/omoi_os_workspaces
 
 integrations:
-  # Production URL for Daytona sandboxes (they run in remote cloud)
-  mcp_server_url: https://api.omoios.dev/mcp
+  # Override with MCP_SERVER_URL in .env or .env.local
+  mcp_server_url: http://localhost:18000/mcp
   enable_mcp_tools: true
 
 embedding:
   provider: fireworks
-  fireworks_api_key: REDACTED_FIREWORKS_API_KEY
+  fireworks_api_key: null  # Set EMBEDDING_FIREWORKS_API_KEY in .env or .env.local
   dimensions: 1536
 
 demo:
@@ -57,4 +60,3 @@ daytona:
   sandbox_memory_gb: 4
   sandbox_cpu: 2
   sandbox_disk_gb: 8
-
