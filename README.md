@@ -13,49 +13,49 @@
 </p>
 
 <p align="center">
-  <b>Spec-driven multi-agent orchestration that turns feature requests into shipped code.</b>
+  <b>Stop babysitting AI agents. Run structured swarms instead.</b>
 </p>
 
 ---
 
-## What is OmoiOS?
+## The Problem
 
-OmoiOS is an autonomous engineering platform that orchestrates multiple AI agents through adaptive, phase-based workflows. You describe what you want built, and the system plans, executes, tests, and delivers—while you watch from a real-time dashboard.
+AI coding agents are powerful individually, but using them at scale is a mess. You paste a prompt, wait, review, paste another prompt, fix what broke, repeat. There's no dependency awareness, no parallel execution, no structured handoff between tasks. Agents don't know what other agents are doing. When something fails, you're the orchestrator.
 
-Instead of managing AI agents one prompt at a time, OmoiOS runs a structured pipeline:
+**OmoiOS fixes this.** It reads your existing codebase, generates specs from what's actually there, builds a task DAG with real dependencies, and runs agent swarms across isolated sandboxes until the work is done. A supervisor agent handles merges and keeps everything on track.
 
 ```
-Feature Request → Requirements → Design → Tasks → Parallel Execution → PR
+You describe what you want
+    → OmoiOS explores your codebase
+    → Generates specs (requirements, design, tasks)
+    → Builds a dependency DAG
+    → Spawns agents in isolated sandboxes
+    → Agents execute in parallel, discover new work as they go
+    → Supervisor agent merges code and steers stuck agents
+    → PRs land on your repo
 ```
 
-Agents don't just follow a plan—they **discover** new work as they go. Find a bug during implementation? OmoiOS spawns a fix task automatically. Missing a dependency? A new requirements branch gets created. The workflow adapts to reality instead of breaking when things don't go as expected.
+This isn't prompt chaining. It's a **structured runtime for agent swarms** — with dependency graphs, sandboxed execution, active supervision, and code that actually merges.
 
-### Who is it for?
+## What Makes This Different
 
-- **Engineering teams** (10–100 engineers) who need consistent output without scaling headcount
-- **Senior engineers** who want to offload repetitive planning and boilerplate
-- **Solo developers** who need to move fast with limited resources
-- **CTOs** who want to see what autonomous engineering looks like in practice
+### Specs from your actual code
+OmoiOS doesn't generate generic plans. It reads your repo — file structure, patterns, dependencies — and generates specs grounded in what exists. The `SpecStateMachine` runs phases (Explore → Requirements → Design → Tasks) where each phase builds on real codebase context.
 
-## Key Capabilities
+### DAG-based execution, not a task queue
+Tasks form a dependency graph (`DependencyGraphService`). Nothing executes until its dependencies are met. Critical path analysis determines what runs in parallel. This is how you get 5 agents working simultaneously without stepping on each other.
 
-### Spec-Driven Development
-Structured requirements (EARS-style `WHEN / THE SYSTEM SHALL` patterns) flow through phases automatically. Each phase produces artifacts that feed the next—no handoff gaps.
+### Every agent gets a sandbox
+Each agent runs in an isolated Daytona container with its own Git branch, filesystem, and resources. No shared state. No interference. When agents finish, `ConvergenceMergeService` merges their branches in optimal order, using Claude to resolve conflicts.
 
-### Adaptive Workflows
-Agents spawn tasks in any phase based on what they discover. Workflows are interconnected problem-solving graphs, not rigid pipelines. Structure emerges from the problem.
+### Active supervision, not fire-and-forget
+`IntelligentGuardian` analyzes every agent's trajectory every 60 seconds — scoring alignment, detecting drift, and injecting steering interventions mid-task. `ConductorService` monitors system-wide coherence, detects duplicate work, and coordinates across agents. Agents don't just run. They're watched.
 
-### Self-Healing Execution
-Guardian agents monitor trajectories every 60 seconds, analyze alignment with goals using accumulated context, detect drift or stuck states, and steer agents back on track automatically.
+### Agents discover work as they go
+During execution, agents find bugs, missing requirements, optimization opportunities. `DiscoveryService` spawns new tasks in the appropriate phase automatically. The DAG grows and adapts — workflows build themselves based on what agents actually encounter.
 
-### Real-Time Visibility
-WebSocket-powered dashboard shows exactly what every agent is doing. Kanban board updates automatically as tickets move through phases. No manual status updates.
-
-### Workspace Isolation
-Each agent gets an isolated Git workspace with its own branch. Multiple agents work in parallel without conflicts. All code changes trace back to work items.
-
-### Phase Gate Approvals
-Quality validation at every phase transition. Human approval where it matters—autonomous execution everywhere else.
+### You approve at gates, not every step
+Phase transitions have quality gates. You review at strategic points (phase completions, PRs). Everything between gates runs autonomously. You set direction — the swarm handles execution.
 
 ## Architecture
 
