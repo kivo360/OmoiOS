@@ -125,26 +125,18 @@ jobs:
       - name: Install detect-secrets
         run: pip install detect-secrets
 
-      - name: Scan for secrets
+      - name: Scan for new secrets (against baseline)
         run: |
-          detect-secrets scan \
-            --exclude-files '\.env\.example$' \
-            --exclude-files '\.lock$' \
-            --exclude-files 'pnpm-lock\.yaml$' \
-            --exclude-files 'uv\.lock$' \
-            --exclude-files '\.venv/' \
-            --exclude-files 'node_modules/' \
-            --exclude-secrets 'REDACTED_' \
-            --exclude-secrets 'change-me-in-production' \
-            --exclude-secrets 'dev-secret-key' \
-            --exclude-secrets 'postgres:postgres@localhost' \
-            > .secrets-results.json
-
-      - name: Check results
-        run: |
-          if detect-secrets audit --report .secrets-results.json 2>/dev/null | grep -q "True"; then
-            echo "Potential secrets detected! Review .secrets-results.json"
-            detect-secrets audit --report .secrets-results.json
+          # Save the current results (minus timestamp) for comparison
+          python3 -c "import json; d=json.load(open('.secrets.baseline')); d.pop('generated_at',None); json.dump(d,open('/tmp/before.json','w'),sort_keys=True)"
+          # Update baseline with any new findings
+          detect-secrets scan --baseline .secrets.baseline
+          # Compare results (minus timestamp)
+          python3 -c "import json; d=json.load(open('.secrets.baseline')); d.pop('generated_at',None); json.dump(d,open('/tmp/after.json','w'),sort_keys=True)"
+          if diff -q /tmp/before.json /tmp/after.json > /dev/null 2>&1; then
+            echo "No new secrets detected."
+          else
+            echo "::error::New potential secrets found! Run 'detect-secrets scan --baseline .secrets.baseline' locally, audit them, and commit the updated baseline."
+            diff /tmp/before.json /tmp/after.json || true
             exit 1
           fi
-          echo "No secrets detected."
