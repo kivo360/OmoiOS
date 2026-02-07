@@ -725,72 +725,6 @@ class FileChangeTracker:
 
 
 # =============================================================================
-# Mock Database Session for Standalone Operation
-# =============================================================================
-
-
-class _MockDatabaseSession:
-    """Mock database session for when DATABASE_URL is not available.
-
-    This allows the spec state machine to run in sandbox environments
-    without database connectivity, logging operations instead of persisting.
-    """
-
-    def __init__(self):
-        self._pending_operations = []
-
-    async def commit(self):
-        """Log commit operation."""
-        logger.debug("MockDatabaseSession: commit() called (no-op)")
-
-    async def flush(self):
-        """Log flush operation."""
-        logger.debug("MockDatabaseSession: flush() called (no-op)")
-
-    async def refresh(self, obj):
-        """Log refresh operation."""
-        logger.debug(
-            f"MockDatabaseSession: refresh({type(obj).__name__}) called (no-op)"
-        )
-
-    async def close(self):
-        """Log close operation."""
-        logger.debug("MockDatabaseSession: close() called")
-
-    def add(self, obj):
-        """Log add operation."""
-        logger.debug(f"MockDatabaseSession: add({type(obj).__name__}) called (no-op)")
-
-    async def execute(self, stmt):
-        """Log execute operation and return empty result."""
-        logger.debug("MockDatabaseSession: execute() called (no-op)")
-        return _MockResult()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
-
-
-class _MockResult:
-    """Mock result from database queries."""
-
-    def scalars(self):
-        return self
-
-    def first(self):
-        return None
-
-    def all(self):
-        return []
-
-    def scalar_one_or_none(self):
-        """Return None for scalar queries (used by load_spec)."""
-        return None
-
-
-# =============================================================================
 # Configuration
 # =============================================================================
 
@@ -4122,9 +4056,9 @@ This is a continuation of your previous work. Please review the notes below and 
         except ImportError as e:
             logger.warning(f"SPEC-SANDBOX: spec_sandbox package not available: {e}")
             logger.info(
-                "SPEC-SANDBOX: Falling back to omoi_os.workers.spec_state_machine"
+                "SPEC-SANDBOX: Falling back to prompt-driven spec workflow"
             )
-            # Return None to signal fallback to the backend's state machine
+            # Return None to signal fallback to prompt-driven execution
             return None
         except Exception as e:
             logger.exception(f"SPEC-SANDBOX: Unexpected error: {e}")
@@ -4132,122 +4066,20 @@ This is a continuation of your previous work. Please review the notes below and 
 
     async def _run_spec_state_machine(
         self, reporter: Optional["EventReporter"] = None
-    ) -> int:
-        """Run spec-driven state machine execution.
+    ) -> Optional[int]:
+        """Run spec-driven state machine execution via spec-sandbox subsystem.
 
-        This is the integration point for phase-aware execution.
-        When SPEC_PHASE is set, the worker delegates to the SpecStateMachine
-        which handles multiple short query() invocations within a SINGLE sandbox.
-
-        The state machine:
-        - Runs phases sequentially (EXPLORE → REQUIREMENTS → DESIGN → TASKS → SYNC)
-        - Uses evaluators as quality gates between phases
-        - Saves checkpoints to database and files
-        - Supports resume from any phase if the sandbox crashes
-
-        spawn_for_phase() in DaytonaSpawnerService is only used for CRASH RECOVERY,
-        not for normal phase progression.
+        Delegates to _run_spec_sandbox_subsystem() which uses the standalone
+        spec-sandbox package. Returns None if spec-sandbox is not available,
+        signaling the caller to fall back to prompt-driven execution.
 
         Args:
             reporter: Optional EventReporter for sending work events.
-                     When provided, the state machine will report phase
-                     progress as work events to prevent idle termination.
 
         Returns:
-            0 on success, 1 on failure, None if state machine unavailable
+            0 on success, 1 on failure, None if spec-sandbox unavailable
         """
-        logger.info("=" * 60)
-        logger.info("SPEC STATE MACHINE: Starting Phase-Aware Execution")
-        logger.info("=" * 60)
-        logger.info(f"SPEC STATE MACHINE: spec_id = {self.config.spec_id}")
-        logger.info(f"SPEC STATE MACHINE: starting_phase = {self.config.spec_phase}")
-        logger.info(
-            f"SPEC STATE MACHINE: phase_data_keys = {list(self.config.phase_data.keys())}"
-        )
-        logger.info(f"SPEC STATE MACHINE: working_directory = {self.config.cwd}")
-
-        # Check if we should use the spec-sandbox subsystem (standalone package)
-        # The spec-sandbox emits proper spec.* events via HTTPReporter
-        use_spec_sandbox = os.environ.get("USE_SPEC_SANDBOX", "").lower() == "true"
-
-        if use_spec_sandbox:
-            result = await self._run_spec_sandbox_subsystem(reporter)
-            # If spec-sandbox returned a result (0 or 1), use it
-            # If it returned None (package not available), fall back to backend's state machine
-            if result is not None:
-                return result
-            logger.info(
-                "SPEC STATE MACHINE: Falling back to omoi_os.workers.spec_state_machine"
-            )
-
-        try:
-            # Import the state machine (avoid circular imports at module level)
-            from omoi_os.workers.spec_state_machine import SpecStateMachine
-
-            # Create database session for state machine
-            # NOTE: In production, this would come from the database service
-            # For now, we create a mock-compatible session or use environment config
-            db_session = await self._get_database_session()
-
-            # Create progress callback that reports events via the reporter
-            # This is critical: without work events, the idle sandbox monitor
-            # will terminate the sandbox after 10 minutes as "stuck_running"
-            progress_callback = None
-            if reporter:
-
-                async def progress_callback(event_type: str, event_data: dict) -> None:
-                    """Report state machine progress as work events."""
-                    await reporter.report(
-                        event_type, event_data, source="spec_state_machine"
-                    )
-
-                logger.info(
-                    "SPEC STATE MACHINE: Progress callback configured for idle monitoring"
-                )
-
-            # Initialize state machine with progress callback
-            state_machine = SpecStateMachine(
-                spec_id=self.config.spec_id,
-                db_session=db_session,
-                working_directory=self.config.cwd,
-                model=self.config.model,
-                progress_callback=progress_callback,
-            )
-
-            # Inject pre-loaded phase data if available (from PHASE_DATA_B64)
-            if self.config.phase_data:
-                logger.info("SPEC STATE MACHINE: Injecting phase data from environment")
-                # The state machine will use this as starting context
-
-            # Run the state machine - it will handle all phases
-            logger.info("SPEC STATE MACHINE: Invoking state_machine.run()")
-            success = await state_machine.run()
-
-            if success:
-                logger.info("=" * 60)
-                logger.info("SPEC STATE MACHINE: Completed Successfully")
-                logger.info("=" * 60)
-                return 0
-            else:
-                logger.error("=" * 60)
-                logger.error("SPEC STATE MACHINE: Failed")
-                logger.error("=" * 60)
-                return 1
-
-        except ImportError as e:
-            logger.warning(f"SPEC STATE MACHINE: SpecStateMachine not available: {e}")
-            logger.info(
-                "SPEC STATE MACHINE: Falling back to prompt-driven spec workflow"
-            )
-            logger.info(
-                "SPEC STATE MACHINE: The spec-driven-dev skill has been injected into the prompt"
-            )
-            # Return None to signal fallback to regular execution
-            # The caller will continue with standard agent execution
-            return None
-        except Exception as e:
-            logger.exception(f"SPEC STATE MACHINE: Unexpected error: {e}")
-            return 1
+        return await self._run_spec_sandbox_subsystem(reporter)
 
     async def _run_spec_state_machine_with_heartbeats(
         self, reporter: "EventReporter"
@@ -4319,46 +4151,6 @@ This is a continuation of your previous work. Please review the notes below and 
                     await heartbeat_task
                 except asyncio.CancelledError:
                     pass
-
-    async def _get_database_session(self):
-        """Get a database session for the state machine.
-
-        In sandbox environments, we may need to create a new connection
-        using environment variables, or use a provided session factory.
-
-        Returns:
-            An async database session
-        """
-        try:
-            # Try to get database URL from environment
-            database_url = os.environ.get("DATABASE_URL")
-            if not database_url:
-                logger.warning(
-                    "SPEC STATE MACHINE: DATABASE_URL not set, "
-                    "state machine will run without database persistence"
-                )
-                # Return a mock session that logs but doesn't persist
-                return _MockDatabaseSession()
-
-            # Import database module
-            from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-            from sqlalchemy.orm import sessionmaker
-
-            # Create async engine
-            engine = create_async_engine(database_url, echo=False)
-
-            # Create session factory
-            async_session = sessionmaker(
-                engine, class_=AsyncSession, expire_on_commit=False
-            )
-
-            # Return a new session
-            return async_session()
-
-        except Exception as e:
-            logger.warning(f"SPEC STATE MACHINE: Database session creation failed: {e}")
-            logger.warning("SPEC STATE MACHINE: Using mock session (no persistence)")
-            return _MockDatabaseSession()
 
     async def run(self):
         """Main worker loop with comprehensive event tracking."""

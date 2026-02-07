@@ -143,7 +143,7 @@ class TestRunSpecStateMachine:
 
     @pytest.mark.asyncio
     async def test_runs_state_machine_successfully(self, mock_db):
-        """Test successful state machine execution."""
+        """Test successful state machine execution via spec-sandbox."""
         mock_session = AsyncMock()
         mock_session.__aenter__.return_value = mock_session
         mock_session.__aexit__.return_value = None
@@ -159,8 +159,10 @@ class TestRunSpecStateMachine:
         mock_db.get_async_session.return_value = mock_session
 
         with patch(
-            "omoi_os.workers.spec_state_machine.SpecStateMachine"
-        ) as MockMachine:
+            "spec_sandbox.worker.state_machine.SpecStateMachine"
+        ) as MockMachine, patch(
+            "spec_sandbox.config.SpecSandboxSettings"
+        ):
             mock_machine = MagicMock()
             mock_machine.run = AsyncMock(return_value=True)
             MockMachine.return_value = mock_machine
@@ -190,8 +192,10 @@ class TestRunSpecStateMachine:
         mock_db.get_async_session.return_value = mock_session
 
         with patch(
-            "omoi_os.workers.spec_state_machine.SpecStateMachine"
-        ) as MockMachine:
+            "spec_sandbox.worker.state_machine.SpecStateMachine"
+        ) as MockMachine, patch(
+            "spec_sandbox.config.SpecSandboxSettings"
+        ):
             MockMachine.side_effect = Exception("State machine error")
 
             success = await _run_spec_state_machine(
