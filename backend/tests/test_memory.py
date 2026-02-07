@@ -983,3 +983,112 @@ def test_memory_type_enum_methods():
     assert MemoryType.is_valid(MemoryType.ERROR_FIX.value) is True
     assert MemoryType.is_valid(MemoryType.DISCOVERY.value) is True
     assert MemoryType.is_valid("invalid_type") is False
+
+
+# ACE Workflow Fields Tests (REQ-MEM-ACE-001)
+def test_store_execution_with_ace_fields(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test storing execution with ACE workflow fields (REQ-MEM-ACE-001)."""
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Successfully implemented authentication",
+            success=True,
+            goal="Implement user authentication with JWT",
+            result="JWT authentication implemented with refresh tokens",
+            feedback="All tests passed, deployment successful",
+            tool_usage={
+                "tools_used": ["Read", "Edit", "Bash"],
+                "file_operations": 15,
+                "commands_run": 5,
+            },
+        )
+        session.commit()
+
+        assert memory.goal == "Implement user authentication with JWT"
+        assert memory.result == "JWT authentication implemented with refresh tokens"
+        assert memory.feedback == "All tests passed, deployment successful"
+        assert memory.tool_usage == {
+            "tools_used": ["Read", "Edit", "Bash"],
+            "file_operations": 15,
+            "commands_run": 5,
+        }
+
+
+def test_store_execution_with_partial_ace_fields(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test storing execution with only some ACE workflow fields (REQ-MEM-ACE-001)."""
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Completed task",
+            success=True,
+            goal="Complete the feature",
+            # result, feedback, tool_usage not provided
+        )
+        session.commit()
+
+        assert memory.goal == "Complete the feature"
+        assert memory.result is None
+        assert memory.feedback is None
+        assert memory.tool_usage is None
+
+
+def test_store_execution_ace_fields_preserved_in_to_dict(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test that ACE workflow fields are preserved in to_dict() (REQ-MEM-ACE-001)."""
+    with db_service.get_session() as session:
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Test task",
+            success=True,
+            goal="Test goal",
+            result="Test result",
+            feedback="Test feedback",
+            tool_usage={"tools": ["Edit"]},
+        )
+        session.commit()
+
+        data = memory.to_dict()
+
+        assert data["goal"] == "Test goal"
+        assert data["result"] == "Test result"
+        assert data["feedback"] == "Test feedback"
+        assert data["tool_usage"] == {"tools": ["Edit"]}
+
+
+def test_store_execution_error_patterns_with_failed_task(
+    db_service,
+    memory_service: MemoryService,
+    test_task: Task,
+):
+    """Test storing error_patterns is allowed when success=false."""
+    with db_service.get_session() as session:
+        error_patterns = {
+            "error_type": "ValidationError",
+            "message": "Invalid input",
+            "stack_trace": "...",
+        }
+        memory = memory_service.store_execution(
+            session=session,
+            task_id=test_task.id,
+            execution_summary="Failed validation",
+            success=False,
+            error_patterns=error_patterns,
+        )
+        session.commit()
+
+        assert memory.success is False
+        assert memory.error_patterns == error_patterns

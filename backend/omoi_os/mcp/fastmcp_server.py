@@ -9,9 +9,11 @@ from typing import Optional, Dict, Any, List
 from fastmcp import FastMCP, Context
 from pydantic import Field
 
+from omoi_os.models.memory_type import MemoryType
 from omoi_os.services.database import DatabaseService
 from omoi_os.services.discovery import DiscoveryService
 from omoi_os.services.event_bus import EventBusService, SystemEvent
+from omoi_os.services.memory import MemoryService
 from omoi_os.services.task_queue import TaskQueueService
 from omoi_os.ticketing.services.ticket_service import TicketService
 
@@ -22,6 +24,7 @@ _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
 _collaboration_service: Optional[Any] = None
+_memory_service: Optional[MemoryService] = None
 
 
 def initialize_mcp_services(
@@ -30,6 +33,7 @@ def initialize_mcp_services(
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
     collaboration_service: Optional[Any] = None,
+    memory_service: Optional[MemoryService] = None,
 ) -> None:
     """Initialize global services for MCP server.
 
@@ -39,13 +43,15 @@ def initialize_mcp_services(
         task_queue: Task queue service
         discovery_service: Discovery service
         collaboration_service: Optional collaboration service for agent messaging
+        memory_service: Optional memory service for storing task memories
     """
-    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service, _memory_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
     _collaboration_service = collaboration_service
+    _memory_service = memory_service
 
 
 # Create FastMCP server
@@ -951,6 +957,156 @@ def get_task(
             else None,
             "dependencies": task.dependencies or [],
         }
+
+
+# ============================================================================
+# Memory Tools (NEW - for persisting task execution memories)
+# ============================================================================
+
+
+@mcp.tool()
+def save_memory(
+    ctx: Context,
+    task_id: str = Field(..., description="ID of the task to save memory for"),
+    execution_summary: str = Field(
+        ..., min_length=10, description="Summary of task execution and results"
+    ),
+    success: bool = Field(..., description="Whether task execution was successful"),
+    memory_type: Optional[str] = Field(
+        None,
+        description="Memory type (error_fix, discovery, decision, learning, warning, codebase_knowledge). Auto-classified if not provided.",
+    ),
+    goal: Optional[str] = Field(
+        None, description="ACE workflow: What the agent was trying to accomplish"
+    ),
+    result: Optional[str] = Field(
+        None, description="ACE workflow: What actually happened"
+    ),
+    feedback: Optional[str] = Field(
+        None,
+        description="ACE workflow: Output from environment (stdout, stderr, test results)",
+    ),
+    tool_usage: Optional[Dict[str, Any]] = Field(
+        None, description="ACE workflow: Tools used during task execution"
+    ),
+    error_patterns: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Error patterns extracted from failed execution (only valid when success=false)",
+    ),
+) -> Dict[str, Any]:
+    """Save a task execution memory with embeddings for future retrieval.
+
+    This tool persists task execution memories that can be searched later
+    to inform similar tasks. Memories include execution summaries, ACE workflow
+    data, and are automatically embedded for semantic search.
+
+    Args:
+        task_id: ID of the task to save memory for
+        execution_summary: Summary of task execution and results (minimum 10 characters)
+        success: Whether task execution was successful
+        memory_type: Optional memory type. If not provided, will be auto-classified
+            based on execution_summary content. Valid types:
+            - error_fix: For bug fixes and error resolutions
+            - discovery: For new findings and insights
+            - decision: For architectural or design decisions
+            - learning: For lessons learned
+            - warning: For gotchas and cautions
+            - codebase_knowledge: For system/architecture understanding
+        goal: ACE workflow field - what the agent was trying to accomplish
+        result: ACE workflow field - what actually happened
+        feedback: ACE workflow field - environment output (stdout, stderr, test results)
+        tool_usage: ACE workflow field - tools used during execution
+        error_patterns: Error patterns (only accepted when success=false)
+
+    Returns:
+        Dictionary with created memory information including:
+        - success: Whether memory was saved successfully
+        - memory_id: ID of created memory
+        - task_id: ID of the associated task
+        - memory_type: Classified memory type (explicit or auto-classified)
+        - has_embedding: Whether embedding was generated
+    """
+    if not _db or not _memory_service:
+        raise RuntimeError("Required services (database, memory) not initialized")
+
+    # Validate error_patterns only allowed when success=false
+    if error_patterns is not None and success:
+        return {
+            "success": False,
+            "error": "error_patterns can only be provided when success=false",
+        }
+
+    # Validate memory_type if provided
+    if memory_type is not None and not MemoryType.is_valid(memory_type):
+        return {
+            "success": False,
+            "error": f"Invalid memory_type: {memory_type}. Must be one of: {', '.join(MemoryType.all_types())}",
+        }
+
+    with _db.get_session() as session:
+        try:
+            # Store execution with all fields
+            memory = _memory_service.store_execution(
+                session=session,
+                task_id=task_id,
+                execution_summary=execution_summary,
+                success=success,
+                memory_type=memory_type,
+                goal=goal,
+                result=result,
+                feedback=feedback,
+                tool_usage=tool_usage,
+                error_patterns=error_patterns,
+            )
+
+            session.commit()
+
+            # Get the classified type for response
+            classified_type = memory.memory_type
+
+            ctx.info(
+                f"Saved memory {memory.id} for task {task_id} "
+                f"(type: {classified_type}, success: {success})"
+            )
+
+            # Publish event for observability
+            if _event_bus:
+                _event_bus.publish(
+                    SystemEvent(
+                        event_type="MEMORY_SAVED",
+                        entity_type="task_memory",
+                        entity_id=str(memory.id),
+                        payload={
+                            "task_id": task_id,
+                            "memory_type": classified_type,
+                            "success": success,
+                            "has_ace_fields": any([goal, result, feedback, tool_usage]),
+                        },
+                    )
+                )
+
+            return {
+                "success": True,
+                "memory_id": str(memory.id),
+                "task_id": task_id,
+                "memory_type": classified_type,
+                "auto_classified": memory_type is None,
+                "has_embedding": memory.context_embedding is not None,
+                "has_ace_fields": any([goal, result, feedback, tool_usage]),
+            }
+
+        except ValueError as e:
+            # Task not found or invalid memory type
+            return {
+                "success": False,
+                "error": str(e),
+            }
+        except Exception as e:
+            ctx.warning(f"Failed to save memory: {e}")
+            return {
+                "success": False,
+                "error": f"Failed to save memory: {str(e)}",
+            }
 
 
 # ============================================================================

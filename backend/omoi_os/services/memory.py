@@ -154,6 +154,10 @@ class MemoryService:
         error_patterns: Optional[Dict[str, Any]] = None,
         auto_extract_patterns: bool = True,
         memory_type: Optional[str] = None,
+        goal: Optional[str] = None,
+        result: Optional[str] = None,
+        feedback: Optional[str] = None,
+        tool_usage: Optional[Dict[str, Any]] = None,
     ) -> TaskMemory:
         """
         Store task execution in memory with embedding and memory type classification (REQ-MEM-TAX-001).
@@ -166,6 +170,10 @@ class MemoryService:
             error_patterns: Optional error patterns if failed.
             auto_extract_patterns: Whether to automatically extract patterns.
             memory_type: Optional memory type (if not provided, will be auto-classified).
+            goal: Optional ACE workflow goal - what the agent was trying to accomplish (REQ-MEM-ACE-001).
+            result: Optional ACE workflow result - what actually happened (REQ-MEM-ACE-001).
+            feedback: Optional ACE workflow feedback - environment output (REQ-MEM-ACE-001).
+            tool_usage: Optional ACE workflow tool usage - tools used during execution (REQ-MEM-ACE-001).
 
         Returns:
             Created TaskMemory record.
@@ -194,7 +202,7 @@ class MemoryService:
         # Generate embedding for the summary
         embedding = self.embedding_service.generate_embedding(execution_summary)
 
-        # Create memory record
+        # Create memory record with ACE workflow fields (REQ-MEM-ACE-001)
         memory = TaskMemory(
             task_id=task_id,
             execution_summary=execution_summary,
@@ -202,6 +210,10 @@ class MemoryService:
             context_embedding=embedding,
             success=success,
             error_patterns=error_patterns,
+            goal=goal,
+            result=result,
+            feedback=feedback,
+            tool_usage=tool_usage,
             learned_at=utc_now(),
             reused_count=0,
         )
