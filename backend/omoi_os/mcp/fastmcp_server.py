@@ -22,6 +22,7 @@ _event_bus: Optional[EventBusService] = None
 _task_queue: Optional[TaskQueueService] = None
 _discovery_service: Optional[DiscoveryService] = None
 _collaboration_service: Optional[Any] = None
+_memory_service: Optional[Any] = None  # MemoryService instance
 
 
 def initialize_mcp_services(
@@ -30,6 +31,7 @@ def initialize_mcp_services(
     task_queue: TaskQueueService,
     discovery_service: DiscoveryService,
     collaboration_service: Optional[Any] = None,
+    memory_service: Optional[Any] = None,
 ) -> None:
     """Initialize global services for MCP server.
 
@@ -39,13 +41,15 @@ def initialize_mcp_services(
         task_queue: Task queue service
         discovery_service: Discovery service
         collaboration_service: Optional collaboration service for agent messaging
+        memory_service: Optional memory service for storing task execution memories
     """
-    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service
+    global _db, _event_bus, _task_queue, _discovery_service, _collaboration_service, _memory_service
     _db = db
     _event_bus = event_bus
     _task_queue = task_queue
     _discovery_service = discovery_service
     _collaboration_service = collaboration_service
+    _memory_service = memory_service
 
 
 # Create FastMCP server
@@ -1541,6 +1545,96 @@ def get_discoveries_by_type(
                 for d in discoveries
             ],
         }
+
+
+# ============================================================================
+# Memory Tools (NEW - for saving task execution memories)
+# ============================================================================
+
+
+@mcp.tool()
+def save_memory(
+    ctx: Context,
+    task_id: str = Field(..., description="ID of the task to save memory for"),
+    execution_summary: str = Field(
+        ..., min_length=10, description="Summary of what happened during execution"
+    ),
+    success: bool = Field(..., description="Whether the execution was successful"),
+    memory_type: Optional[str] = Field(
+        default=None,
+        description="Memory type (error_fix, discovery, decision, learning, warning, codebase_knowledge). Auto-classified if not provided.",
+    ),
+    error_patterns: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Error patterns if execution failed (only valid when success=false)",
+    ),
+    auto_extract_patterns: bool = Field(
+        default=True,
+        description="Whether to automatically extract patterns from successful executions",
+    ),
+) -> Dict[str, Any]:
+    """Save task execution memory for future similarity search and pattern learning.
+
+    This tool stores the outcome of a task execution in the memory system,
+    enabling agents to learn from past experiences and find similar tasks.
+
+    Args:
+        task_id: ID of the task to save memory for
+        execution_summary: Summary of what happened during execution (minimum 10 characters)
+        success: Whether the execution was successful
+        memory_type: Optional memory type for classification. If not provided, will be auto-classified based on execution_summary.
+        error_patterns: Optional error patterns if execution failed (only valid when success=false)
+        auto_extract_patterns: Whether to automatically extract patterns from successful executions
+
+    Returns:
+        Dictionary with memory_id and classification details
+    """
+    if not _memory_service:
+        raise RuntimeError("Memory service not initialized")
+
+    if not _db:
+        raise RuntimeError("Database service not initialized")
+
+    # Normalize optional parameters (handles FieldInfo objects from direct calls)
+    # This is needed when calling .fn() directly for testing
+    actual_error_patterns = error_patterns if isinstance(error_patterns, dict) else None
+    actual_memory_type = memory_type if isinstance(memory_type, str) else None
+    actual_auto_extract = auto_extract_patterns if isinstance(auto_extract_patterns, bool) else True
+
+    # Validate error_patterns usage
+    if actual_error_patterns and success:
+        return {
+            "success": False,
+            "error": "error_patterns can only be provided when success=false",
+        }
+
+    with _db.get_session() as session:
+        try:
+            memory = _memory_service.store_execution(
+                session=session,
+                task_id=task_id,
+                execution_summary=execution_summary,
+                success=success,
+                error_patterns=actual_error_patterns,
+                auto_extract_patterns=actual_auto_extract,
+                memory_type=actual_memory_type,
+            )
+            session.commit()
+
+            ctx.info(f"Saved memory {memory.id} for task {task_id}")
+
+            return {
+                "success": True,
+                "memory_id": str(memory.id),
+                "task_id": task_id,
+                "memory_type": memory.memory_type,
+                "has_embedding": memory.context_embedding is not None,
+            }
+        except ValueError as e:
+            return {
+                "success": False,
+                "error": str(e),
+            }
 
 
 # Create HTTP app for FastAPI mounting using Streamable HTTP transport
