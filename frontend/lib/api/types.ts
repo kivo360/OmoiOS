@@ -898,6 +898,25 @@ export interface CreatePullRequestRequest {
 }
 
 // ============================================================================
+// Preview Types
+// ============================================================================
+
+export interface PreviewSession {
+  id: string
+  sandbox_id: string
+  task_id: string | null
+  project_id: string | null
+  status: "pending" | "starting" | "ready" | "stopped" | "failed"
+  preview_url: string | null
+  port: number
+  framework: string | null
+  error_message: string | null
+  created_at: string
+  ready_at: string | null
+  stopped_at: string | null
+}
+
+// ============================================================================
 // Sandbox Types
 // ============================================================================
 

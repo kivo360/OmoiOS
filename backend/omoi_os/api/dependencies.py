@@ -32,6 +32,7 @@ if TYPE_CHECKING:
     from omoi_os.services.monitor import MonitorService
     from omoi_os.services.phase_gate import PhaseGateService
     from omoi_os.services.phase_manager import PhaseManager
+    from omoi_os.services.prototype_manager import PrototypeManager
     from omoi_os.services.resource_lock import ResourceLockService
     from omoi_os.services.task_queue import TaskQueueService
 
@@ -707,6 +708,25 @@ def require_permission(permission: str, organization_id: UUID):
         return details
 
     return permission_checker
+
+
+# Singleton instances for prototype manager
+_prototype_manager_instance: "PrototypeManager | None" = None
+
+
+def get_prototype_manager() -> "PrototypeManager":
+    """Get prototype manager instance with lazy initialization."""
+    global _prototype_manager_instance
+
+    if _prototype_manager_instance is not None:
+        return _prototype_manager_instance
+
+    from omoi_os.services.prototype_manager import PrototypeManager
+
+    _prototype_manager_instance = PrototypeManager(
+        db=get_db_service(), event_bus=get_event_bus()
+    )
+    return _prototype_manager_instance
 
 
 # Singleton instances for embedding and deduplication services
