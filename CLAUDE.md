@@ -223,6 +223,55 @@ CLI: `spec-sandbox` (see `subsystems/spec-sandbox/`)
 5. **Document Results**: Add review section to `tasks/todo.md`
 6. **Capture Lessons**: Update `tasks/lessons.md` after corrections
 
+## Proactive Memory System
+
+This project uses a WAL (Write-Ahead Log) protocol for session continuity. Memory files persist context across sessions so agents don't start from zero.
+
+### Session Start Protocol
+
+At the start of every session, read these files in order:
+1. `MEMORY.md` — Project state, active workstreams, architecture decisions
+2. `memory/working-buffer.md` — What was happening most recently (WAL target)
+3. `tasks/todo.md` — Active work items
+4. `tasks/lessons.md` — Patterns to avoid
+
+### During Session
+
+- **WAL Protocol**: When the user makes a correction, decision, or states a preference — write it to `memory/working-buffer.md` BEFORE continuing work. Context vanishes. The buffer won't.
+- **Track progress**: Update `tasks/todo.md` as items complete
+- **Capture lessons**: When something fails unexpectedly, add the pattern to `tasks/lessons.md`
+- **Daily log**: Write significant actions to `memory/YYYY-MM-DD.md`
+
+### Session End Protocol
+
+Before ending a session:
+1. Update `memory/working-buffer.md` with current state and next steps
+2. Mark completed items in `tasks/todo.md`
+3. If new lessons learned: update `tasks/lessons.md`
+4. If architecture decisions were made: add to the ADL table in `MEMORY.md`
+5. Write daily log entry to `memory/YYYY-MM-DD.md`
+
+### Memory File Structure
+
+```
+MEMORY.md                    # Curated long-term project state
+memory/
+├── working-buffer.md        # Active working memory (WAL target)
+└── YYYY-MM-DD.md            # Daily raw capture logs
+tasks/
+├── todo.md                  # Active work items
+└── lessons.md               # Patterns to avoid
+```
+
+### Key References
+
+| What | Where |
+|------|-------|
+| Architecture overview | `ARCHITECTURE.md` |
+| Integration gaps | `docs/architecture/14-integration-gaps.md` |
+| Live preview plan | `docs/design/live-preview/prototype-plan.md` |
+| Backend guide | `backend/CLAUDE.md` |
+
 ## Core Principles
 
 - **Simplicity First**: Make every change as simple as possible. Impact minimal code.
