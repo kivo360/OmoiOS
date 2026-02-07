@@ -29,8 +29,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "backend"))
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 
-# Database URL from config/local.yaml
-DATABASE_URL = "postgresql+psycopg://postgres:REDACTED_DB_PASSWORD@REDACTED_DB_HOST:5432/REDACTED_DB"
+# Database URL from environment variable or config
+import os
+DATABASE_URL = os.environ.get(
+    "DATABASE_URL",
+    "postgresql+psycopg://postgres:postgres@localhost:15432/omoi_os"
+)
 
 
 def create_test_markdown_files(base_dir: Path) -> None:

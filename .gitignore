@@ -21,11 +21,15 @@ build/
 .env.test
 .env.staging
 .env.production
+*.backup
+.env.*.backup
+backend/.env.remote-test
 
 # DO commit these:
 # .env.example
-# .env.test.example
-# config/*.yaml
+# backend/config/base.yaml
+# backend/config/test.yaml
+# backend/config/production.yaml
 
 # Testing
 .testmondata
@@ -90,6 +94,17 @@ pnpm-lock.yaml
 # Rust (tools/resmgr)
 **/target/
 **/*.rs.bk
+
+# Lead generation output data (contains PII)
+scripts/lead-generation/*.csv
+
+# Marketing & business strategy (private)
+docs/marketing/
+marketing/
+
+# Cache databases
+.instructor_cache/
+.instructor-cache/
 
 # System files
 ITERATION_NOTES.md
