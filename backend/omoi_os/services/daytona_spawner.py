@@ -1319,6 +1319,8 @@ class DaytonaSpawnerService:
                 disk=self.sandbox_disk_gb,
             )
 
+            sandbox = None
+
             # Create sandbox from snapshot if provided, otherwise use image
             if self.sandbox_snapshot:
                 logger.info(
@@ -1326,30 +1328,41 @@ class DaytonaSpawnerService:
                     f"with resources: {self.sandbox_cpu} CPU, "
                     f"{self.sandbox_memory_gb} GiB RAM, {self.sandbox_disk_gb} GiB disk"
                 )
-                params = CreateSandboxFromSnapshotParams(
-                    snapshot=self.sandbox_snapshot,
-                    labels=labels or None,
-                    ephemeral=True,  # Auto-delete when stopped
-                    public=False,
-                    resources=resources,
-                    auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
-                )
-            else:
+                try:
+                    params = CreateSandboxFromSnapshotParams(
+                        snapshot=self.sandbox_snapshot,
+                        labels=labels or None,
+                        ephemeral=True,  # Auto-delete when stopped
+                        public=False,
+                        resources=resources,
+                        auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
+                    )
+                    sandbox = daytona.create(params=params, timeout=120)
+                except Exception as snapshot_error:
+                    # Snapshot may be inactive/expired/unavailable -- fall back to image
+                    logger.warning(
+                        f"Snapshot '{self.sandbox_snapshot}' creation failed: {snapshot_error}. "
+                        f"Falling back to image-based sandbox creation."
+                    )
+                    # sandbox remains None, will be created from image below
+
+            if sandbox is None:
+                image = self.sandbox_image or "nikolaik/python-nodejs:python3.12-nodejs22"
                 logger.info(
-                    f"Creating sandbox from image: {self.sandbox_image} "
+                    f"Creating sandbox from image: {image} "
                     f"with resources: {self.sandbox_cpu} CPU, "
                     f"{self.sandbox_memory_gb} GiB RAM, {self.sandbox_disk_gb} GiB disk"
                 )
                 params = CreateSandboxFromImageParams(
-                    image=self.sandbox_image,
+                    image=image,
                     labels=labels or None,
                     ephemeral=True,  # Auto-delete when stopped
                     public=False,
                     resources=resources,
                     auto_stop_interval=30,  # Safety net: auto-stop after 30min idle (our own idle detection should fire first)
                 )
+                sandbox = daytona.create(params=params, timeout=120)
 
-            sandbox = daytona.create(params=params, timeout=120)
             logger.info(f"Daytona sandbox {sandbox.id} created for {sandbox_id}")
 
             # Store sandbox reference
@@ -1359,11 +1372,26 @@ class DaytonaSpawnerService:
                 info.extra_data["daytona_sandbox_id"] = sandbox.id
 
         except ImportError as e:
-            # Daytona SDK not available - use mock for local testing
+            # Daytona SDK not available - only use mock in development
+            import os
+
+            if os.environ.get("OMOIOS_ENV") == "production":
+                raise RuntimeError(
+                    f"Daytona SDK not available in production: {e}"
+                ) from e
             logger.warning(f"Daytona SDK import failed: {e}, using mock sandbox")
             await self._create_mock_sandbox(sandbox_id, env_vars)
             return  # Don't try to start worker in mock sandbox here
         except Exception as e:
+            # In production, sandbox creation failures must propagate -- silent
+            # fallback to mock causes tasks to be "assigned" with no worker running,
+            # leading to stale task cleanup marking them as failed after 3 minutes.
+            import os
+
+            if os.environ.get("OMOIOS_ENV") == "production":
+                raise RuntimeError(
+                    f"Failed to create Daytona sandbox: {e}"
+                ) from e
             logger.error(f"Failed to create Daytona sandbox: {e}")
             import traceback
 
