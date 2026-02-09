@@ -143,6 +143,7 @@ class TaskQueueService:
         session: Optional["Session"] = None,
         title: Optional[str] = None,
         execution_config: dict | None = None,
+        required_capabilities: list[str] | None = None,
     ) -> Task:
         """
         Add a task to the queue.
@@ -175,6 +176,7 @@ class TaskQueueService:
                 status="pending",
                 dependencies=dependencies,
                 execution_config=execution_config,
+                required_capabilities=required_capabilities,
             )
             session.add(task)
             session.flush()
@@ -202,6 +204,7 @@ class TaskQueueService:
                     status="pending",
                     dependencies=dependencies,
                     execution_config=execution_config,
+                    required_capabilities=required_capabilities,
                 )
                 session.add(task)
                 session.flush()

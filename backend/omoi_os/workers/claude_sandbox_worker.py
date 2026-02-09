@@ -1398,6 +1398,18 @@ You are assigned to work on task ID: `{self.task_id}`
 **Note**: Full task context was not available at worker creation time.
 You may need to examine the codebase to understand the task requirements.""")
 
+        # Inject preview instructions into system prompt if preview is enabled
+        if os.environ.get("PREVIEW_ENABLED", "").lower() == "true":
+            preview_port = os.environ.get("PREVIEW_PORT", "3000")
+            append_parts.append(f"""
+## Live Preview
+
+A live preview is configured for this task on port {preview_port}. After creating or modifying frontend code:
+1. Install dependencies (`npm install` / `pnpm install` / `yarn install` based on lockfile present)
+2. Start the dev server in the background: run the dev script with `--port {preview_port}` and `&` to background it
+3. The preview will be automatically detected and shown to the user in their browser.
+4. Keep the dev server running — do not kill it.""")
+
         # Check for custom SYSTEM_PROMPT env var or additional append content
         custom_system_prompt = os.environ.get("SYSTEM_PROMPT")
         system_prompt_append = os.environ.get("SYSTEM_PROMPT_APPEND", "")
@@ -2202,6 +2214,139 @@ class EventReporter:
             },
             source="agent",
         )
+
+
+# =============================================================================
+# Preview Setup Manager
+# =============================================================================
+
+
+class PreviewSetupManager:
+    """Watches for dev server readiness and signals the backend.
+
+    Primary approach: The agent starts the dev server via system prompt instructions.
+    This manager watches for it to become responsive and notifies the backend.
+    Fallback: If the dev server isn't detected within a timeout, attempts to start it.
+    """
+
+    def __init__(self, config: WorkerConfig):
+        self.config = config
+        self.enabled = os.environ.get("PREVIEW_ENABLED", "").lower() == "true"
+        self.port = int(os.environ.get("PREVIEW_PORT", "3000"))
+        self.process: Optional[subprocess.Popen] = None
+
+    async def setup_preview(self):
+        """Watch for dev server, start it as fallback if needed."""
+        if not self.enabled:
+            return
+
+        cwd = self.config.cwd
+        logger.info(f"[PREVIEW] Preview enabled, watching for dev server on port {self.port}")
+        await self._notify("starting")
+
+        # Phase 1: Wait for agent to start the dev server (via system prompt instructions)
+        # Give the agent time to install deps and start it
+        if await self._wait_for_ready(timeout=180):
+            logger.info(f"[PREVIEW] Dev server detected on port {self.port}")
+            await self._notify("ready")
+            return
+
+        # Phase 2: Fallback - try to start it ourselves
+        logger.info("[PREVIEW] Dev server not detected, attempting fallback startup")
+        frontend_dir = self._find_frontend_dir(cwd)
+        if not frontend_dir:
+            await self._notify("failed", error_message="No frontend project found")
+            return
+
+        try:
+            await self._install_and_start(frontend_dir)
+            if await self._wait_for_ready(timeout=120):
+                logger.info(f"[PREVIEW] Dev server ready on port {self.port} (fallback)")
+                await self._notify("ready")
+            else:
+                await self._notify("failed", error_message="Dev server did not respond")
+        except Exception as e:
+            logger.error(f"[PREVIEW] Fallback startup failed: {e}")
+            await self._notify("failed", error_message=str(e)[:500])
+
+    def _find_frontend_dir(self, base: str) -> Optional[str]:
+        """Find directory with package.json that has a dev script."""
+        for d in [base, f"{base}/frontend", f"{base}/client", f"{base}/app", f"{base}/web"]:
+            pkg_path = Path(d) / "package.json"
+            if pkg_path.exists():
+                try:
+                    data = json.loads(pkg_path.read_text())
+                    if "dev" in data.get("scripts", {}):
+                        return d
+                except Exception:
+                    continue
+        return None
+
+    async def _install_and_start(self, frontend_dir: str):
+        """Install deps and start dev server as fallback."""
+        has_pnpm = (Path(frontend_dir) / "pnpm-lock.yaml").exists()
+        has_yarn = (Path(frontend_dir) / "yarn.lock").exists()
+
+        if has_pnpm:
+            install_cmd = ["pnpm", "install", "--no-frozen-lockfile"]
+            dev_cmd = ["pnpm", "dev", "--port", str(self.port)]
+        elif has_yarn:
+            install_cmd = ["yarn", "install"]
+            dev_cmd = ["yarn", "dev", "--port", str(self.port)]
+        else:
+            install_cmd = ["npm", "install"]
+            dev_cmd = ["npm", "run", "dev", "--", "--port", str(self.port)]
+
+        proc = subprocess.run(
+            install_cmd, cwd=frontend_dir, capture_output=True, text=True, timeout=300
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Install failed: {proc.stderr[:500]}")
+
+        self.process = subprocess.Popen(
+            dev_cmd, cwd=frontend_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+
+    async def _wait_for_ready(self, timeout: int = 120) -> bool:
+        """Poll localhost until dev server responds."""
+        import time
+
+        start = time.time()
+        while time.time() - start < timeout:
+            try:
+                async with httpx.AsyncClient() as client:
+                    resp = await client.get(
+                        f"http://localhost:{self.port}", timeout=3
+                    )
+                    if resp.status_code < 500:
+                        return True
+            except Exception:
+                pass
+            await asyncio.sleep(5)
+        return False
+
+    async def _notify(
+        self,
+        status: str,
+        preview_url: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ):
+        """Call backend preview notify endpoint."""
+        url = f"{self.config.callback_url}/api/v1/preview/notify"
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(
+                    url,
+                    json={
+                        "sandbox_id": self.config.sandbox_id,
+                        "status": status,
+                        "preview_url": preview_url,
+                        "error_message": error_message,
+                    },
+                )
+                logger.info(f"[PREVIEW] Notified server: status={status}")
+        except Exception as e:
+            logger.warning(f"[PREVIEW] Failed to notify server: {e}")
 
 
 # =============================================================================
@@ -4362,6 +4507,11 @@ The following dependencies were automatically installed before you started:
                     },
                     source="worker",
                 )
+
+                # Launch preview setup in background (non-blocking)
+                preview_mgr = PreviewSetupManager(self.config)
+                if preview_mgr.enabled:
+                    asyncio.create_task(preview_mgr.setup_preview())
 
                 try:
                     # Debug: Log options structure before creating client

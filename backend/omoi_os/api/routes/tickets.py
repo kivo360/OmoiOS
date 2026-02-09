@@ -40,6 +40,30 @@ from omoi_os.services.reasoning_listener import log_reasoning_event
 router = APIRouter()
 
 
+# ============================================================================
+# Frontend capability detection for live preview
+# ============================================================================
+
+_FRONTEND_KEYWORDS = frozenset({
+    "react", "vue", "next", "vite", "frontend", "ui", "web",
+    "component", "button", "dashboard", "form", "tailwind", "css",
+    "html", "layout", "responsive", "animation", "page", "styled",
+    "svelte", "angular", "preview",
+})
+
+
+def _detect_frontend_capabilities(title: str, description: str | None) -> list[str]:
+    """Detect frontend capabilities from task text using keyword matching.
+
+    Returns a list of matched keywords if any frontend indicators are found,
+    or an empty list if none match. Used to set required_capabilities on tasks
+    so the spawner can enable live preview for frontend work.
+    """
+    text = f"{title} {description or ''}".lower()
+    found = [kw for kw in _FRONTEND_KEYWORDS if kw in text]
+    return found
+
+
 class TicketListResponse(BaseModel):
     """Response model for ticket list."""
 
@@ -645,6 +669,11 @@ async def create_ticket(
             if workflow_mode_for_task == "quick":
                 execution_config = {"force_execute": True}
 
+            # Detect frontend capabilities for live preview support
+            capabilities = _detect_frontend_capabilities(
+                title_for_task, ticket_data.description
+            )
+
             queue.enqueue_task(
                 ticket_id=ticket_id_for_task,
                 phase_id=phase_for_task,
@@ -661,6 +690,7 @@ async def create_ticket(
                 priority=priority_for_task,
                 session=None,  # Creates own session, ticket already committed
                 execution_config=execution_config,
+                required_capabilities=capabilities or None,
             )
 
     # Fire-and-forget: Log reasoning event and publish event
