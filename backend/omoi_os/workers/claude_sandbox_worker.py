@@ -56,6 +56,12 @@ Environment Variables (optional - GitHub):
     GITHUB_REPO         - Repository in owner/repo format
     BRANCH_NAME         - Branch to checkout
 
+Environment Variables (optional - live preview):
+    PREVIEW_ENABLED     - Set to "true" to enable live preview for frontend tasks
+                          Injects dev server instructions into agent system prompt
+                          and runs PreviewSetupManager to detect/start dev server
+    PREVIEW_PORT        - Dev server port (default: 3000)
+
 Environment Variables (optional - session resumption):
     RESUME_SESSION_ID   - Session ID to resume a previous conversation
     FORK_SESSION        - Set to "true" to fork from session (creates new branch)
