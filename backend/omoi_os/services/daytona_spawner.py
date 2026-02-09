@@ -752,6 +752,17 @@ class DaytonaSpawnerService:
         if labels:
             sandbox_labels.update(labels)
 
+        # Check if this is a frontend task BEFORE creating sandbox
+        # so we can set PREVIEW_ENABLED env var for the worker
+        is_frontend = self._is_frontend_task(task_id)
+        if is_frontend:
+            env_vars["PREVIEW_ENABLED"] = "true"
+            env_vars["PREVIEW_PORT"] = "3000"
+            logger.info(
+                "[PREVIEW] Frontend task detected, setting PREVIEW_ENABLED=true",
+                extra={"task_id": task_id},
+            )
+
         # Create sandbox info
         info = SandboxInfo(
             sandbox_id=sandbox_id,
@@ -832,7 +843,7 @@ class DaytonaSpawnerService:
             )
 
             # Kick off preview setup in background for frontend tasks (non-blocking)
-            if self._is_frontend_task(task_id):
+            if is_frontend:
                 asyncio.create_task(
                     self._setup_preview_for_sandbox(
                         sandbox_id=sandbox_id,
@@ -917,6 +928,8 @@ class DaytonaSpawnerService:
             return
 
         try:
+            from sqlalchemy import select
+            from omoi_os.models.preview_session import PreviewSession
             from omoi_os.services.preview_manager import PreviewManager
 
             manager = PreviewManager(db=self.db, event_bus=self.event_bus)
@@ -941,12 +954,40 @@ class DaytonaSpawnerService:
                 },
             )
 
-            # Note: The actual dev server startup and readiness polling
-            # will be handled by the sandbox worker script or a follow-up
-            # API call. The spawner creates the record so the frontend
-            # knows a preview is expected. The worker (or orchestrator)
-            # will call mark_starting() and mark_ready() when the dev
-            # server boots.
+            # Pre-store Daytona preview URL so the worker only needs to signal "ready"
+            # The URL is generated server-side from the Daytona SDK
+            info = self._sandboxes.get(sandbox_id)
+            daytona_sandbox = info.extra_data.get("daytona_sandbox") if info else None
+            if daytona_sandbox:
+                try:
+                    preview_link = daytona_sandbox.get_preview_link(port)
+                    preview_url = preview_link.url
+                    preview_token = getattr(preview_link, "token", None)
+
+                    # Update the preview record with pre-stored URL
+                    async with self.db.get_async_session() as session:
+                        result = await session.execute(
+                            select(PreviewSession).filter(
+                                PreviewSession.id == str(preview.id)
+                            )
+                        )
+                        ps = result.scalar_one_or_none()
+                        if ps:
+                            ps.preview_url = preview_url
+                            ps.preview_token = preview_token
+                            await session.commit()
+
+                    logger.info(
+                        "[PREVIEW] Pre-stored Daytona preview URL",
+                        extra={
+                            "preview_id": preview.id,
+                            "preview_url": preview_url,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(f"[PREVIEW] Could not get preview link: {e}")
+            else:
+                logger.debug("[PREVIEW] No Daytona sandbox object available for preview URL")
 
         except ValueError as e:
             # Preview already exists for this sandbox (idempotent)

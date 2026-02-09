@@ -158,6 +158,54 @@ async def stop_preview(
         )
 
 
+class PreviewNotifyRequest(BaseModel):
+    """Worker callback for preview state changes."""
+
+    sandbox_id: str
+    status: str  # "starting", "ready", "failed"
+    preview_url: Optional[str] = None  # Override if worker knows the URL
+    error_message: Optional[str] = None
+
+
+@router.post("/notify", summary="Worker preview status callback")
+async def notify_preview_status(
+    body: PreviewNotifyRequest,
+    db: DatabaseService = Depends(get_db_service),
+    event_bus: EventBusService = Depends(get_event_bus_service),
+):
+    """Called by sandbox worker to update preview session status.
+
+    No auth required — worker calls this from inside the sandbox.
+    The preview URL is pre-stored by the spawner from the Daytona SDK.
+    """
+    manager = PreviewManager(db=db, event_bus=event_bus)
+    preview = await manager.get_by_sandbox(body.sandbox_id)
+    if not preview:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No preview for sandbox: {body.sandbox_id}",
+        )
+
+    preview_id = str(preview.id)
+
+    if body.status == "starting":
+        await manager.mark_starting(preview_id)
+    elif body.status == "ready":
+        # Use pre-stored URL from spawner, or override if worker provides one
+        url = body.preview_url or preview.preview_url or ""
+        token = preview.preview_token
+        await manager.mark_ready(preview_id, url, token)
+    elif body.status == "failed":
+        await manager.mark_failed(preview_id, body.error_message or "Unknown error")
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status: {body.status}",
+        )
+
+    return {"status": "ok", "preview_id": preview_id}
+
+
 @router.get(
     "/sandbox/{sandbox_id}",
     response_model=PreviewResponse,
