@@ -1299,6 +1299,10 @@ async def approve_ticket(
         with db.get_session() as session:
             ticket_obj: Ticket | None = session.get(Ticket, request.ticket_id)
             if ticket_obj:
+                # Detect frontend capabilities for live preview support
+                capabilities = _detect_frontend_capabilities(
+                    ticket_obj.title or "", ticket_obj.description
+                )
                 queue.enqueue_task(
                     ticket_id=str(ticket_obj.id),
                     phase_id=ticket_obj.phase_id or "PHASE_REQUIREMENTS",
@@ -1306,6 +1310,7 @@ async def approve_ticket(
                     description=f"Analyze requirements for: {ticket_obj.title}",
                     priority=ticket_obj.priority or "MEDIUM",
                     session=session,
+                    required_capabilities=capabilities or None,
                 )
                 session.commit()
 

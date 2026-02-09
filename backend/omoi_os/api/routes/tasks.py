@@ -593,6 +593,13 @@ async def create_task(
         if task_data.execution_config:
             execution_config_dict = task_data.execution_config.model_dump(mode="json")
 
+        # Detect frontend capabilities for live preview support
+        from omoi_os.api.routes.tickets import _detect_frontend_capabilities
+
+        capabilities = _detect_frontend_capabilities(
+            task_data.title or "", task_data.description
+        )
+
         task = queue.enqueue_task(
             ticket_id=task_data.ticket_id,
             phase_id=task_data.phase_id,
@@ -602,6 +609,7 @@ async def create_task(
             dependencies=task_data.dependencies,
             title=task_data.title,
             execution_config=execution_config_dict,
+            required_capabilities=capabilities or None,
         )
 
         return {
