@@ -158,7 +158,7 @@ export function HeroSection({ className }: HeroSectionProps) {
             </div>
 
             {/* Real Kanban Board Screenshot */}
-            <div className="relative aspect-[16/9] bg-landing-bg-muted">
+            <div className="relative aspect-video bg-landing-bg-muted">
               <Image
                 src="/screenshots/agent-task-view.png"
                 alt="OmoiOS Kanban Board showing tasks in Backlog, Analyzing, Building, Testing, and Done columns"

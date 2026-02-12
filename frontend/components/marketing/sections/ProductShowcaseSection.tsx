@@ -153,7 +153,7 @@ export function ProductShowcaseSection({ className, id }: ProductShowcaseSection
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -20 }}
                   transition={{ duration: 0.3 }}
-                  className="relative aspect-[16/9]"
+                  className="relative aspect-video"
                 >
                   <Image
                     src={activeItem.image}
