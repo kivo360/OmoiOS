@@ -1,17 +1,31 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
-import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowRight, Play, Loader2 } from "lucide-react"
+import { ArrowRight, Play, Loader2, Code, FileText } from "lucide-react"
 import { FlipWords } from "@/components/ui/flip-words"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 
 const heroWords = ["shipped features", "merged PRs", "done work", "real results"]
+
+const heroVideos = [
+  {
+    id: "code-assistant",
+    label: "Code Assistant",
+    icon: Code,
+    src: "/videos/code-assistant.mp4",
+  },
+  {
+    id: "specs-driven",
+    label: "Specs-Driven",
+    icon: FileText,
+    src: "/videos/specs-driven.mp4",
+  },
+]
 
 interface HeroSectionProps {
   className?: string
@@ -21,6 +35,8 @@ export function HeroSection({ className }: HeroSectionProps) {
   const router = useRouter()
   const [email, setEmail] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [activeVideo, setActiveVideo] = useState(0)
+  const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -32,6 +48,19 @@ export function HeroSection({ className }: HeroSectionProps) {
       router.push(`/register?email=${encodeURIComponent(email)}`)
     }, 300)
   }
+
+  useEffect(() => {
+    // Play the active video, pause the other
+    videoRefs.current.forEach((video, i) => {
+      if (!video) return
+      if (i === activeVideo) {
+        video.currentTime = 0
+        video.play().catch(() => {})
+      } else {
+        video.pause()
+      }
+    })
+  }, [activeVideo])
 
   return (
     <section
@@ -137,7 +166,7 @@ export function HeroSection({ className }: HeroSectionProps) {
 
         </div>
 
-        {/* Dashboard Preview */}
+        {/* Video Preview */}
         <motion.div
           initial={{ opacity: 0, y: 40 }}
           animate={{ opacity: 1, y: 0 }}
@@ -145,27 +174,50 @@ export function HeroSection({ className }: HeroSectionProps) {
           className="relative mx-auto mt-16 max-w-5xl"
         >
           <div className="landing-shadow-lg overflow-hidden rounded-xl border border-landing-border bg-white">
-            {/* Browser Chrome */}
+            {/* Browser Chrome with Video Tabs */}
             <div className="flex items-center gap-2 border-b border-landing-border bg-landing-bg-muted px-4 py-3">
               <div className="flex gap-1.5">
                 <div className="h-3 w-3 rounded-full bg-red-400" />
                 <div className="h-3 w-3 rounded-full bg-yellow-400" />
                 <div className="h-3 w-3 rounded-full bg-green-400" />
               </div>
-              <div className="mx-auto rounded-md bg-white px-4 py-1 text-xs text-landing-text-subtle">
-                app.omoios.dev/board/acme-corp
+              <div className="mx-auto flex gap-1 rounded-lg bg-white p-1">
+                {heroVideos.map((video, index) => (
+                  <button
+                    key={video.id}
+                    onClick={() => setActiveVideo(index)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1 text-xs font-medium transition-all",
+                      activeVideo === index
+                        ? "bg-landing-accent text-white"
+                        : "text-landing-text-muted hover:text-landing-text"
+                    )}
+                  >
+                    <video.icon className="h-3 w-3" />
+                    {video.label}
+                  </button>
+                ))}
               </div>
+              <div className="w-[54px]" /> {/* Spacer to balance traffic lights */}
             </div>
 
-            {/* Real Kanban Board Screenshot */}
+            {/* Video Player */}
             <div className="relative aspect-video bg-landing-bg-muted">
-              <Image
-                src="/screenshots/agent-task-view.png"
-                alt="OmoiOS Kanban Board showing tasks in Backlog, Analyzing, Building, Testing, and Done columns"
-                fill
-                className="object-cover object-top"
-                priority
-              />
+              {heroVideos.map((video, index) => (
+                <video
+                  key={video.id}
+                  ref={(el) => { videoRefs.current[index] = el }}
+                  src={video.src}
+                  muted
+                  loop
+                  playsInline
+                  preload={index === 0 ? "auto" : "metadata"}
+                  className={cn(
+                    "absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-300",
+                    activeVideo === index ? "opacity-100" : "opacity-0"
+                  )}
+                />
+              ))}
             </div>
           </div>
 
