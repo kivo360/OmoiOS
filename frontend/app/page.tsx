@@ -26,8 +26,8 @@ function LandingPage() {
   return (
     <div className="landing-page min-h-screen bg-landing-bg">
       {/* Announcement Banner - sticky at top, above navbar */}
-      <div className="sticky top-0 z-[5001] flex justify-center bg-landing-bg-muted py-2.5">
-        <Link href="https://prompt.omoios.dev/" target="_blank" rel="noopener noreferrer">
+      <div className="pointer-events-none sticky top-0 z-[5001] flex justify-center bg-landing-bg-muted py-2.5">
+        <Link href="https://prompt.omoios.dev/" target="_blank" rel="noopener noreferrer" className="pointer-events-auto">
           <Announcement themed className="themed cursor-pointer">
             <AnnouncementTag>Free for Limited Time</AnnouncementTag>
             <AnnouncementTitle>
