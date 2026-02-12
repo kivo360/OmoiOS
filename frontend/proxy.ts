@@ -107,6 +107,6 @@ export const config = {
      * - OpenGraph/Twitter images (social media crawlers need access)
      * - Apple touch icons and favicons
      */
-    "/((?!api|_next/static|_next/image|opengraph-image|opengraph-image-light|og/|twitter-image|robots\\.txt|sitemap\\.xml|site\\.webmanifest|manifest\\.json|apple-touch-icon|favicon|icon-|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|xml|json|txt)$).*)",
+    "/((?!api|_next/static|_next/image|opengraph-image|opengraph-image-light|og/|twitter-image|robots\\.txt|sitemap\\.xml|site\\.webmanifest|manifest\\.json|apple-touch-icon|favicon|icon-|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|xml|json|txt|mp4|webm)$).*)",
   ],
 }
