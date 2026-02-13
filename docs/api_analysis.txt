@@ -1,0 +1,542 @@
+# OmoiOS API Analysis
+==================================================
+Title: OmoiOS API
+Version: 0.1.0
+Description: Multi-Agent Orchestration System API
+Total Endpoints: 173
+
+Total Schemas/Models: 158
+
+## Schemas (Data Models)
+----------------------------------------
+- APIKeyCreate: name, scopes, expires_in_days, organization_id
+- APIKeyResponse: id, name, key_prefix, scopes, is_active... (+3 more)
+- APIKeyWithSecret: id, name, key_prefix, scopes, is_active... (+4 more)
+- AcceptanceCriterion: id, text, completed
+- AddDependenciesRequest: depends_on
+- AgentAvailabilityRequest: available
+- AgentDTO: agent_id, agent_type, phase_id, status, capabilities... (+5 more)
+- AgentEventRequest: task_id, agent_id, event_type, event_data
+- AgentMatchResponse: agent, match_score, matched_capabilities
+- AgentRegisterRequest: agent_type, phase_id, capabilities, capacity, status... (+1 more)
+- AgentResultDTO: result_id, agent_id, task_id, markdown_file_path, result_type... (+5 more)
+- AgentUpdateRequest: capabilities, capacity, status, tags, health_status
+- AlertAcknowledgeRequest: acknowledged_by
+- AlertResolveRequest: resolved_by, note
+- AlertResponse: id, rule_id, metric_name, severity, current_value... (+9 more)
+- AlertRuleResponse: rule_id, name, metric_name, condition, severity... (+2 more)
+- Alternative: option, rejected
+- AnomalyDTO: anomaly_id, metric_name, anomaly_type, severity, baseline_value... (+6 more)
+- ApiEndpoint: method, endpoint, description
+- ApproveTicketRequest: ticket_id
+- ApproveTicketResponse: ticket_id, status
+- ArtifactCreate: phase_id, artifact_type, artifact_path, artifact_content, collected_by
+- ArtifactResponse: id, artifact_type, phase_id, artifact_path, artifact_content
+- BoardViewResponse: columns
+- BudgetCheckResponse: exists, limit, spent, remaining, utilization_percent... (+3 more)
+- BudgetCreate: scope_type, scope_id, limit_amount, period_end, alert_threshold
+- BudgetResponse: id, scope_type, scope_id, limit_amount, spent_amount... (+8 more)
+- ChangePasswordRequest: current_password, new_password
+- ColumnStatsResponse: column_id, name, ticket_count, wip_limit, utilization... (+1 more)
+- CommitDiffResponse: commit_sha, files
+- CommitListResponse: commits, total
+- CommitResponse: id, commit_sha, commit_message, commit_timestamp, agent_id... (+7 more)
+- CompleteTaskRequest: task_id, goal, result, tool_usage, feedback... (+1 more)
+- CompleteTaskResponse: success, ace_result
+- ConnectRepositoryRequest: owner, repo, webhook_secret
+- ConnectRepositoryResponse: success, message, project_id, webhook_url
+- Conversation: id, project_id, title, last_message, messages... (+2 more)
+- ConversationListResponse: conversations, total_count
+- ConversationResponse: conversation
+- ConversationSummary: id, title, last_message, timestamp
+- CostRecordResponse: id, task_id, agent_id, provider, model... (+7 more)
+- CostSummaryResponse: scope_type, scope_id, total_cost, total_tokens, record_count... (+1 more)
+- CreateThreadRequest: thread_type, participants, ticket_id, task_id, thread_metadata
+- CriterionCreate: text
+- CriterionUpdate: text, completed
+- DashboardSummary: total_tasks_pending, total_tasks_completed, active_agents, stale_agents, active_locks... (+2 more)
+- Decision: type, action, reasoning
+- DesignArtifact: architecture, data_model, api_spec
+- DiagnosticRunDTO: run_id, workflow_id, diagnostic_agent_id, diagnostic_task_id, triggered_at... (+13 more)
+- EventDetails: context, reasoning, source_spec, source_requirement, created_by... (+20 more)
+... and 108 more schemas
+
+## Endpoints by Category
+==================================================
+
+### MCP (9 endpoints)
+----------------------------------------
+POST   /api/mcp/register
+       Summary: Register Server
+GET    /api/mcp/tools
+       Summary: List Tools
+GET    /api/mcp/tools/{server_id}/{tool_name}
+       Summary: Get Tool
+POST   /api/mcp/invoke
+       Summary: Invoke Tool
+POST   /api/mcp/policies/grant
+       Summary: Grant Permission
+GET    /api/mcp/policies/{agent_id}
+       Summary: List Agent Permissions
+DELETE /api/mcp/policies/{agent_id}/{server_id}/{tool_name}
+       Summary: Revoke Permission
+GET    /api/mcp/circuit-breakers
+       Summary: Get Circuit Breakers
+GET    /api/mcp/servers
+       Summary: List Servers
+
+### AGENTS (14 endpoints)
+----------------------------------------
+POST   /api/v1/agent-events
+       Summary: Report Agent Event
+POST   /api/v1/agents/register
+       Summary: Register Agent
+PATCH  /api/v1/agents/{agent_id}
+       Summary: Update Agent
+GET    /api/v1/agents/{agent_id}
+       Summary: Get Agent
+POST   /api/v1/agents/{agent_id}/availability
+       Summary: Toggle Agent Availability
+GET    /api/v1/agents/search
+       Summary: Search Agents Endpoint
+GET    /api/v1/agents/best-fit
+       Summary: Get Best Fit Agent
+GET    /api/v1/agents/health
+       Summary: Get All Agents Health
+GET    /api/v1/agents/statistics
+       Summary: Get Agent Statistics
+GET    /api/v1/agents/{agent_id}/health
+       Summary: Get Agent Health
+POST   /api/v1/agents/{agent_id}/heartbeat
+       Summary: Emit Agent Heartbeat
+GET    /api/v1/agents/stale
+       Summary: Get Stale Agents
+POST   /api/v1/agents/cleanup-stale
+       Summary: Cleanup Stale Agents
+GET    /api/v1/agents
+       Summary: List Agents
+
+### ALERTS (5 endpoints)
+----------------------------------------
+GET    /api/v1/alerts
+       Summary: List Alerts
+GET    /api/v1/alerts/{alert_id}
+       Summary: Get Alert
+POST   /api/v1/alerts/{alert_id}/acknowledge
+       Summary: Acknowledge Alert
+POST   /api/v1/alerts/{alert_id}/resolve
+       Summary: Resolve Alert
+GET    /api/v1/alerts/rules
+       Summary: List Alert Rules
+
+### AUTH (13 endpoints)
+----------------------------------------
+POST   /api/v1/auth/register
+       Summary: Register
+POST   /api/v1/auth/login
+       Summary: Login
+POST   /api/v1/auth/refresh
+       Summary: Refresh Token
+POST   /api/v1/auth/logout
+       Summary: Logout
+GET    /api/v1/auth/me
+       Summary: Get Current User Info
+PATCH  /api/v1/auth/me
+       Summary: Update Current User
+POST   /api/v1/auth/verify-email
+       Summary: Verify Email
+POST   /api/v1/auth/forgot-password
+       Summary: Forgot Password
+POST   /api/v1/auth/reset-password
+       Summary: Reset Password
+POST   /api/v1/auth/change-password
+       Summary: Change Password
+GET    /api/v1/auth/api-keys
+       Summary: List Api Keys
+POST   /api/v1/auth/api-keys
+       Summary: Create Api Key
+DELETE /api/v1/auth/api-keys/{key_id}
+       Summary: Revoke Api Key
+
+### BOARD (6 endpoints)
+----------------------------------------
+GET    /api/v1/board/view
+       Summary: Get Board View
+POST   /api/v1/board/move
+       Summary: Move Ticket
+GET    /api/v1/board/stats
+       Summary: Get Column Stats
+GET    /api/v1/board/wip-violations
+       Summary: Check Wip Violations
+POST   /api/v1/board/auto-transition/{ticket_id}
+       Summary: Auto Transition Ticket
+GET    /api/v1/board/column/{phase_id}
+       Summary: Get Column For Phase
+
+### COLLABORATION (9 endpoints)
+----------------------------------------
+POST   /api/v1/collaboration/threads
+       Summary: Create Thread
+GET    /api/v1/collaboration/threads
+       Summary: List Threads
+POST   /api/v1/collaboration/threads/{thread_id}/close
+       Summary: Close Thread
+POST   /api/v1/collaboration/messages
+       Summary: Send Message
+GET    /api/v1/collaboration/threads/{thread_id}/messages
+       Summary: Get Thread Messages
+POST   /api/v1/collaboration/messages/{message_id}/read
+       Summary: Mark Message Read
+POST   /api/v1/collaboration/handoff/request
+       Summary: Request Handoff
+POST   /api/v1/collaboration/handoff/{thread_id}/accept
+       Summary: Accept Handoff
+POST   /api/v1/collaboration/handoff/{thread_id}/decline
+       Summary: Decline Handoff
+
+### COMMITS (5 endpoints)
+----------------------------------------
+GET    /api/v1/commits/{commit_sha}
+       Summary: Get Commit
+GET    /api/v1/commits/ticket/{ticket_id}
+       Summary: Get Ticket Commits
+GET    /api/v1/commits/agent/{agent_id}
+       Summary: Get Agent Commits
+POST   /api/v1/commits/ticket/{ticket_id}/link
+       Summary: Link Commit To Ticket
+GET    /api/v1/commits/{commit_sha}/diff
+       Summary: Get Commit Diff
+
+### COSTS (6 endpoints)
+----------------------------------------
+GET    /api/v1/costs/records
+       Summary: List Cost Records
+GET    /api/v1/costs/summary
+       Summary: Get Cost Summary
+GET    /api/v1/costs/budgets
+       Summary: List Budgets
+POST   /api/v1/costs/budgets
+       Summary: Create Budget
+GET    /api/v1/costs/budgets/check
+       Summary: Check Budget
+POST   /api/v1/costs/forecast
+       Summary: Forecast Costs
+
+### DIAGNOSTIC (4 endpoints)
+----------------------------------------
+GET    /api/v1/diagnostic/stuck-workflows
+       Summary: List currently stuck workflows
+GET    /api/v1/diagnostic/runs
+       Summary: Get diagnostic run history
+POST   /api/v1/diagnostic/trigger/{workflow_id}
+       Summary: Manually trigger diagnostic for workflow
+GET    /api/v1/diagnostic/runs/{run_id}
+       Summary: Get diagnostic run details
+
+### EXPLORE (7 endpoints)
+----------------------------------------
+GET    /api/v1/explore/project/{project_id}/conversations
+       Summary: List Conversations
+POST   /api/v1/explore/project/{project_id}/conversations
+       Summary: Create Conversation
+GET    /api/v1/explore/project/{project_id}/conversations/{conversation_id}
+       Summary: Get Conversation
+DELETE /api/v1/explore/project/{project_id}/conversations/{conversation_id}
+       Summary: Delete Conversation
+POST   /api/v1/explore/project/{project_id}/conversations/{conversation_id}/messages
+       Summary: Send Message
+GET    /api/v1/explore/project/{project_id}/files
+       Summary: List Project Files
+GET    /api/v1/explore/project/{project_id}/suggestions
+       Summary: Get Suggestions
+
+### GITHUB (4 endpoints)
+----------------------------------------
+POST   /api/v1/github/connect
+       Summary: Connect Repository
+GET    /api/v1/github/repos
+       Summary: List Connected Repositories
+POST   /api/v1/github/webhooks/github
+       Summary: Handle Github Webhook
+POST   /api/v1/github/sync
+       Summary: Sync Repository
+
+### GRAPH (4 endpoints)
+----------------------------------------
+GET    /api/v1/graph/dependency-graph/ticket/{ticket_id}
+       Summary: Get Ticket Dependency Graph
+GET    /api/v1/graph/dependency-graph/project/{project_id}
+       Summary: Get Project Dependency Graph
+GET    /api/v1/graph/dependency-graph/task/{task_id}/blocked
+       Summary: Get Blocked Tasks
+GET    /api/v1/graph/dependency-graph/task/{task_id}/blocking
+       Summary: Get Blocking Tasks
+
+### GUARDIAN (6 endpoints)
+----------------------------------------
+POST   /api/v1/guardian/intervention/cancel-task
+       Summary: Emergency cancel a running task
+POST   /api/v1/guardian/intervention/reallocate
+       Summary: Reallocate agent capacity
+POST   /api/v1/guardian/intervention/override-priority
+       Summary: Override task priority in queue
+GET    /api/v1/guardian/actions
+       Summary: Get guardian action audit trail
+GET    /api/v1/guardian/actions/{action_id}
+       Summary: Get specific guardian action details
+POST   /api/v1/guardian/actions/{action_id}/revert
+       Summary: Revert a guardian intervention
+
+### MEMORY (7 endpoints)
+----------------------------------------
+POST   /api/v1/memory/store
+       Summary: Store Execution
+POST   /api/v1/memory/search
+       Summary: Search Similar
+GET    /api/v1/memory/tasks/{task_id}/context
+       Summary: Get Task Context
+GET    /api/v1/memory/patterns
+       Summary: List Patterns
+POST   /api/v1/memory/patterns/extract
+       Summary: Extract Pattern
+POST   /api/v1/memory/patterns/{pattern_id}/feedback
+       Summary: Provide Pattern Feedback
+POST   /api/v1/memory/complete-task
+       Summary: Complete Task
+
+### MONITORING (8 endpoints)
+----------------------------------------
+GET    /api/v1/monitor/metrics
+       Summary: Get Metrics
+GET    /api/v1/monitor/anomalies
+       Summary: Get Anomalies
+POST   /api/v1/monitor/anomalies/{anomaly_id}/acknowledge
+       Summary: Acknowledge Anomaly
+GET    /api/v1/monitor/dashboard
+       Summary: Get Dashboard Summary
+GET    /api/v1/monitor/intelligent/status
+       Summary: Get Intelligent Monitoring Status
+GET    /api/v1/monitor/intelligent/health
+       Summary: Get Intelligent Monitoring Health
+POST   /api/v1/monitor/intelligent/analyze/{agent_id}
+       Summary: Analyze Agent Trajectory
+POST   /api/v1/monitor/intelligent/emergency
+       Summary: Trigger Emergency Analysis
+
+### ORGANIZATIONS (13 endpoints)
+----------------------------------------
+GET    /api/v1/organizations
+       Summary: List Organizations
+POST   /api/v1/organizations
+       Summary: Create Organization
+GET    /api/v1/organizations/{org_id}
+       Summary: Get Organization
+PATCH  /api/v1/organizations/{org_id}
+       Summary: Update Organization
+DELETE /api/v1/organizations/{org_id}
+       Summary: Delete Organization
+POST   /api/v1/organizations/{org_id}/members
+       Summary: Add Member
+GET    /api/v1/organizations/{org_id}/members
+       Summary: List Members
+PATCH  /api/v1/organizations/{org_id}/members/{member_id}
+       Summary: Update Member
+DELETE /api/v1/organizations/{org_id}/members/{member_id}
+       Summary: Remove Member
+GET    /api/v1/organizations/{org_id}/roles
+       Summary: List Roles
+POST   /api/v1/organizations/{org_id}/roles
+       Summary: Create Role
+PATCH  /api/v1/organizations/{org_id}/roles/{role_id}
+       Summary: Update Role
+DELETE /api/v1/organizations/{org_id}/roles/{role_id}
+       Summary: Delete Role
+
+### PHASES (3 endpoints)
+----------------------------------------
+POST   /api/v1/tickets/{ticket_id}/validate-gate
+       Summary: Validate Gate
+GET    /api/v1/tickets/{ticket_id}/gate-status
+       Summary: Get Gate Status
+POST   /api/v1/tickets/{ticket_id}/artifacts
+       Summary: Add Artifact
+
+### PROJECTS (6 endpoints)
+----------------------------------------
+POST   /api/v1/projects
+       Summary: Create Project
+GET    /api/v1/projects
+       Summary: List Projects
+GET    /api/v1/projects/{project_id}
+       Summary: Get Project
+PATCH  /api/v1/projects/{project_id}
+       Summary: Update Project
+DELETE /api/v1/projects/{project_id}
+       Summary: Delete Project
+GET    /api/v1/projects/{project_id}/stats
+       Summary: Get Project Stats
+
+### QUALITY (5 endpoints)
+----------------------------------------
+POST   /api/v1/quality/metrics/record
+       Summary: Record Quality Metric
+GET    /api/v1/quality/metrics/{task_id}
+       Summary: Get Task Metrics
+POST   /api/v1/quality/predict
+       Summary: Predict Quality
+GET    /api/v1/quality/trends
+       Summary: Get Quality Trends
+POST   /api/v1/quality/gates/{gate_id}/evaluate
+       Summary: Evaluate Quality Gate
+
+### REASONING (5 endpoints)
+----------------------------------------
+GET    /api/v1/reasoning/{entity_type}/{entity_id}
+       Summary: Get Reasoning Chain
+POST   /api/v1/reasoning/{entity_type}/{entity_id}/events
+       Summary: Add Reasoning Event
+GET    /api/v1/reasoning/{entity_type}/{entity_id}/events/{event_id}
+       Summary: Get Reasoning Event
+DELETE /api/v1/reasoning/{entity_type}/{entity_id}/events/{event_id}
+       Summary: Delete Reasoning Event
+GET    /api/v1/reasoning/types
+       Summary: Get Event Types
+
+### RESULTS (5 endpoints)
+----------------------------------------
+POST   /api/v1/report_results
+       Summary: Submit task-level results
+POST   /api/v1/submit_result
+       Summary: Submit workflow-level result
+POST   /api/v1/submit_result_validation
+       Summary: Validate workflow result (validator-only)
+GET    /api/v1/workflows/{workflow_id}/results
+       Summary: Get all results for a workflow
+GET    /api/v1/tasks/{task_id}/results
+       Summary: Get all results for a task
+
+### SPECS (15 endpoints)
+----------------------------------------
+GET    /api/v1/specs/project/{project_id}
+       Summary: List Project Specs
+POST   /api/v1/specs
+       Summary: Create Spec
+GET    /api/v1/specs/{spec_id}
+       Summary: Get Spec
+PATCH  /api/v1/specs/{spec_id}
+       Summary: Update Spec
+DELETE /api/v1/specs/{spec_id}
+       Summary: Delete Spec
+POST   /api/v1/specs/{spec_id}/requirements
+       Summary: Add Requirement
+PATCH  /api/v1/specs/{spec_id}/requirements/{req_id}
+       Summary: Update Requirement
+DELETE /api/v1/specs/{spec_id}/requirements/{req_id}
+       Summary: Delete Requirement
+POST   /api/v1/specs/{spec_id}/requirements/{req_id}/criteria
+       Summary: Add Criterion
+PATCH  /api/v1/specs/{spec_id}/requirements/{req_id}/criteria/{criterion_id}
+       Summary: Update Criterion
+PUT    /api/v1/specs/{spec_id}/design
+       Summary: Update Design
+POST   /api/v1/specs/{spec_id}/tasks
+       Summary: Add Task
+GET    /api/v1/specs/{spec_id}/tasks
+       Summary: List Spec Tasks
+POST   /api/v1/specs/{spec_id}/approve-requirements
+       Summary: Approve Requirements
+POST   /api/v1/specs/{spec_id}/approve-design
+       Summary: Approve Design
+
+### TASKS (14 endpoints)
+----------------------------------------
+POST   /api/v1/tasks/{task_id}/register-conversation
+       Summary: Register Conversation
+GET    /api/v1/tasks/{task_id}
+       Summary: Get Task
+GET    /api/v1/tasks
+       Summary: List Tasks
+GET    /api/v1/tasks/{task_id}/dependencies
+       Summary: Get Task Dependencies
+POST   /api/v1/tasks/{task_id}/dependencies
+       Summary: Add Task Dependencies
+PUT    /api/v1/tasks/{task_id}/dependencies
+       Summary: Set Task Dependencies
+POST   /api/v1/tasks/{task_id}/check-circular
+       Summary: Check Circular Dependencies
+DELETE /api/v1/tasks/{task_id}/dependencies/{depends_on_task_id}
+       Summary: Remove Task Dependency
+POST   /api/v1/tasks/{task_id}/cancel
+       Summary: Cancel Task
+GET    /api/v1/tasks/{task_id}/timeout-status
+       Summary: Get Task Timeout Status
+GET    /api/v1/tasks/timed-out
+       Summary: Get Timed Out Tasks
+GET    /api/v1/tasks/cancellable
+       Summary: Get Cancellable Tasks
+POST   /api/v1/tasks/cleanup-timed-out
+       Summary: Cleanup Timed Out Tasks
+POST   /api/v1/tasks/{task_id}/set-timeout
+       Summary: Set Task Timeout
+
+### TICKETS (15 endpoints)
+----------------------------------------
+GET    /api/v1/tickets
+       Summary: List Tickets
+POST   /api/v1/tickets
+       Summary: Create Ticket
+GET    /api/v1/tickets/{ticket_id}
+       Summary: Get Ticket
+GET    /api/v1/tickets/{ticket_id}/context
+       Summary: Get Ticket Context
+POST   /api/v1/tickets/{ticket_id}/update-context
+       Summary: Update Ticket Context Endpoint
+POST   /api/v1/tickets/{ticket_id}/transition
+       Summary: Transition Ticket Status
+POST   /api/v1/tickets/{ticket_id}/block
+       Summary: Block Ticket
+POST   /api/v1/tickets/{ticket_id}/unblock
+       Summary: Unblock Ticket
+POST   /api/v1/tickets/{ticket_id}/regress
+       Summary: Regress Ticket
+POST   /api/v1/tickets/{ticket_id}/progress
+       Summary: Progress Ticket
+POST   /api/v1/tickets/detect-blocking
+       Summary: Detect Blocking
+POST   /api/v1/tickets/approve
+       Summary: Approve Ticket
+POST   /api/v1/tickets/reject
+       Summary: Reject Ticket
+GET    /api/v1/tickets/pending-review-count
+       Summary: Get Pending Review Count
+GET    /api/v1/tickets/approval-status
+       Summary: Get Approval Status
+
+### UNTAGGED (2 endpoints)
+----------------------------------------
+GET    /
+       Summary: Serve Ui
+GET    /health
+       Summary: Health Check
+
+### VALIDATION (4 endpoints)
+----------------------------------------
+POST   /api/validation/give_review
+       Summary: Give Review
+POST   /api/validation/spawn_validator
+       Summary: Spawn Validator
+POST   /api/validation/send_feedback
+       Summary: Send Feedback
+GET    /api/validation/status
+       Summary: Get Validation Status
+
+### WATCHDOG (4 endpoints)
+----------------------------------------
+GET    /api/v1/watchdog/monitor-status
+       Summary: Get Monitor Status
+POST   /api/v1/watchdog/execute-remediation
+       Summary: Execute Remediation
+GET    /api/v1/watchdog/remediation-history
+       Summary: Get Remediation History
+GET    /api/v1/watchdog/policies
+       Summary: Get Policies

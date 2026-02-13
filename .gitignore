@@ -109,3 +109,12 @@ marketing/
 # System files
 ITERATION_NOTES.md
 .vercel
+
+# Build artifacts & junk
+core
+coverage.xml
+htmlcov/
+__pycache__/
+logs/
+test.txt
+*.core
