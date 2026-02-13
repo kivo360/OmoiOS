@@ -57,26 +57,27 @@ WEEKDAY_SLOTS = ["09:00", "12:00", "17:00", "19:00", "20:00"]  # 3 posts in peak
 WEEKEND_SLOTS = ["10:00", "12:00", "18:00", "20:00"]
 
 # Category priority for each time slot (preferred categories)
+# Niche: Navigating the Singularity — AI, institutional collapse, positioning, consciousness
 SLOT_PREFERENCES = {
-    "09:00": ["engagement-optimized", "stories", "general-builder", "raw-unclean"],  # Morning bump
-    "10:00": ["engagement-optimized", "hot-takes", "raw-unclean", "stories"],  # Weekend morning
+    "09:00": ["practical-moves", "ai-reality-check", "stories-and-experiences"],  # Morning: actionable + credibility
+    "10:00": ["hot-takes", "consciousness-and-meaning", "stories-and-experiences"],  # Weekend morning
     "11:00": ["threads"],  # Sunday threads
-    "12:00": ["engagement-optimized", "spec-driven", "technical-education", "memes-analogies", "raw-unclean"],  # Lunch spike
-    "17:00": ["engagement-optimized", "engagement-questions", "cto-pain", "hot-takes", "raw-unclean"],  # Start of peak
-    "18:00": ["engagement-optimized", "hot-takes", "raw-unclean", "stories"],  # Weekend evening start
-    "19:00": ["engagement-optimized", "raw-unclean", "hot-takes", "failure-stories"],  # Building to peak
-    "20:00": ["engagement-optimized", "raw-unclean", "hot-takes", "stories"],  # GOLDEN HOUR - highest engagement
+    "12:00": ["ai-reality-check", "economic-reality", "practical-moves", "engagement-questions"],  # Lunch: meaty content
+    "17:00": ["engagement-questions", "hot-takes", "institutional-collapse", "practical-moves"],  # Start of peak: conversation starters
+    "18:00": ["hot-takes", "stories-and-experiences", "geopolitics-decoded"],  # Weekend evening start
+    "19:00": ["institutional-collapse", "hot-takes", "economic-reality", "stories-and-experiences"],  # Building to peak
+    "20:00": ["hot-takes", "stories-and-experiences", "consciousness-and-meaning", "practical-moves"],  # GOLDEN HOUR
 }
 
 # Day preferences for categories
 DAY_PREFERENCES = {
-    "monday": ["general-builder", "agent-problems", "engagement-questions", "raw-unclean"],
-    "tuesday": ["stories", "spec-driven", "cto-pain", "raw-unclean"],
-    "wednesday": ["vision-product", "technical-education", "engagement-questions", "raw-unclean"],
-    "thursday": ["competitor-callouts", "failure-stories", "hot-takes", "raw-unclean"],
-    "friday": ["build-in-public", "memes-analogies", "stories", "raw-unclean"],
-    "saturday": ["hot-takes", "customer-avatars", "raw-unclean"],
-    "sunday": ["threads", "hot-takes", "raw-unclean"],
+    "monday": ["practical-moves", "ai-reality-check", "engagement-questions"],  # Start week with action + AI insider
+    "tuesday": ["stories-and-experiences", "institutional-collapse", "economic-reality"],  # Stories + hard truths
+    "wednesday": ["ai-reality-check", "geopolitics-decoded", "engagement-questions"],  # Tech + geopolitics
+    "thursday": ["hot-takes", "economic-reality", "institutional-collapse"],  # Opinions + economics
+    "friday": ["stories-and-experiences", "practical-moves", "consciousness-and-meaning"],  # Stories + meaning
+    "saturday": ["hot-takes", "consciousness-and-meaning", "geopolitics-decoded"],  # Weekend: bigger ideas
+    "sunday": ["threads", "consciousness-and-meaning", "hot-takes"],  # Deep dives + reflection
 }
 
 

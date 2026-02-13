@@ -8,6 +8,7 @@ import { Loader2, CheckCircle2, XCircle } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { setTokens, clearTokens } from "@/lib/api/client"
 import { getCurrentUser } from "@/lib/api/auth"
+import { fetchOnboardingStatus, setOnboardingCookie } from "@/lib/onboarding/sync"
 
 type CallbackStatus = "loading" | "success" | "error"
 
@@ -86,6 +87,15 @@ function CallbackContent() {
         queryClient.invalidateQueries({ queryKey: ["github-repos"] })
 
         setStatus("success")
+
+        // Check onboarding status and set cookie before redirect
+        // This ensures proxy.ts has the cookie for edge redirects
+        try {
+          const onboardingStatus = await fetchOnboardingStatus()
+          setOnboardingCookie(onboardingStatus.is_completed)
+        } catch {
+          // If onboarding check fails, don't block login
+        }
 
         // Redirect to main app after brief success display
         setTimeout(() => router.push("/command"), 1500)

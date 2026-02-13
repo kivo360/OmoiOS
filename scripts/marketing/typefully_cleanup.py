@@ -140,6 +140,8 @@ def main():
                        help="Status of drafts to check (default: scheduled)")
     parser.add_argument("--keep", default="oldest", choices=["oldest", "newest"],
                        help="Which duplicate to keep (default: oldest)")
+    parser.add_argument("--purge-all", action="store_true",
+                       help="Delete ALL drafts with the given status (not just duplicates)")
     args = parser.parse_args()
 
     api_key = get_api_key()
@@ -163,6 +165,45 @@ def main():
         print(f"\n📥 Fetching {args.status} drafts...")
         drafts = fetch_all_drafts(client, headers, social_set_id, args.status)
         print(f"   Found {len(drafts)} total drafts")
+
+        # Purge all mode
+        if args.purge_all:
+            print(f"\n🗑️  PURGE ALL MODE - Deleting all {len(drafts)} {args.status} drafts")
+            print("-" * 60)
+
+            deleted_count = 0
+            failed_count = 0
+
+            for draft in drafts:
+                preview = draft.preview[:60] + "..." if len(draft.preview) > 60 else draft.preview
+                sched = f" (scheduled: {draft.scheduled_date[:10]})" if draft.scheduled_date else ""
+                print(f"  ✗ {preview}{sched}", end="")
+
+                if args.dry_run:
+                    print(" [DRY RUN]")
+                    deleted_count += 1
+                else:
+                    import time
+                    if delete_draft(client, headers, social_set_id, draft.id):
+                        print(" ✅")
+                        deleted_count += 1
+                        time.sleep(1)  # Rate limit safety
+                    else:
+                        print(" ❌")
+                        failed_count += 1
+
+            print("\n" + "=" * 60)
+            print("PURGE SUMMARY")
+            print("=" * 60)
+            if args.dry_run:
+                print(f"Would delete: {deleted_count} of {len(drafts)} {args.status} drafts")
+                print(f"\nRun without --dry-run to actually delete these drafts.")
+            else:
+                print(f"Deleted: {deleted_count} of {len(drafts)} {args.status} drafts")
+                if failed_count:
+                    print(f"Failed: {failed_count}")
+            print("=" * 60)
+            return
 
         # Find duplicates
         print("\n🔍 Analyzing for duplicates...")

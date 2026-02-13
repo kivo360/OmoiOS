@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #2479 | 3:47 PM | 🔵 | Insecure JWT Configuration and Secrets in Base Config | ~489 |
-| #2467 | 3:46 PM | 🔵 | Production Configuration Reveals Database and Authentication Settings | ~472 |
+| #2465 | 3:46 PM | 🔵 | SQL Injection in Test Database Setup | ~361 |
 </claude-mem-context>

@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #2479 | 3:47 PM | 🔵 | Insecure JWT Configuration and Secrets in Base Config | ~489 |
-| #2467 | 3:46 PM | 🔵 | Production Configuration Reveals Database and Authentication Settings | ~472 |
+| #2460 | 3:46 PM | 🟣 | Vector Embeddings Added to Tasks Table | ~409 |
 </claude-mem-context>
