@@ -7,6 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #2479 | 3:47 PM | 🔵 | Insecure JWT Configuration and Secrets in Base Config | ~489 |
-| #2467 | 3:46 PM | 🔵 | Production Configuration Reveals Database and Authentication Settings | ~472 |
+| #2484 | 3:47 PM | 🔵 | Comprehensive Security Audit Reveals Critical Vulnerabilities Beyond RLS | ~506 |
+| #2472 | 3:46 PM | 🔵 | Command Injection Vulnerability in LocalCommandExecutor | ~429 |
 </claude-mem-context>

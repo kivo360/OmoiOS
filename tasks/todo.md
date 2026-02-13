@@ -6,6 +6,23 @@
 
 ## In Progress
 
+### Live Preview — E2E Testing & Remaining Work
+- [x] Implement backend changes (5 files): task_queue, tickets, daytona_spawner, preview routes, worker
+- [x] Add capability detection to all 3 task creation paths (quick-mode, approval, direct API)
+- [x] Write 42 unit/integration tests (capability detection, notify route, preview setup)
+- [x] Verify `/notify` endpoint responds correctly via curl
+- [x] Push to main: `81093c08`, `2a1e8aca`
+- [ ] Start OmoiOS frontend on correct port (was conflicting with another project on 3000)
+- [ ] Create frontend task ("Build a React counter component with Tailwind") from command page
+- [ ] Verify DB: task has `required_capabilities` populated (e.g. `["react", "component", "tailwind"]`)
+- [ ] Verify backend logs: `[PREVIEW] Preview enabled`, `[PREVIEW] Preview session created`
+- [ ] Verify DB: `preview_sessions` has `status=pending`, `preview_url` pre-populated from Daytona SDK
+- [ ] Wait for sandbox worker → watch for `[PREVIEW] Dev server ready` in logs
+- [ ] Verify preview session transitions to READY in DB
+- [ ] Verify frontend Preview tab appears with working iframe on sandbox page
+- [ ] Negative test: "Write a Python data analysis script" → no capabilities, no preview session
+- [ ] Address uncommitted change in `frontend/app/(auth)/callback/page.tsx`
+
 ### Landing Page Conversion Optimization
 - [x] Remove fake social proof (DiceBear avatars, "500+ engineers", fake testimonial) — `7c469a8`
 - [x] Reduce section whitespace ~25% across 5 sections — `7c469a8`
@@ -52,6 +69,9 @@
 | 2026-02-05 | Reduce section padding ~25% across HeroSection, NightShift, Stats, FAQ, WaitlistCTA | `7c469a8` |
 | 2026-02-05 | Fix dark mode: pin ShadCN vars in `.dark .landing-page`, swap `bg-white` → `bg-landing-bg` in nav | `ea3ce1e` |
 | 2026-02-05 | Full dark mode visual verification (all sections, desktop + mobile) | — |
+| 2026-02-08 | Implement live preview backend (5 files, 3 gaps closed) | `81093c08` |
+| 2026-02-08 | Add capability detection to remaining task creation paths | `2a1e8aca` |
+| 2026-02-08 | Write 42 tests for live preview (capability detection, notify route, preview setup) | `81093c08` |
 
 ---
 

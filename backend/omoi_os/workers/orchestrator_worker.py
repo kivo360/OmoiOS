@@ -12,11 +12,15 @@ Run with: python -m omoi_os.workers.orchestrator_worker
 from __future__ import annotations
 
 import asyncio
+import base64
+import json
 import os
 import signal
 import sys
 import time
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Optional
+from uuid import uuid4
 
 # Configure logging before any other imports that might log
 from omoi_os.logging import configure_logging, get_logger
@@ -56,6 +60,29 @@ stats = {
     "events_received": 0,
     "start_time": 0.0,
 }
+
+
+@dataclass
+class SandboxSpawnContext:
+    """All parameters needed to spawn a sandbox for a task."""
+
+    task_id: str
+    phase_id: str
+    ticket_id: str
+    task_type: str
+    task_description: str
+    task_priority: str
+    task_result: Optional[dict] = None
+    task_execution_config: Optional[dict] = None
+    spawn_mode: Literal["implementation", "validation"] = "implementation"
+    extra_env: dict[str, str] = field(default_factory=dict)
+    user_id_for_token: Optional[str] = None
+    agent_type: Optional[str] = None
+    agent_capabilities: Optional[list[str]] = None
+    execution_mode: Optional[str] = None
+    task_requirements: Optional["TaskRequirements"] = None
+    require_spec_skill: bool = False
+    project_id: Optional[str] = None
 
 
 # Task type categories for execution mode determination
@@ -163,6 +190,547 @@ async def analyze_task_requirements(
         ticket_title=ticket_title,
         ticket_description=ticket_description,
     )
+
+
+def _determine_ticket_type(ticket) -> str:
+    """Derive ticket type from priority/title for branch naming."""
+    if ticket.priority == "CRITICAL":
+        return "hotfix"
+    elif "bug" in (ticket.title or "").lower():
+        return "bug"
+    return "feature"
+
+
+def _build_fallback_context(
+    ctx: SandboxSpawnContext,
+    ticket,
+) -> dict:
+    """Build minimal task context dict when full context build fails."""
+    task_data: dict = {
+        "task": {
+            "id": ctx.task_id,
+            "type": ctx.task_type,
+            "description": ctx.task_description,
+            "priority": ctx.task_priority,
+            "phase_id": ctx.phase_id,
+        },
+        "ticket": {
+            "id": str(ticket.id),
+            "title": ticket.title or "",
+            "description": ticket.description or "",
+            "priority": ticket.priority,
+            "context": ticket.context or {},
+        },
+    }
+    if ctx.spawn_mode == "validation":
+        task_data["validation_mode"] = True
+        task_data["implementation_result"] = ctx.task_result or {}
+    elif ctx.task_result:
+        # Implementation path: include revision feedback if available
+        if ctx.task_result.get("revision_feedback"):
+            task_data["revision"] = {
+                "feedback": ctx.task_result["revision_feedback"],
+                "recommendations": ctx.task_result.get(
+                    "revision_recommendations", []
+                ),
+                "iteration": ctx.task_result.get("validation_iteration"),
+            }
+    return task_data
+
+
+async def _build_task_context(
+    ctx: SandboxSpawnContext,
+    ticket,
+    log,
+) -> dict:
+    """Build full task context including spec data and base64 encode into ctx.extra_env."""
+    from omoi_os.services.task_context_builder import TaskContextBuilder
+
+    try:
+        context_builder = TaskContextBuilder(db=db)
+        if ctx.spawn_mode == "validation":
+            full_context = context_builder.build_context_sync(ctx.task_id)
+        else:
+            full_context = await context_builder.build_context(ctx.task_id)
+        task_data = full_context.to_dict()
+
+        if ctx.spawn_mode == "validation":
+            task_data["validation_mode"] = True
+            task_data["implementation_result"] = ctx.task_result or {}
+
+        task_data["_markdown_context"] = full_context.to_markdown()
+
+        if ctx.spawn_mode == "validation":
+            log.info(
+                "built_validation_context",
+                task_id=ctx.task_id,
+                has_spec=bool(full_context.spec_id),
+                num_requirements=len(full_context.requirements),
+            )
+        else:
+            log.info(
+                "built_full_task_context",
+                task_id=ctx.task_id,
+                has_spec=bool(full_context.spec_id),
+                num_requirements=len(full_context.requirements),
+                has_design=bool(full_context.design),
+            )
+        return task_data
+    except Exception as ctx_err:
+        if ctx.spawn_mode == "validation":
+            log.warning(
+                "validation_context_build_failed",
+                error=str(ctx_err),
+            )
+        else:
+            log.warning(
+                "full_context_build_failed",
+                task_id=ctx.task_id,
+                error=str(ctx_err),
+            )
+        return _build_fallback_context(ctx, ticket)
+
+
+def _extract_ticket_env(
+    ctx: SandboxSpawnContext,
+    ticket,
+    log,
+) -> None:
+    """Extract ticket, project, and user env vars into ctx.extra_env."""
+    ctx.extra_env["TICKET_ID"] = str(ticket.id)
+    ctx.extra_env["TICKET_TITLE"] = ticket.title or ""
+    ctx.extra_env["TICKET_DESCRIPTION"] = ticket.description or ""
+
+    # Ticket type detection only for implementation path
+    if ctx.spawn_mode == "implementation":
+        ticket_type = _determine_ticket_type(ticket)
+        ctx.extra_env["TICKET_TYPE"] = ticket_type
+        ctx.extra_env["TICKET_PRIORITY"] = ticket.priority or "MEDIUM"
+
+    if ticket.project:
+        ctx.project_id = str(ticket.project.id)
+        ctx.extra_env["OMOIOS_PROJECT_ID"] = ctx.project_id
+
+        if ctx.spawn_mode == "implementation":
+            log.info(
+                "project_found_for_ticket",
+                ticket_id=str(ticket.id),
+                project_id=str(ticket.project.id),
+                project_name=ticket.project.name,
+                github_owner=ticket.project.github_owner,
+                github_repo=ticket.project.github_repo,
+                created_by=(
+                    str(ticket.project.created_by)
+                    if ticket.project.created_by
+                    else None
+                ),
+            )
+
+        if ticket.project.created_by:
+            ctx.user_id_for_token = ticket.project.created_by
+            ctx.extra_env["USER_ID"] = str(ctx.user_id_for_token)
+        else:
+            # Fallback: use ticket's user_id if project has no created_by
+            if ticket.user_id:
+                ctx.user_id_for_token = ticket.user_id
+                ctx.extra_env["USER_ID"] = str(ctx.user_id_for_token)
+                if ctx.spawn_mode == "implementation":
+                    log.info(
+                        "using_ticket_user_id_fallback",
+                        project_id=str(ticket.project.id),
+                        ticket_user_id=str(ticket.user_id),
+                        msg="Project has no created_by, falling back to ticket.user_id",
+                    )
+            elif ctx.spawn_mode == "implementation":
+                log.warning(
+                    "project_missing_created_by",
+                    project_id=str(ticket.project.id),
+                    msg="Project has no created_by and ticket has no user_id - cannot fetch GitHub token",
+                )
+
+        owner = ticket.project.github_owner
+        repo = ticket.project.github_repo
+        if owner and repo:
+            ctx.extra_env["GITHUB_REPO"] = f"{owner}/{repo}"
+            if ctx.spawn_mode == "implementation":
+                ctx.extra_env["GITHUB_REPO_OWNER"] = owner
+                ctx.extra_env["GITHUB_REPO_NAME"] = repo
+        elif ctx.spawn_mode == "implementation":
+            log.warning(
+                "project_missing_github_info",
+                project_id=str(ticket.project.id),
+                github_owner=owner,
+                github_repo=repo,
+                msg="Project missing github_owner or github_repo",
+            )
+    else:
+        # No project
+        if ticket.user_id:
+            ctx.user_id_for_token = ticket.user_id
+            ctx.extra_env["USER_ID"] = str(ctx.user_id_for_token)
+            if ctx.spawn_mode == "implementation":
+                log.info(
+                    "using_ticket_user_id_no_project",
+                    ticket_id=str(ticket.id),
+                    ticket_user_id=str(ticket.user_id),
+                    msg="Ticket has no project, using ticket.user_id for GitHub token",
+                )
+        elif ctx.spawn_mode == "implementation":
+            log.warning(
+                "ticket_has_no_project",
+                ticket_id=str(ticket.id),
+                msg="Ticket has no project and no user_id - cannot get GitHub info",
+            )
+
+
+def _extract_github_token(
+    ctx: SandboxSpawnContext,
+    session,
+    log,
+) -> None:
+    """Fetch GitHub token from user attributes into ctx.extra_env."""
+    from omoi_os.models.user import User
+
+    if ctx.user_id_for_token:
+        user = session.get(User, ctx.user_id_for_token)
+        if user:
+            attrs = user.attributes or {}
+            if ctx.spawn_mode == "implementation":
+                log.info(
+                    "checking_user_github_token",
+                    user_id=str(ctx.user_id_for_token),
+                    user_email=user.email,
+                    has_attributes=bool(attrs),
+                    attribute_keys=list(attrs.keys()) if attrs else [],
+                )
+            github_token = attrs.get("github_access_token")
+            if github_token:
+                ctx.extra_env["GITHUB_TOKEN"] = github_token
+                if ctx.spawn_mode == "implementation":
+                    log.info(
+                        "github_token_found",
+                        user_id=str(ctx.user_id_for_token),
+                        token_prefix=(
+                            github_token[:10] + "..."
+                            if len(github_token) > 10
+                            else "***"
+                        ),
+                    )
+            elif ctx.spawn_mode == "implementation":
+                log.warning(
+                    "no_github_token_in_user_attributes",
+                    user_id=str(ctx.user_id_for_token),
+                    user_email=user.email,
+                    available_attrs=list(attrs.keys()) if attrs else [],
+                    msg="User has no github_access_token in attributes - repo clone will fail",
+                )
+        elif ctx.spawn_mode == "implementation":
+            log.error(
+                "user_not_found_for_token",
+                user_id=str(ctx.user_id_for_token),
+                msg="Could not find user to get GitHub token",
+            )
+    elif ctx.spawn_mode == "implementation":
+        log.warning(
+            "no_user_id_for_github_token",
+            ticket_id=ctx.extra_env.get("TICKET_ID", ctx.ticket_id),
+            msg="No user_id_for_token set - cannot fetch GitHub token",
+        )
+
+
+async def _extract_spawn_env_from_db(
+    ctx: SandboxSpawnContext,
+    log,
+) -> None:
+    """Extract all env vars from DB: ticket info, project, user, GitHub token, task context."""
+    from omoi_os.models.ticket import Ticket
+
+    with db.get_session() as session:
+        ticket = session.get(Ticket, ctx.ticket_id)
+        if ticket:
+            _extract_ticket_env(ctx, ticket, log)
+
+            # Build task context and base64-encode it
+            task_data = await _build_task_context(ctx, ticket, log)
+            task_json_str = json.dumps(task_data)
+            ctx.extra_env["TASK_DATA_BASE64"] = base64.b64encode(
+                task_json_str.encode()
+            ).decode()
+
+        # Fetch GitHub token
+        _extract_github_token(ctx, session, log)
+
+    if ctx.spawn_mode == "implementation":
+        log.debug(
+            "env_extracted",
+            user_id=ctx.extra_env.get("USER_ID"),
+            github_repo=ctx.extra_env.get("GITHUB_REPO"),
+            ticket_type=ctx.extra_env.get("TICKET_TYPE"),
+            has_github_token="GITHUB_TOKEN" in ctx.extra_env,
+            has_task_data="TASK_DATA_JSON" in ctx.extra_env,
+        )
+
+
+async def _configure_agent(
+    ctx: SandboxSpawnContext,
+    log,
+) -> None:
+    """Determine agent type, capabilities, execution mode, and spec skill settings."""
+    if ctx.spawn_mode == "validation":
+        ctx.agent_type = "validator"
+        ctx.agent_capabilities = ["validation", "code-review", "test-runner"]
+        ctx.execution_mode = "validation"
+    else:
+        from omoi_os.agents.templates import get_template_for_phase
+
+        template = get_template_for_phase(ctx.phase_id)
+        ctx.agent_type = template.agent_type.value
+        ctx.agent_capabilities = (
+            template.tools.get_sdk_tools() if template.tools else ["sandbox"]
+        )
+
+        # Analyze task requirements using LLM
+        ctx.task_requirements = await analyze_task_requirements(
+            task_description=ctx.task_description,
+            task_type=ctx.task_type,
+            ticket_title=ctx.extra_env.get("TICKET_TITLE"),
+            ticket_description=ctx.extra_env.get("TICKET_DESCRIPTION"),
+        )
+        ctx.execution_mode = ctx.task_requirements.execution_mode.value
+        log.info(
+            "task_requirements_analyzed",
+            task_type=ctx.task_type,
+            execution_mode=ctx.execution_mode,
+            output_type=ctx.task_requirements.output_type.value,
+            requires_code=ctx.task_requirements.requires_code_changes,
+            requires_pr=ctx.task_requirements.requires_pull_request,
+            reasoning=ctx.task_requirements.reasoning[:100],
+        )
+
+        # Extract spec-skill settings from task execution_config
+        if ctx.task_execution_config and isinstance(ctx.task_execution_config, dict):
+            ctx.require_spec_skill = ctx.task_execution_config.get(
+                "require_spec_skill", False
+            )
+
+        ctx.project_id = ctx.extra_env.get("OMOIOS_PROJECT_ID") or ctx.project_id
+
+        log.info(
+            "spec_skill_config",
+            require_spec_skill=ctx.require_spec_skill,
+            project_id=ctx.project_id,
+            execution_config=ctx.task_execution_config,
+        )
+
+
+def _register_agent(
+    ctx: SandboxSpawnContext,
+) -> str:
+    """Create Agent record in DB and return agent_id."""
+    from omoi_os.models.agent import Agent
+
+    agent_id = str(uuid4())
+    tags = ["sandbox", "daytona"]
+    if ctx.spawn_mode == "validation":
+        tags.append("validation")
+
+    with db.get_session() as session:
+        agent = Agent(
+            id=agent_id,
+            agent_type=ctx.agent_type,
+            phase_id=ctx.phase_id,
+            capabilities=ctx.agent_capabilities,
+            status="RUNNING",
+            tags=tags,
+            health_status="healthy",
+        )
+        session.add(agent)
+        session.commit()
+    return agent_id
+
+
+async def _spawn_and_update(
+    ctx: SandboxSpawnContext,
+    agent_id: str,
+    daytona_spawner,
+    log,
+) -> str:
+    """Spawn sandbox via Daytona and update task in DB. Returns sandbox_id."""
+    from omoi_os.models.task import Task
+
+    sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "claude")
+
+    if ctx.spawn_mode == "implementation":
+        log.info(
+            "spawning_sandbox_starting",
+            agent_id=agent_id,
+            agent_type=ctx.agent_type,
+            runtime=sandbox_runtime,
+            github_repo=ctx.extra_env.get("GITHUB_REPO"),
+            has_github_token="GITHUB_TOKEN" in ctx.extra_env,
+            ticket_id=ctx.extra_env.get("TICKET_ID"),
+            ticket_type=ctx.extra_env.get("TICKET_TYPE"),
+        )
+    else:
+        log.info(
+            "spawning_validation_sandbox",
+            agent_id=agent_id,
+            runtime=sandbox_runtime,
+        )
+
+    spawn_kwargs: dict = {
+        "task_id": ctx.task_id,
+        "agent_id": agent_id,
+        "phase_id": ctx.phase_id,
+        "agent_type": ctx.agent_type,
+        "extra_env": ctx.extra_env if ctx.extra_env else None,
+        "runtime": sandbox_runtime,
+        "execution_mode": ctx.execution_mode,
+    }
+    if ctx.spawn_mode == "implementation":
+        spawn_kwargs["task_requirements"] = ctx.task_requirements
+        spawn_kwargs["require_spec_skill"] = ctx.require_spec_skill
+        spawn_kwargs["project_id"] = ctx.project_id
+
+    sandbox_id = await daytona_spawner.spawn_for_task(**spawn_kwargs)
+
+    if ctx.spawn_mode == "implementation":
+        log.info(
+            "sandbox_spawn_returned",
+            sandbox_id=sandbox_id,
+            agent_id=agent_id,
+        )
+
+    # Assign task to agent
+    queue.assign_task(ctx.task_id, agent_id)
+
+    # Update sandbox_id in DB
+    with db.get_session() as session:
+        task_obj = session.query(Task).filter(Task.id == ctx.task_id).first()
+        if task_obj:
+            if ctx.spawn_mode == "implementation":
+                # Double-check for sandbox conflict
+                if task_obj.sandbox_id and task_obj.sandbox_id != sandbox_id:
+                    log.error(
+                        "task_sandbox_id_conflict",
+                        existing_sandbox_id=task_obj.sandbox_id,
+                        new_sandbox_id=sandbox_id,
+                        task_status=task_obj.status,
+                        reason="Task already has a different sandbox_id - this is a bug!",
+                    )
+            task_obj.sandbox_id = sandbox_id
+            session.commit()
+            if ctx.spawn_mode == "implementation":
+                log.info(
+                    "task_sandbox_id_updated",
+                    sandbox_id=sandbox_id,
+                    task_status=task_obj.status,
+                )
+
+    # For validation: also update status to "running"
+    if ctx.spawn_mode == "validation":
+        queue.update_task_status(
+            task_id=ctx.task_id,
+            status="running",
+        )
+
+    return sandbox_id
+
+
+def _publish_spawn_event(
+    ctx: SandboxSpawnContext,
+    sandbox_id: str,
+    agent_id: str,
+) -> None:
+    """Publish SANDBOX_SPAWNED or VALIDATION_SANDBOX_SPAWNED event."""
+    from omoi_os.services.event_bus import SystemEvent
+
+    if ctx.spawn_mode == "validation":
+        event_bus.publish(
+            SystemEvent(
+                event_type="VALIDATION_SANDBOX_SPAWNED",
+                entity_type="sandbox",
+                entity_id=sandbox_id,
+                payload={
+                    "sandbox_id": sandbox_id,
+                    "task_id": ctx.task_id,
+                    "ticket_id": ctx.ticket_id,
+                    "agent_id": agent_id,
+                    "execution_mode": "validation",
+                },
+            )
+        )
+    else:
+        event_bus.publish(
+            SystemEvent(
+                event_type="SANDBOX_SPAWNED",
+                entity_type="sandbox",
+                entity_id=sandbox_id,
+                payload={
+                    "sandbox_id": sandbox_id,
+                    "task_id": ctx.task_id,
+                    "ticket_id": ctx.ticket_id,
+                    "agent_id": agent_id,
+                    "phase_id": ctx.phase_id,
+                },
+            )
+        )
+
+
+async def _spawn_sandbox_for_task(
+    task,
+    spawn_mode: Literal["implementation", "validation"],
+    daytona_spawner,
+    log,
+) -> None:
+    """Unified sandbox spawn pipeline for both implementation and validation tasks.
+
+    Orchestrates: env extraction → agent configuration → agent registration →
+    sandbox spawn → DB update → event publishing.
+    """
+    ctx = SandboxSpawnContext(
+        task_id=str(task.id),
+        phase_id=task.phase_id or "PHASE_IMPLEMENTATION",
+        ticket_id=str(task.ticket_id),
+        task_type=task.task_type,
+        task_description=task.description or "",
+        task_priority=task.priority,
+        task_result=task.result,
+        task_execution_config=task.execution_config if hasattr(task, "execution_config") else None,
+        spawn_mode=spawn_mode,
+    )
+
+    # 1. Extract env vars from DB
+    await _extract_spawn_env_from_db(ctx, log)
+
+    # 2. Configure agent type/capabilities/execution_mode
+    await _configure_agent(ctx, log)
+
+    # 3. Register agent in DB
+    agent_id = _register_agent(ctx)
+
+    # 4. Spawn sandbox and update task
+    sandbox_id = await _spawn_and_update(ctx, agent_id, daytona_spawner, log)
+
+    # 5. Update stats
+    stats["tasks_processed"] += 1
+
+    if ctx.spawn_mode == "implementation":
+        log.info(
+            "sandbox_spawned_successfully",
+            sandbox_id=sandbox_id,
+            agent_id=agent_id,
+            task_id=ctx.task_id,
+        )
+    else:
+        log.info(
+            "validation_sandbox_spawned",
+            sandbox_id=sandbox_id,
+            agent_id=agent_id,
+        )
+
+    # 6. Publish event
+    _publish_spawn_event(ctx, sandbox_id, agent_id)
 
 
 async def heartbeat_task():
@@ -482,410 +1050,9 @@ async def orchestrator_loop():
                         daytona_spawner_available=daytona_spawner is not None,
                     )
                     try:
-                        # Extract user_id, repo info, ticket info, GitHub token, and FULL TASK DATA from DB
-                        # This enables per-user credentials, GitHub branch workflow, and task injection
-                        import json
-
-                        extra_env: dict[str, str] = {}
-                        user_id_for_token = None
-                        with db.get_session() as session:
-                            from omoi_os.models.ticket import Ticket
-                            from omoi_os.models.user import User
-
-                            ticket = session.get(Ticket, task.ticket_id)
-                            if ticket:
-                                # Ticket info for branch naming
-                                extra_env["TICKET_ID"] = str(ticket.id)
-                                extra_env["TICKET_TITLE"] = ticket.title or ""
-                                extra_env["TICKET_DESCRIPTION"] = (
-                                    ticket.description or ""
-                                )
-                                # Determine ticket type from phase or status
-                                ticket_type = "feature"
-                                if ticket.priority == "CRITICAL":
-                                    ticket_type = "hotfix"
-                                elif "bug" in (ticket.title or "").lower():
-                                    ticket_type = "bug"
-                                extra_env["TICKET_TYPE"] = ticket_type
-                                extra_env["TICKET_PRIORITY"] = (
-                                    ticket.priority or "MEDIUM"
-                                )
-
-                                # Inject full task context as base64-encoded JSON
-                                # This eliminates the need for worker to fetch from API
-                                # Base64 encoding avoids shell escaping issues with JSON
-                                # Now includes spec requirements, design, and acceptance criteria
-                                import base64
-                                from omoi_os.services.task_context_builder import (
-                                    TaskContextBuilder,
-                                )
-
-                                # Build comprehensive task context including spec data
-                                try:
-                                    context_builder = TaskContextBuilder(db=db)
-                                    full_context = await context_builder.build_context(
-                                        str(task.id)
-                                    )
-                                    task_data = full_context.to_dict()
-
-                                    # Also include the markdown version for system prompt injection
-                                    task_data["_markdown_context"] = (
-                                        full_context.to_markdown()
-                                    )
-
-                                    log.info(
-                                        "built_full_task_context",
-                                        task_id=str(task.id),
-                                        has_spec=bool(full_context.spec_id),
-                                        num_requirements=len(full_context.requirements),
-                                        has_design=bool(full_context.design),
-                                    )
-                                except Exception as ctx_err:
-                                    # Fallback to basic context on error
-                                    log.warning(
-                                        "full_context_build_failed",
-                                        task_id=str(task.id),
-                                        error=str(ctx_err),
-                                    )
-                                    task_data = {
-                                        "task": {
-                                            "id": str(task.id),
-                                            "type": task.task_type,
-                                            "description": task.description or "",
-                                            "priority": task.priority,
-                                            "phase_id": task.phase_id,
-                                        },
-                                        "ticket": {
-                                            "id": str(ticket.id),
-                                            "title": ticket.title or "",
-                                            "description": ticket.description or "",
-                                            "priority": ticket.priority,
-                                            "context": ticket.context or {},
-                                        },
-                                    }
-                                    # Include revision feedback if available
-                                    if task.result:
-                                        if task.result.get("revision_feedback"):
-                                            task_data["revision"] = {
-                                                "feedback": task.result[
-                                                    "revision_feedback"
-                                                ],
-                                                "recommendations": task.result.get(
-                                                    "revision_recommendations", []
-                                                ),
-                                                "iteration": task.result.get(
-                                                    "validation_iteration"
-                                                ),
-                                            }
-
-                                # Base64 encode to avoid shell escaping issues
-                                task_json = json.dumps(task_data)
-                                extra_env["TASK_DATA_BASE64"] = base64.b64encode(
-                                    task_json.encode()
-                                ).decode()
-
-                                if ticket.project:
-                                    # Inject project ID for spec CLI syncing
-                                    extra_env["OMOIOS_PROJECT_ID"] = str(
-                                        ticket.project.id
-                                    )
-                                    log.info(
-                                        "project_found_for_ticket",
-                                        ticket_id=str(ticket.id),
-                                        project_id=str(ticket.project.id),
-                                        project_name=ticket.project.name,
-                                        github_owner=ticket.project.github_owner,
-                                        github_repo=ticket.project.github_repo,
-                                        created_by=(
-                                            str(ticket.project.created_by)
-                                            if ticket.project.created_by
-                                            else None
-                                        ),
-                                    )
-                                    if ticket.project.created_by:
-                                        user_id_for_token = ticket.project.created_by
-                                        extra_env["USER_ID"] = str(user_id_for_token)
-                                    else:
-                                        # Fallback: use ticket's user_id if project has no created_by
-                                        # This handles older projects created before we tracked created_by
-                                        if ticket.user_id:
-                                            user_id_for_token = ticket.user_id
-                                            extra_env["USER_ID"] = str(
-                                                user_id_for_token
-                                            )
-                                            log.info(
-                                                "using_ticket_user_id_fallback",
-                                                project_id=str(ticket.project.id),
-                                                ticket_user_id=str(ticket.user_id),
-                                                msg="Project has no created_by, falling back to ticket.user_id",
-                                            )
-                                        else:
-                                            log.warning(
-                                                "project_missing_created_by",
-                                                project_id=str(ticket.project.id),
-                                                msg="Project has no created_by and ticket has no user_id - cannot fetch GitHub token",
-                                            )
-                                    # Combine owner/repo into GITHUB_REPO format
-                                    owner = ticket.project.github_owner
-                                    repo = ticket.project.github_repo
-                                    if owner and repo:
-                                        extra_env["GITHUB_REPO"] = f"{owner}/{repo}"
-                                        # Also keep separate vars for backwards compat
-                                        extra_env["GITHUB_REPO_OWNER"] = owner
-                                        extra_env["GITHUB_REPO_NAME"] = repo
-                                    else:
-                                        log.warning(
-                                            "project_missing_github_info",
-                                            project_id=str(ticket.project.id),
-                                            github_owner=owner,
-                                            github_repo=repo,
-                                            msg="Project missing github_owner or github_repo",
-                                        )
-                                else:
-                                    # No project - try to get user_id from ticket directly
-                                    if ticket.user_id:
-                                        user_id_for_token = ticket.user_id
-                                        extra_env["USER_ID"] = str(user_id_for_token)
-                                        log.info(
-                                            "using_ticket_user_id_no_project",
-                                            ticket_id=str(ticket.id),
-                                            ticket_user_id=str(ticket.user_id),
-                                            msg="Ticket has no project, using ticket.user_id for GitHub token",
-                                        )
-                                    else:
-                                        log.warning(
-                                            "ticket_has_no_project",
-                                            ticket_id=str(ticket.id),
-                                            msg="Ticket has no project and no user_id - cannot get GitHub info",
-                                        )
-
-                            # Fetch GitHub token from user attributes
-                            # Token is stored in user.attributes.github_access_token (via OAuth)
-                            if user_id_for_token:
-                                user = session.get(User, user_id_for_token)
-                                if user:
-                                    attrs = user.attributes or {}
-                                    log.info(
-                                        "checking_user_github_token",
-                                        user_id=str(user_id_for_token),
-                                        user_email=user.email,
-                                        has_attributes=bool(attrs),
-                                        attribute_keys=(
-                                            list(attrs.keys()) if attrs else []
-                                        ),
-                                    )
-                                    github_token = attrs.get("github_access_token")
-                                    if github_token:
-                                        extra_env["GITHUB_TOKEN"] = github_token
-                                        log.info(
-                                            "github_token_found",
-                                            user_id=str(user_id_for_token),
-                                            token_prefix=(
-                                                github_token[:10] + "..."
-                                                if len(github_token) > 10
-                                                else "***"
-                                            ),
-                                        )
-                                    else:
-                                        log.warning(
-                                            "no_github_token_in_user_attributes",
-                                            user_id=str(user_id_for_token),
-                                            user_email=user.email,
-                                            available_attrs=(
-                                                list(attrs.keys()) if attrs else []
-                                            ),
-                                            msg="User has no github_access_token in attributes - repo clone will fail",
-                                        )
-                                else:
-                                    log.error(
-                                        "user_not_found_for_token",
-                                        user_id=str(user_id_for_token),
-                                        msg="Could not find user to get GitHub token",
-                                    )
-                            else:
-                                log.warning(
-                                    "no_user_id_for_github_token",
-                                    ticket_id=str(ticket.id),
-                                    msg="No user_id_for_token set - cannot fetch GitHub token",
-                                )
-
-                        log.debug(
-                            "env_extracted",
-                            user_id=extra_env.get("USER_ID"),
-                            github_repo=extra_env.get("GITHUB_REPO"),
-                            ticket_type=extra_env.get("TICKET_TYPE"),
-                            has_github_token="GITHUB_TOKEN" in extra_env,
-                            has_task_data="TASK_DATA_JSON" in extra_env,
+                        await _spawn_sandbox_for_task(
+                            task, "implementation", daytona_spawner, log
                         )
-
-                        # Determine agent type from phase
-                        from omoi_os.agents.templates import get_template_for_phase
-
-                        template = get_template_for_phase(phase_id)
-                        agent_type: Literal[
-                            "planner",
-                            "implementer",
-                            "validator",
-                            "diagnostician",
-                            "coordinator",
-                        ] = template.agent_type.value
-
-                        # Register sandbox agent in database (skip heartbeat wait)
-                        from omoi_os.models.agent import Agent
-                        from uuid import uuid4
-
-                        agent_id = str(uuid4())
-                        capabilities = (
-                            template.tools.get_sdk_tools()
-                            if template.tools
-                            else ["sandbox"]
-                        )
-
-                        with db.get_session() as session:
-                            agent = Agent(
-                                id=agent_id,
-                                agent_type=agent_type,
-                                phase_id=phase_id,
-                                capabilities=capabilities,
-                                status="RUNNING",
-                                tags=["sandbox", "daytona"],
-                                health_status="healthy",
-                            )
-                            session.add(agent)
-                            session.commit()
-
-                        # Determine sandbox runtime: "claude" (Claude Agent SDK) or "openhands"
-                        # Default to "claude" for the new Claude Agent SDK worker
-                        sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "claude")
-
-                        log.info(
-                            "spawning_sandbox_starting",
-                            agent_id=agent_id,
-                            agent_type=agent_type,
-                            runtime=sandbox_runtime,
-                            github_repo=extra_env.get("GITHUB_REPO"),
-                            has_github_token="GITHUB_TOKEN" in extra_env,
-                            ticket_id=extra_env.get("TICKET_ID"),
-                            ticket_type=extra_env.get("TICKET_TYPE"),
-                        )
-
-                        # Analyze task requirements using LLM for intelligent determination
-                        # This replaces hardcoded task type mappings with dynamic analysis
-                        # Falls back to get_execution_mode() if analysis fails
-                        task_requirements = await analyze_task_requirements(
-                            task_description=task.description or "",
-                            task_type=task.task_type,
-                            ticket_title=extra_env.get("TICKET_TITLE"),
-                            ticket_description=extra_env.get("TICKET_DESCRIPTION"),
-                        )
-                        execution_mode = task_requirements.execution_mode.value
-                        log.info(
-                            "task_requirements_analyzed",
-                            task_type=task.task_type,
-                            execution_mode=execution_mode,
-                            output_type=task_requirements.output_type.value,
-                            requires_code=task_requirements.requires_code_changes,
-                            requires_pr=task_requirements.requires_pull_request,
-                            reasoning=task_requirements.reasoning[:100],
-                        )
-
-                        # Extract spec-skill settings from task.execution_config
-                        # This is set by the frontend when workflow_mode="spec_driven"
-                        require_spec_skill = False
-                        if task.execution_config and isinstance(
-                            task.execution_config, dict
-                        ):
-                            require_spec_skill = task.execution_config.get(
-                                "require_spec_skill", False
-                            )
-
-                        # Get project_id from extra_env (set earlier from ticket.project.id)
-                        project_id = (
-                            extra_env.get("OMOIOS_PROJECT_ID") if extra_env else None
-                        )
-
-                        log.info(
-                            "spec_skill_config",
-                            require_spec_skill=require_spec_skill,
-                            project_id=project_id,
-                            execution_config=task.execution_config,
-                        )
-
-                        # Spawn sandbox with user/repo context and analyzed requirements
-                        sandbox_id = await daytona_spawner.spawn_for_task(
-                            task_id=task_id,
-                            agent_id=agent_id,
-                            phase_id=phase_id,
-                            agent_type=agent_type,
-                            extra_env=extra_env if extra_env else None,
-                            runtime=sandbox_runtime,
-                            execution_mode=execution_mode,
-                            task_requirements=task_requirements,
-                            require_spec_skill=require_spec_skill,
-                            project_id=project_id,
-                        )
-
-                        log.info(
-                            "sandbox_spawn_returned",
-                            sandbox_id=sandbox_id,
-                            agent_id=agent_id,
-                        )
-
-                        # Update task with sandbox info
-                        queue.assign_task(task.id, agent_id)
-
-                        # Also update task.sandbox_id directly (assign_task doesn't set it)
-                        with db.get_session() as session:
-                            task_obj = (
-                                session.query(Task).filter(Task.id == task.id).first()
-                            )
-                            if task_obj:
-                                # Double-check task doesn't already have a different sandbox
-                                if (
-                                    task_obj.sandbox_id
-                                    and task_obj.sandbox_id != sandbox_id
-                                ):
-                                    log.error(
-                                        "task_sandbox_id_conflict",
-                                        existing_sandbox_id=task_obj.sandbox_id,
-                                        new_sandbox_id=sandbox_id,
-                                        task_status=task_obj.status,
-                                        reason="Task already has a different sandbox_id - this is a bug!",
-                                    )
-                                task_obj.sandbox_id = sandbox_id
-                                session.commit()
-                                log.info(
-                                    "task_sandbox_id_updated",
-                                    sandbox_id=sandbox_id,
-                                    task_status=task_obj.status,
-                                )
-
-                        stats["tasks_processed"] += 1
-                        log.info(
-                            "sandbox_spawned_successfully",
-                            sandbox_id=sandbox_id,
-                            agent_id=agent_id,
-                            task_id=task_id,
-                        )
-
-                        # Publish event (include sandbox_id in payload for frontend compatibility)
-                        from omoi_os.services.event_bus import SystemEvent
-
-                        event_bus.publish(
-                            SystemEvent(
-                                event_type="SANDBOX_SPAWNED",
-                                entity_type="sandbox",
-                                entity_id=sandbox_id,
-                                payload={
-                                    "sandbox_id": sandbox_id,  # Also in payload for easier access
-                                    "task_id": task_id,
-                                    "ticket_id": str(task.ticket_id),
-                                    "agent_id": agent_id,
-                                    "phase_id": phase_id,
-                                },
-                            )
-                        )
-
                     except Exception as spawn_error:
                         import traceback
 
@@ -932,12 +1099,9 @@ async def orchestrator_loop():
                     max_concurrent_per_project=max_concurrent_per_project,
                 )
                 if validation_task:
-                    val_task_id = str(validation_task.id)
-                    val_phase_id = validation_task.phase_id or "PHASE_IMPLEMENTATION"
-
                     val_log = log.bind(
-                        task_id=val_task_id,
-                        phase=val_phase_id,
+                        task_id=str(validation_task.id),
+                        phase=validation_task.phase_id or "PHASE_IMPLEMENTATION",
                         ticket_id=str(validation_task.ticket_id),
                         task_type="validation",
                     )
@@ -948,186 +1112,9 @@ async def orchestrator_loop():
                     )
 
                     try:
-                        # Extract task data for validation sandbox
-                        import json
-                        import base64
-
-                        extra_env: dict[str, str] = {}
-                        user_id_for_token = None
-
-                        with db.get_session() as session:
-                            from omoi_os.models.ticket import Ticket
-                            from omoi_os.models.user import User
-
-                            ticket = session.get(Ticket, validation_task.ticket_id)
-                            if ticket:
-                                extra_env["TICKET_ID"] = str(ticket.id)
-                                extra_env["TICKET_TITLE"] = ticket.title or ""
-                                extra_env["TICKET_DESCRIPTION"] = (
-                                    ticket.description or ""
-                                )
-
-                                # Build full task context with validation mode flag
-                                from omoi_os.services.task_context_builder import (
-                                    TaskContextBuilder,
-                                )
-
-                                try:
-                                    context_builder = TaskContextBuilder(db=db)
-                                    full_context = context_builder.build_context_sync(
-                                        str(validation_task.id)
-                                    )
-                                    task_data = full_context.to_dict()
-
-                                    # Add validation-specific flags
-                                    task_data["validation_mode"] = True
-                                    task_data["implementation_result"] = (
-                                        validation_task.result or {}
-                                    )
-                                    task_data["_markdown_context"] = (
-                                        full_context.to_markdown()
-                                    )
-
-                                    val_log.info(
-                                        "built_validation_context",
-                                        task_id=str(validation_task.id),
-                                        has_spec=bool(full_context.spec_id),
-                                        num_requirements=len(full_context.requirements),
-                                    )
-                                except Exception as ctx_err:
-                                    val_log.warning(
-                                        "validation_context_build_failed",
-                                        error=str(ctx_err),
-                                    )
-                                    task_data = {
-                                        "task": {
-                                            "id": str(validation_task.id),
-                                            "type": validation_task.task_type,
-                                            "description": validation_task.description
-                                            or "",
-                                            "priority": validation_task.priority,
-                                            "phase_id": validation_task.phase_id,
-                                        },
-                                        "ticket": {
-                                            "id": str(ticket.id),
-                                            "title": ticket.title or "",
-                                            "description": ticket.description or "",
-                                            "priority": ticket.priority,
-                                            "context": ticket.context or {},
-                                        },
-                                        "validation_mode": True,
-                                        "implementation_result": validation_task.result
-                                        or {},
-                                    }
-
-                                task_json = json.dumps(task_data)
-                                extra_env["TASK_DATA_BASE64"] = base64.b64encode(
-                                    task_json.encode()
-                                ).decode()
-
-                                if ticket.project:
-                                    if ticket.project.created_by:
-                                        user_id_for_token = ticket.project.created_by
-                                        extra_env["USER_ID"] = str(user_id_for_token)
-                                    owner = ticket.project.github_owner
-                                    repo = ticket.project.github_repo
-                                    if owner and repo:
-                                        extra_env["GITHUB_REPO"] = f"{owner}/{repo}"
-
-                            if user_id_for_token:
-                                user = session.get(User, user_id_for_token)
-                                if user:
-                                    attrs = user.attributes or {}
-                                    github_token = attrs.get("github_access_token")
-                                    if github_token:
-                                        extra_env["GITHUB_TOKEN"] = github_token
-
-                        # Register validation agent
-                        from omoi_os.models.agent import Agent
-                        from uuid import uuid4
-
-                        agent_id = str(uuid4())
-                        with db.get_session() as session:
-                            agent = Agent(
-                                id=agent_id,
-                                agent_type="validator",
-                                phase_id=val_phase_id,
-                                capabilities=[
-                                    "validation",
-                                    "code-review",
-                                    "test-runner",
-                                ],
-                                status="RUNNING",
-                                tags=["sandbox", "daytona", "validation"],
-                                health_status="healthy",
-                            )
-                            session.add(agent)
-                            session.commit()
-
-                        sandbox_runtime = os.environ.get("SANDBOX_RUNTIME", "claude")
-
-                        val_log.info(
-                            "spawning_validation_sandbox",
-                            agent_id=agent_id,
-                            runtime=sandbox_runtime,
+                        await _spawn_sandbox_for_task(
+                            validation_task, "validation", daytona_spawner, val_log
                         )
-
-                        # Spawn with validation execution mode
-                        sandbox_id = await daytona_spawner.spawn_for_task(
-                            task_id=val_task_id,
-                            agent_id=agent_id,
-                            phase_id=val_phase_id,
-                            agent_type="validator",
-                            extra_env=extra_env if extra_env else None,
-                            runtime=sandbox_runtime,
-                            execution_mode="validation",  # Force validation mode
-                        )
-
-                        # Update task with sandbox info
-                        queue.assign_task(validation_task.id, agent_id)
-
-                        # Update sandbox_id in database
-                        with db.get_session() as session:
-                            task_obj = (
-                                session.query(Task)
-                                .filter(Task.id == validation_task.id)
-                                .first()
-                            )
-                            if task_obj:
-                                task_obj.sandbox_id = sandbox_id
-                                session.commit()
-
-                        # Use TaskQueueService to update status and publish TASK_STARTED event for WebSocket
-                        queue.update_task_status(
-                            task_id=validation_task.id,
-                            status="running",
-                        )
-
-                        stats["tasks_processed"] += 1
-                        val_log.info(
-                            "validation_sandbox_spawned",
-                            sandbox_id=sandbox_id,
-                            agent_id=agent_id,
-                        )
-
-                        # Publish event
-                        from omoi_os.services.event_bus import SystemEvent
-
-                        event_bus.publish(
-                            SystemEvent(
-                                event_type="VALIDATION_SANDBOX_SPAWNED",
-                                entity_type="sandbox",
-                                entity_id=sandbox_id,
-                                payload={
-                                    "sandbox_id": sandbox_id,
-                                    "task_id": val_task_id,
-                                    "ticket_id": str(validation_task.ticket_id),
-                                    "agent_id": agent_id,
-                                    "execution_mode": "validation",
-                                },
-                            )
-                        )
-
                     except Exception as spawn_error:
                         import traceback
 
