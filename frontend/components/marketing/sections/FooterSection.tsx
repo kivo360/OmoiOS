@@ -33,7 +33,7 @@ const footerLinks = {
 }
 
 const socialLinks = [
-  { icon: Github, href: "https://github.com/omoios", label: "GitHub" },
+  { icon: Github, href: "https://github.com/kivo360/OmoiOS", label: "GitHub" },
   { icon: Twitter, href: "https://twitter.com/omoios", label: "Twitter" },
   { icon: Linkedin, href: "https://linkedin.com/company/omoios", label: "LinkedIn" },
   { icon: MessageCircle, href: "https://discord.gg/omoios", label: "Discord" },

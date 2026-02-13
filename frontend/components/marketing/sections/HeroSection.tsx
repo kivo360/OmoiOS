@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { motion } from "framer-motion"
-import { ArrowRight, Play, Loader2, Code, FileText } from "lucide-react"
+import { ArrowRight, Play, Loader2, Code, FileText, Github } from "lucide-react"
 import { FlipWords } from "@/components/ui/flip-words"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -153,13 +153,23 @@ export function HeroSection({ className }: HeroSectionProps) {
               </Button>
             </form>
 
-            {/* Secondary CTA */}
+            {/* Secondary CTAs */}
             <div className="mt-4 flex items-center justify-center gap-4">
               <Button variant="ghost" size="sm" className="text-landing-text-muted" asChild>
                 <Link href="#demo">
                   <Play className="mr-2 h-4 w-4" />
                   Watch Demo
                 </Link>
+              </Button>
+              <Button variant="ghost" size="sm" className="text-landing-text-muted" asChild>
+                <a
+                  href="https://github.com/kivo360/OmoiOS"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Github className="mr-2 h-4 w-4" />
+                  Star on GitHub
+                </a>
               </Button>
             </div>
           </motion.div>
