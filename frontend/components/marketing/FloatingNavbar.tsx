@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import { Menu, X, ArrowRight } from "lucide-react"
+import { Menu, X, ArrowRight, Github } from "lucide-react"
 import { FloatingNav } from "@/components/ui/floating-navbar"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -77,6 +77,17 @@ export function MarketingNavbar({ className }: MarketingNavbarProps) {
                 </ul>
 
                 <div className="mt-4 space-y-2 border-t border-landing-border pt-4">
+                  <Button variant="ghost" className="w-full justify-start" asChild>
+                    <a
+                      href="https://github.com/kivo360/OmoiOS"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={() => setMobileMenuOpen(false)}
+                    >
+                      <Github className="mr-2 h-4 w-4" />
+                      GitHub
+                    </a>
+                  </Button>
                   <Button variant="ghost" className="w-full justify-start" asChild>
                     <Link href="/login" onClick={() => setMobileMenuOpen(false)}>
                       Sign in

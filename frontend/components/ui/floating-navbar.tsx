@@ -6,7 +6,7 @@ import {
   AnimatePresence,
 } from "motion/react";
 import { cn } from "@/lib/utils";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Github } from "lucide-react";
 import { OmoiOSLogo } from "@/components/ui/omoios-logo";
 
 export const FloatingNav = ({
@@ -60,6 +60,17 @@ export const FloatingNav = ({
             <span className="hidden sm:block">{navItem.name}</span>
           </a>
         ))}
+
+        {/* GitHub Link */}
+        <a
+          href="https://github.com/kivo360/OmoiOS"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-1.5 text-sm text-landing-text-muted transition-colors hover:text-landing-text"
+        >
+          <Github className="h-4 w-4" />
+          <span className="hidden lg:block">GitHub</span>
+        </a>
 
         {/* CTA Button */}
         <Link
