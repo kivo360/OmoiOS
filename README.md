@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/kivo360/OmoiOS/stargazers"><img src="https://img.shields.io/github/stars/kivo360/OmoiOS?style=social" alt="GitHub Stars"/></a>
   <a href="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml"><img src="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
   <a href="https://codecov.io/gh/kivo360/OmoiOS"><img src="https://img.shields.io/badge/tests-234%20passed-brightgreen" alt="Tests"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"/></a>
@@ -14,6 +15,10 @@
 
 <p align="center">
   <b>Stop babysitting AI agents. Run structured swarms instead.</b>
+</p>
+
+<p align="center">
+  If you find OmoiOS useful, consider giving it a <a href="https://github.com/kivo360/OmoiOS">star</a> — it helps others discover the project.
 </p>
 
 ---
@@ -305,6 +310,16 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | [Frontend Architecture](docs/design/frontend/frontend_architecture_shadcn_nextjs.md) | Frontend patterns + components |
 | [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md) | Guardian + Conductor system |
 | [Backend Guide](backend/CLAUDE.md) | Backend development reference |
+
+## Star History
+
+<a href="https://star-history.com/#kivo360/OmoiOS&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=kivo360/OmoiOS&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=kivo360/OmoiOS&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=kivo360/OmoiOS&type=Date" />
+ </picture>
+</a>
 
 ## Contributing
 
