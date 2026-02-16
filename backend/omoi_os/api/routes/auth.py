@@ -272,6 +272,17 @@ async def forgot_password(
 
     Sends reset token via email (email sending not implemented yet).
     """
+    # Validate email format before DB lookup to avoid unnecessary queries.
+    # Return the same success message on invalid format to prevent enumeration.
+    from email_validator import validate_email, EmailNotValidError
+
+    try:
+        validate_email(request.email, check_deliverability=False)
+    except EmailNotValidError:
+        return {
+            "message": "If an account with that email exists, a password reset link has been sent."
+        }
+
     user = await auth_service.get_user_by_email(request.email)
 
     if user:
