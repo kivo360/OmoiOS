@@ -66,6 +66,14 @@ During execution, agents find bugs, missing requirements, optimization opportuni
 ### You approve at gates, not every step
 Phase transitions have quality gates. You review at strategic points (phase completions, PRs). Everything between gates runs autonomously. You set direction — the swarm handles execution.
 
+## Code Assistant
+
+<p align="center">
+  <img src="docs/assets/demo-code-assistant.gif" alt="OmoiOS Code Assistant — spawns sandboxes and codes for you" width="960"/>
+</p>
+
+Beyond orchestrating agent swarms, OmoiOS includes a built-in code assistant that understands your entire codebase. Ask it anything — it explores your repo's structure, reads the actual code, and gives grounded answers. When it's time to build, it spawns isolated sandboxes and writes code for you.
+
 ## Architecture
 
 ```
@@ -339,14 +347,6 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | [API Route Catalog](docs/architecture/13-api-route-catalog.md) | All FastAPI route modules |
 
 </details>
-
-## Code Assistant
-
-<p align="center">
-  <img src="docs/assets/demo-code-assistant.gif" alt="OmoiOS Code Assistant — AI-powered codebase Q&A" width="960"/>
-</p>
-
-> Ask questions about your codebase and get grounded answers. The code assistant explores your repo's actual structure, patterns, and dependencies — not generic guesses.
 
 ## Star History
 
