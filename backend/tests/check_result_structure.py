@@ -14,10 +14,10 @@ class Test(BaseModel):
 agent = Agent("anthropic:claude-sonnet-4-5", output_type=Test)
 result = agent.run_sync("Say hello in one word")
 
-print(f'Has output: {hasattr(result, "output")}')
-print(f'Has data: {hasattr(result, "data")}')
+print(f"Has output: {hasattr(result, 'output')}")
+print(f"Has data: {hasattr(result, 'data')}")
 print(f"Result type: {type(result)}")
-print(f'Result attributes: {[x for x in dir(result) if not x.startswith("_")]}')
+print(f"Result attributes: {[x for x in dir(result) if not x.startswith('_')]}")
 
 if hasattr(result, "output"):
     print(f"Result.output: {result.output}")

@@ -533,12 +533,12 @@ async def test_github_api_has_required_methods():
     from omoi_os.services.github_api import GitHubAPIService
 
     # These methods should exist
-    assert hasattr(
-        GitHubAPIService, "get_pull_request"
-    ), "Missing get_pull_request method"
-    assert hasattr(
-        GitHubAPIService, "merge_pull_request"
-    ), "Missing merge_pull_request method"
+    assert hasattr(GitHubAPIService, "get_pull_request"), (
+        "Missing get_pull_request method"
+    )
+    assert hasattr(GitHubAPIService, "merge_pull_request"), (
+        "Missing merge_pull_request method"
+    )
     assert hasattr(GitHubAPIService, "delete_branch"), "Missing delete_branch method"
 
     # compare_branches is optional for MVP

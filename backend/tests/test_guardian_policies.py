@@ -25,9 +25,9 @@ def test_emergency_policy_exists():
 def test_resource_reallocation_policy_exists():
     """Test that resource_reallocation.yaml policy exists."""
     policy_file = POLICY_DIR / "resource_reallocation.yaml"
-    assert (
-        policy_file.exists()
-    ), f"Resource reallocation policy not found: {policy_file}"
+    assert policy_file.exists(), (
+        f"Resource reallocation policy not found: {policy_file}"
+    )
 
 
 def test_priority_override_policy_exists():
@@ -161,9 +161,9 @@ def test_policy_authority_levels_consistent():
         min_authority = policy["min_authority"]
 
         # All guardian policies should require GUARDIAN level (4) or higher
-        assert (
-            min_authority >= AuthorityLevel.GUARDIAN
-        ), f"Policy {policy_filename} has insufficient authority level: {min_authority}"
+        assert min_authority >= AuthorityLevel.GUARDIAN, (
+            f"Policy {policy_filename} has insufficient authority level: {min_authority}"
+        )
 
 
 # -------------------------------------------------------------------------
@@ -240,6 +240,6 @@ def test_policy_evaluator_rollback_enabled():
         policy_file = POLICY_DIR / policy_filename
         evaluator = PolicyEvaluator(policy_file)
 
-        assert (
-            evaluator.should_rollback() is True
-        ), f"Policy {policy_filename} should have rollback enabled"
+        assert evaluator.should_rollback() is True, (
+            f"Policy {policy_filename} should have rollback enabled"
+        )

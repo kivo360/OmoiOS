@@ -497,27 +497,27 @@ class TestOrchestratorWorkerInitOrder:
         source = inspect.getsource(orchestrator_worker.init_services)
 
         # Verify CoordinationService is imported and initialized
-        assert (
-            "CoordinationService" in source
-        ), "CoordinationService not found in init_services()"
+        assert "CoordinationService" in source, (
+            "CoordinationService not found in init_services()"
+        )
 
         # Verify ConvergenceMergeService is imported and initialized
-        assert (
-            "get_convergence_merge_service" in source
-        ), "get_convergence_merge_service not found in init_services()"
-        assert (
-            "subscribe_to_events" in source
-        ), "subscribe_to_events() not called in init_services()"
+        assert "get_convergence_merge_service" in source, (
+            "get_convergence_merge_service not found in init_services()"
+        )
+        assert "subscribe_to_events" in source, (
+            "subscribe_to_events() not called in init_services()"
+        )
 
         # Verify OwnershipValidationService is imported and initialized
-        assert (
-            "get_ownership_validation_service" in source
-        ), "get_ownership_validation_service not found in init_services()"
+        assert "get_ownership_validation_service" in source, (
+            "get_ownership_validation_service not found in init_services()"
+        )
 
         # Verify AgentConflictResolver is imported
-        assert (
-            "AgentConflictResolver" in source
-        ), "AgentConflictResolver not found in init_services()"
+        assert "AgentConflictResolver" in source, (
+            "AgentConflictResolver not found in init_services()"
+        )
 
     def test_init_services_order_is_correct(self):
         """Verify services are initialized in dependency order.
@@ -538,9 +538,9 @@ class TestOrchestratorWorkerInitOrder:
         coordination_pos = source.find("CoordinationService")
         convergence_pos = source.find("get_convergence_merge_service")
 
-        assert (
-            synthesis_pos < coordination_pos
-        ), "SynthesisService must be initialized before CoordinationService"
-        assert (
-            coordination_pos < convergence_pos
-        ), "CoordinationService must be initialized before ConvergenceMergeService"
+        assert synthesis_pos < coordination_pos, (
+            "SynthesisService must be initialized before CoordinationService"
+        )
+        assert coordination_pos < convergence_pos, (
+            "CoordinationService must be initialized before ConvergenceMergeService"
+        )

@@ -305,5 +305,3 @@ class TestMermaidValidationResult:
             is_valid=True, sanitized_code=code, original_code=code
         )
         assert result.needs_sanitization is False
-
-

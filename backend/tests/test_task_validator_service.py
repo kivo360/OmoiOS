@@ -222,7 +222,7 @@ async def test_request_validation_fails_after_max_iterations(
                 validator_agent_id=str(uuid4()),
                 iteration_number=i + 1,
                 validation_passed=False,
-                feedback=f"Validation {i+1} failed",
+                feedback=f"Validation {i + 1} failed",
             )
             session.add(review)
         session.commit()

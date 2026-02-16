@@ -987,7 +987,9 @@ class DaytonaSpawnerService:
                 except Exception as e:
                     logger.warning(f"[PREVIEW] Could not get preview link: {e}")
             else:
-                logger.debug("[PREVIEW] No Daytona sandbox object available for preview URL")
+                logger.debug(
+                    "[PREVIEW] No Daytona sandbox object available for preview URL"
+                )
 
         except ValueError as e:
             # Preview already exists for this sandbox (idempotent)
@@ -1388,7 +1390,9 @@ class DaytonaSpawnerService:
                     # sandbox remains None, will be created from image below
 
             if sandbox is None:
-                image = self.sandbox_image or "nikolaik/python-nodejs:python3.12-nodejs22"
+                image = (
+                    self.sandbox_image or "nikolaik/python-nodejs:python3.12-nodejs22"
+                )
                 logger.info(
                     f"Creating sandbox from image: {image} "
                     f"with resources: {self.sandbox_cpu} CPU, "
@@ -1430,9 +1434,7 @@ class DaytonaSpawnerService:
             import os
 
             if os.environ.get("OMOIOS_ENV") == "production":
-                raise RuntimeError(
-                    f"Failed to create Daytona sandbox: {e}"
-                ) from e
+                raise RuntimeError(f"Failed to create Daytona sandbox: {e}") from e
             logger.error(f"Failed to create Daytona sandbox: {e}")
             import traceback
 
@@ -1589,9 +1591,7 @@ class DaytonaSpawnerService:
 
         # Upload spec-sandbox subsystem for spec-driven development
         # This provides the SpecStateMachine with proper spec.* events via HTTPReporter
-        logger.info(
-            "Uploading spec-sandbox subsystem for spec-driven development..."
-        )
+        logger.info("Uploading spec-sandbox subsystem for spec-driven development...")
         try:
             # Create base directory for spec_sandbox package
             sandbox.process.exec("mkdir -p /tmp/spec_sandbox_pkg/spec_sandbox")

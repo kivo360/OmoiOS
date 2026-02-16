@@ -34,9 +34,9 @@ from datetime import timedelta
 
 
 def print_header(title: str):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {title}")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
 
 
 def print_result(name: str, passed: bool, detail: str = ""):

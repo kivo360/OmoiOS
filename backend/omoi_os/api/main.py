@@ -686,7 +686,29 @@ async def anomaly_monitoring_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI app."""
-    global db, queue, event_bus, health_service, heartbeat_protocol_service, registry_service, agent_status_manager, approval_service, collaboration_service, lock_service, monitor_service, phase_gate_service, phase_manager, cost_tracking_service, budget_enforcer_service, result_submission_service, diagnostic_service, validation_orchestrator, ticket_workflow_orchestrator, llm_service, monitoring_loop, mcp_app
+    global \
+        db, \
+        queue, \
+        event_bus, \
+        health_service, \
+        heartbeat_protocol_service, \
+        registry_service, \
+        agent_status_manager, \
+        approval_service, \
+        collaboration_service, \
+        lock_service, \
+        monitor_service, \
+        phase_gate_service, \
+        phase_manager, \
+        cost_tracking_service, \
+        budget_enforcer_service, \
+        result_submission_service, \
+        diagnostic_service, \
+        validation_orchestrator, \
+        ticket_workflow_orchestrator, \
+        llm_service, \
+        monitoring_loop, \
+        mcp_app
 
     app_settings = get_app_settings()
 

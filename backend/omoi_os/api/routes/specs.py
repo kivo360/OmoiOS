@@ -954,9 +954,7 @@ class SpecResponse(BaseModel):
     description: Optional[str] = None
     status: str  # draft, requirements, design, executing, completed
     phase: str  # Requirements, Design, Implementation, Testing, Done
-    current_phase: str = (
-        "explore"  # State machine phase: explore, requirements, design, tasks, sync, complete
-    )
+    current_phase: str = "explore"  # State machine phase: explore, requirements, design, tasks, sync, complete
     progress: float = 0
     test_coverage: float = 0
     active_agents: int = 0

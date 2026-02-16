@@ -31,9 +31,9 @@ class TestMessageQueueEndpoint:
         )
 
         # VERIFY: Endpoint exists and accepts POST
-        assert (
-            response.status_code == 200
-        ), f"Got {response.status_code}: {response.text}"
+        assert response.status_code == 200, (
+            f"Got {response.status_code}: {response.text}"
+        )
 
         # VERIFY: Response has required fields
         data = response.json()

@@ -44,9 +44,9 @@ class MCPRegistryService:
             db: DatabaseService instance
         """
         self.db = db
-        self.version_matrix: Dict[str, Dict[str, List[str]]] = (
-            {}
-        )  # server_id -> tool_name -> versions
+        self.version_matrix: Dict[
+            str, Dict[str, List[str]]
+        ] = {}  # server_id -> tool_name -> versions
 
     def register_server(
         self,

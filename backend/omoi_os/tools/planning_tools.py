@@ -53,7 +53,13 @@ def initialize_planning_tool_services(
     event_bus: Optional[EventBusServiceProtocol] = None,
 ) -> None:
     """Initialize the module-level service instances for planning tools."""
-    global _db, _memory_service, _context_service, _dependency_service, _discovery_service, _event_bus
+    global \
+        _db, \
+        _memory_service, \
+        _context_service, \
+        _dependency_service, \
+        _discovery_service, \
+        _event_bus
     _db = db
     _memory_service = memory_service
     _context_service = context_service

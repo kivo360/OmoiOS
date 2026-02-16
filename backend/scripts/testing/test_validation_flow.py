@@ -196,9 +196,9 @@ async def _run_validation_pass(validator, db, test_data, validator_agent_id):
     with db.get_session() as session:
         task = session.get(Task, test_data["task_id"])
         print(f"   Task status: {task.status}")
-        assert (
-            task.status == "pending_validation"
-        ), f"Expected pending_validation, got {task.status}"
+        assert task.status == "pending_validation", (
+            f"Expected pending_validation, got {task.status}"
+        )
         print("   ✅ Task is pending_validation")
 
     # Step 2: Simulate validation passing
@@ -308,9 +308,9 @@ async def _run_validation_fail(validator, db, test_data, validator_agent_id):
     with db.get_session() as session:
         task = session.get(Task, test_data["task_id"])
         print(f"   Task status: {task.status}")
-        assert (
-            task.status == "needs_revision"
-        ), f"Expected needs_revision, got {task.status}"
+        assert task.status == "needs_revision", (
+            f"Expected needs_revision, got {task.status}"
+        )
         print("   ✅ Task is needs_revision")
         print(
             f"   Revision feedback: {task.result.get('revision_feedback', '')[:50]}..."

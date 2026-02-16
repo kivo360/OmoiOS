@@ -24,7 +24,9 @@ except Exception as e:
         output = (
             result.output
             if hasattr(result, "output")
-            else result.data if hasattr(result, "data") else str(result)
+            else result.data
+            if hasattr(result, "data")
+            else str(result)
         )
         print(f"✅ Direct format works: {output}")
         print(

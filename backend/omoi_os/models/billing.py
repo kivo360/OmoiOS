@@ -508,8 +508,7 @@ class Payment(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<Payment(id={self.id}, amount=${self.amount:.2f}, "
-            f"status={self.status})>"
+            f"<Payment(id={self.id}, amount=${self.amount:.2f}, status={self.status})>"
         )
 
     def to_dict(self) -> dict:

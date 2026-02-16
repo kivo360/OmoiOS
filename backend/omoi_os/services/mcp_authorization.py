@@ -80,9 +80,9 @@ class MCPAuthorizationService:
         """
         self.db = db
         self.cache_ttl = cache_ttl
-        self.decision_cache: Dict[str, tuple[PolicyDecision, datetime]] = (
-            {}
-        )  # cache_key -> (decision, timestamp)
+        self.decision_cache: Dict[
+            str, tuple[PolicyDecision, datetime]
+        ] = {}  # cache_key -> (decision, timestamp)
 
     def authorize(
         self,

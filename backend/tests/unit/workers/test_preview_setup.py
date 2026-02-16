@@ -13,7 +13,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from omoi_os.workers.claude_sandbox_worker import PreviewSetupManager, WorkerConfig
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -57,7 +56,9 @@ class TestPreviewSetupManagerInit:
 
     def test_enabled_when_env_set(self, mock_config):
         """Manager should be enabled when PREVIEW_ENABLED=true."""
-        with patch.dict(os.environ, {"PREVIEW_ENABLED": "true", "PREVIEW_PORT": "3000"}):
+        with patch.dict(
+            os.environ, {"PREVIEW_ENABLED": "true", "PREVIEW_PORT": "3000"}
+        ):
             mgr = PreviewSetupManager(mock_config)
             assert mgr.enabled is True
             assert mgr.port == 3000
@@ -73,7 +74,9 @@ class TestPreviewSetupManagerInit:
 
     def test_custom_port(self, mock_config):
         """Manager should use PREVIEW_PORT from env."""
-        with patch.dict(os.environ, {"PREVIEW_ENABLED": "true", "PREVIEW_PORT": "8080"}):
+        with patch.dict(
+            os.environ, {"PREVIEW_ENABLED": "true", "PREVIEW_PORT": "8080"}
+        ):
             mgr = PreviewSetupManager(mock_config)
             assert mgr.port == 8080
 
@@ -172,7 +175,9 @@ class TestPreviewNotify:
 
                 mock_client_instance.post.assert_awaited_once()
                 call_args = mock_client_instance.post.call_args
-                assert call_args[0][0] == "https://api.example.com/api/v1/preview/notify"
+                assert (
+                    call_args[0][0] == "https://api.example.com/api/v1/preview/notify"
+                )
                 assert call_args[1]["json"]["sandbox_id"] == "sb-test-123"
                 assert call_args[1]["json"]["status"] == "starting"
 

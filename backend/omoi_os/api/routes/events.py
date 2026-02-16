@@ -20,7 +20,9 @@ async def _authenticate_websocket(websocket: WebSocket, token: Optional[str]) ->
     """
     if not token:
         await websocket.accept()
-        await websocket.send_json({"error": "Authentication required. Pass ?token=<jwt>"})
+        await websocket.send_json(
+            {"error": "Authentication required. Pass ?token=<jwt>"}
+        )
         await websocket.close(code=4401)
         return False
 
@@ -52,6 +54,7 @@ async def _authenticate_websocket(websocket: WebSocket, token: Optional[str]) ->
         return False
 
     return True
+
 
 router = APIRouter()
 
@@ -223,7 +226,9 @@ def get_ws_manager() -> WebSocketEventManager:
 @router.websocket("/ws/events")
 async def websocket_events(
     websocket: WebSocket,
-    token: Optional[str] = Query(None, description="JWT access token for authentication"),
+    token: Optional[str] = Query(
+        None, description="JWT access token for authentication"
+    ),
     event_types: Optional[str] = Query(
         None, description="Comma-separated list of event types to filter"
     ),

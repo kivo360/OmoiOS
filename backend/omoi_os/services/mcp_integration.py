@@ -126,9 +126,9 @@ class MCPIntegrationService:
         self.retry_manager = retry_manager
         self.event_bus = event_bus
         self.fallback_config = fallback_config or {}
-        self.circuit_breakers: Dict[str, MCPCircuitBreaker] = (
-            {}
-        )  # circuit_key -> breaker
+        self.circuit_breakers: Dict[
+            str, MCPCircuitBreaker
+        ] = {}  # circuit_key -> breaker
 
     async def invoke_tool(self, request: MCPInvocationRequest) -> MCPInvocationResult:
         """

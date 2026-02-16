@@ -227,7 +227,9 @@ class PhaseGateService:
         Returns:
             Tuple containing boolean flag and blocking reasons.
         """
-        del to_phase  # Placeholder for future use when downstream phase requirements added
+        del (
+            to_phase
+        )  # Placeholder for future use when downstream phase requirements added
 
         with self.db.get_session() as session:
             ticket = session.get(Ticket, ticket_id)

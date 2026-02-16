@@ -310,9 +310,9 @@ class TestWorkerScriptGuardianHandling:
         from omoi_os.services.daytona_spawner import OPENHANDS_WORKER_SCRIPT
 
         # Check that script handles guardian_nudge or guardian_intervention
-        assert (
-            "guardian" in OPENHANDS_WORKER_SCRIPT.lower()
-        ), "OpenHands worker script should reference guardian messages"
+        assert "guardian" in OPENHANDS_WORKER_SCRIPT.lower(), (
+            "OpenHands worker script should reference guardian messages"
+        )
 
     def test_claude_worker_script_handles_guardian_intervention(self):
         """
@@ -321,6 +321,6 @@ class TestWorkerScriptGuardianHandling:
         from omoi_os.services.daytona_spawner import CLAUDE_WORKER_SCRIPT
 
         # Check that script handles guardian messages
-        assert (
-            "guardian" in CLAUDE_WORKER_SCRIPT.lower()
-        ), "Claude worker script should reference guardian messages"
+        assert "guardian" in CLAUDE_WORKER_SCRIPT.lower(), (
+            "Claude worker script should reference guardian messages"
+        )

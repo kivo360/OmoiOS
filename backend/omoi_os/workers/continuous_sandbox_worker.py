@@ -871,10 +871,10 @@ The completion signal was detected, but validation checks failed.
 
             feedback_section += f"""
 ### Git Status:
-- Branch: {git_status.get('branch_name', 'unknown')}
-- Clean working directory: {'✅ Yes' if git_status['is_clean'] else '❌ No'}
-- Code pushed to remote: {'✅ Yes' if git_status['is_pushed'] else '❌ No'}
-- PR exists: {'✅ Yes' if git_status['has_pr'] else '❌ No'}
+- Branch: {git_status.get("branch_name", "unknown")}
+- Clean working directory: {"✅ Yes" if git_status["is_clean"] else "❌ No"}
+- Code pushed to remote: {"✅ Yes" if git_status["is_pushed"] else "❌ No"}
+- PR exists: {"✅ Yes" if git_status["has_pr"] else "❌ No"}
 
 ### Required Actions:
 """

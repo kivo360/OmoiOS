@@ -1402,7 +1402,6 @@ async def run_sync(
 
 
 if __name__ == "__main__":
-
     # Quick test
     async def test():
         client = OmoiOSClient()

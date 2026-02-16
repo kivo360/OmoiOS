@@ -12,7 +12,6 @@ from omoi_os.services.prototype_manager import (
     PrototypeStatus,
 )
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -90,13 +89,13 @@ class TestStartSession:
             patch("daytona.DaytonaConfig"),
             patch("omoi_os.config.get_app_settings") as mock_settings,
         ):
-            mock_settings.return_value.daytona.api_key = "test-key"  # pragma: allowlist secret
+            mock_settings.return_value.daytona.api_key = (
+                "test-key"  # pragma: allowlist secret
+            )
             mock_settings.return_value.daytona.api_url = "https://api.daytona.io"
             mock_settings.return_value.daytona.target = "us"
 
-            session = await manager.start_session(
-                user_id="u-1", framework="react-vite"
-            )
+            session = await manager.start_session(user_id="u-1", framework="react-vite")
 
         assert session.status == PrototypeStatus.READY
         assert session.sandbox_id == "sb-proto-123"
@@ -117,9 +116,7 @@ class TestStartSession:
             patch("daytona.DaytonaConfig"),
             patch("omoi_os.config.get_app_settings"),
         ):
-            session = await manager.start_session(
-                user_id="u-1", framework="react-vite"
-            )
+            session = await manager.start_session(user_id="u-1", framework="react-vite")
 
         assert session.status == PrototypeStatus.FAILED
         assert "SDK unavailable" in session.error_message
@@ -151,9 +148,7 @@ class TestApplyPrompt:
         )
         manager._sessions["sess-1"] = session
 
-        with patch(
-            "omoi_os.services.llm_service.get_llm_service"
-        ) as mock_llm_fn:
+        with patch("omoi_os.services.llm_service.get_llm_service") as mock_llm_fn:
             mock_llm = MagicMock()
             mock_llm.complete = AsyncMock(
                 return_value="Added a counter component to App.tsx"
@@ -222,7 +217,9 @@ class TestExportToRepo:
             patch("daytona.DaytonaConfig"),
             patch("omoi_os.config.get_app_settings") as mock_settings,
         ):
-            mock_settings.return_value.daytona.api_key = "test-key"  # pragma: allowlist secret
+            mock_settings.return_value.daytona.api_key = (
+                "test-key"  # pragma: allowlist secret
+            )
             mock_settings.return_value.daytona.api_url = "https://api.daytona.io"
             mock_settings.return_value.daytona.target = "us"
 
@@ -282,7 +279,9 @@ class TestEndSession:
             patch("daytona.DaytonaConfig"),
             patch("omoi_os.config.get_app_settings") as mock_settings,
         ):
-            mock_settings.return_value.daytona.api_key = "test-key"  # pragma: allowlist secret
+            mock_settings.return_value.daytona.api_key = (
+                "test-key"  # pragma: allowlist secret
+            )
             mock_settings.return_value.daytona.api_url = "https://api.daytona.io"
             mock_settings.return_value.daytona.target = "us"
 
@@ -303,9 +302,7 @@ class TestGetSession:
 
     def test_get_session_found(self, manager):
         """Test retrieving an existing session."""
-        session = PrototypeSession(
-            id="sess-5", user_id="u-1", framework="react-vite"
-        )
+        session = PrototypeSession(id="sess-5", user_id="u-1", framework="react-vite")
         manager._sessions["sess-5"] = session
 
         result = manager.get_session("sess-5")

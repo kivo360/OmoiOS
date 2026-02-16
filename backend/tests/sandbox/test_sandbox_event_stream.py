@@ -84,9 +84,11 @@ async def process_response(
                             "agent.tool_use",
                             {
                                 "tool": block.name,
-                                "input": str(block.input)[:200]
-                                if hasattr(block, "input")
-                                else "",
+                                "input": (
+                                    str(block.input)[:200]
+                                    if hasattr(block, "input")
+                                    else ""
+                                ),
                             },
                         )
                         print(f"   🔧 Tool: {block.name}")
@@ -109,15 +111,17 @@ async def process_response(
                     sandbox_id,
                     "agent.turn_completed",
                     {
-                        "cost_usd": message.cost_usd
-                        if hasattr(message, "cost_usd")
-                        else 0,
-                        "duration_ms": message.duration_ms
-                        if hasattr(message, "duration_ms")
-                        else 0,
-                        "turns": message.num_turns
-                        if hasattr(message, "num_turns")
-                        else 0,
+                        "cost_usd": (
+                            message.cost_usd if hasattr(message, "cost_usd") else 0
+                        ),
+                        "duration_ms": (
+                            message.duration_ms
+                            if hasattr(message, "duration_ms")
+                            else 0
+                        ),
+                        "turns": (
+                            message.num_turns if hasattr(message, "num_turns") else 0
+                        ),
                     },
                 )
                 print("   ✅ Turn completed")

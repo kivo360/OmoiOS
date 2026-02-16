@@ -384,10 +384,12 @@ class AuthSettings(OmoiBaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
 
-    _INSECURE_DEFAULTS = frozenset({
-        "dev-secret-key-change-in-production",
-        "change-me-in-production",
-    })
+    _INSECURE_DEFAULTS = frozenset(
+        {
+            "dev-secret-key-change-in-production",
+            "change-me-in-production",
+        }
+    )
 
     @model_validator(mode="after")
     def _reject_weak_jwt_secret_in_production(self) -> "AuthSettings":

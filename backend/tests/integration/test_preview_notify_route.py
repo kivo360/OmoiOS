@@ -12,7 +12,6 @@ from fastapi.testclient import TestClient
 
 from omoi_os.models.preview_session import PreviewSession, PreviewStatus
 
-
 # ============================================================================
 # Fixtures
 # ============================================================================
@@ -199,9 +198,7 @@ class TestNotifyFailed:
             )
 
         assert response.status_code == 200
-        instance.mark_failed.assert_awaited_once_with(
-            preview.id, "Dev server crashed"
-        )
+        instance.mark_failed.assert_awaited_once_with(preview.id, "Dev server crashed")
 
     def test_notify_failed_default_error_message(self, client):
         """Failed without error_message should use 'Unknown error'."""

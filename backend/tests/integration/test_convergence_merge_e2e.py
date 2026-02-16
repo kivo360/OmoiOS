@@ -103,15 +103,15 @@ def parallel_tasks_with_results(db_service, test_ticket):
                 ticket_id=test_ticket,
                 phase_id="PHASE_IMPLEMENTATION",
                 task_type="implement_feature",
-                title=f"Parallel Task {i+1}",
+                title=f"Parallel Task {i + 1}",
                 priority="HIGH",
                 status="completed",
                 result={
-                    "output": f"Task {i+1} implementation",
-                    "files_modified": [f"src/module{i+1}/main.py"],
+                    "output": f"Task {i + 1} implementation",
+                    "files_modified": [f"src/module{i + 1}/main.py"],
                     "tests_passed": True,
                 },
-                owned_files=[f"src/module{i+1}/**"],
+                owned_files=[f"src/module{i + 1}/**"],
             )
             session.add(task)
             task_ids.append(task.id)
@@ -300,7 +300,7 @@ class TestSynthesisE2E:
                     ticket_id=test_ticket,
                     phase_id="PHASE_IMPLEMENTATION",
                     task_type="implement_feature",
-                    title=f"Incremental Task {i+1}",
+                    title=f"Incremental Task {i + 1}",
                     status="pending",  # Start pending
                     priority="HIGH",
                 )
@@ -341,7 +341,7 @@ class TestSynthesisE2E:
             with db_service.get_session() as session:
                 task = session.query(Task).filter(Task.id == task_id).first()
                 task.status = "completed"
-                task.result = {"output": f"Task {i+1} result"}
+                task.result = {"output": f"Task {i + 1} result"}
                 session.commit()
 
             # Simulate TASK_COMPLETED event

@@ -303,16 +303,18 @@ class TestTimeoutManager:
     def test_timeout_monitoring_loop(self, mock_sleep, timeout_manager, sample_task):
         """Test timeout monitoring loop."""
         # Mock the timed out tasks response
-        with patch.object(
-            timeout_manager.task_queue, "get_timed_out_tasks"
-        ) as mock_get_timed_out, patch.object(
-            timeout_manager.task_queue, "mark_task_timeout"
-        ) as mock_mark_timeout, patch.object(
-            timeout_manager.task_queue, "get_task_elapsed_time"
-        ) as mock_get_elapsed, patch.object(
-            timeout_manager.event_bus, "publish"
-        ) as mock_publish:
-
+        with (
+            patch.object(
+                timeout_manager.task_queue, "get_timed_out_tasks"
+            ) as mock_get_timed_out,
+            patch.object(
+                timeout_manager.task_queue, "mark_task_timeout"
+            ) as mock_mark_timeout,
+            patch.object(
+                timeout_manager.task_queue, "get_task_elapsed_time"
+            ) as mock_get_elapsed,
+            patch.object(timeout_manager.event_bus, "publish") as mock_publish,
+        ):
             # Setup mocks
             mock_get_timed_out.side_effect = [
                 [sample_task],
@@ -484,10 +486,12 @@ class TestTimeoutIntegration:
 
     def test_timeout_manager_with_no_tasks(self, timeout_manager):
         """Test timeout manager when no tasks are timed out."""
-        with patch.object(
-            timeout_manager.task_queue, "get_timed_out_tasks"
-        ) as mock_get_timed_out, patch("time.sleep") as mock_sleep:
-
+        with (
+            patch.object(
+                timeout_manager.task_queue, "get_timed_out_tasks"
+            ) as mock_get_timed_out,
+            patch("time.sleep") as mock_sleep,
+        ):
             # No timed out tasks
             mock_get_timed_out.return_value = []
             mock_sleep.side_effect = KeyboardInterrupt

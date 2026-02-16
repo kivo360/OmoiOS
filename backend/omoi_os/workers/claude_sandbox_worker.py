@@ -2247,7 +2247,9 @@ class PreviewSetupManager:
             return
 
         cwd = self.config.cwd
-        logger.info(f"[PREVIEW] Preview enabled, watching for dev server on port {self.port}")
+        logger.info(
+            f"[PREVIEW] Preview enabled, watching for dev server on port {self.port}"
+        )
         await self._notify("starting")
 
         # Phase 1: Wait for agent to start the dev server (via system prompt instructions)
@@ -2267,7 +2269,9 @@ class PreviewSetupManager:
         try:
             await self._install_and_start(frontend_dir)
             if await self._wait_for_ready(timeout=120):
-                logger.info(f"[PREVIEW] Dev server ready on port {self.port} (fallback)")
+                logger.info(
+                    f"[PREVIEW] Dev server ready on port {self.port} (fallback)"
+                )
                 await self._notify("ready")
             else:
                 await self._notify("failed", error_message="Dev server did not respond")
@@ -2277,7 +2281,13 @@ class PreviewSetupManager:
 
     def _find_frontend_dir(self, base: str) -> Optional[str]:
         """Find directory with package.json that has a dev script."""
-        for d in [base, f"{base}/frontend", f"{base}/client", f"{base}/app", f"{base}/web"]:
+        for d in [
+            base,
+            f"{base}/frontend",
+            f"{base}/client",
+            f"{base}/app",
+            f"{base}/web",
+        ]:
             pkg_path = Path(d) / "package.json"
             if pkg_path.exists():
                 try:
@@ -2321,9 +2331,7 @@ class PreviewSetupManager:
         while time.time() - start < timeout:
             try:
                 async with httpx.AsyncClient() as client:
-                    resp = await client.get(
-                        f"http://localhost:{self.port}", timeout=3
-                    )
+                    resp = await client.get(f"http://localhost:{self.port}", timeout=3)
                     if resp.status_code < 500:
                         return True
             except Exception:
@@ -4206,9 +4214,7 @@ This is a continuation of your previous work. Please review the notes below and 
 
         except ImportError as e:
             logger.warning(f"SPEC-SANDBOX: spec_sandbox package not available: {e}")
-            logger.info(
-                "SPEC-SANDBOX: Falling back to prompt-driven spec workflow"
-            )
+            logger.info("SPEC-SANDBOX: Falling back to prompt-driven spec workflow")
             # Return None to signal fallback to prompt-driven execution
             return None
         except Exception as e:
@@ -4702,9 +4708,7 @@ The following dependencies were automatically installed before you started:
                                                 self.config.completion_signal
                                                 in output_text
                                             ):
-                                                self.iteration_state.completion_signal_count += (
-                                                    1
-                                                )
+                                                self.iteration_state.completion_signal_count += 1
                                                 logger.info(
                                                     "Completion signal detected (%d/%d)",
                                                     self.iteration_state.completion_signal_count,
@@ -4724,22 +4728,16 @@ The following dependencies were automatically installed before you started:
                                                 await self._run_validation()
 
                                                 # If validation passed, we're done!
-                                                if (
-                                                    self.iteration_state.validation_passed
-                                                ):
+                                                if self.iteration_state.validation_passed:
                                                     logger.info(
                                                         "Validation PASSED - task truly complete!"
                                                     )
                                                     break
                                             else:
                                                 # No completion signal - reset counter
-                                                self.iteration_state.completion_signal_count = (
-                                                    0
-                                                )
+                                                self.iteration_state.completion_signal_count = 0
 
-                                            self.iteration_state.successful_iterations += (
-                                                1
-                                            )
+                                            self.iteration_state.successful_iterations += 1
                                             self.iteration_state.error_count = 0
 
                                             # Report iteration completion

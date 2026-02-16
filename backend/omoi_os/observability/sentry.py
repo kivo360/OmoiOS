@@ -139,7 +139,9 @@ def _scrub_dict(
                 (
                     _scrub_dict(v, depth + 1, max_depth)
                     if isinstance(v, dict)
-                    else _scrub_pii_from_string(v) if isinstance(v, str) else v
+                    else _scrub_pii_from_string(v)
+                    if isinstance(v, str)
+                    else v
                 )
                 for v in value
             ]

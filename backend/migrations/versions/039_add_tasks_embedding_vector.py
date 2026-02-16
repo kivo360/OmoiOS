@@ -80,10 +80,12 @@ def upgrade() -> None:
     else:
         print(f"Creating {table_name}.{column_name} column...")
         try:
-            bind.execute(text(f"""
+            bind.execute(
+                text(f"""
                 ALTER TABLE {table_name}
                 ADD COLUMN {column_name} vector({EMBEDDING_DIMENSIONS})
-            """))
+            """)
+            )
             print(
                 f"  ✓ Created column {column_name} with vector({EMBEDDING_DIMENSIONS})"
             )
@@ -100,12 +102,14 @@ def upgrade() -> None:
         try:
             # IVFFlat with cosine similarity (vector_cosine_ops)
             # lists=100 is a reasonable default for up to ~100k vectors
-            bind.execute(text(f"""
+            bind.execute(
+                text(f"""
                 CREATE INDEX {index_name}
                 ON {table_name}
                 USING ivfflat ({column_name} vector_cosine_ops)
                 WITH (lists = 100)
-            """))
+            """)
+            )
             print("  ✓ Created IVFFlat index with cosine similarity")
         except Exception as e:
             # IVFFlat requires training data, try without index for now

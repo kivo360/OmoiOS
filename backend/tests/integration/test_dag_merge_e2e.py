@@ -214,7 +214,7 @@ def git_repo_clean(tmp_path, task_ids, ticket_id):
         fpath, content = file_map[i]
         _create_file(repo, fpath, content)
         _run_git(repo, "add", ".")
-        _run_git(repo, "commit", "-m", f"Task {i+1}: update {fpath}")
+        _run_git(repo, "commit", "-m", f"Task {i + 1}: update {fpath}")
 
     # Return to ticket branch for merge operations
     _run_git(repo, "checkout", ticket_branch)
@@ -319,15 +319,15 @@ def merge_db_records(
                 ticket_id=ticket.id,
                 phase_id="PHASE_IMPLEMENTATION",
                 task_type="implement_feature",
-                title=f"Parallel Task {i+1}",
-                description=f"Source task {i+1}",
+                title=f"Parallel Task {i + 1}",
+                description=f"Source task {i + 1}",
                 status="completed",
                 priority="MEDIUM",
                 result={
-                    "output": f"Task {i+1} completed",
-                    "files_changed": [f"src/module{i+1}/"],
+                    "output": f"Task {i + 1} completed",
+                    "files_changed": [f"src/module{i + 1}/"],
                 },
-                owned_files=[f"src/module{i+1}/**"],
+                owned_files=[f"src/module{i + 1}/**"],
             )
             session.add(task)
             sources.append(task)

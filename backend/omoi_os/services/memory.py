@@ -824,7 +824,7 @@ class MemoryService:
 
         # Combine summaries for analysis
         combined_text = "\n\n".join(
-            [f"Summary {i+1}: {s}" for i, s in enumerate(summaries)]
+            [f"Summary {i + 1}: {s}" for i, s in enumerate(summaries)]
         )
 
         # Build prompt using template

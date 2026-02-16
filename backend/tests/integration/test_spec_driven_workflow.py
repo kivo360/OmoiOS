@@ -192,9 +192,9 @@ class TestSpecDrivenTicketCreation:
 
         # The endpoint returns 200 for successful ticket creation (API design choice)
         # When check_duplicates=False, it creates the ticket and returns TicketResponse
-        assert (
-            response.status_code == 200
-        ), f"Expected 200, got {response.status_code}. Response: {response.json()}"
+        assert response.status_code == 200, (
+            f"Expected 200, got {response.status_code}. Response: {response.json()}"
+        )
         ticket_data = response.json()
 
         # Verify it's a TicketResponse (has 'id') not a DuplicateCheckResponse (has 'is_duplicate')
@@ -340,9 +340,9 @@ class TestSandboxEventCallbacks:
 
             # The explore phase data should be present
             # Note: exact behavior depends on _update_spec_phase_data implementation
-            assert (
-                "explore" in phase_data or len(phase_data) > 0
-            ), f"Expected phase_data to be updated, got: {phase_data}"
+            assert "explore" in phase_data or len(phase_data) > 0, (
+                f"Expected phase_data to be updated, got: {phase_data}"
+            )
 
     def test_sandbox_event_validates_source(
         self,

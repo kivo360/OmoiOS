@@ -63,7 +63,8 @@ class PromoCode(Base):
 
     # Usage limits
     max_uses: Mapped[Optional[int]] = mapped_column(
-        Integer, nullable=True  # null = unlimited
+        Integer,
+        nullable=True,  # null = unlimited
     )
     current_uses: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
@@ -72,7 +73,8 @@ class PromoCode(Base):
         DateTime(timezone=True), nullable=False, default=utc_now
     )
     valid_until: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True), nullable=True  # null = no expiration
+        DateTime(timezone=True),
+        nullable=True,  # null = no expiration
     )
 
     # Plan restrictions (which tiers this code applies to)

@@ -116,10 +116,12 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                 # Alter column type to have explicit dimensions
                 # Note: This will fail if there's data with wrong dimensions
                 try:
-                    bind.execute(text(f"""
-                        ALTER TABLE {table_name} 
+                    bind.execute(
+                        text(f"""
+                        ALTER TABLE {table_name}
                         ALTER COLUMN {column_name} TYPE vector({EMBEDDING_DIMENSIONS})
-                    """))
+                    """)
+                    )
                     print(f"  ✓ Updated column to vector({EMBEDDING_DIMENSIONS})")
                 except Exception as e:
                     print(f"  ⚠ Could not alter column type: {e}")
@@ -128,17 +130,21 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                     # Backup data, drop, recreate, restore
                     try:
                         # Create temp column
-                        bind.execute(text(f"""
-                            ALTER TABLE {table_name} 
+                        bind.execute(
+                            text(f"""
+                            ALTER TABLE {table_name}
                             ADD COLUMN {column_name}_backup vector({EMBEDDING_DIMENSIONS})
-                        """))
+                        """)
+                        )
 
                         # Copy data (truncating if needed)
-                        bind.execute(text(f"""
-                            UPDATE {table_name} 
+                        bind.execute(
+                            text(f"""
+                            UPDATE {table_name}
                             SET {column_name}_backup = {column_name}::vector({EMBEDDING_DIMENSIONS})
                             WHERE {column_name} IS NOT NULL
-                        """))
+                        """)
+                        )
 
                         # Drop old column
                         bind.execute(
@@ -146,20 +152,24 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
                         )
 
                         # Rename backup
-                        bind.execute(text(f"""
-                            ALTER TABLE {table_name} 
+                        bind.execute(
+                            text(f"""
+                            ALTER TABLE {table_name}
                             RENAME COLUMN {column_name}_backup TO {column_name}
-                        """))
+                        """)
+                        )
 
                         print("  ✓ Recreated column with correct dimensions")
                     except Exception as e2:
                         print(f"  ✗ Failed to recreate column: {e2}")
                         # Clean up temp column if it exists
                         try:
-                            bind.execute(text(f"""
-                                ALTER TABLE {table_name} 
+                            bind.execute(
+                                text(f"""
+                                ALTER TABLE {table_name}
                                 DROP COLUMN IF EXISTS {column_name}_backup
-                            """))
+                            """)
+                            )
                         except:
                             pass
                         return
@@ -167,10 +177,12 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
         # Column doesn't exist - create it
         print(f"Creating {table_name}.{column_name} column...")
         try:
-            bind.execute(text(f"""
-                ALTER TABLE {table_name} 
+            bind.execute(
+                text(f"""
+                ALTER TABLE {table_name}
                 ADD COLUMN {column_name} vector({EMBEDDING_DIMENSIONS})
-            """))
+            """)
+            )
             print(
                 f"  ✓ Created column {column_name} with vector({EMBEDDING_DIMENSIONS})"
             )
@@ -187,12 +199,14 @@ def _fix_tickets_embedding_vector(bind, inspector) -> None:
         try:
             # IVFFlat with cosine similarity (vector_cosine_ops)
             # lists=100 is a reasonable default for up to ~100k vectors
-            bind.execute(text(f"""
-                CREATE INDEX {index_name} 
-                ON {table_name} 
-                USING ivfflat ({column_name} vector_cosine_ops) 
+            bind.execute(
+                text(f"""
+                CREATE INDEX {index_name}
+                ON {table_name}
+                USING ivfflat ({column_name} vector_cosine_ops)
                 WITH (lists = 100)
-            """))
+            """)
+            )
             print("  ✓ Created IVFFlat index with cosine similarity")
         except Exception as e:
             # IVFFlat requires training data, try without index for now

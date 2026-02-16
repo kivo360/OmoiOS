@@ -76,11 +76,11 @@ def test_tasks(db_service, test_ticket):
                 ticket_id=test_ticket,
                 phase_id="PHASE_IMPLEMENTATION",
                 task_type="implement_feature",
-                title=f"Parallel Task {i+1}",
+                title=f"Parallel Task {i + 1}",
                 priority="HIGH",
                 status="completed",
-                result={"output": f"Task {i+1} completed"},
-                owned_files=[f"src/module{i+1}/**"],
+                result={"output": f"Task {i + 1} completed"},
+                owned_files=[f"src/module{i + 1}/**"],
             )
             session.add(task)
             task_ids.append(task.id)

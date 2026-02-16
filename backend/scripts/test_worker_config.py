@@ -84,9 +84,9 @@ def test_default_mode():
     print(f"   disallowed_tools: {config.disallowed_tools}")
 
     # Verify expectations
-    assert (
-        config.tools_mode == "default"
-    ), f"Expected 'default', got '{config.tools_mode}'"
+    assert config.tools_mode == "default", (
+        f"Expected 'default', got '{config.tools_mode}'"
+    )
     assert config.allowed_tools is None, f"Expected None, got {config.allowed_tools}"
 
     # Test SDK options
@@ -121,9 +121,9 @@ def test_replace_mode():
     print(f"   allowed_tools: {config.allowed_tools}")
 
     # Verify expectations
-    assert (
-        config.tools_mode == "replace"
-    ), f"Expected 'replace', got '{config.tools_mode}'"
+    assert config.tools_mode == "replace", (
+        f"Expected 'replace', got '{config.tools_mode}'"
+    )
     assert config.allowed_tools == [
         "Read",
         "Write",
@@ -162,9 +162,9 @@ def test_disallow_mode():
     print(f"   disallowed_tools: {config.disallowed_tools}")
 
     # Verify expectations
-    assert (
-        config.tools_mode == "default"
-    ), f"Expected 'default', got '{config.tools_mode}'"
+    assert config.tools_mode == "default", (
+        f"Expected 'default', got '{config.tools_mode}'"
+    )
     assert config.allowed_tools is None, "Should use SDK defaults"
     assert config.disallowed_tools == [
         "Bash",

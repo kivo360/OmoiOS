@@ -55,7 +55,13 @@ shutdown_event = asyncio.Event()
 
 async def heartbeat_monitoring_loop():
     """Check for missed heartbeats and trigger restarts."""
-    global db, heartbeat_protocol_service, registry_service, queue, event_bus, agent_status_manager
+    global \
+        db, \
+        heartbeat_protocol_service, \
+        registry_service, \
+        queue, \
+        event_bus, \
+        agent_status_manager
 
     if not db or not heartbeat_protocol_service:
         logger.warning("Heartbeat monitoring: Required services not available")

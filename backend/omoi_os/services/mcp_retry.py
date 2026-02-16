@@ -62,9 +62,9 @@ class MCPRetryManager:
         self.max_delay_ms = max_delay_ms
         self.jitter = jitter
         self.idempotency_ttl = idempotency_ttl
-        self.idempotency_keys: Dict[str, tuple[Any, datetime]] = (
-            {}
-        )  # key -> (result, timestamp)
+        self.idempotency_keys: Dict[
+            str, tuple[Any, datetime]
+        ] = {}  # key -> (result, timestamp)
 
     async def execute_with_retry(
         self,

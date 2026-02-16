@@ -57,7 +57,7 @@ async def main():
 
         for i in range(30):  # Wait up to 30 seconds
             await asyncio.sleep(1)
-            print(f"   Checking... ({i+1}s)")
+            print(f"   Checking... ({i + 1}s)")
 
             # Check for tasks
             resp = await client.get(f"{API_URL}/api/v1/tasks?status=running&limit=5")

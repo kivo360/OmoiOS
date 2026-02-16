@@ -4,8 +4,6 @@ Tests the keyword-matching logic that determines whether a task
 needs live preview support based on ticket title and description.
 """
 
-import pytest
-
 from omoi_os.api.routes.tickets import _detect_frontend_capabilities
 
 
@@ -18,9 +16,7 @@ class TestDetectFrontendCapabilities:
 
     def test_react_component_detected(self):
         """Tasks mentioning React should be detected as frontend."""
-        result = _detect_frontend_capabilities(
-            "Build a React counter component", None
-        )
+        result = _detect_frontend_capabilities("Build a React counter component", None)
         assert "react" in result
         assert "component" in result
 
@@ -45,9 +41,7 @@ class TestDetectFrontendCapabilities:
 
     def test_next_vite_detected(self):
         """Tasks mentioning Next.js or Vite should be detected."""
-        result = _detect_frontend_capabilities(
-            "Set up Next.js with Vite", None
-        )
+        result = _detect_frontend_capabilities("Set up Next.js with Vite", None)
         assert "next" in result
         assert "vite" in result
 
@@ -73,9 +67,7 @@ class TestDetectFrontendCapabilities:
 
     def test_angular_svelte_detected(self):
         """Other frontend frameworks should be detected."""
-        result = _detect_frontend_capabilities(
-            "Create Angular component", None
-        )
+        result = _detect_frontend_capabilities("Create Angular component", None)
         assert "angular" in result
         assert "component" in result
 
@@ -140,9 +132,7 @@ class TestDetectFrontendCapabilities:
         """Keywords use substring matching — 'web' in 'webserver' matches."""
         # "web" is a substring of "webserver" so it matches
         # "page" is NOT a substring of "pagination" (p-a-g-i-n-a-t-i-o-n)
-        result = _detect_frontend_capabilities(
-            "Add pagination to webserver", None
-        )
+        result = _detect_frontend_capabilities("Add pagination to webserver", None)
         assert "web" in result
         assert "page" not in result  # "page" != substring of "pagination"
 

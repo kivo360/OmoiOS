@@ -4,13 +4,12 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select, func
+from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from omoi_os.api.dependencies import get_db_service, get_current_user
 from omoi_os.logging import get_logger
-from omoi_os.models.project import Project
-from omoi_os.models.spec import Spec as SpecModel, SpecRequirement, SpecTask
+from omoi_os.models.spec import Spec as SpecModel
 from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
 
@@ -80,9 +79,7 @@ async def get_showcase(
 
         # Increment view count atomically
         await session.execute(
-            select(SpecModel)
-            .filter(SpecModel.id == spec.id)
-            .with_for_update()
+            select(SpecModel).filter(SpecModel.id == spec.id).with_for_update()
         )
         spec.share_view_count = (spec.share_view_count or 0) + 1
         await session.commit()
@@ -132,7 +129,9 @@ async def enable_spec_sharing(
 
         # Verify user owns this spec
         if spec.user_id and spec.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Not authorized to share this spec")
+            raise HTTPException(
+                status_code=403, detail="Not authorized to share this spec"
+            )
 
         # If already shared, return existing URL
         if spec.share_enabled and spec.share_token:

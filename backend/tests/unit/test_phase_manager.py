@@ -94,9 +94,9 @@ class TestPhaseMappings:
         for phase, status in PHASE_STATUS_MAP.items():
             # Verify status is a valid TicketStatus value
             valid_statuses = [s.value for s in TicketStatus]
-            assert (
-                status in valid_statuses
-            ), f"Invalid status {status} for phase {phase}"
+            assert status in valid_statuses, (
+                f"Invalid status {status} for phase {phase}"
+            )
 
     def test_status_to_phase_mapping(self):
         """Each status should map to a valid phase."""

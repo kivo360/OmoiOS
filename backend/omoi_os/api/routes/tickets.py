@@ -44,12 +44,32 @@ router = APIRouter()
 # Frontend capability detection for live preview
 # ============================================================================
 
-_FRONTEND_KEYWORDS = frozenset({
-    "react", "vue", "next", "vite", "frontend", "ui", "web",
-    "component", "button", "dashboard", "form", "tailwind", "css",
-    "html", "layout", "responsive", "animation", "page", "styled",
-    "svelte", "angular", "preview",
-})
+_FRONTEND_KEYWORDS = frozenset(
+    {
+        "react",
+        "vue",
+        "next",
+        "vite",
+        "frontend",
+        "ui",
+        "web",
+        "component",
+        "button",
+        "dashboard",
+        "form",
+        "tailwind",
+        "css",
+        "html",
+        "layout",
+        "responsive",
+        "animation",
+        "page",
+        "styled",
+        "svelte",
+        "angular",
+        "preview",
+    }
+)
 
 
 def _detect_frontend_capabilities(title: str, description: str | None) -> list[str]:

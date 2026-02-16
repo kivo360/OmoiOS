@@ -130,9 +130,8 @@ async def test_mcp_full_flow():
 
                                     # Check for tools/list response
                                     if isinstance(parsed, dict):
-                                        if (
-                                            "result" in parsed
-                                            and "tools" in parsed.get("result", {})
+                                        if "result" in parsed and "tools" in parsed.get(
+                                            "result", {}
                                         ):
                                             tools = parsed["result"]["tools"]
                                             print("   ✅ Received tools/list response!")

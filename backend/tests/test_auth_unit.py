@@ -136,7 +136,8 @@ class TestJWTOperations:
 
         # Create token with very short expiration
         token = auth_service.create_access_token(
-            user_id, expires_delta=timedelta(seconds=-1)  # Already expired
+            user_id,
+            expires_delta=timedelta(seconds=-1),  # Already expired
         )
 
         # Should fail verification due to expiration

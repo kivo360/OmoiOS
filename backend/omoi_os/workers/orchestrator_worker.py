@@ -230,9 +230,7 @@ def _build_fallback_context(
         if ctx.task_result.get("revision_feedback"):
             task_data["revision"] = {
                 "feedback": ctx.task_result["revision_feedback"],
-                "recommendations": ctx.task_result.get(
-                    "revision_recommendations", []
-                ),
+                "recommendations": ctx.task_result.get("revision_recommendations", []),
                 "iteration": ctx.task_result.get("validation_iteration"),
             }
     return task_data
@@ -696,7 +694,9 @@ async def _spawn_sandbox_for_task(
         task_description=task.description or "",
         task_priority=task.priority,
         task_result=task.result,
-        task_execution_config=task.execution_config if hasattr(task, "execution_config") else None,
+        task_execution_config=(
+            task.execution_config if hasattr(task, "execution_config") else None
+        ),
         spawn_mode=spawn_mode,
     )
 
@@ -979,7 +979,6 @@ async def orchestrator_loop():
             # Get next pending task (no agent filter in sandbox mode)
             from omoi_os.models.agent import Agent
             from omoi_os.models.agent_status import AgentStatus
-            from omoi_os.models.task import Task
 
             available_agent_id = None
 
