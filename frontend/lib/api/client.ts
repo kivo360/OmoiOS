@@ -341,7 +341,7 @@ export async function apiRequest<T>(
         const error = new ApiError(
           `Too many requests. Please try again in ${retrySeconds} seconds.`,
           429,
-          { retry_after: retrySeconds }
+          "rate_limited"
         )
         throw error
       }
