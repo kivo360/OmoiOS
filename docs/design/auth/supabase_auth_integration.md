@@ -21,11 +21,11 @@ This plan outlines the integration of Supabase authentication into the OmoiOS sy
 ## 1. Supabase Connection Details
 
 **Provided Credentials:**
-- **Supabase URL**: `https://ogqsxfcnpmcslmqfombp.supabase.co`
-- **Publishable Key**: `sb_publishable_Q8raBOkqd5TDYJ8L-zCxtQ_F_ttoHRy`
-- **Secret Key**: `sb_secret_OoXIDSzsqxxIYxhW17mTrg_IH5G1XAG`
-- **PostgreSQL Password**: `gtR8fVhhZz3Fcv6g`
-- **PostgreSQL Connection**: `postgresql://postgres.ogqsxfcnpmcslmqfombp:gtR8fVhhZz3Fcv6g@aws-1-us-east-1.pooler.supabase.com:6543/postgres`
+- **Supabase URL**: `https://<YOUR_SUPABASE_PROJECT>.supabase.co`
+- **Publishable Key**: `<YOUR_SUPABASE_ANON_KEY>`
+- **Secret Key**: `<YOUR_SUPABASE_SERVICE_ROLE_KEY>`
+- **PostgreSQL Password**: `<YOUR_DB_PASSWORD>`
+- **PostgreSQL Connection**: `postgresql://<YOUR_DB_USER>:<YOUR_DB_PASSWORD>@aws-1-us-east-1.pooler.supabase.com:6543/postgres`
 
 **Note**: The connection string uses the pooler on port 6543. For direct connections, use port 5432.
 
@@ -129,23 +129,23 @@ CREATE TABLE public.users (
     email_confirmed_at TIMESTAMPTZ,
     phone TEXT,
     phone_confirmed_at TIMESTAMPTZ,
-    
+
     -- User profile fields
     name TEXT,
     avatar_url TEXT,
     role TEXT DEFAULT 'user',  -- user, admin, project_manager, developer, viewer
-    
+
     -- Metadata
     metadata JSONB DEFAULT '{}'::jsonb,
-    
+
     -- Timestamps
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     last_sign_in_at TIMESTAMPTZ,
-    
+
     -- Soft delete
     deleted_at TIMESTAMPTZ,
-    
+
     -- Indexes
     CONSTRAINT users_email_key UNIQUE (email)
 );
@@ -193,7 +193,7 @@ BEGIN
         updated_at = EXCLUDED.updated_at,
         last_sign_in_at = EXCLUDED.last_sign_in_at,
         metadata = EXCLUDED.metadata;
-    
+
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -211,7 +211,7 @@ BEGIN
     UPDATE public.users
     SET deleted_at = NOW()
     WHERE id = OLD.id;
-    
+
     RETURN OLD;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -280,7 +280,7 @@ class SupabaseSettings(BaseSettings):
     url: str  # SUPABASE_URL
     anon_key: str  # SUPABASE_ANON_KEY (publishable key)
     service_role_key: str  # SUPABASE_SERVICE_ROLE_KEY (secret key)
-    
+
     # Database connection (for direct PostgreSQL access)
     db_url: Optional[str] = None  # SUPABASE_DB_URL (optional, for direct DB access)
 
@@ -291,10 +291,10 @@ def load_supabase_settings() -> SupabaseSettings:
 
 **Environment Variables:**
 ```bash
-SUPABASE_URL=https://ogqsxfcnpmcslmqfombp.supabase.co
-SUPABASE_ANON_KEY=sb_publishable_Q8raBOkqd5TDYJ8L-zCxtQ_F_ttoHRy
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_OoXIDSzsqxxIYxhW17mTrg_IH5G1XAG
-SUPABASE_DB_URL=postgresql://postgres.ogqsxfcnpmcslmqfombp:gtR8fVhhZz3Fcv6g@aws-1-us-east-1.pooler.supabase.com:6543/postgres
+SUPABASE_URL=https://<YOUR_SUPABASE_PROJECT>.supabase.co
+SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
+SUPABASE_SERVICE_ROLE_KEY=<YOUR_SUPABASE_SERVICE_ROLE_KEY>
+SUPABASE_DB_URL=postgresql://<YOUR_DB_USER>:<YOUR_DB_PASSWORD>@aws-1-us-east-1.pooler.supabase.com:6543/postgres
 ```
 
 ### 4.3 Supabase Client Service
@@ -322,7 +322,7 @@ class SupabaseAuthService:
             settings: Optional Supabase settings (defaults to loading from env)
         """
         self.settings = settings or load_supabase_settings()
-        
+
         # Client for admin operations (uses service role key)
         self.admin_client: Client = create_client(
             self.settings.url,
@@ -332,7 +332,7 @@ class SupabaseAuthService:
                 persist_session=False,
             ),
         )
-        
+
         # Client for user operations (uses anon key)
         # This is typically used on the frontend, but available here for server-side user ops
         self.client: Client = create_client(
@@ -361,7 +361,7 @@ class SupabaseAuthService:
                 }
         except Exception:
             return None
-        
+
         return None
 
     def get_user_by_id(self, user_id: str) -> Optional[dict]:
@@ -386,7 +386,7 @@ class SupabaseAuthService:
                 }
         except Exception:
             return None
-        
+
         return None
 
     def create_user(
@@ -423,7 +423,7 @@ class SupabaseAuthService:
                 }
         except Exception:
             return None
-        
+
         return None
 ```
 
@@ -466,19 +466,19 @@ class User(Base):
     phone_confirmed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    
+
     # Profile fields
     name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     role: Mapped[str] = mapped_column(
         String(50), nullable=False, default="user", index=True
     )  # user, admin, project_manager, developer, viewer
-    
+
     # Metadata
     metadata: Mapped[dict] = mapped_column(
         JSONB, nullable=False, default=dict, server_default="{}"
     )
-    
+
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=utc_now, index=True
@@ -489,12 +489,12 @@ class User(Base):
     last_sign_in_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    
+
     # Soft delete
     deleted_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )
-    
+
     __table_args__ = (
         Index("idx_users_email", "email"),
         Index("idx_users_role", "role"),
@@ -527,7 +527,7 @@ def get_supabase_auth_service() -> SupabaseAuthService:
     """Get Supabase auth service instance."""
     from omoi_os.services.supabase_auth import SupabaseAuthService
     from omoi_os.config import load_supabase_settings
-    
+
     settings = load_supabase_settings()
     return SupabaseAuthService(settings)
 
@@ -552,7 +552,7 @@ async def get_current_user(
         HTTPException: If token is invalid or user not found
     """
     token = credentials.credentials
-    
+
     # Verify JWT token
     user_info = supabase_auth.verify_jwt_token(token)
     if not user_info:
@@ -561,7 +561,7 @@ async def get_current_user(
             detail="Invalid authentication token",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Load user from public.users
     with db.get_session() as session:
         user = session.get(User, user_info["id"])
@@ -571,7 +571,7 @@ async def get_current_user(
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
-        
+
         return user
 
 
@@ -587,7 +587,7 @@ async def get_current_user_optional(
     """
     if not credentials:
         return None
-    
+
     try:
         return await get_current_user(credentials, supabase_auth, db)
     except HTTPException:
@@ -623,7 +623,7 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
         # Skip auth for public endpoints
         if request.url.path in ["/health", "/docs", "/openapi.json", "/redoc"]:
             return await call_next(request)
-        
+
         # Extract token from Authorization header
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
@@ -632,7 +632,7 @@ class SupabaseAuthMiddleware(BaseHTTPMiddleware):
             if user_info:
                 request.state.user_id = user_info["id"]
                 request.state.user_email = user_info["email"]
-        
+
         response = await call_next(request)
         return response
 ```
@@ -709,13 +709,13 @@ async def signup(
         password=request.password,
         user_metadata={"name": request.name} if request.name else None,
     )
-    
+
     if not user_data:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Failed to create user",
         )
-    
+
     # Wait for trigger to replicate to public.users, then fetch
     with db.get_session() as session:
         user = session.get(User, user_data["id"])
@@ -724,7 +724,7 @@ async def signup(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="User created but not found in database",
             )
-        
+
         return UserResponse.model_validate(user)
 
 
@@ -746,13 +746,13 @@ async def signin(
                 "password": request.password,
             }
         )
-        
+
         if not response.session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid credentials",
             )
-        
+
         return {
             "access_token": response.session.access_token,
             "refresh_token": response.session.refresh_token,
@@ -798,13 +798,13 @@ async def refresh_token(
     """Refresh access token using refresh token."""
     try:
         response = supabase_auth.client.auth.refresh_session(refresh_token)
-        
+
         if not response.session:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token",
             )
-        
+
         return {
             "access_token": response.session.access_token,
             "refresh_token": response.session.refresh_token,
@@ -890,7 +890,7 @@ def require_role(allowed_roles: List[str]):
                 detail=f"Requires one of these roles: {', '.join(allowed_roles)}",
             )
         return current_user
-    
+
     return role_checker
 ```
 
@@ -947,12 +947,12 @@ def upgrade():
         sa.ForeignKeyConstraint(["id"], ["auth.users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    
+
     # Create indexes
     op.create_index("idx_users_email", "users", ["email"])
     op.create_index("idx_users_role", "users", ["role"])
     op.create_index("idx_users_deleted_at", "users", ["deleted_at"])
-    
+
     # Create replication function
     op.execute("""
         CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -982,12 +982,12 @@ def upgrade():
                 updated_at = EXCLUDED.updated_at,
                 last_sign_in_at = EXCLUDED.last_sign_in_at,
                 metadata = EXCLUDED.metadata;
-            
+
             RETURN NEW;
         END;
         $$ LANGUAGE plpgsql SECURITY DEFINER;
     """)
-    
+
     # Create deletion function
     op.execute("""
         CREATE OR REPLACE FUNCTION public.handle_user_deleted()
@@ -996,12 +996,12 @@ def upgrade():
             UPDATE public.users
             SET deleted_at = NOW()
             WHERE id = OLD.id;
-            
+
             RETURN OLD;
         END;
         $$ LANGUAGE plpgsql SECURITY DEFINER;
     """)
-    
+
     # Create triggers
     op.execute("""
         CREATE TRIGGER on_auth_user_created
@@ -1009,17 +1009,17 @@ def upgrade():
             FOR EACH ROW
             EXECUTE FUNCTION public.handle_new_user();
     """)
-    
+
     op.execute("""
         CREATE TRIGGER on_auth_user_deleted
             AFTER DELETE ON auth.users
             FOR EACH ROW
             EXECUTE FUNCTION public.handle_user_deleted();
     """)
-    
+
     # Enable RLS
     op.execute("ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;")
-    
+
     # Create RLS policies
     op.execute("""
         CREATE POLICY "Users can view own profile"
@@ -1027,7 +1027,7 @@ def upgrade():
             FOR SELECT
             USING (auth.uid() = id);
     """)
-    
+
     op.execute("""
         CREATE POLICY "Users can update own profile"
             ON public.users
@@ -1035,14 +1035,14 @@ def upgrade():
             USING (auth.uid() = id)
             WITH CHECK (auth.uid() = id);
     """)
-    
+
     op.execute("""
         CREATE POLICY "Service role full access"
             ON public.users
             FOR ALL
             USING (auth.jwt()->>'role' = 'service_role');
     """)
-    
+
     # Backfill existing users (if any exist in auth.users)
     op.execute("""
         INSERT INTO public.users (
@@ -1068,16 +1068,16 @@ def downgrade():
     # Drop triggers
     op.execute("DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;")
     op.execute("DROP TRIGGER IF EXISTS on_auth_user_deleted ON auth.users;")
-    
+
     # Drop functions
     op.execute("DROP FUNCTION IF EXISTS public.handle_new_user();")
     op.execute("DROP FUNCTION IF EXISTS public.handle_user_deleted();")
-    
+
     # Drop RLS policies
     op.execute("DROP POLICY IF EXISTS \"Users can view own profile\" ON public.users;")
     op.execute("DROP POLICY IF EXISTS \"Users can update own profile\" ON public.users;")
     op.execute("DROP POLICY IF EXISTS \"Service role full access\" ON public.users;")
-    
+
     # Drop table
     op.drop_table("users")
 ```
@@ -1092,7 +1092,7 @@ def downgrade():
 
 Update `DATABASE_URL` in `.env`:
 ```bash
-DATABASE_URL=postgresql+psycopg://postgres.ogqsxfcnpmcslmqfombp:gtR8fVhhZz3Fcv6g@aws-1-us-east-1.pooler.supabase.com:6543/postgres
+DATABASE_URL=postgresql+psycopg://<YOUR_DB_USER>:<YOUR_DB_PASSWORD>@aws-1-us-east-1.pooler.supabase.com:6543/postgres
 ```
 
 **Option B: Keep local PostgreSQL for development, Supabase for production**
@@ -1109,7 +1109,7 @@ class DatabaseSettings(BaseSettings):
     )
 
     url: str = "postgresql+psycopg://postgres:postgres@localhost:15432/app_db"
-    
+
     # Supabase connection (optional override)
     supabase_url: Optional[str] = None  # If set, uses Supabase instead
 ```
@@ -1119,12 +1119,12 @@ class DatabaseSettings(BaseSettings):
 **Add to `.env` file:**
 ```bash
 # Supabase Configuration
-SUPABASE_URL=https://ogqsxfcnpmcslmqfombp.supabase.co
-SUPABASE_ANON_KEY=sb_publishable_Q8raBOkqd5TDYJ8L-zCxtQ_F_ttoHRy
-SUPABASE_SERVICE_ROLE_KEY=sb_secret_OoXIDSzsqxxIYxhW17mTrg_IH5G1XAG
+SUPABASE_URL=https://<YOUR_SUPABASE_PROJECT>.supabase.co
+SUPABASE_ANON_KEY=<YOUR_SUPABASE_ANON_KEY>
+SUPABASE_SERVICE_ROLE_KEY=<YOUR_SUPABASE_SERVICE_ROLE_KEY>
 
 # Optional: Use Supabase PostgreSQL directly
-# DATABASE_URL=postgresql+psycopg://postgres.ogqsxfcnpmcslmqfombp:gtR8fVhhZz3Fcv6g@aws-1-us-east-1.pooler.supabase.com:6543/postgres
+# DATABASE_URL=postgresql+psycopg://<YOUR_DB_USER>:<YOUR_DB_PASSWORD>@aws-1-us-east-1.pooler.supabase.com:6543/postgres
 ```
 
 ---
@@ -1332,4 +1332,3 @@ This plan provides a complete roadmap for integrating Supabase authentication in
 6. **Role-based authorization** for fine-grained access control
 
 The implementation follows Supabase best practices and integrates seamlessly with the existing FastAPI architecture.
-

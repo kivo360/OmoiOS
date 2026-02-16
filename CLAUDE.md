@@ -10,6 +10,50 @@ OmoiOS is a spec-driven, multi-agent orchestration system that scales developmen
 - Frontend: `https://omoios.dev`
 - Backend API: `https://api.omoios.dev`
 
+### Deployment Infrastructure
+
+**Vercel Projects** (org: `automation-workz`):
+
+| Project | URL | Directory | Purpose |
+|---------|-----|-----------|---------|
+| `omoios-frontend` | `https://www.omoios.dev` | `frontend/` | Main production frontend |
+| `omoi-os` | `https://omoi-os.vercel.app` | — | Legacy/alternate frontend |
+| `landing-pages` | `https://landing-pages-automation-workz.vercel.app` | `landing-pages/` | Marketing landing pages |
+| `omoi-prompt-frontend` | `https://prompt.omoios.dev` | — | Prompt playground frontend |
+
+```bash
+# List all Vercel projects
+vercel project ls
+
+# Manage env vars for the main frontend (run from frontend/)
+cd frontend && vercel env ls
+vercel env add <NAME> production
+vercel env rm <NAME> production
+```
+
+**Railway** (project: `aomoi-os-backend`):
+
+| Service | Environment | Purpose |
+|---------|-------------|---------|
+| `omoi-api` | `production` | FastAPI backend API |
+
+```bash
+# Link to the Railway project
+railway link
+
+# List env vars
+railway variables
+
+# Set an env var
+railway variables set KEY=value
+```
+
+**Important notes:**
+- `.env` files are gitignored and protected by detect-secrets pre-commit hook — never modify them for deployment config
+- Frontend env vars with `NEXT_PUBLIC_` prefix are embedded in the client-side JS bundle
+- Production secrets (Sentry tokens, PostHog keys, etc.) live exclusively in Vercel/Railway env var storage
+- The `omoios-frontend` Vercel project already has all production env vars configured
+
 ## Monorepo Structure
 
 This project uses **uv workspaces** for unified Python dependency management:
@@ -92,7 +136,7 @@ pnpm lint                     # Lint check
 - **Cache/Queue**: Redis 7 + Taskiq
 - **LLM**: Claude Agent SDK, Anthropic Claude
 - **Sandbox**: Daytona for isolated workspace execution
-- **Auth**: Supabase + JWT
+- **Auth**: JWT (custom auth service)
 - **Observability**: Sentry + OpenTelemetry + Logfire
 
 ### Frontend Tech Stack

@@ -1,6 +1,6 @@
 -- Supabase Auth Integration: RLS Policies and Triggers
 -- Run this SQL in Supabase SQL Editor after migration 025 completes
--- Project: ogqsxfcnpmcslmqfombp
+-- Project: <YOUR_SUPABASE_PROJECT_REF>
 
 -- ============================================================================
 -- RLS POLICIES for public.users

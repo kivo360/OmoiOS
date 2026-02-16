@@ -39,7 +39,8 @@ approval:
   on_reject: delete
 
 auth:
-  jwt_secret_key: change-me-in-production  # REQUIRED: Set AUTH_JWT_SECRET_KEY env var in Railway
+  # jwt_secret_key: MUST come from AUTH_JWT_SECRET_KEY env var (Railway).
+  # The app will refuse to start in production without a strong secret.
   jwt_algorithm: HS256
   access_token_expire_minutes: 15
   refresh_token_expire_days: 7

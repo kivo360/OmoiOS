@@ -57,6 +57,7 @@ from omoi_os.api.routes import (
     preview,
     projects,
     prototype,
+    public,
     quality,
     reasoning,
     results,
@@ -1045,10 +1046,18 @@ async def general_exception_handler(request: Request, exc: Exception):
     )
 
 
-# Add CORS middleware
+# Add CORS middleware — restrict origins in production
+_cors_origins = (
+    ["*"]
+    if _env in ("development", "local", "test")
+    else [
+        "https://omoios.dev",
+        "https://www.omoios.dev",
+    ]
+)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -1132,6 +1141,9 @@ app.include_router(
 
 # Specs routes
 app.include_router(specs.router, prefix="/api/v1", tags=["specs"])
+
+# Public showcase routes (unauthenticated + authenticated share endpoint)
+app.include_router(public.router, prefix="/api/v1/public", tags=["public"])
 
 # Reasoning chain routes
 app.include_router(reasoning.router, prefix="/api/v1", tags=["reasoning"])

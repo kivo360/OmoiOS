@@ -12,6 +12,47 @@ from omoi_os.services.event_bus import EventBusService, SystemEvent
 
 logger = get_logger(__name__)
 
+
+async def _authenticate_websocket(websocket: WebSocket, token: Optional[str]) -> bool:
+    """Verify JWT token for WebSocket connections.
+
+    Returns True if authenticated, False otherwise (after closing the socket).
+    """
+    if not token:
+        await websocket.accept()
+        await websocket.send_json({"error": "Authentication required. Pass ?token=<jwt>"})
+        await websocket.close(code=4401)
+        return False
+
+    try:
+        from omoi_os.services.auth_service import AuthService
+        from omoi_os.config import settings
+        from omoi_os.api.dependencies import get_db_service
+
+        db = get_db_service()
+        with db.get_session() as session:
+            auth_service = AuthService(
+                db=session,
+                jwt_secret=settings.jwt_secret_key,
+                jwt_algorithm=settings.jwt_algorithm,
+                access_token_expire_minutes=settings.access_token_expire_minutes,
+                refresh_token_expire_days=settings.refresh_token_expire_days,
+            )
+            token_data = auth_service.verify_token(token, token_type="access")
+            if not token_data:
+                await websocket.accept()
+                await websocket.send_json({"error": "Invalid or expired token"})
+                await websocket.close(code=4401)
+                return False
+    except Exception:
+        logger.exception("WebSocket authentication error")
+        await websocket.accept()
+        await websocket.send_json({"error": "Authentication failed"})
+        await websocket.close(code=4401)
+        return False
+
+    return True
+
 router = APIRouter()
 
 
@@ -182,6 +223,7 @@ def get_ws_manager() -> WebSocketEventManager:
 @router.websocket("/ws/events")
 async def websocket_events(
     websocket: WebSocket,
+    token: Optional[str] = Query(None, description="JWT access token for authentication"),
     event_types: Optional[str] = Query(
         None, description="Comma-separated list of event types to filter"
     ),
@@ -194,6 +236,8 @@ async def websocket_events(
 ):
     """
     WebSocket endpoint for real-time event streaming.
+
+    Requires authentication via the `token` query parameter (JWT access token).
 
     Clients can filter events by:
     - event_types: Comma-separated list (e.g., "TASK_ASSIGNED,TASK_COMPLETED")
@@ -208,6 +252,10 @@ async def websocket_events(
         "payload": {...}
     }
     """
+    # Authenticate before accepting the connection
+    if not await _authenticate_websocket(websocket, token):
+        return
+
     # Handle case where services aren't ready yet
     try:
         ws_manager = get_ws_manager()

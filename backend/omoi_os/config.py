@@ -7,6 +7,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, ClassVar, Dict, Mapping, MutableMapping, Optional
 
+from pydantic import model_validator
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
@@ -382,6 +383,27 @@ class AuthSettings(OmoiBaseSettings):
     jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 7
+
+    _INSECURE_DEFAULTS = frozenset({
+        "dev-secret-key-change-in-production",
+        "change-me-in-production",
+    })
+
+    @model_validator(mode="after")
+    def _reject_weak_jwt_secret_in_production(self) -> "AuthSettings":
+        env = os.environ.get(ENVIRONMENT_VARIABLE, DEFAULT_ENVIRONMENT)
+        if env == "production":
+            if self.jwt_secret_key in self._INSECURE_DEFAULTS:
+                raise ValueError(
+                    "CRITICAL: Using a default JWT secret in production! "
+                    "Set AUTH_JWT_SECRET_KEY to a strong random value (>= 32 chars)."
+                )
+            if len(self.jwt_secret_key) < 32:
+                raise ValueError(
+                    "JWT secret key is too short for production. "
+                    "Set AUTH_JWT_SECRET_KEY to at least 32 characters."
+                )
+        return self
 
     # Password requirements
     min_password_length: int = 8
