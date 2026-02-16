@@ -5,6 +5,7 @@
 
 import { useEffect, useCallback, useRef, useState } from "react"
 import { useQueryClient } from "@tanstack/react-query"
+import { getAccessToken } from "@/lib/api/client"
 import { boardKeys } from "./useBoard"
 import { ticketKeys } from "./useTickets"
 
@@ -140,8 +141,17 @@ export function useBoardEvents({
         apiUrl.replace("http://", "ws://").replace("https://", "wss://") +
         "/api/v1/ws/events"
 
-      // Add project filter if provided
-      const url = projectId ? `${wsUrl}?entity_ids=${projectId}` : wsUrl
+      // Build query params with auth token and optional project filter
+      const params = new URLSearchParams()
+      const token = getAccessToken()
+      if (token) {
+        params.set("token", token)
+      }
+      if (projectId) {
+        params.set("entity_ids", projectId)
+      }
+      const query = params.toString()
+      const url = query ? `${wsUrl}?${query}` : wsUrl
 
       const ws = new WebSocket(url)
       wsRef.current = ws
@@ -201,7 +211,7 @@ export function useBoardEvents({
         setIsConnected(false)
 
         // Don't reconnect for auth errors
-        if (event.code === 1008 || event.code === 1003 || event.code === 1000) {
+        if (event.code === 1008 || event.code === 1003 || event.code === 1000 || event.code === 4401) {
           console.log("[BoardEvents] WebSocket closed normally")
           return
         }

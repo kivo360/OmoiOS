@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState, useCallback, useRef } from "react"
+import { getAccessToken } from "@/lib/api/client"
 
 export interface SystemEvent {
   event_type: string
@@ -68,7 +69,7 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
   const buildWsUrl = useCallback(() => {
     // Get API base URL, default to localhost:18000
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:18000"
-    
+
     // Parse the URL to get host and determine protocol
     let wsUrl: string
     try {
@@ -81,6 +82,10 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
     }
 
     const params = new URLSearchParams()
+    const token = getAccessToken()
+    if (token) {
+      params.set("token", token)
+    }
     if (filtersRef.current?.event_types?.length) {
       params.set("event_types", filtersRef.current.event_types.join(","))
     }
@@ -164,8 +169,8 @@ export function useEvents(options: UseEventsOptions = {}): UseEventsReturn {
         setIsConnecting(false)
         wsRef.current = null
 
-        // Only auto-reconnect on abnormal closures
-        if (event.code !== 1000 && event.code !== 1001) {
+        // Only auto-reconnect on abnormal closures (not auth failures)
+        if (event.code !== 1000 && event.code !== 1001 && event.code !== 4401) {
           console.log("[WebSocket] Will reconnect in 5s...")
           reconnectTimeoutRef.current = setTimeout(() => {
             connect()
