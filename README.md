@@ -340,6 +340,14 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 
 </details>
 
+## Code Assistant
+
+<p align="center">
+  <img src="docs/assets/demo-code-assistant.gif" alt="OmoiOS Code Assistant — AI-powered codebase Q&A" width="960"/>
+</p>
+
+> Ask questions about your codebase and get grounded answers. The code assistant explores your repo's actual structure, patterns, and dependencies — not generic guesses.
+
 ## Star History
 
 <a href="https://star-history.com/#kivo360/OmoiOS&Date">
