@@ -117,7 +117,6 @@ class APIKeyCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
     scopes: List[str] = Field(default_factory=list)
     expires_in_days: Optional[int] = Field(None, ge=1, le=365)
-    organization_id: Optional[UUID] = None
 
 
 class APIKeyResponse(BaseModel):

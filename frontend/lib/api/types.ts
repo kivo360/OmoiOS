@@ -103,7 +103,6 @@ export interface APIKeyCreate {
   name: string
   scopes?: string[]
   expires_in_days?: number
-  organization_id?: string
 }
 
 export interface APIKey {

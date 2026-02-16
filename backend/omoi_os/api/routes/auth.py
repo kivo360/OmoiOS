@@ -393,12 +393,23 @@ async def create_api_key(
     Create API key for programmatic access.
 
     Returns the full key ONLY ONCE - save it securely!
+    Organization is derived from the authenticated user (not from request body)
+    to prevent cross-organization key creation (IDOR).
     """
+    from omoi_os.models.organization import Organization
+
+    # Derive organization from authenticated user instead of trusting request body
+    org_result = await db.execute(
+        select(Organization).where(Organization.owner_id == current_user.id).limit(1)
+    )
+    org = org_result.scalar_one_or_none()
+    organization_id = org.id if org else None
+
     api_key, full_key = await auth_service.create_api_key(
         user_id=current_user.id,
         name=request.name,
         scopes=request.scopes,
-        organization_id=request.organization_id,
+        organization_id=organization_id,
         expires_in_days=request.expires_in_days,
     )
 
