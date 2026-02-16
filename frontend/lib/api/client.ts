@@ -334,6 +334,18 @@ export async function apiRequest<T>(
 
     // Handle errors
     if (!response.ok) {
+      // Handle rate limiting (429) with Retry-After header
+      if (response.status === 429) {
+        const retryAfter = response.headers.get("Retry-After")
+        const retrySeconds = retryAfter ? parseInt(retryAfter, 10) : 60
+        const error = new ApiError(
+          `Too many requests. Please try again in ${retrySeconds} seconds.`,
+          429,
+          { retry_after: retrySeconds }
+        )
+        throw error
+      }
+
       const error = await parseErrorResponse(response)
 
       // Add breadcrumb for failed request

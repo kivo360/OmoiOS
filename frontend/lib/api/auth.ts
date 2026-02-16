@@ -63,6 +63,13 @@ export async function verifyEmail(token: string): Promise<MessageResponse> {
 }
 
 /**
+ * Resend verification email
+ */
+export async function resendVerification(email: string): Promise<MessageResponse> {
+  return api.post<MessageResponse>("/api/v1/auth/resend-verification", { email }, false)
+}
+
+/**
  * Request password reset email
  */
 export async function forgotPassword(data: ForgotPasswordRequest): Promise<MessageResponse> {

@@ -1012,6 +1012,17 @@ app = FastAPI(
 # Get structured logger
 logger = get_logger(__name__)
 
+# Rate limiting — protect auth endpoints from brute-force/abuse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 
 # Exception handler for RequestValidationError (returns 422, but sometimes shows as 400)
 @app.exception_handler(RequestValidationError)

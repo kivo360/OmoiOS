@@ -1,7 +1,9 @@
 """Authentication API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
@@ -11,6 +13,7 @@ from omoi_os.logging import get_logger
 from omoi_os.services.email_service import get_email_service
 
 logger = get_logger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 from omoi_os.models.user import User
 from omoi_os.schemas.auth import (
     UserCreate,
@@ -36,7 +39,9 @@ security = HTTPBearer()
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
+@limiter.limit("3/hour")
 async def register(
+    http_request: Request,
     request: UserCreate,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
@@ -78,7 +83,9 @@ async def register(
 
 
 @router.post("/resend-verification")
+@limiter.limit("3/hour")
 async def resend_verification(
+    http_request: Request,
     request: ForgotPasswordRequest,  # Reuse - just needs email
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
@@ -111,7 +118,9 @@ async def resend_verification(
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit("5/minute")
 async def login(
+    http_request: Request,
     request: LoginRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
@@ -244,7 +253,9 @@ async def update_current_user(
 
 
 @router.post("/verify-email")
+@limiter.limit("10/hour")
 async def verify_email(
+    http_request: Request,
     request: VerifyEmailRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
@@ -262,7 +273,9 @@ async def verify_email(
 
 
 @router.post("/forgot-password")
+@limiter.limit("3/hour")
 async def forgot_password(
+    http_request: Request,
     request: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db_session),
     auth_service: AuthService = Depends(get_auth_service),
