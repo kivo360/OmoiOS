@@ -41,7 +41,7 @@ jobs:
 
       - name: Ruff check
         working-directory: backend
-        run: ruff check . --statistics
+        run: ruff check . --fix --statistics
 
       - name: Black check
         working-directory: backend

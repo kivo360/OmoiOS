@@ -21,6 +21,10 @@
   If you find OmoiOS useful, consider giving it a <a href="https://github.com/kivo360/OmoiOS">star</a> — it helps others discover the project.
 </p>
 
+<p align="center">
+  <img src="docs/assets/demo-specs-driven.gif" alt="OmoiOS Demo — Spec-driven agent execution" width="960"/>
+</p>
+
 ---
 
 ## The Problem
