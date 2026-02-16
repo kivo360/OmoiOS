@@ -5,7 +5,7 @@
 <p align="center">
   <a href="https://github.com/kivo360/OmoiOS/stargazers"><img src="https://img.shields.io/github/stars/kivo360/OmoiOS?style=social" alt="GitHub Stars"/></a>
   <a href="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml"><img src="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml/badge.svg" alt="CI"/></a>
-  <a href="https://codecov.io/gh/kivo360/OmoiOS"><img src="https://img.shields.io/badge/tests-234%20passed-brightgreen" alt="Tests"/></a>
+  <a href="https://github.com/kivo360/OmoiOS/actions/workflows/ci.yml"><img src="https://img.shields.io/badge/tests-passing-brightgreen" alt="Tests"/></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"/></a>
   <img src="https://img.shields.io/badge/python-3.12+-3776ab.svg" alt="Python 3.12+"/>
   <img src="https://img.shields.io/badge/next.js-15-000000.svg" alt="Next.js 15"/>
@@ -72,14 +72,14 @@ Phase transitions have quality gates. You review at strategic points (phase comp
 ┌─────────────────────────────────────────────────────────────────┐
 │                        Frontend (Next.js 15)                     │
 │  Dashboard · Kanban Board · Agent Monitor · Spec Workspace       │
-│  65 pages · ShadCN UI · React Flow · xterm.js · WebSocket        │
+│  ~94 pages · ShadCN UI · React Flow · xterm.js · WebSocket       │
 └──────────────────────────┬──────────────────────────────────────┘
                            │ REST + WebSocket
 ┌──────────────────────────▼──────────────────────────────────────┐
 │                     Backend (FastAPI)                             │
 │                                                                  │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────┐  │
-│  │   35 Route   │  │  103 Service │  │   59 SQLAlchemy        │  │
+│  │   39 Route   │  │  ~100 Service│  │   61 SQLAlchemy        │  │
 │  │   Modules    │  │   Modules    │  │   Models               │  │
 │  └─────────────┘  └──────────────┘  └────────────────────────┘  │
 │                                                                  │
@@ -94,6 +94,8 @@ Phase transitions have quality gates. You review at strategic points (phase comp
 │  │  AgentHealthService  →  Heartbeat monitoring (30s/90s)    │   │
 │  │  EventBusService     →  Redis pub/sub for real-time       │   │
 │  │  Conductor           →  System coherence scoring          │   │
+│  │  MemoryService       →  Hybrid search (semantic + keyword)│   │
+│  │  BillingService      →  Stripe integration + cost tracking│   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                                                                  │
 └──────┬───────────────┬───────────────┬──────────────────────────┘
@@ -198,7 +200,7 @@ just check           # All quality checks
 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
-| **Frontend** | Next.js 15 (App Router) | 65-page dashboard with SSR |
+| **Frontend** | Next.js 15 (App Router) | ~94-page dashboard with SSR |
 | **UI** | ShadCN UI + Tailwind | Component library (Radix primitives) |
 | **State** | Zustand + React Query | Client + server state management |
 | **Visualization** | React Flow v12 | Dependency graphs + workflow DAGs |
@@ -218,22 +220,22 @@ just check           # All quality checks
 OmoiOS/
 ├── backend/                  # Python FastAPI backend
 │   ├── omoi_os/
-│   │   ├── api/routes/       # 35 route modules (~23k lines)
-│   │   ├── models/           # 59 SQLAlchemy models
-│   │   ├── services/         # 103 service modules
+│   │   ├── api/routes/       # 39 route modules
+│   │   ├── models/           # 61 SQLAlchemy models
+│   │   ├── services/         # ~100 service modules
 │   │   └── workers/          # Orchestrator + task workers
-│   ├── migrations/versions/  # 71 Alembic migrations
+│   ├── migrations/versions/  # 73 Alembic migrations
 │   ├── config/               # YAML configs per environment
-│   └── tests/                # 234+ pytest tests
+│   └── tests/                # 112 test files (pytest)
 │
 ├── frontend/                 # Next.js 15 frontend
-│   ├── app/                  # 65 App Router pages
-│   ├── components/           # 100+ React components
+│   ├── app/                  # ~94 App Router pages
+│   ├── components/           # 140+ React components
 │   ├── hooks/                # Custom hooks (WebSocket, API)
 │   └── lib/                  # API client, utilities
 │
 ├── subsystems/
-│   └── sandbox-runtime/      # Lightweight spec execution runtime
+│   └── spec-sandbox/         # Lightweight spec execution runtime
 │
 ├── docs/                     # 30,000+ lines of documentation
 ├── containers/               # Docker configurations
@@ -275,11 +277,13 @@ cd backend
 ruff check .
 
 # Format
-black .
+ruff format .
 
 # Both at once
 just check
 ```
+
+Pre-commit hooks enforce Ruff linting and formatting on every commit.
 
 ### Database Migrations
 
@@ -309,11 +313,32 @@ All ports are offset by +10,000 to avoid conflicts with local services:
 | **[ARCHITECTURE.md](./ARCHITECTURE.md)** | Complete system architecture (start here) |
 | [Product Vision](docs/product_vision.md) | Full product vision + target audience |
 | [App Overview](docs/app_overview.md) | Core features + user flows |
-| [Page Architecture](docs/page_architecture.md) | All 65 frontend pages detailed |
+| [Page Architecture](docs/page_architecture.md) | All ~94 frontend pages detailed |
 | [Design System](docs/design_system.md) | Complete design system |
 | [Frontend Architecture](docs/design/frontend/frontend_architecture_shadcn_nextjs.md) | Frontend patterns + components |
 | [Monitoring Architecture](docs/requirements/monitoring/monitoring_architecture.md) | Guardian + Conductor system |
 | [Backend Guide](backend/CLAUDE.md) | Backend development reference |
+
+<details>
+<summary>Architecture Deep-Dives</summary>
+
+| Document | Description |
+|----------|-------------|
+| [Planning System](docs/architecture/01-planning-system.md) | Spec-Sandbox state machine, phase evaluators |
+| [Execution System](docs/architecture/02-execution-system.md) | Orchestrator, Daytona sandboxes, agent workers |
+| [Discovery System](docs/architecture/03-discovery-system.md) | Adaptive workflow branching |
+| [Readjustment System](docs/architecture/04-readjustment-system.md) | Guardian, Conductor, steering interventions |
+| [Frontend Architecture](docs/architecture/05-frontend-architecture.md) | Next.js 15 App Router, state management |
+| [Real-Time Events](docs/architecture/06-realtime-events.md) | Redis pub/sub, WebSocket forwarding |
+| [Auth & Security](docs/architecture/07-auth-and-security.md) | JWT, OAuth, RBAC, API keys |
+| [Billing & Subscriptions](docs/architecture/08-billing-and-subscriptions.md) | Stripe, tiers, cost tracking |
+| [MCP Integration](docs/architecture/09-mcp-integration.md) | Model Context Protocol, circuit breakers |
+| [GitHub Integration](docs/architecture/10-github-integration.md) | Branch management, PR workflows |
+| [Database Schema](docs/architecture/11-database-schema.md) | PostgreSQL + pgvector, ~60 entities |
+| [Configuration System](docs/architecture/12-configuration-system.md) | YAML + env, Pydantic validation |
+| [API Route Catalog](docs/architecture/13-api-route-catalog.md) | All FastAPI route modules |
+
+</details>
 
 ## Star History
 
