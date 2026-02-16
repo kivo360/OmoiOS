@@ -10,8 +10,9 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel, ConfigDict
 
-from omoi_os.api.dependencies import get_db_service
+from omoi_os.api.dependencies import get_current_user, get_db_service
 from omoi_os.models.explore import ExploreConversation, ExploreMessage
+from omoi_os.models.user import User
 from omoi_os.services.database import DatabaseService
 from omoi_os.utils.datetime import utc_now
 
@@ -697,6 +698,7 @@ def _seed_demo_conversations(session, project_id: str) -> list[ExploreConversati
 async def list_conversations(
     project_id: str,
     limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """List conversations for a project."""
@@ -712,6 +714,7 @@ async def list_conversations(
 @router.post("/project/{project_id}/conversations", response_model=ConversationResponse)
 async def create_conversation(
     project_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Create a new conversation."""
@@ -728,6 +731,7 @@ async def create_conversation(
 async def get_conversation(
     project_id: str,
     conversation_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Get a conversation with all messages."""
@@ -748,6 +752,7 @@ async def send_message(
     project_id: str,
     conversation_id: str,
     message: MessageCreate,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Send a message and get AI response."""
@@ -768,6 +773,7 @@ async def send_message(
 async def delete_conversation(
     project_id: str,
     conversation_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Delete a conversation."""
@@ -788,6 +794,7 @@ async def delete_conversation(
 @router.get("/project/{project_id}/files", response_model=ProjectFilesResponse)
 async def list_project_files(
     project_id: str,
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """List key files in a project for exploration."""
@@ -849,6 +856,7 @@ async def list_project_files(
 async def get_suggestions(
     project_id: str,
     context: Optional[str] = Query(None, description="Context for suggestions"),
+    current_user: User = Depends(get_current_user),
     db: DatabaseService = Depends(get_db_service),
 ):
     """Get query suggestions for the explore interface."""
