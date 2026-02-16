@@ -997,12 +997,16 @@ async def combined_lifespan(app: FastAPI):
                 yield
 
 
-# Create FastAPI app
+# Create FastAPI app — disable OpenAPI docs in production to avoid exposing API structure
+_is_production = _env == "production"
 app = FastAPI(
     title="OmoiOS API",
     description="Multi-Agent Orchestration System API",
     version="0.1.0",
     lifespan=combined_lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # Get structured logger
@@ -1110,6 +1114,22 @@ async def logging_context_middleware(request: Request, call_next):
         clear_context()
 
 
+# Security headers middleware — prevents clickjacking, MIME-sniffing, and info leakage
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    if _is_production:
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 # Include routers
 app.include_router(tickets.router, prefix="/api/v1/tickets", tags=["tickets"])
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["tasks"])
@@ -1126,7 +1146,8 @@ app.include_router(board.router, prefix="/api/v1", tags=["board"])
 app.include_router(quality.router, prefix="/api/v1", tags=["quality"])
 app.include_router(results.router, prefix="/api/v1", tags=["results"])
 app.include_router(diagnostic.router, prefix="/api/v1/diagnostic", tags=["diagnostic"])
-app.include_router(debug.router, prefix="/api/v1/debug", tags=["debug"])
+if not _is_production:
+    app.include_router(debug.router, prefix="/api/v1/debug", tags=["debug"])
 app.include_router(validation.router, prefix="/api/validation", tags=["validation"])
 app.include_router(mcp.router, tags=["MCP"])
 app.include_router(events.router, prefix="/api/v1", tags=["events"])
