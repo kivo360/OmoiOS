@@ -70,7 +70,11 @@ OmoiOS is an autonomous engineering platform that orchestrates multiple AI agent
 │                                   DATA LAYER                                             │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐     │
 │  │  MemoryService  │  │  ContextService │  │ SynthesisService│  │  DAG Merge      │     │
-│  │  (pattern RAG)  │  │  (phase context)│  │ (parallel merge)│  │  System         │     │
+│  │  (hybrid search)│  │  (phase context)│  │ (parallel merge)│  │  System         │     │
+│  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘     │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐     │
+│  │  SpecDedup      │  │ EmbeddingService│  │  BillingService │  │ CostTracking    │     │
+│  │  (hash+semantic)│  │  (pgvector 1536)│  │  (Stripe+tiers) │  │ (per-task LLM)  │     │
 │  └─────────────────┘  └─────────────────┘  └─────────────────┘  └─────────────────┘     │
 │                                                                                          │
 │                          PostgreSQL + pgvector + Redis                                   │
@@ -153,9 +157,9 @@ Self-hosted JWT authentication with bcrypt password hashing, refresh tokens, OAu
 
 ### 8. Billing & Subscriptions
 
-Stripe integration with tier-based subscriptions (Free/Starter/Pro/Enterprise), prepaid credit purchases, usage-based billing, and quota enforcement. Workflow execution is gated by `check_and_reserve_workflow()` before sandbox spawning.
+Full Stripe integration with 5 subscription tiers (Free/Pro/Team/Enterprise/Lifetime), prepaid credit purchases, usage-based billing, automated dunning (3 retries before suspension), promo codes, and per-task LLM cost tracking. Workflow execution is gated by `check_and_reserve_workflow()` before sandbox spawning. Background tasks handle monthly invoice generation, payment reminders, and low credit warnings.
 
-**Key components**: BillingService, CostTrackingService, BudgetEnforcerService
+**Key components**: BillingService, StripeService, SubscriptionService, CostTrackingService, BudgetEnforcerService
 
 [Deep-dive: Billing & Subscriptions →](docs/architecture/08-billing-and-subscriptions.md)
 
@@ -183,9 +187,9 @@ Branch management, commit tracking, pull request workflows, and webhook processi
 
 ### 11. Database Schema
 
-PostgreSQL 16 with pgvector for semantic search, ~60 domain entities across SQLAlchemy 2.0+ models, and 71 Alembic migrations. Models cover core resources, workflow state, agent execution, monitoring, auth/billing, version control, memory, and quality.
+PostgreSQL 16 with pgvector for semantic search and deduplication, ~60 domain entities across SQLAlchemy 2.0+ models, and 71 Alembic migrations. 8 tables use `Vector(1536)` columns with IVFFlat indexes for cosine similarity search. PostgreSQL `tsvector` provides full-text keyword search for hybrid retrieval. Models cover core resources, workflow state, agent execution, monitoring, auth/billing, version control, memory, and quality.
 
-**Key components**: SQLAlchemy models, Alembic migrations, pgvector embeddings
+**Key components**: SQLAlchemy models, Alembic migrations, pgvector embeddings, tsvector full-text search
 
 [Deep-dive: Database Schema →](docs/architecture/11-database-schema.md)
 
@@ -213,16 +217,74 @@ FastAPI REST API with ~30 route files organized by domain. All protected routes 
 
 ## Memory & Context System
 
-Learn from execution history and provide relevant context to new tasks.
+Learn from execution history and provide relevant context to new tasks using pgvector-powered semantic search combined with PostgreSQL full-text search.
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| **MemoryService** | `services/memory.py` | Pattern learning + hybrid search (semantic + keyword with RRF) |
+| **MemoryService** | `services/memory.py` (~910 lines) | Pattern learning + hybrid search (semantic + keyword with RRF) |
+| **EmbeddingService** | `services/embedding.py` | Multi-provider embeddings (Fireworks, OpenAI, FastEmbed local) |
 | **ContextService** | `services/context_service.py` | Cross-phase context aggregation |
 | **TaskContextBuilder** | `services/task_context_builder.py` | Full context assembly for task execution |
 | **SynthesisService** | `services/synthesis_service.py` | Parallel task result merging (combine/union/intersection) |
 
-**Memory Types**: `ERROR_FIX`, `DECISION`, `LEARNING`, `WARNING`, `CODEBASE_KNOWLEDGE`, `DISCOVERY`
+**Memory Types**: `ERROR_FIX`, `DECISION`, `LEARNING`, `WARNING`, `CODEBASE_KNOWLEDGE`, `DISCOVERY` (LLM-classified with rule-based fallback)
+
+### Hybrid Search (Reciprocal Rank Fusion)
+
+Memories are searched using three modes:
+- **Semantic**: pgvector cosine similarity on 1536-dim embeddings
+- **Keyword**: PostgreSQL `tsvector` full-text search with `ts_rank`
+- **Hybrid (default)**: RRF fusion — `score = 0.6 * (1/(60 + sem_rank)) + 0.4 * (1/(60 + kw_rank))`
+
+### ACE Workflow
+
+When a task completes, the ACE (Analyze-Curate-Extract) workflow runs:
+1. **Executor**: Parse tool usage, classify memory type, generate embeddings, create TaskMemory
+2. **Reflector**: Analyze feedback for errors, search playbook, extract insights
+3. **Curator**: Propose playbook updates, generate deltas, validate and apply changes
+
+**Storage**: TaskMemory (execution records), LearnedPattern (extracted patterns), PlaybookEntry (knowledge bullets per ticket)
+
+[Design: Memory System →](docs/design/memory/memory_system.md) | [Requirements: Memory System →](docs/requirements/memory/memory_system.md)
+
+---
+
+## Deduplication System
+
+Prevent duplicate work across specs, requirements, tasks, and tickets using dual-path deduplication: SHA256 content hashing (fast exact match) + pgvector embedding similarity (semantic near-duplicate detection).
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| **SpecDeduplicationService** | `services/spec_dedup.py` (~855 lines) | Dedup specs, requirements, tasks within project/spec scope |
+| **TaskDeduplicationService** | `services/task_dedup.py` | Prevent runaway diagnostic task spawning |
+| **TicketDeduplicationService** | `services/ticket_dedup.py` | Global ticket duplicate detection |
+| **EmbeddingService** | `services/embedding.py` | Shared embedding generation for all dedup services |
+
+### Similarity Thresholds
+
+| Entity | Threshold | Scope | Method |
+|--------|-----------|-------|--------|
+| Spec | 0.92 | Within project | Hash + semantic |
+| Requirement | 0.88 | Within spec | Hash + semantic |
+| Task (spec) | 0.85 | Within spec | Hash + semantic |
+| Task (queue) | 0.85 | Within ticket | Semantic only |
+| Ticket | 0.85 | Global | Semantic only |
+| Acceptance Criteria | 1.0 (exact) | Within requirement | Hash only |
+
+### pgvector Usage
+
+All vector columns use `Vector(1536)` with IVFFlat indexes (`vector_cosine_ops`, lists=100). Similarity queries use cosine distance: `1 - (embedding <=> query_vector)`. Default embedding provider: Fireworks (`qwen3-embedding-8b`), with OpenAI and local FastEmbed as alternatives.
+
+| Table | Vector Column | Purpose |
+|-------|--------------|---------|
+| `specs` | `embedding_vector` | Spec-level dedup within project |
+| `spec_requirements` | `embedding_vector` | Requirement dedup within spec |
+| `spec_tasks` | `embedding_vector` | Task dedup within spec |
+| `tasks` | `embedding_vector` | Queue task dedup within ticket |
+| `tickets` | `embedding_vector` | Global ticket dedup |
+| `task_memories` | `context_embedding` | Memory similarity search |
+| `learned_patterns` | `embedding` | Pattern matching |
+| `playbook_entries` | `embedding` | Playbook entry search (ACE) |
 
 ---
 
@@ -327,8 +389,10 @@ See [Integration Gaps →](docs/architecture/14-integration-gaps.md) for the ful
 
 ## Next Steps
 
-1. **Fix Integration Gaps**: Address critical gaps first (see [Integration Gaps](docs/architecture/14-integration-gaps.md))
-2. **Verify Event Flow**: Use checklist in Integration Gaps doc to verify each event
-3. **Test DAG System**: After wiring, test with parallel tasks
-4. **Monitor Production**: Watch logs for `service_initialized` entries
-5. **Update This Document**: Keep the Service Initialization Map current as services change
+1. ~~**Fix Integration Gaps**: Address critical gaps first~~ — DAG wiring complete, services initialized in orchestrator
+2. **Verify Event Flow**: Use checklist in Integration Gaps doc to verify each event; ~135 orphaned events remain
+3. **Test DAG System**: Services are wired; needs integration tests with parallel tasks
+4. **Complete Live Preview**: ~80% done, needs HMR WebSocket connection (see [#87](https://github.com/kivo360/OmoiOS/issues/87))
+5. **Add Frontend Tests**: No test infrastructure exists yet (see [#86](https://github.com/kivo360/OmoiOS/issues/86))
+6. **Implement Alerting Channels**: Slack/email routers are stubs (see [#78](https://github.com/kivo360/OmoiOS/issues/78))
+7. **Update This Document**: Keep the Service Initialization Map current as services change
