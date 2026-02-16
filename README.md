@@ -77,43 +77,40 @@ Beyond orchestrating agent swarms, OmoiOS includes a built-in code assistant tha
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────────────────┐
-│                         Frontend (Next.js 15)                      │
-│  Dashboard · Kanban Board · Agent Monitor · Spec Workspace         │
-│  ~94 pages · ShadCN UI · React Flow · xterm.js · WebSocket         │
-└───────────────────────────────┬────────────────────────────────────┘
-                                │ REST + WebSocket
-┌───────────────────────────────▼────────────────────────────────────┐
-│                          Backend (FastAPI)                          │
-│                                                                    │
-│  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐   │
-│  │  39 Route Modules │ │ ~100 Service     │ │ 61 SQLAlchemy    │   │
-│  │                   │ │ Modules          │ │ Models           │   │
-│  └──────────────────┘ └──────────────────┘ └──────────────────┘   │
-│                                                                    │
-│  ┌────────────────────────────────────────────────────────────┐   │
-│  │             Core Orchestration Services                     │   │
-│  │                                                            │   │
-│  │  SpecStateMachine     Phase-based workflow engine           │   │
-│  │  OrchestratorWorker   Task execution + sandbox spawn       │   │
-│  │  TaskQueueService     Priority assignment + deps           │   │
-│  │  DiscoveryService     Adaptive workflow branching           │   │
-│  │  IntelligentGuardian  LLM-powered trajectory analysis      │   │
-│  │  AgentHealthService   Heartbeat monitoring (30s/90s)       │   │
-│  │  EventBusService      Redis pub/sub for real-time          │   │
-│  │  ConductorService     System coherence scoring             │   │
-│  │  MemoryService        Hybrid search (semantic + keyword)   │   │
-│  │  BillingService       Stripe integration + cost tracking   │   │
-│  └────────────────────────────────────────────────────────────┘   │
-│                                                                    │
-└──────────┬──────────────────────┬──────────────────────┬──────────┘
-           │                      │                      │
-    ┌──────▼──────┐       ┌───────▼───────┐      ┌──────▼──────┐
-    │  PostgreSQL  │       │     Redis     │      │   Daytona   │
-    │  16 +        │       │  7 — cache,   │      │  isolated   │
-    │  pgvector    │       │  queue, pub/  │      │  sandbox    │
-    │              │       │  sub          │      │  execution  │
-    └─────────────┘       └───────────────┘      └─────────────┘
+                    +---------------------------+
+                    |    Frontend (Next.js 15)   |
+                    |  Dashboard, Kanban Board,  |
+                    |  Agent Monitor, Spec       |
+                    |  Workspace, React Flow     |
+                    +-------------+-------------+
+                                  |
+                          REST + WebSocket
+                                  |
+                    +-------------v-------------+
+                    |    Backend (FastAPI)       |
+                    |                           |
+                    |  39 Route Modules          |
+                    |  ~100 Service Modules      |
+                    |  61 SQLAlchemy Models      |
+                    |                           |
+                    |  --- Core Services ---     |
+                    |  SpecStateMachine          |
+                    |  OrchestratorWorker        |
+                    |  TaskQueueService          |
+                    |  IntelligentGuardian       |
+                    |  ConductorService          |
+                    |  DiscoveryService          |
+                    |  EventBusService           |
+                    |  MemoryService             |
+                    |  BillingService            |
+                    +---+-----------+--------+--+
+                        |           |        |
+                +-------v--+  +----v-----+  +--v--------+
+                | Postgres  |  |  Redis   |  |  Daytona  |
+                | 16 +      |  |  cache,  |  |  isolated |
+                | pgvector  |  |  queue,  |  |  sandbox  |
+                |           |  |  pubsub  |  |  exec     |
+                +-----------+  +----------+  +-----------+
 ```
 
 ### How a Feature Gets Built
