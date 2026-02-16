@@ -393,17 +393,31 @@ async def create_api_key(
     Create API key for programmatic access.
 
     Returns the full key ONLY ONCE - save it securely!
-    Organization is derived from the authenticated user (not from request body)
-    to prevent cross-organization key creation (IDOR).
+    If organization_id is provided, validates the user owns or is a member of that org.
     """
-    from omoi_os.models.organization import Organization
+    organization_id = None
+    if request.organization_id:
+        from omoi_os.models.organization import Organization, OrganizationMembership
 
-    # Derive organization from authenticated user instead of trusting request body
-    org_result = await db.execute(
-        select(Organization).where(Organization.owner_id == current_user.id).limit(1)
-    )
-    org = org_result.scalar_one_or_none()
-    organization_id = org.id if org else None
+        # Verify user is owner or member of the requested organization
+        is_owner = await db.execute(
+            select(Organization.id).where(
+                Organization.id == request.organization_id,
+                Organization.owner_id == current_user.id,
+            )
+        )
+        is_member = await db.execute(
+            select(OrganizationMembership.id).where(
+                OrganizationMembership.organization_id == request.organization_id,
+                OrganizationMembership.user_id == current_user.id,
+            )
+        )
+        if not is_owner.scalar_one_or_none() and not is_member.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have access to this organization",
+            )
+        organization_id = request.organization_id
 
     api_key, full_key = await auth_service.create_api_key(
         user_id=current_user.id,
