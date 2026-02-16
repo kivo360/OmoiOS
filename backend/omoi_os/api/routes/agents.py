@@ -13,6 +13,9 @@ from omoi_os.api.dependencies import (
     get_heartbeat_protocol_service,
     get_event_bus_service,
 )
+from omoi_os.logging import get_logger
+
+logger = get_logger(__name__)
 from omoi_os.models.agent import Agent
 from omoi_os.models.heartbeat_message import HeartbeatAck, HeartbeatMessage
 from omoi_os.services.agent_health import AgentHealthService
@@ -236,11 +239,10 @@ async def register_agent(
             ),
         ) from exc
     except Exception as exc:
-        import traceback
-
-        error_msg = str(exc) if str(exc) else traceback.format_exc().split("\n")[-2]
+        logger.error("Failed to register agent", exc_info=True)
         raise HTTPException(
-            status_code=500, detail=f"Failed to register agent: {error_msg}"
+            status_code=500,
+            detail="Failed to register agent. Please contact support if this persists.",
         ) from exc
 
 

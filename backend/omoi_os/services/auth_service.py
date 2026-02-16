@@ -9,7 +9,7 @@ import hashlib
 import bcrypt
 from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from pydantic import BaseModel
 
 from omoi_os.models.user import User
@@ -485,9 +485,8 @@ class AuthService:
 
         # Invalidate all sessions for security
         await self.db.execute(
-            select(Session).where(Session.user_id == token_data.user_id)
+            delete(Session).where(Session.user_id == token_data.user_id)
         )
-        # Will be deleted by cascade
         await self.db.commit()
 
         return True
