@@ -14,6 +14,7 @@ const PUBLIC_ROUTES = [
   "/callback",
   "/docs",
   "/blog",
+  "/showcase",
   "/feed.xml",
   "/sitemap.xml",
   "/robots.txt",

@@ -84,7 +84,7 @@ import {
 import { useTickets } from "@/hooks/useTickets"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useRouter } from "next/navigation"
-import { EventTimeline, PhaseProgress, PhaseProgressInline } from "@/components/spec"
+import { EventTimeline, PhaseProgress, PhaseProgressInline, SpecCompletionModal } from "@/components/spec"
 import { useProject } from "@/hooks/useProjects"
 import {
   Dialog,
@@ -150,6 +150,9 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
 
   // History modal state
   const [historyOpen, setHistoryOpen] = useState(false)
+
+  // Completion modal state (viral loop)
+  const [showCompletionModal, setShowCompletionModal] = useState(false)
 
   // Form states
   const [newRequirement, setNewRequirement] = useState({ title: "", condition: "", action: "" })
@@ -217,10 +220,7 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
     // Status transition notification (started, completed, failed)
     if (previousStatusRef.current && currentStatus && previousStatusRef.current !== currentStatus) {
       if (currentStatus === "completed") {
-        toast.success("🎉 Spec execution completed!", {
-          description: "All tasks have been processed",
-          duration: 8000,
-        })
+        setShowCompletionModal(true)
       } else if (currentStatus === "failed") {
         toast.error("❌ Spec execution failed", {
           description: "Check the event timeline for details",
@@ -2314,6 +2314,15 @@ export default function SpecWorkspacePage({ params }: SpecPageProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Spec Completion Modal (viral loop) */}
+      {spec && (
+        <SpecCompletionModal
+          open={showCompletionModal}
+          onOpenChange={setShowCompletionModal}
+          spec={spec}
+        />
+      )}
     </div>
   )
 }

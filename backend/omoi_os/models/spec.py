@@ -165,6 +165,27 @@ class Spec(Base):
         comment="GitHub PR number for tracking",
     )
 
+    # Sharing / viral loop fields
+    share_token: Mapped[Optional[str]] = mapped_column(
+        String(32),
+        nullable=True,
+        unique=True,
+        index=True,
+        comment="URL-safe token for public showcase page (generated on share)",
+    )
+    share_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        comment="Whether the spec is publicly viewable via showcase link",
+    )
+    share_view_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        comment="Number of public showcase page views",
+    )
+
     # Deduplication support (pgvector for efficient similarity search)
     embedding_vector: Mapped[Optional[list[float]]] = mapped_column(
         Vector(1536),  # pgvector native type for cosine similarity

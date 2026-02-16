@@ -103,11 +103,13 @@ class SpecCompletionService:
                 body_parts.append(f"- {status_icon} {task.title}")
             body_parts.append("")
 
-        # Add spec link
+        # Add spec link and OmoiOS badge
         body_parts.extend(
             [
                 "---",
                 f"*Automated PR for spec `{spec.id}`*",
+                "",
+                '<sub>Built with <a href="https://omoios.dev">OmoiOS</a> — spec-driven AI agents</sub>',
             ]
         )
 
