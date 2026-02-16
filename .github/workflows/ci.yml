@@ -35,29 +35,20 @@ jobs:
         run: uv sync --group test
 
       - name: Install linters
-        run: uv tool install ruff
+        run: uv tool install ruff@0.9.7
 
-      - name: Ruff lint & fix
+      - name: Ruff lint check
         working-directory: backend
-        run: ruff check . --fix --statistics
+        run: ruff check . --statistics
 
-      - name: Ruff format
+      - name: Ruff format check
         working-directory: backend
-        run: ruff format .
-
-      - name: Check for formatting changes
         run: |
-          if [ -n "$(git diff --name-only)" ]; then
-            echo "::warning::The following files were reformatted by CI:"
-            git diff --name-only
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add -A
-            git commit -m "style: auto-format with ruff"
-            git push
-          else
-            echo "All files already formatted."
-          fi
+          ruff format --check . || {
+            echo ""
+            echo "::error::Files need formatting. Run 'uv run ruff format backend/' locally and commit."
+            exit 1
+          }
 
   test:
     name: Tests
