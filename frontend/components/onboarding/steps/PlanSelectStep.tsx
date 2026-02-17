@@ -54,12 +54,12 @@ const PLANS: PlanOption[] = [
   {
     id: "pro",
     name: "Pro",
-    price: "$299",
+    price: "$50",
     priceNote: "/month",
     icon: <Crown className="h-5 w-5" />,
     features: [
-      "3 concurrent agents",
-      "50 workflows/month",
+      "5 concurrent agents",
+      "100 workflows/month",
       "50GB storage",
       "BYO API keys",
       "Priority support",
@@ -69,12 +69,12 @@ const PLANS: PlanOption[] = [
   {
     id: "team",
     name: "Team",
-    price: "$999",
+    price: "$150",
     priceNote: "/month",
     icon: <Infinity className="h-5 w-5" />,
     features: [
       "10 concurrent agents",
-      "Unlimited workflows",
+      "500 workflows/month",
       "500GB storage",
       "BYO API keys",
       "Dedicated support",

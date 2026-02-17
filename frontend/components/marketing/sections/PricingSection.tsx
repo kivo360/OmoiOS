@@ -34,7 +34,7 @@ const pricingTiers: PricingTier[] = [
     features: [
       "1 concurrent agent",
       "5 workflows per month",
-      "1 project",
+      "2 GB storage",
       "Community support",
     ],
     cta: "Start Free",
@@ -42,13 +42,13 @@ const pricingTiers: PricingTier[] = [
   },
   {
     name: "Pro",
-    price: 299,
+    price: 50,
     period: "/month",
     description: "Ship faster with parallel agents",
     features: [
-      "3 concurrent agents",
-      "50 workflows per month",
-      "Unlimited projects",
+      "5 concurrent agents",
+      "100 workflows per month",
+      "50 GB storage",
       "Bring your own API keys",
       "Priority support",
       "Advanced analytics",
@@ -59,13 +59,13 @@ const pricingTiers: PricingTier[] = [
   },
   {
     name: "Team",
-    price: 999,
+    price: 150,
     period: "/month",
     description: "Scale your engineering output",
     features: [
       "10 concurrent agents",
-      "Unlimited workflows",
-      "Unlimited projects",
+      "500 workflows per month",
+      "500 GB storage",
       "Bring your own API keys",
       "Team collaboration",
       "Role-based access",
@@ -189,7 +189,7 @@ export function PricingSection({ className, id }: PricingSectionProps) {
             Unlimited agents, dedicated support, custom SLAs, and on-premise deployment options.
           </p>
           <p className="mt-4 text-2xl font-bold text-landing-text">
-            Starting at $5,000/month
+            Custom Pricing
           </p>
           <Button
             className="mt-4 bg-landing-accent text-white hover:bg-landing-accent/90"

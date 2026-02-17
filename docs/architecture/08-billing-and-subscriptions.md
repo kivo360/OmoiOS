@@ -11,10 +11,11 @@ OmoiOS uses **Stripe** for payment processing with a tier-based subscription mod
 | Tier | Price | Workflows/mo | Agents | Storage | BYO Keys |
 |------|-------|-------------|--------|---------|----------|
 | **Free** | $0 | 5 | 1 | 2 GB | No |
-| **Pro** | $299/mo | 50 | 3 | 50 GB | Yes |
-| **Team** | $999/mo | Unlimited | 10 | 500 GB | Yes |
+| **Pro** | $50/mo | 100 | 5 | 50 GB | Yes |
+| **Team** | $150/mo | 500 | 10 | 500 GB | Yes |
 | **Enterprise** | Custom | Unlimited | Unlimited | Unlimited | Yes |
-| **Lifetime** | $499 one-time | 50 | 5 | 50 GB | Yes |
+| **Lifetime** | $299 one-time | 50 | 5 | 50 GB | Yes |
+| **BYO Platform** | $19/mo | Unlimited (user pays LLM) | 5 | 50 GB | Yes |
 
 ## Architecture
 

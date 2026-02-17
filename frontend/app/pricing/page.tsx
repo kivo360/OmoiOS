@@ -16,7 +16,7 @@ import Link from "next/link"
 export const metadata: Metadata = {
   title: "Pricing - OmoiOS | Autonomous Engineering Platform",
   description:
-    "Simple, transparent pricing for OmoiOS. Start free, scale as you grow. Pro at $299/month, Team at $999/month, Enterprise starting at $5,000/month.",
+    "Simple, transparent pricing for OmoiOS. Start free, scale as you grow. Pro at $50/month, Team at $150/month, or bring your own API keys for $19/month.",
   keywords: [
     "OmoiOS pricing",
     "AI coding tool pricing",
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "OmoiOS Pricing - Autonomous Engineering Platform",
     description:
-      "Start free with 5 workflows/month. Pro $299/mo, Team $999/mo, Enterprise from $5K/mo.",
+      "Start free with 5 workflows/month. Pro $50/mo, Team $150/mo, or BYO keys at $19/mo.",
     url: "https://omoios.dev/pricing",
     type: "website",
   },
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "OmoiOS Pricing",
     description:
-      "Start free with 5 workflows/month. Pro $299/mo, Team $999/mo, Enterprise from $5K/mo.",
+      "Start free with 5 workflows/month. Pro $50/mo, Team $150/mo, or BYO keys at $19/mo.",
   },
   alternates: {
     canonical: "https://omoios.dev/pricing",
@@ -67,34 +67,45 @@ const structuredData = {
     {
       "@type": "Offer",
       name: "Pro",
-      price: "299",
+      price: "50",
       priceCurrency: "USD",
       priceValidUntil: "2026-12-31",
       availability: "https://schema.org/InStock",
-      description: "3 agents, 50 workflows/month, priority support, BYO API keys",
+      description: "5 agents, 100 workflows/month, priority support, BYO API keys",
       url: "https://omoios.dev/register?plan=pro",
     },
     {
       "@type": "Offer",
       name: "Team",
-      price: "999",
+      price: "150",
       priceCurrency: "USD",
       priceValidUntil: "2026-12-31",
       availability: "https://schema.org/InStock",
       description:
-        "10 agents, unlimited workflows, dedicated support, team collaboration",
+        "10 agents, 500 workflows/month, dedicated support, team collaboration",
       url: "https://omoios.dev/register?plan=team",
     },
     {
       "@type": "Offer",
-      name: "Enterprise",
-      price: "5000",
+      name: "BYO Platform",
+      price: "19",
       priceCurrency: "USD",
       priceValidUntil: "2026-12-31",
       availability: "https://schema.org/InStock",
       description:
-        "Unlimited agents, unlimited workflows, custom SLAs, on-premise options",
-      url: "https://omoios.dev/pricing#enterprise",
+        "5 agents, unlimited workflows (user pays LLM), BYO API keys",
+      url: "https://omoios.dev/register?plan=byo",
+    },
+    {
+      "@type": "Offer",
+      name: "Lifetime",
+      price: "299",
+      priceCurrency: "USD",
+      priceValidUntil: "2026-12-31",
+      availability: "https://schema.org/InStock",
+      description:
+        "5 agents, 50 workflows/month, one-time payment, no recurring charges",
+      url: "https://omoios.dev/register?plan=lifetime",
     },
   ],
 }
@@ -121,23 +132,22 @@ const pricingTiers: PricingTier[] = [
     features: [
       "1 concurrent agent",
       "5 workflows per month",
-      "1 project",
+      "2 GB storage",
       "Community support",
-      "Basic analytics",
     ],
     cta: "Start Free",
     href: "/register",
   },
   {
     name: "Pro",
-    price: 299,
+    price: 50,
     period: "/month",
     description: "Ship faster with parallel agents",
     icon: <Crown className="h-6 w-6" />,
     features: [
-      "3 concurrent agents",
-      "50 workflows per month",
-      "Unlimited projects",
+      "5 concurrent agents",
+      "100 workflows per month",
+      "50 GB storage",
       "Bring your own API keys",
       "Priority support",
       "Advanced analytics",
@@ -149,20 +159,19 @@ const pricingTiers: PricingTier[] = [
   },
   {
     name: "Team",
-    price: 999,
+    price: 150,
     period: "/month",
     description: "Scale your engineering output",
     icon: <Users className="h-6 w-6" />,
     features: [
       "10 concurrent agents",
-      "Unlimited workflows",
-      "Unlimited projects",
+      "500 workflows per month",
+      "500 GB storage",
       "Bring your own API keys",
       "Team collaboration",
       "Role-based access control",
       "Dedicated support",
       "Custom integrations",
-      "SSO (coming soon)",
     ],
     cta: "Get Team",
     href: "/register?plan=team",
@@ -275,10 +284,108 @@ export default function PricingPage() {
           </div>
         </section>
 
-        {/* Enterprise Section */}
-        <section id="enterprise" className="py-16 bg-muted/30">
+        {/* Special Plans Section */}
+        <section id="special-plans" className="py-16 bg-muted/30">
           <div className="container mx-auto px-4">
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-4xl mx-auto space-y-8">
+              {/* BYO Platform */}
+              <Card className="p-8">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 rounded-lg bg-primary/10">
+                      <Zap className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold">BYO Platform</h2>
+                      <p className="text-muted-foreground mt-1">
+                        Bring your own LLM API keys — unlimited workflows at the lowest price
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold">$19</p>
+                    <p className="text-muted-foreground">/month</p>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6 mt-8">
+                  <div>
+                    <ul className="space-y-2">
+                      {[
+                        "Unlimited workflows (you pay LLM costs)",
+                        "5 concurrent agents",
+                        "50 GB storage",
+                        "Bring your own API keys",
+                        "Community support",
+                      ].map((feature) => (
+                        <li key={feature} className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-primary" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <p className="text-muted-foreground mb-4">
+                      Already have an Anthropic or OpenAI API key? Get unlimited workflows for just $19/month.
+                    </p>
+                    <Button size="lg" asChild>
+                      <Link href="/register?plan=byo">Get BYO Platform</Link>
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Lifetime Deal */}
+              <Card className="p-8 border-primary/20">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+                  <div className="flex items-start gap-4">
+                    <div className="p-3 rounded-lg bg-primary/10">
+                      <Crown className="h-8 w-8 text-primary" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold">Lifetime Deal</h2>
+                      <p className="text-muted-foreground mt-1">
+                        One-time payment — never pay again
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-3xl font-bold">$299</p>
+                    <p className="text-muted-foreground">one-time</p>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6 mt-8">
+                  <div>
+                    <ul className="space-y-2">
+                      {[
+                        "50 workflows per month",
+                        "5 concurrent agents",
+                        "50 GB storage",
+                        "Bring your own API keys",
+                        "No recurring charges ever",
+                        "Founding member badge",
+                      ].map((feature) => (
+                        <li key={feature} className="flex items-center gap-2 text-sm">
+                          <Check className="h-4 w-4 text-primary" />
+                          {feature}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="flex flex-col justify-center">
+                    <p className="text-muted-foreground mb-4">
+                      Lock in lifetime access at our founding price. Limited availability.
+                    </p>
+                    <Button size="lg" asChild>
+                      <Link href="/register?plan=lifetime">Claim Lifetime Access</Link>
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Enterprise */}
               <Card className="p-8">
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
                   <div className="flex items-start gap-4">
@@ -293,8 +400,8 @@ export default function PricingPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-3xl font-bold">Starting at $5,000</p>
-                    <p className="text-muted-foreground">/month</p>
+                    <p className="text-3xl font-bold">Custom</p>
+                    <p className="text-muted-foreground">pricing</p>
                   </div>
                 </div>
 
@@ -304,11 +411,11 @@ export default function PricingPage() {
                     <ul className="space-y-2">
                       {[
                         "Unlimited concurrent agents",
+                        "Unlimited workflows",
+                        "Unlimited storage",
                         "Dedicated infrastructure",
                         "Custom SLAs (99.9% uptime)",
                         "On-premise deployment option",
-                        "Advanced security & compliance",
-                        "Custom integrations & API limits",
                         "Dedicated success manager",
                         "Training & onboarding",
                       ].map((feature) => (
@@ -363,8 +470,8 @@ export default function PricingPage() {
                 <h3 className="font-semibold">What happens if I exceed my workflow limit?</h3>
                 <p className="text-muted-foreground mt-1">
                   Your workflows will queue until the next billing cycle, or you can
-                  upgrade your plan. Team and Enterprise plans have unlimited
-                  workflows.
+                  upgrade your plan. The BYO Platform tier offers unlimited workflows
+                  for just $19/month when you bring your own API keys.
                 </p>
               </div>
               <div>
@@ -380,7 +487,7 @@ export default function PricingPage() {
                   OmoiOS is spec-driven with full visibility into what agents are
                   doing. You approve the plan, see the dependency graph, and every
                   task traces back to requirements. Devin is $500/seat; OmoiOS Pro
-                  starts at $299/month with multiple agents.
+                  starts at $50/month with 5 parallel agents.
                 </p>
               </div>
             </div>
