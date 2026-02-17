@@ -72,6 +72,26 @@ Let AI run overnight and finish your software for you. Describe what you want, a
 
 - **[12_agent_memory.md](./12_agent_memory.md)** - Flows 47-51: Memory Search, Learned Patterns, Task Context, Pattern Extraction, ACE Workflow
 
+### Sandbox & Execution
+
+- **[13_sandbox_system.md](./13_sandbox_system.md)** - Flows 52-53: Sandbox List, Sandbox Detail (real-time event monitoring, agent messaging, live preview)
+
+### Billing & Subscriptions
+
+- **[14_billing.md](./14_billing.md)** - Flows 54-56: Organization Billing Dashboard, Stripe Checkout Success/Cancel, Subscription Management
+
+### Expanded Settings
+
+- **[15_settings_expanded.md](./15_settings_expanded.md)** - Flows 57-60: Appearance, Integrations, Notifications, Security Settings
+
+### Public Pages
+
+- **[16_public_pages.md](./16_public_pages.md)** - Flows 61-66: Landing Page, Pricing, Blog, Documentation Site, Showcase, OAuth Callback
+
+### Real-Time Activity
+
+- **[17_activity_timeline.md](./17_activity_timeline.md)** - Flow 67: Activity Timeline (global and sandbox-scoped real-time event feed)
+
 ## Quick Navigation
 
 **Getting Started:**
@@ -87,18 +107,26 @@ Let AI run overnight and finish your software for you. Describe what you want, a
 - [04_kanban_tickets.md](./04_kanban_tickets.md) - Kanban board and ticket management
 - [07_phases.md](./07_phases.md) - Phase system and configuration
 
-**Monitoring & Analysis:**
+**Execution & Monitoring:**
 
+- [13_sandbox_system.md](./13_sandbox_system.md) - Sandbox execution monitoring and agent messaging
+- [17_activity_timeline.md](./17_activity_timeline.md) - Real-time system activity feed
 - [06_visualizations.md](./06_visualizations.md) - Graphs, statistics, and activity timelines
 - [10_command_center.md](./10_command_center.md) - Analytics Dashboard (secondary page)
 - [10a_monitoring_system.md](./10a_monitoring_system.md) - Guardian & System Health monitoring
 - [09a_diagnostic_reasoning.md](./09a_diagnostic_reasoning.md) - Understanding why decisions were made
 
-**Administration:**
+**Administration & Billing:**
 
 - [05_organizations_api.md](./05_organizations_api.md) - Organization and API management
+- [14_billing.md](./14_billing.md) - Billing, subscriptions, credits, and payment methods
+- [15_settings_expanded.md](./15_settings_expanded.md) - Appearance, notifications, security, integrations
 - [08a_comments_collaboration.md](./08a_comments_collaboration.md) - Collaboration features
 - [08c_github_integration.md](./08c_github_integration.md) - GitHub integration
+
+**Public & Marketing:**
+
+- [16_public_pages.md](./16_public_pages.md) - Landing page, pricing, blog, docs, showcase
 
 ## Flow Reference
 
@@ -142,6 +170,22 @@ Let AI run overnight and finish your software for you. Describe what you want, a
 | 49     | Task Context View                | [12_agent_memory.md](./12_agent_memory.md)                       |
 | 50     | Pattern Extraction               | [12_agent_memory.md](./12_agent_memory.md)                       |
 | 51     | ACE Workflow Completion          | [12_agent_memory.md](./12_agent_memory.md)                       |
+| 52     | Sandbox List                     | [13_sandbox_system.md](./13_sandbox_system.md)                   |
+| 53     | Sandbox Detail (Real-time)       | [13_sandbox_system.md](./13_sandbox_system.md)                   |
+| 54     | Organization Billing Dashboard   | [14_billing.md](./14_billing.md)                                 |
+| 55     | Billing Success                  | [14_billing.md](./14_billing.md)                                 |
+| 56     | Billing Cancelled                | [14_billing.md](./14_billing.md)                                 |
+| 57     | Appearance Settings              | [15_settings_expanded.md](./15_settings_expanded.md)             |
+| 58     | Integrations Settings            | [15_settings_expanded.md](./15_settings_expanded.md)             |
+| 59     | Notification Settings            | [15_settings_expanded.md](./15_settings_expanded.md)             |
+| 60     | Security Settings                | [15_settings_expanded.md](./15_settings_expanded.md)             |
+| 61     | Landing Page (Marketing)         | [16_public_pages.md](./16_public_pages.md)                       |
+| 62     | Pricing Page                     | [16_public_pages.md](./16_public_pages.md)                       |
+| 63     | Blog                             | [16_public_pages.md](./16_public_pages.md)                       |
+| 64     | Documentation Site               | [16_public_pages.md](./16_public_pages.md)                       |
+| 65     | Showcase Page                    | [16_public_pages.md](./16_public_pages.md)                       |
+| 66     | OAuth Callback                   | [16_public_pages.md](./16_public_pages.md)                       |
+| 67     | Activity Timeline                | [17_activity_timeline.md](./17_activity_timeline.md)             |
 
 ## Common API Error Responses
 

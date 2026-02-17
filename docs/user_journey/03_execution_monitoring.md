@@ -104,68 +104,146 @@
     - Progress dashboard: Metrics update live
 ```
 
-#### 3.2 Sandbox-Based Monitoring (Frontend)
+#### 3.2 Sandbox List (/sandboxes)
 
-The frontend provides real-time monitoring through the sandbox detail view at `/sandbox/:sandboxId`.
+```
+User navigates to /sandboxes (from sidebar):
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Sandboxes                                  [Refresh] [+ New]│
+│  42 sandboxes total                                          │
+│                                                              │
+│  [Search sandboxes...]                                       │
+│  [All] [Running 3] [Validating 1] [Awaiting 2] [Pending 5] │
+│  [Completed 28] [Failed 3]                                   │
+│                                                              │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ ● Running    │ │ ✓ Completed  │ │ ✗ Failed     │        │
+│  │ code_gen     │ │ testing      │ │ integration  │        │
+│  │ "Add Stripe  │ │ "JWT auth    │ │ "Payment     │        │
+│  │  payments"   │ │  tests"      │ │  webhook"    │        │
+│  │ sbx-a1b2c3   │ │ sbx-d4e5f6   │ │ sbx-g7h8i9   │        │
+│  │ [Running] 2m │ │ [Completed]  │ │ [Failed]     │        │
+│  │         [⋮]  │ │              │ │              │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
 
-**Current Implementation:**
+Status normalization:
+  assigned/running/active/in_progress → "Running"
+  completed/done/success → "Completed"
+  failed/error/cancelled → "Failed"
+  pending_validation → "Awaiting Validation"
+  validating → "Validating"
+
+Actions:
+- Click card → /sandbox/[sandboxId] (if sandbox_id exists)
+- [+ New Sandbox] → /command
+- [⋮] menu on running/pending → "Mark as Failed"
+- [Refresh] → Re-fetch sandbox task list
+- Search → Filters by title, task type, ID, or sandbox ID
+- Status buttons → Filter by normalized status with count badges
+```
+
+#### 3.3 Sandbox Detail (/sandbox/[sandboxId])
+
+The frontend provides real-time monitoring through the sandbox detail view.
+
+**Implementation:**
 - `frontend/app/(app)/sandbox/[sandboxId]/page.tsx` - Sandbox detail view
-- `frontend/hooks/use-sandbox-monitor.ts` - WebSocket event streaming
+- `frontend/hooks/useSandbox.ts` - WebSocket event streaming + history loading
 - `frontend/components/sandbox/EventRenderer.tsx` - Event visualization
+- `frontend/components/preview/PreviewPanel.tsx` - Live preview iframe
 
 **Sandbox Detail View Structure:**
 
 ```
-┌────────────────────────────────────────────────────────────────────────┐
-│  IconRail  │  TasksPanel          │  Sandbox Detail View              │
-│            │  (grouped by status) │                                   │
-│            │                      │  ┌──────────────────────────────┐ │
-│            │  Running:            │  │ Tabs: [Events] [Details]     │ │
-│            │  ├─ Current sandbox  │  ├──────────────────────────────┤ │
-│            │  │   (highlighted)   │  │                              │ │
-│            │  │                   │  │ Real-time Event Stream:      │ │
-│            │  Completed:          │  │                              │ │
-│            │  ├─ Payment API      │  │ 10:23 agent.thinking         │ │
-│            │  └─ Auth System      │  │   "Analyzing requirements"   │ │
-│            │                      │  │                              │ │
-│            │                      │  │ 10:24 agent.tool_use         │ │
-│            │                      │  │   Tool: Read file.ts         │ │
-│            │                      │  │                              │ │
-│            │                      │  │ 10:25 agent.file_edited      │ │
-│            │                      │  │   Modified: src/api.ts       │ │
-│            │                      │  │                              │ │
-│            │                      │  └──────────────────────────────┘ │
-│            │                      │                                   │
-│            │                      │  ┌──────────────────────────────┐ │
-│            │                      │  │ Message Input                │ │
-│            │                      │  │ [Type a message to agent...] │ │
-│            │                      │  └──────────────────────────────┘ │
-└────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  ← Back to Command                                          │
+│  🤖 "Add Stripe payments"     [Running ●]                  │
+│  sbx-a1b2c3                    🟢 Live  [↻]                │
+│                                                              │
+│  Tabs: [Events] [Preview ●] [Details]                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ↑ Scroll up for older events                                │
+│                                                              │
+│  10:23 agent.thinking                                        │
+│    "Analyzing requirements for payment integration"          │
+│                                                              │
+│  10:24 agent.tool_completed (Read)                           │
+│    Read: src/checkout/api.ts                                 │
+│                                                              │
+│  10:25 agent.tool_completed (Write)                          │
+│    Modified: src/payments/stripe.ts (+45 -3)                │
+│    [Cursor-style diff view with syntax highlighting]         │
+│                                                              │
+│  10:26 agent.tool_completed (Bash)                           │
+│    $ npm test -- --run                                       │
+│    ✓ 12 tests passed                                        │
+│                                                              │
+├─────────────────────────────────────────────────────────────┤
+│  [Send a message to the agent...]                    [Send] │
+└─────────────────────────────────────────────────────────────┘
 ```
+
+**Three Tabs:**
+
+| Tab | Content |
+|-----|---------|
+| Events | Real-time event stream with auto-scroll, infinite scroll for history |
+| Preview | Live preview iframe (auto-switches when preview becomes ready) |
+| Details | Task metadata (ID, status, priority, type, phase, timestamps, description) + Event summary stats (total events, tool uses, file edits) |
+
+**Connection States:**
+- Connecting: Spinner + "Connecting..."
+- Connected: Green wifi icon + "Live"
+- Disconnected: Gray wifi-off icon + "Disconnected"
+
+**Event Deduplication Logic:**
+- `tool_completed` events replace their `tool_use` counterpart (same tool + input)
+- `file_edited` events suppressed when matching `tool_completed` exists for same file
+- Duplicate Write/Edit operations deduplicated by normalized content hash
+- Subagent prompts filtered from user messages (already shown in SubagentCard)
+- Heartbeat events hidden (`agent.heartbeat`, `SANDBOX_HEARTBEAT`)
+
+**Infinite Scroll:**
+- Historical events loaded on scroll-up (sentinel element at top)
+- 2-second cooldown between loads
+- Scroll position preserved when loading older events
+- Auto-scroll to bottom only for new real-time events (not when user is reading history)
+
+**Agent Messaging:**
+- Text area at bottom of Events tab
+- Enter sends message (Shift+Enter for newline)
+- Message delivered to running agent via API
+- Sent message appears in event stream
 
 **WebSocket Event Types:**
 | Event | Description |
 |-------|-------------|
 | `SANDBOX_SPAWNED` | Sandbox created and agent assigned |
 | `agent.thinking` | Agent reasoning/planning |
-| `agent.tool_use` | Agent using a tool (Read, Edit, Bash, etc.) |
+| `agent.user_message` | User or system message to agent |
+| `agent.tool_use` | Agent invoking a tool (Read, Edit, Bash, etc.) |
 | `agent.tool_completed` | Tool execution finished with result |
 | `agent.file_edited` | File was modified |
 | `agent.message` | Agent output message |
+| `agent.subagent_invoked` | Agent spawned a sub-agent |
+| `agent.heartbeat` | Agent alive signal (hidden from UI) |
 | `TASK_COMPLETED` | Sandbox execution finished |
 
-**EventRenderer - Beautiful Event Display:**
+**EventRenderer - Specialized Event Visualization:**
 
 The `EventRenderer` component (`frontend/components/sandbox/EventRenderer.tsx`) provides specialized rendering for each event type:
 
 | Card Type | Used For | Features |
 |-----------|----------|----------|
 | **MessageCard** | Agent/user messages | Markdown rendering, "Thinking" indicator with amber styling |
-| **FileWriteCard** | Write/Edit tool results | Cursor-style diff view, syntax highlighting (oneDark theme), language icons (🐍 Python, ⚛️ React, 🦀 Rust, etc.), line numbers, +/- stats |
+| **FileWriteCard** | Write/Edit tool results | Cursor-style diff view, syntax highlighting (oneDark theme), language icons, line numbers, +/- stats |
 | **BashCard** | Terminal commands | `$` prompt styling, stdout/stderr parsing, exit code badges, dark terminal theme |
 | **GlobCard** | File search results | Tree-style directory listing with folder icons, file counts |
 | **GrepCard** | Code search results | Grouped by directory, match counts, expandable |
-| **TodoCard** | Task lists | Status icons (✓ completed, ▶ in progress, ⏱ pending), progress tracking |
+| **TodoCard** | Task lists | Status icons (completed, in progress, pending), progress tracking |
 | **ToolCard** | Generic tools | Collapsible with input/output JSON display |
 
 **Syntax Highlighting:**
@@ -173,17 +251,9 @@ The `EventRenderer` component (`frontend/components/sandbox/EventRenderer.tsx`) 
 - Auto-detects language from file extension
 - Supports 40+ languages (Python, TypeScript, Rust, Go, etc.)
 
-**User Interactions:**
-- View real-time event stream as agent works
-- Switch between Events and Details tabs
-- Send messages to agent while it's running
-- Navigate between sandboxes via TasksPanel
-- Expand/collapse code blocks
-- Copy code with one click
-
 ---
 
-#### 3.3 Extended Monitoring Views (Planned)
+#### 3.4 Extended Monitoring Views (Planned)
 
 **Kanban Board View:**
 ```
@@ -197,7 +267,7 @@ Features:
   - Can edit ticket inline
   - Can link/unlink related tickets
 - **View Switcher**: Toggle between Kanban | List | Graph views
-- **Filters**: 
+- **Filters**:
   - Type filter (bug, feature, optimization)
   - Phase filter (show only specific phases)
   - Status filter (active, blocked, completed)
@@ -285,7 +355,7 @@ Workspace Isolation Features:
 - Merge conflict logging: All resolutions logged for audit
 ```
 
-#### 3.4 Discovery & Workflow Branching
+#### 3.5 Discovery & Workflow Branching
 
 ```
 Agent working on Task A discovers bug:
@@ -344,7 +414,7 @@ Agent working on Task A discovers bug:
 - Discoveries saved for future reference
 - Collective intelligence improves over time
 
-#### 3.5 Collective Intelligence & Memory System
+#### 3.6 Collective Intelligence & Memory System
 
 **How Agents Learn from Each Other:**
 
@@ -423,7 +493,7 @@ Agent A encounters PostgreSQL timeout error:
 
 > 💡 **For user-facing memory management flows**, see [11_cost_memory_management.md](./11_cost_memory_management.md) (Memory Search, Patterns, Insights).
 
-#### 3.6 Guardian Interventions
+#### 3.7 Guardian Interventions
 
 ```
 Guardian monitors agent trajectories every 60 seconds:
@@ -452,7 +522,7 @@ Guardian monitors agent trajectories every 60 seconds:
 - Add constraint: Add new requirement
 - Inject tool call: Force specific action
 
-#### 3.7 System Health & Monitoring Dashboard
+#### 3.8 System Health & Monitoring Dashboard
 
 ```
 User can view System Health at any time via header indicator or sidebar:

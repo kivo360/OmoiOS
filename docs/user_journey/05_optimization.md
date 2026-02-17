@@ -23,8 +23,10 @@ Views analytics:
 
 #### 5.2 Agents Overview Page
 
+> **Note**: The primary sidebar navigation now links to **Sandboxes** (`/sandboxes`) instead of Agents. The `/agents` page is still accessible via direct URL and provides agent-level health monitoring distinct from sandbox execution tracking. See [03_execution_monitoring.md § 3.2](./03_execution_monitoring.md) for the Sandbox List journey.
+
 ```
-User navigates to /agents:
+User navigates to /agents (via direct URL or deep link):
    ↓
 Views Agents Overview Page:
    ↓

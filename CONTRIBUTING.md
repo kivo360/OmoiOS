@@ -1,175 +1,145 @@
 # Contributing to OmoiOS
 
-Thank you for your interest in contributing to OmoiOS. This guide covers how to set up your environment, submit changes, and follow project conventions.
+## Orientation
 
-## Getting Started
+Before making changes, read these documents in order:
 
-### Prerequisites
+| Document | What it tells you |
+|----------|-------------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design — planning, execution, discovery, readjustment systems, service map |
+| [UI.md](UI.md) | Frontend routes, components, state management, design system |
+| [backend/CLAUDE.md](backend/CLAUDE.md) | Backend conventions, database patterns, LLM service usage, testing |
+| [CLAUDE.md](CLAUDE.md) | Monorepo structure, development commands, port configuration |
 
-- Python 3.12+
-- Node.js 22+ with pnpm
-- Docker and Docker Compose
-- [uv](https://docs.astral.sh/uv/) package manager
-- [just](https://github.com/casey/just) command runner
+For AI coding agents, see [AGENTS.md](AGENTS.md).
 
-### Local Setup
+## Local Setup
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/kivo360/OmoiOS.git
-   cd OmoiOS
-   ```
-
-2. **Start infrastructure services**
-   ```bash
-   docker-compose up -d postgres redis
-   ```
-
-3. **Install backend dependencies**
-   ```bash
-   cd backend
-   uv sync --group test --group dev
-   ```
-
-4. **Install frontend dependencies**
-   ```bash
-   cd frontend
-   pnpm install
-   ```
-
-5. **Set up environment variables**
-   ```bash
-   cp backend/.env.example backend/.env
-   cp frontend/.env.example frontend/.env.local
-   ```
-   Fill in the required values. See the comments in each `.env.example` for guidance.
-
-6. **Run database migrations**
-   ```bash
-   cd backend
-   uv run alembic upgrade head
-   ```
-
-7. **Verify everything works**
-   ```bash
-   just check        # Lint + type checks
-   just test          # Run tests
-   ```
-
-## Development Workflow
-
-### Branch Naming
-
-- `feat/<description>` — New features
-- `fix/<description>` — Bug fixes
-- `refactor/<description>` — Code restructuring
-- `docs/<description>` — Documentation changes
-
-### Making Changes
-
-1. Create a branch from `main`
-2. Make your changes
-3. Run quality checks: `just check`
-4. Run tests: `just test`
-5. Open a pull request against `main`
-
-### Useful Commands
+**Prerequisites**: Python 3.12+, Node.js 22+ with pnpm, Docker, [uv](https://docs.astral.sh/uv/), [just](https://github.com/casey/just)
 
 ```bash
-just --list          # See all available commands
-just dev-all         # Start full stack with hot-reload
-just test            # Run affected tests only (fast)
-just test-all        # Full test suite
-just format          # Auto-format code
-just lint            # Lint check
-just check           # All quality checks
+git clone https://github.com/kivo360/OmoiOS.git && cd OmoiOS
+docker-compose up -d postgres redis
+cd backend && uv sync --group test --group dev
+cd ../frontend && pnpm install
+cp ../backend/.env.example ../backend/.env
+cp .env.example .env.local
+cd ../backend && uv run alembic upgrade head
+just check && just test
 ```
 
-## Code Standards
+## Monorepo Layout
+
+```
+senior_sandbox/
+├── backend/                 # FastAPI + SQLAlchemy + Redis
+│   ├── omoi_os/             # Main Python package
+│   │   ├── api/routes/      # ~30 route files by domain
+│   │   ├── services/        # Business logic services
+│   │   ├── models/          # SQLAlchemy models (~60 tables)
+│   │   └── config.py        # Settings (YAML + env)
+│   ├── config/              # YAML settings (base.yaml, test.yaml)
+│   └── tests/               # unit/, integration/, e2e/
+├── frontend/                # Next.js 15 App Router
+│   ├── app/                 # Route groups: (app), (auth), (dashboard)
+│   ├── components/          # UI components (ShadCN + custom)
+│   ├── hooks/               # ~30 React Query + Zustand hooks
+│   ├── lib/api/             # API client by domain
+│   └── providers/           # Context providers
+├── subsystems/spec-sandbox/ # Spec execution runtime
+├── docs/                    # 100+ documentation files
+│   ├── proposals/           # OmoiOS Improvement Proposals (OIPs)
+│   ├── page_flows/          # Page-by-page UI flow documentation
+│   ├── user_journey/        # End-to-end user journey docs
+│   └── architecture/        # System deep-dives (01-13)
+└── Justfile                 # Task runner
+```
+
+## Making Changes
+
+### Branch and PR workflow
+
+1. Create a branch: `feat/`, `fix/`, `refactor/`, or `docs/` prefix
+2. Make changes, following the conventions below
+3. Run `just check` (lint + types) and `just test` (affected tests)
+4. Open a PR against `main` with a clear title and description
+
+### Useful commands
+
+```bash
+just --list          # See all commands
+just dev-all         # Full stack with hot-reload
+just test            # Affected tests only (fast, via testmon)
+just test-all        # Full suite
+just format          # Auto-format
+just check           # Lint + type checks
+```
+
+## Conventions
 
 ### Backend (Python)
 
-- **Formatter**: ruff format
-- **Linter**: ruff
-- **Type checker**: mypy (where applicable)
-- **Test framework**: pytest with pytest-testmon
-- Use `async/await` for I/O operations
-- Use `omoi_os.utils.datetime.utc_now()` instead of `datetime.utcnow()`
-- Use `structured_output()` for LLM responses needing structured data
-- Never use `metadata` or `registry` as SQLAlchemy column names (reserved)
+- **Formatting/linting**: ruff
+- **Async**: Use `async/await` for all I/O
+- **Datetime**: Always `omoi_os.utils.datetime.utc_now()`, never `datetime.utcnow()`
+- **LLM calls**: Use `llm_service.structured_output()` with Pydantic models, never parse JSON manually
+- **SQLAlchemy**: Never use `metadata` or `registry` as column names (reserved words)
+- **Config**: Application settings in `config/*.yaml`, secrets in `.env` only
+- **Settings classes**: Extend `OmoiBaseSettings` with `yaml_section` and `@lru_cache` factory
 
 ### Frontend (TypeScript)
 
-- **Framework**: Next.js 15 with App Router
-- **UI**: ShadCN UI (Radix + Tailwind)
-- **State**: Zustand (client) + React Query (server)
-- Follow existing component patterns in `components/`
-- Use the existing API client in `lib/api/`
+- **Framework**: Next.js 15 App Router
+- **UI components**: ShadCN UI (Radix + Tailwind). Check `components/ui/` before creating new primitives.
+- **State**: React Query for server state, Zustand for client state
+- **API calls**: Use the typed client in `lib/api/client.ts`, add new domain files to `lib/api/`
+- **Hooks**: One hook per domain in `hooks/`. Follow existing patterns (e.g., `useProjects.ts`, `useSpecs.ts`).
+- **Route structure**: Pages go in `app/(app)/` for authenticated routes, `app/(auth)/` for auth flows
 
-### Configuration
-
-- **Application settings** go in `config/*.yaml`
-- **Secrets** go in `.env` files (never committed)
-- See `backend/omoi_os/config.py` for the Settings pattern
-
-## Testing
-
-### Running Tests
+### Testing
 
 ```bash
-just test              # Affected tests only (~10-30s)
-just test-all          # Full suite
+# Backend tests
+just test              # Affected only (~10-30s)
 just test-unit         # Unit tests
 just test-integration  # Integration tests
 ```
 
-### Writing Tests
+- Place tests in `backend/tests/{unit,integration,e2e}/`
+- Name: `test_<scenario>_<expected_outcome>`
+- Pattern: Arrange-Act-Assert with pytest fixtures
 
-- Place tests in `backend/tests/` following the directory structure:
-  - `tests/unit/` — Fast, isolated tests
-  - `tests/integration/` — Multi-component tests
-  - `tests/e2e/` — Full workflow tests
-- Use descriptive test names: `test_<scenario>_<expected_outcome>`
-- Follow Arrange-Act-Assert pattern
-- Use pytest fixtures for shared setup
-
-## Pull Request Process
-
-1. **Title**: Use a clear, descriptive title (e.g., "Add rate limiting to auth endpoints")
-2. **Description**: Explain what changed and why
-3. **Tests**: Include tests for new functionality
-4. **Review**: All PRs require at least one review before merging
-5. **CI**: All checks must pass
-
-### PR Checklist
-
-- [ ] Tests pass locally (`just test`)
-- [ ] Quality checks pass (`just check`)
-- [ ] New functionality has tests
-- [ ] Documentation updated if needed
-- [ ] No secrets or credentials in the diff
-
-## Database Changes
-
-If your change requires a database migration:
+### Database migrations
 
 ```bash
 cd backend
 uv run alembic revision -m "description of change"
-# Edit the generated migration file
-uv run alembic upgrade head  # Test it
+uv run alembic upgrade head
 ```
 
-## Reporting Issues
+## Proposing Features
 
-- Use GitHub Issues for bug reports and feature requests
-- Include reproduction steps for bugs
-- Check existing issues before creating a new one
+For non-trivial features or architectural changes, write an OmoiOS Improvement Proposal (OIP):
+
+1. Copy `docs/proposals/TEMPLATE.md` to `docs/proposals/oip-NNNN-short-title.md`
+2. Fill in all sections (Abstract, Motivation, Specification, Rationale, Security)
+3. Add to the status table in `docs/proposals/README.md`
+4. Submit as a PR for discussion
+
+See [docs/proposals/README.md](docs/proposals/README.md) for the full process and existing proposals.
+
+## PR Checklist
+
+- [ ] `just test` passes
+- [ ] `just check` passes
+- [ ] New functionality has tests
+- [ ] No secrets or credentials in the diff
+- [ ] Documentation updated if behavior changed
 
 ## Security
 
-If you discover a security vulnerability, please **do not** open a public issue. See [SECURITY.md](SECURITY.md) for our responsible disclosure process.
+If you discover a security vulnerability, **do not** open a public issue. See [SECURITY.md](SECURITY.md).
 
 ## License
 
-By contributing to OmoiOS, you agree that your contributions will be licensed under the [Apache License 2.0](LICENSE).
+Contributions are licensed under the [Apache License 2.0](LICENSE).

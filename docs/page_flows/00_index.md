@@ -75,7 +75,7 @@ Your time: 10 minutes | AI time: 10 hours | Shipped: Same morning
     ├── /graph/:projectId (Dependency graph)
     │   └── /graph/:projectId/:ticketId (Ticket graph)
     │
-    ├── /agents (Agent list)
+    ├── /agents (Agent list — not in sidebar, replaced by /sandboxes)
     │   ├── /agents/spawn (Spawn agent)
     │   ├── /agents/:agentId (Agent detail)
     │   └── /agents/:agentId/workspace (Workspace detail)
@@ -92,11 +92,52 @@ Your time: 10 minutes | AI time: 10 hours | Shipped: Same morning
     │   ├── /memory?tab=search (Semantic search)
     │   └── /memory?tab=patterns (Learned patterns)
     │
+    ├── /sandboxes (Sandbox list)
+    ├── /sandbox/:sandboxId (Sandbox detail — real-time monitoring)
+    │
+    ├── /activity (Activity timeline — real-time event feed)
+    │   └── /activity?sandbox_id=:id (Sandbox-scoped activity)
+    │
+    ├── /prototype (Prototype workspace)
+    │
     └── /settings (User settings)
         ├── /settings/profile (User profile)
+        ├── /settings/appearance (Theme, colors, typography, layout)
+        ├── /settings/integrations (Connected accounts — GitHub OAuth)
+        ├── /settings/notifications (Notification channels and timing)
+        ├── /settings/security (Password, 2FA, account deletion)
         ├── /settings/api-keys (API key management)
-        ├── /settings/sessions (Active sessions)
-        └── /settings/preferences (User preferences)
+        └── /settings/sessions (Active sessions)
+
+Organization Billing (nested under orgs):
+    └── /organizations/:id/billing (Billing dashboard)
+        ├── Subscription tab (tier management)
+        ├── Credits tab (purchase prepaid credits → Stripe Checkout)
+        ├── Payment Methods tab (view/remove cards)
+        ├── Invoices tab (billing history)
+        └── Usage tab (unbilled usage records)
+
+Billing Callbacks:
+    ├── /billing/success (Stripe checkout success)
+    └── /billing/cancel (Stripe checkout cancelled)
+
+Public Pages (no auth required):
+    ├── / (Landing page — marketing)
+    ├── /pricing (Pricing tiers — SEO-optimized)
+    ├── /blog (Blog index)
+    │   ├── /blog/:slug (Individual post)
+    │   ├── /blog/category/:category (Posts by category)
+    │   └── /blog/tag/:tag (Posts by tag)
+    ├── /docs/[[...slug]] (Documentation site — Fumadocs)
+    └── /showcase/:token (Shareable feature showcase)
+
+Auth Flow (public layout):
+    ├── /callback (OAuth callback handler)
+    ├── /login (Email login)
+    ├── /register (Email registration)
+    ├── /forgot-password (Password reset request)
+    ├── /reset-password (Password reset form)
+    └── /verify-email (Email verification)
 ```
 
 ### Key User Actions
@@ -147,9 +188,19 @@ Your time: 10 minutes | AI time: 10 hours | Shipped: Same morning
 44. **Cost Forecasting**: Costs → Forecast → Estimate pending costs → Adjust parameters → Plan budget
 45. **Memory Search**: Memory → Search → Enter task description → Find similar past tasks → Apply learnings
 46. **Pattern Learning**: Memory → Patterns → View learned patterns → Provide feedback → Extract new patterns
-
----
-
+47. **Sandbox Monitoring**: Command Center → Submit Task → Auto-redirect to /sandbox/:id → Watch real-time events → Send messages → View preview
+48. **Sandbox Management**: Sandboxes → Filter by status → Click sandbox → Monitor execution → Mark failed
+49. **Billing Dashboard**: Organization → Billing → View subscription/credits/payment methods/invoices/usage
+50. **Subscription Upgrade**: Billing → Subscription Tab → Upgrade → Select Tier → Stripe Checkout → Billing Success
+51. **Credit Purchase**: Billing → Credits Tab → Enter Amount → Buy Credits → Stripe Checkout → /billing/success
+52. **Appearance Settings**: Settings → Appearance → Configure theme/colors/typography/layout → Save
+53. **Notification Settings**: Settings → Notifications → Toggle channels per event type → Set digest frequency → Configure quiet hours
+54. **Security Settings**: Settings → Security → Change password → Toggle 2FA → Manage API keys → Account deletion
+55. **Integration Settings**: Settings → Integrations → Connect/disconnect GitHub OAuth
+56. **Activity Timeline**: Activity → Watch real-time events → Filter by type/actor/project → Navigate to source
+57. **Showcase Sharing**: (Generated link) → View feature stats → Visit PR → Sign up CTA
+58. **Blog Browse**: Blog → Browse posts → Filter by category/tag → Read post
+59. **Documentation**: Docs → Navigate sidebar → Read MDX content with diagrams
 
 ---
 

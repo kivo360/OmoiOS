@@ -1,129 +1,169 @@
-# AGENTS
+# AGENTS.md — AI Coding Agent Guide for OmoiOS
 
-<skills_system priority="1">
+This document helps AI coding agents (Claude Code, Cursor, Copilot Workspace, Windsurf, etc.) understand and contribute to OmoiOS efficiently.
 
-## Available Skills
+## What is OmoiOS?
 
-<!-- SKILLS_TABLE_START -->
-<usage>
-When users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.
+OmoiOS is a spec-driven, multi-agent orchestration system. Users describe a feature, OmoiOS plans it (requirements → design → tasks), executes it with autonomous AI agents in isolated sandboxes, and creates a PR. The core promise: "Start a feature before bed. Wake up to a PR."
 
-How to use skills:
-- Invoke: Bash("openskills read <skill-name>")
-- The skill content will load with detailed instructions on how to complete the task
-- Base directory provided in output for resolving bundled resources (references/, scripts/, assets/)
+**Production**: Frontend at `https://omoios.dev`, API at `https://api.omoios.dev`
 
-Usage notes:
-- Only use skills listed in <available_skills> below
-- Do not invoke a skill that is already loaded in your context
-- Each skill invocation is stateless
-</usage>
+## Read These First
 
-<available_skills>
+| Document | Purpose | When to read |
+|----------|---------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, service map, data flow | Before any backend work |
+| [UI.md](UI.md) | Frontend routes, components, state, design system | Before any frontend work |
+| [backend/CLAUDE.md](backend/CLAUDE.md) | Backend conventions, patterns, anti-patterns | Before writing Python |
+| [CLAUDE.md](CLAUDE.md) | Monorepo structure, dev commands, ports | Always |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Branch conventions, PR process, testing | Before submitting changes |
 
-<skill>
-<name>algorithmic-art</name>
-<description>Creating algorithmic art using p5.js with seeded randomness and interactive parameter exploration. Use this when users request creating art using code, generative art, algorithmic art, flow fields, or particle systems. Create original algorithmic art rather than copying existing artists' work to avoid copyright violations.</description>
-<location>project</location>
-</skill>
+## Repository Map
 
-<skill>
-<name>brand-guidelines</name>
-<description>Applies Anthropic's official brand colors and typography to any sort of artifact that may benefit from having Anthropic's look-and-feel. Use it when brand colors or style guidelines, visual formatting, or company design standards apply.</description>
-<location>project</location>
-</skill>
+```
+senior_sandbox/
+├── backend/omoi_os/
+│   ├── api/
+│   │   ├── main.py              # FastAPI app + lifespan (25+ services initialized)
+│   │   └── routes/              # ~30 route files by domain
+│   ├── services/                # Business logic (~40 service files)
+│   ├── models/                  # SQLAlchemy 2.0 models (~60 tables)
+│   ├── workers/                 # Background workers (orchestrator, sandbox)
+│   └── config.py                # OmoiBaseSettings (YAML + env)
+│
+├── backend/config/
+│   ├── base.yaml                # Default application settings
+│   └── test.yaml                # Test overrides
+│
+├── backend/tests/
+│   ├── unit/                    # Fast isolated tests
+│   ├── integration/             # Multi-component tests
+│   └── e2e/                     # Full workflow tests
+│
+├── frontend/
+│   ├── app/                     # Next.js 15 App Router
+│   │   ├── (app)/               # Authenticated routes (command, projects, sandboxes, etc.)
+│   │   ├── (auth)/              # Login, register, OAuth callback
+│   │   └── (dashboard)/         # Root redirect to /command
+│   ├── components/
+│   │   ├── ui/                  # ShadCN primitives (40+) — do not modify
+│   │   ├── layout/              # App shell (MainLayout, IconRail, ContextualPanel)
+│   │   ├── panels/              # Sidebar panels (route-aware)
+│   │   └── {domain}/            # Domain components (command, spec, sandbox, etc.)
+│   ├── hooks/                   # ~30 React Query + Zustand hooks (one per domain)
+│   ├── lib/api/                 # HTTP client + domain-specific API functions
+│   └── providers/               # Context providers (Query, Auth, Theme, PostHog)
+│
+├── subsystems/spec-sandbox/     # Spec execution runtime
+├── docs/
+│   ├── proposals/               # OmoiOS Improvement Proposals (OIPs)
+│   ├── page_flows/              # 67 page-by-page UI flow docs
+│   ├── user_journey/            # End-to-end user journey docs
+│   └── architecture/            # 13 system deep-dive docs
+└── Justfile                     # Task runner (just --list for all commands)
+```
 
-<skill>
-<name>canvas-design</name>
-<description>Create beautiful visual art in .png and .pdf documents using design philosophy. You should use this skill when the user asks to create a poster, piece of art, design, or other static piece. Create original visual designs, never copying existing artists' work to avoid copyright violations.</description>
-<location>project</location>
-</skill>
+## Critical Rules
 
-<skill>
-<name>doc-coauthoring</name>
-<description>Guide users through a structured workflow for co-authoring documentation. Use when user wants to write documentation, proposals, technical specs, decision docs, or similar structured content. This workflow helps users efficiently transfer context, refine content through iteration, and verify the doc works for readers. Trigger when user mentions writing docs, creating proposals, drafting specs, or similar documentation tasks.</description>
-<location>project</location>
-</skill>
+These rules prevent common mistakes. Violating them causes build failures or runtime crashes.
 
-<skill>
-<name>docx</name>
-<description>"Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. When Claude needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks"</description>
-<location>project</location>
-</skill>
+### Backend
 
-<skill>
-<name>frontend-design</name>
-<description>Create distinctive, production-grade frontend interfaces with high design quality. Use this skill when the user asks to build web components, pages, artifacts, posters, or applications (examples include websites, landing pages, dashboards, React components, HTML/CSS layouts, or when styling/beautifying any web UI). Generates creative, polished code and UI design that avoids generic AI aesthetics.</description>
-<location>project</location>
-</skill>
+1. **Never use `metadata` or `registry` as SQLAlchemy column names.** They are reserved by SQLAlchemy's declarative API and cause `InvalidRequestError` on import. Use `change_metadata`, `item_metadata`, etc.
 
-<skill>
-<name>internal-comms</name>
-<description>A set of resources to help me write all kinds of internal communications, using the formats that my company likes to use. Claude should use this skill whenever asked to write some sort of internal communications (status reports, leadership updates, 3P updates, company newsletters, FAQs, incident reports, project updates, etc.).</description>
-<location>project</location>
-</skill>
+2. **Always use `omoi_os.utils.datetime.utc_now()`** instead of `datetime.utcnow()`. The former returns timezone-aware datetimes compatible with the database.
 
-<skill>
-<name>mcp-builder</name>
-<description>Guide for creating high-quality MCP (Model Context Protocol) servers that enable LLMs to interact with external services through well-designed tools. Use when building MCP servers to integrate external APIs or services, whether in Python (FastMCP) or Node/TypeScript (MCP SDK).</description>
-<location>project</location>
-</skill>
+3. **Use `structured_output()` for LLM calls that need structured data.** Never manually parse JSON from LLM responses.
+   ```python
+   from omoi_os.services.llm_service import get_llm_service
+   llm = get_llm_service()
+   result = await llm.structured_output(prompt="...", output_type=MyPydanticModel)
+   ```
 
-<skill>
-<name>pdf</name>
-<description>Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.</description>
-<location>project</location>
-</skill>
+4. **Settings go in YAML, secrets go in .env.** Application settings in `config/base.yaml`, secret keys/passwords in `.env`. Settings classes extend `OmoiBaseSettings`.
 
-<skill>
-<name>pptx</name>
-<description>"Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks"</description>
-<location>project</location>
-</skill>
+5. **Two separate service initialization points exist.** `api/main.py` (API server) and `workers/orchestrator_worker.py` (background worker) initialize different service sets. They run as separate processes and do not share state. See the Service Availability Matrix in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-<skill>
-<name>skill-creator</name>
-<description>Guide for creating effective skills. This skill should be used when users want to create a new skill (or update an existing skill) that extends Claude's capabilities with specialized knowledge, workflows, or tool integrations.</description>
-<location>project</location>
-</skill>
+### Frontend
 
-<skill>
-<name>slack-gif-creator</name>
-<description>Knowledge and utilities for creating animated GIFs optimized for Slack. Provides constraints, validation tools, and animation concepts. Use when users request animated GIFs for Slack like "make me a GIF of X doing Y for Slack."</description>
-<location>project</location>
-</skill>
+1. **Check `components/ui/` before creating new primitives.** 40+ ShadCN components are available. Don't reinvent Button, Card, Dialog, etc.
 
-<skill>
-<name>template</name>
-<description>Replace with description of the skill and when Claude should use it.</description>
-<location>project</location>
-</skill>
+2. **One hook per domain in `hooks/`.** Follow the pattern in `useProjects.ts` or `useSpecs.ts`. Use React Query for server state.
 
-<skill>
-<name>theme-factory</name>
-<description>Toolkit for styling artifacts with a theme. These artifacts can be slides, docs, reportings, HTML landing pages, etc. There are 10 pre-set themes with colors/fonts that you can apply to any artifact that has been creating, or can generate a new theme on-the-fly.</description>
-<location>project</location>
-</skill>
+3. **API calls go through `lib/api/client.ts`.** Add domain-specific files to `lib/api/` (e.g., `projects.ts`, `specs.ts`). Never call `fetch` directly.
 
-<skill>
-<name>web-artifacts-builder</name>
-<description>Suite of tools for creating elaborate, multi-component claude.ai HTML artifacts using modern frontend web technologies (React, Tailwind CSS, shadcn/ui). Use for complex artifacts requiring state management, routing, or shadcn/ui components - not for simple single-file HTML/JSX artifacts.</description>
-<location>project</location>
-</skill>
+4. **Route groups**: `(app)` for authenticated pages, `(auth)` for auth flows, root for public pages.
 
-<skill>
-<name>webapp-testing</name>
-<description>Toolkit for interacting with and testing local web applications using Playwright. Supports verifying frontend functionality, debugging UI behavior, capturing browser screenshots, and viewing browser logs.</description>
-<location>project</location>
-</skill>
+## Common Tasks
 
-<skill>
-<name>xlsx</name>
-<description>"Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas"</description>
-<location>project</location>
-</skill>
+### Add a new API endpoint
 
-</available_skills>
-<!-- SKILLS_TABLE_END -->
+1. Create or edit a route file in `backend/omoi_os/api/routes/`
+2. Add the service method in `backend/omoi_os/services/`
+3. Register the route in `backend/omoi_os/api/main.py` if it's a new router
+4. Add tests in `backend/tests/`
+5. Run `just test` to verify
 
-</skills_system>
+### Add a new frontend page
+
+1. Create `page.tsx` in the correct `frontend/app/` route group
+2. Add a sidebar panel in `components/panels/` if needed, register in `ContextualPanel.tsx`
+3. Create domain hooks in `hooks/` and API functions in `lib/api/`
+4. Use existing ShadCN components from `components/ui/`
+
+### Add a new database model
+
+1. Create the model in `backend/omoi_os/models/`
+2. Create an Alembic migration: `cd backend && uv run alembic revision -m "description"`
+3. Apply it: `uv run alembic upgrade head`
+4. Never use `metadata` or `registry` as column names
+
+### Propose a feature
+
+Write an OIP (OmoiOS Improvement Proposal) following the template in `docs/proposals/TEMPLATE.md`. See `docs/proposals/README.md` for the process.
+
+## Development Commands
+
+```bash
+just --list          # All available commands
+just dev-all         # Full stack with hot-reload
+just test            # Affected tests only (via testmon)
+just test-all        # Full test suite
+just format          # Auto-format code
+just check           # Lint + type checks
+```
+
+**Ports**: PostgreSQL 15432, Redis 16379, Backend API 18000, Frontend 3000
+
+## Finding Things
+
+| What you need | Where to look |
+|---------------|---------------|
+| API route for a feature | `backend/omoi_os/api/routes/` — files named by domain |
+| Business logic | `backend/omoi_os/services/` — 40+ service files |
+| Database schema | `backend/omoi_os/models/` — SQLAlchemy models |
+| Frontend page | `frontend/app/(app)/` — route structure matches URL |
+| React component | `frontend/components/{domain}/` — grouped by domain |
+| Data fetching hook | `frontend/hooks/use{Domain}.ts` |
+| API client function | `frontend/lib/api/{domain}.ts` |
+| Type definitions | `frontend/lib/api/types.ts` |
+| Page flow documentation | `docs/page_flows/` — 67 documented flows |
+| User journey documentation | `docs/user_journey/` — end-to-end journey docs |
+| Architecture deep-dives | `docs/architecture/01-*.md` through `13-*.md` |
+| Improvement proposals | `docs/proposals/` — OIP system |
+| Config settings | `backend/config/base.yaml` |
+| Test examples | `backend/tests/unit/`, `backend/tests/integration/` |
+
+## Architecture Summary
+
+OmoiOS has four core systems:
+
+1. **Planning** — Spec State Machine converts feature ideas through EXPLORE → PRD → REQUIREMENTS → DESIGN → TASKS → SYNC → COMPLETE. Each phase has an LLM evaluator (quality gate).
+
+2. **Execution** — OrchestratorWorker dispatches tasks to Daytona sandboxes where ClaudeSandboxWorker runs using the Claude Agent SDK. Three modes: exploration, implementation, validation.
+
+3. **Discovery** — DiscoveryService enables adaptive branching when agents find new requirements during execution. A Phase 3 agent can spawn Phase 1 investigation tasks.
+
+4. **Readjustment** — MonitoringLoop runs Guardian (trajectory analysis, 60s), Conductor (coherence + duplicate detection, 5min), and Health Check (30s). Can redirect, refocus, or stop agents.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full diagram and deep-dive links.

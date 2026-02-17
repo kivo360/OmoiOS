@@ -455,6 +455,244 @@ User configures board structure:
    - Ticket types available in creation form
 ```
 
+### Organization Management Sub-Pages
+
+#### Creating an Organization (/organizations/new)
+
+```
+User clicks [+ Create Organization] from /organizations:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  ← Back to Organizations                                     │
+│                                                              │
+│  Create Organization                                         │
+│  Set up a new organization to collaborate with your team     │
+│                                                              │
+│  Organization Name: [Acme Inc_________]                      │
+│                                                              │
+│  URL Slug: omoios.dev/ [acme-inc________]                   │
+│  Only lowercase letters, numbers, and hyphens                │
+│                                                              │
+│  Description (optional):                                     │
+│  [Tell us about your organization...                ]        │
+│                                                              │
+│                          [Cancel] [Create Organization]      │
+└─────────────────────────────────────────────────────────────┘
+   ↓
+On submit:
+├── Creates organization via API
+├── Checks localStorage for "pending_plan" (from /pricing signup)
+│   ├── If pending plan (pro/team):
+│   │   → Creates Stripe checkout session → Redirects to Stripe
+│   └── If no pending plan:
+│       → Navigates to /organizations/:id
+└── Name auto-generates slug (lowercase, hyphens for spaces)
+```
+
+#### Managing Organization Members (/organizations/[id]/members)
+
+```
+User navigates to /organizations/:id/members:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  ← Back to Organization                                      │
+│  Members                                     [+ Add Member] │
+│  Manage team members and their permissions                   │
+│                                                              │
+│  [Search members...]                                         │
+│                                                              │
+│  Team Members (5 members)                                    │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Member         │ Role             │ Joined    │ Actions ││
+│  ├─────────────────────────────────────────────────────────┤│
+│  │ 👤 a1b2c3... │ 👑 Owner (amber) │ Jan 15    │   [⋮]  ││
+│  │    User       │                  │           │         ││
+│  │ 🤖 d4e5f6... │ 🛡 Admin (blue)  │ Jan 20    │   [⋮]  ││
+│  │    Agent      │                  │           │         ││
+│  │ 👤 g7h8i9... │ 🛡 Member (gray) │ Feb 1     │   [⋮]  ││
+│  │    User       │                  │           │         ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+│  Available Roles                                             │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ 👑 Owner     │ │ 🛡 Admin     │ │ 🛡 Member    │        │
+│  │ [System]     │ │ [System]     │ │ [System]     │        │
+│  │ Full control │ │ manage, edit │ │ read, create │        │
+│  │ +3 perms     │ │ +2 perms     │ │              │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+
+Actions (via [⋮] dropdown):
+- Change to [role] → Updates member role via API
+- Remove Member → Destructive confirmation dialog
+  "They will lose access to all projects and resources"
+  [Cancel] [Remove]
+
+Add Member dialog:
+- User ID field
+- Role selector (populated from organization's role list)
+- [Cancel] [Add Member]
+
+Search: Filters by role name, user ID, or agent ID
+Member types: User (person icon) or Agent (bot icon)
+```
+
+#### Organization Settings (/organizations/[id]/settings)
+
+```
+User navigates to /organizations/:id/settings:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  ← Back to Organization                                      │
+│  Organization Settings                                       │
+│  Manage your organization's profile and preferences          │
+│                                                              │
+│  General                                                     │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ [Avatar]  [Change Logo]                                 ││
+│  │ Name: [Acme Inc______]  Slug: acme-inc (read-only)     ││
+│  │ Description: [Tell us about...]                         ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+│  Member Settings                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ Allow member invites         [toggle on]                ││
+│  │ Require approval             [toggle off]               ││
+│  │ Note: Stored locally. Backend support coming soon.      ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+│  Usage Summary                                               │
+│  ┌──────────────┐ ┌──────────────┐                          │
+│  │ Members: 5   │ │ Projects: 12 │                          │
+│  └──────────────┘ └──────────────┘                          │
+│                                                              │
+│                                        [Save Changes]        │
+│                                                              │
+│  ⚠ Danger Zone                                               │
+│  Delete Organization — permanent         [🗑 Delete]         │
+│  Confirmation: "This will permanently delete Acme Inc..."   │
+└─────────────────────────────────────────────────────────────┘
+
+Key behaviors:
+- Slug is read-only after creation
+- Member settings stored in localStorage (backend pending)
+- Delete requires confirmation AlertDialog
+- On delete → redirect to /organizations
+```
+
+### Agent Spawning & Workspaces
+
+#### Spawning an Agent (/agents/spawn)
+
+> **Note**: The `/agents` page is no longer in the primary sidebar (replaced by `/sandboxes`). Agent spawn is accessible via direct URL or deep links from project pages.
+
+```
+User navigates to /agents/spawn (via direct URL or ?projectId= link):
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  ← Back to Agents                                            │
+│                                                              │
+│  🤖 Spawn New Agent                                         │
+│  Create a new AI agent to work on your project               │
+│                                                              │
+│  Project (Optional):                                         │
+│  [Select a project (optional)       ▼]                      │
+│  ← Pre-populated if ?projectId= in URL                      │
+│                                                              │
+│  Agent Type:                                                 │
+│  [Worker (General purpose)          ▼]                      │
+│  Options: Worker, Specialist, Coordinator, Reviewer          │
+│                                                              │
+│  Starting Phase:                                             │
+│  [PHASE_IMPLEMENTATION              ▼]                      │
+│  ← Lists all phases from PHASES config                       │
+│                                                              │
+│  Capabilities:                                               │
+│  [code_generation, testing, debugging]                       │
+│  Comma-separated list                                        │
+│                                                              │
+│  Capacity:                                                   │
+│  [3] (1-10 concurrent tasks)                                │
+│                                                              │
+│                            [Cancel] [Register Agent]         │
+└─────────────────────────────────────────────────────────────┘
+   ↓
+On submit:
+- POST /agents/register with agent_type, phase_id, capabilities, capacity, tags
+- Tags include project:${projectId} if project selected
+- On success → navigate to /agents/:agentId
+```
+
+#### Agent Workspace (/agents/[agentId]/workspace)
+
+```
+User opens workspace from agent detail page or /workspaces list:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  ← Back to Agent                                             │
+│  🗂 Workspace                     [feature/jwt-auth]        │
+│  IMPLEMENTATION                                              │
+│                                                              │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ Total Commits│ │ Lines Changed│ │ Merge        │        │
+│  │     8        │ │ +342  -56    │ │ Conflicts: 0 │        │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+│                                                              │
+│  Tabs: [Commits] [Merge Conflicts] [Settings]               │
+│                                                              │
+│  Commit History:                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │ ● "Implement JWT middleware"              [View]        ││
+│  │   a1b2c3d  3 hours ago  4 files  +120 -8               ││
+│  ├─────────────────────────────────────────────────────────┤│
+│  │ ● "Add refresh token rotation"            [View]        ││
+│  │   e4f5g6h  2 hours ago  2 files  +85 -12               ││
+│  └─────────────────────────────────────────────────────────┘│
+│                                                              │
+│  Merge Conflicts: ✓ No merge conflicts                      │
+│                                                              │
+│  Settings:                                                   │
+│  │ Workspace Path:   /workspaces/{agentId}                  │
+│  │ Git Branch:       feature/jwt-auth                       │
+│  │ Workspace Type:   Docker Container                       │
+│  │ Parent Agent:     None (root)                            │
+│  │ Retention Policy: 7 days after completion                │
+│  │ Created:          3 hours ago                            │
+└─────────────────────────────────────────────────────────────┘
+
+Commit [View] dialog:
+- Shows file list with path, status badge (added/modified/deleted), +/- counts
+- Scrollable for large commits
+```
+
+#### Workspaces List (/workspaces)
+
+```
+User navigates to /workspaces:
+   ↓
+┌─────────────────────────────────────────────────────────────┐
+│  Workspaces                                                  │
+│  Isolated agent workspaces with repo context                 │
+│                                                              │
+│  [Search agent, project, or repo]  [Filter status ▼]        │
+│                                                              │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐        │
+│  │ auth-system  │ │ payment-gw   │ │ analytics    │        │
+│  │ github/auth  │ │ github/pay   │ │ github/analy │        │
+│  │ [Active ●]   │ │ [Active ●]   │ │ [Degraded ⚠] │        │
+│  │ worker-1     │ │ worker-2     │ │ worker-5     │        │
+│  │ Sync: 3m ago │ │ Sync: 8m ago │ │ Sync: 15m    │        │
+│  │ [Open] [Agent]│ │ [Open] [Agent]│ │ [Open] [Agent]│       │
+│  └──────────────┘ └──────────────┘ └──────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+
+Note: This page currently uses hardcoded mock data (not API-connected).
+Filter by: All, Active, Degraded, Idle
+Search by: agent name, project name, or repo URL
+[Open workspace] → /agents/:agent/workspace
+[Agent] → /agents/:agent
+```
+
 ### Keyboard Shortcuts & Accessibility
 
 #### Keyboard Navigation

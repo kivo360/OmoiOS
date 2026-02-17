@@ -27,7 +27,7 @@ Let AI run overnight and finish your software for you. Describe what you want, a
 ### Core Journey
 - **[01_onboarding.md](./01_onboarding.md)** - Phase 1: Onboarding & First Project Setup
 - **[02_feature_planning.md](./02_feature_planning.md)** - Phase 2: Feature Request & Planning
-- **[03_execution_monitoring.md](./03_execution_monitoring.md)** - Phase 3: Autonomous Execution & Monitoring
+- **[03_execution_monitoring.md](./03_execution_monitoring.md)** - Phase 3: Autonomous Execution & Monitoring (Sandbox List, Sandbox Detail, Event Deduplication)
 - **[04_approvals_completion.md](./04_approvals_completion.md)** - Phase 4: Approval Gates & Phase Transitions
 - **[05_optimization.md](./05_optimization.md)** - Phase 5: Ongoing Monitoring & Optimization
 
@@ -47,12 +47,43 @@ Let AI run overnight and finish your software for you. Describe what you want, a
   - Pattern Extraction & Learning
   - Memory Insights Dashboard
 
+### Billing & Subscriptions
+- **[12_billing_subscription.md](./12_billing_subscription.md)** - Billing & Subscription Management:
+  - Subscription Tiers (Free, Pro, Team, BYO Keys, Lifetime, Enterprise)
+  - Credit Purchases via Stripe Checkout
+  - Payment Method Management
+  - Invoice History & Usage Tracking
+
+### Public & Marketing Pages
+- **[13_public_marketing_pages.md](./13_public_marketing_pages.md)** - Public Pages & Conversion Funnel:
+  - Landing Page Conversion
+  - Pricing Evaluation
+  - Blog Discovery
+  - Documentation Exploration
+  - Showcase Sharing
+  - OAuth Callback Flow
+
+### Settings & Personalization
+- **[14_settings_personalization.md](./14_settings_personalization.md)** - Settings, Personalization & Activity:
+  - Appearance Customization (theme, colors, fonts, layout)
+  - Notification Configuration (per-event channels, digest, quiet hours)
+  - Security Management (password, 2FA, account deletion)
+  - Integration Management (GitHub OAuth)
+  - Activity Timeline (real-time system event feed)
+
+### Prototype & Diagnostic
+- **[15_prototype_diagnostic.md](./15_prototype_diagnostic.md)** - Prototype Workspace & Diagnostic Reasoning:
+  - Prototype Workspace (/prototype) — framework selection, split-view prompt + live preview
+  - Diagnostic Reasoning (/diagnostic/[entityType]/[entityId]) — decision timeline, evidence, alternatives
+
 ### Additional Information
 - **[10_additional_flows.md](./10_additional_flows.md)** - Additional Flows & Edge Cases:
   - Error Handling & Failure Recovery
   - Notification & Alert Flows
   - Settings & Configuration
   - Multi-User Collaboration
+  - Organization Management (create, members, settings)
+  - Agent Spawning & Workspaces
   - Keyboard Shortcuts & Accessibility
   - Mobile & Responsive Design
   - Troubleshooting & Support
@@ -75,11 +106,17 @@ Let AI run overnight and finish your software for you. Describe what you want, a
 - [04_approvals_completion.md](./04_approvals_completion.md) - Approving work and completing features
 - [05_optimization.md](./05_optimization.md) - Ongoing monitoring and optimization
 
-**Cost & Resource Management:**
+**Cost & Billing:**
 - [11_cost_memory_management.md](./11_cost_memory_management.md) - Cost tracking, budgets, and agent learning
+- [12_billing_subscription.md](./12_billing_subscription.md) - Subscription management, credit purchases, invoices
+
+**Public & Settings:**
+- [13_public_marketing_pages.md](./13_public_marketing_pages.md) - Landing page, pricing, blog, docs, showcase
+- [14_settings_personalization.md](./14_settings_personalization.md) - Appearance, notifications, security, activity timeline
 
 **Advanced Topics:**
-- [10_additional_flows.md](./10_additional_flows.md) - Edge cases, error handling, collaboration
+- [15_prototype_diagnostic.md](./15_prototype_diagnostic.md) - Prototype workspace, diagnostic reasoning chain
+- [10_additional_flows.md](./10_additional_flows.md) - Edge cases, error handling, collaboration, org management
 - [09_design_principles.md](./09_design_principles.md) - Design system and success metrics
 
 ## Related Documentation
@@ -88,4 +125,3 @@ Let AI run overnight and finish your software for you. Describe what you want, a
 - [Page Architecture](../page_architecture.md) - Complete page architecture specifications
 - [Design System](../design_system.md) - UI/UX design system guide
 - [App Overview](../app_overview.md) - High-level application overview
-
