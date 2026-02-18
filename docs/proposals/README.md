@@ -10,6 +10,7 @@ OIPs are the primary mechanism for proposing new features, collecting design inp
 | [0002](oip-0002-public-prototype-workspace.md) | Try-Before-Register Public Prototype Workspace | Standards Track | Draft | 2026-02-17 |
 | [0003](oip-0003-streamlined-onboarding.md) | Streamlined Onboarding with Deferred GitHub | Standards Track | Draft | 2026-02-17 |
 | [0004](oip-0004-live-demo-sandbox.md) | One-Click Live Demo with Pre-Warmed Sandboxes | Standards Track | Draft | 2026-02-17 |
+| [0005](oip-0005-bring-your-own-keys.md) | Bring Your Own API Keys | Standards Track | Draft | 2026-02-17 |
 
 ### Recommended Implementation Order
 

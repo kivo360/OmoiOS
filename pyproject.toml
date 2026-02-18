@@ -4,5 +4,11 @@ members = [
     "subsystems/*"
 ]
 
+[dependency-groups]
+test = [
+    "pytest-cov>=4.1.0",
+    "pytest-testmon>=2.2.0",
+]
+
 [tool.uv]
 dev-dependencies = []

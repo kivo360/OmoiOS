@@ -75,20 +75,20 @@ setup: install-all setup-test
 # Testing (with pytest-testmon)
 # ============================================================================
 
-# Quick feedback: run only affected tests
+# Default: run unit tests (fast, no external deps)
 [group('test')]
 test pattern="":
+    cd {{backend_dir}} && {{pytest}} tests/unit/ {{pattern}} -x -q
+
+# Run all affected tests (uses testmon, may hit DB/Redis)
+[group('test')]
+test-affected pattern="":
     cd {{backend_dir}} && {{pytest}} {{pattern}} --testmon -x
 
-# Quick mode (quiet output)
-[group('test')]
-test-quick pattern="":
-    cd {{backend_dir}} && {{pytest}} {{pattern}} --testmon -x -q
-
-# Run unit tests only
+# Run unit tests only (verbose)
 [group('test')]
 test-unit:
-    cd {{backend_dir}} && {{pytest}} tests/unit/ --testmon -v
+    cd {{backend_dir}} && {{pytest}} tests/unit/ -v
 
 # Run integration tests
 [group('test')]
@@ -796,7 +796,7 @@ config-check:
 commit message:
     just docs-validate
     just config-validate
-    just test-quick
+    just test
     git add -A
     git commit -m "{{message}}"
 
@@ -872,7 +872,7 @@ deps-tree package="omoi_os":
 
 # Validate everything (docs, config, tests, code)
 [group('validate')]
-validate-all: docs-validate config-validate lint type-check test-quick
+validate-all: docs-validate config-validate lint type-check test
     @echo "✅ All validations passed"
 
 # Validate documentation structure
@@ -1039,7 +1039,7 @@ all: clean-all install-all validate-all test-all
     @echo "✅ Complete validation successful"
 
 # Development workflow (format, test, commit)
-dev-commit message: format test-quick
+dev-commit message: format test
     git add -A
     git commit -m "{{message}}"
 
